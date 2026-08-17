@@ -1,47 +1,48 @@
 # 🎨 Lojinha UI & UX Design Guide
 
-Welcome to the **Lojinha UI/UX Guide**. This document defines the design principles, visual hierarchy, layout structures, color systems, component specs, and interaction patterns for the **Self-Service Kiosk & POS System**.
+Welcome to the **Lojinha UI/UX Guide**. This document defines the design principles, visual hierarchy, layout structures, color systems, component specs, and interaction patterns for the **Self-Service POS System**.
 
 ---
 
 ## 🎯 Core UX Principles
 
-1. **Touch & Scanner First (Kiosk Ergonomics)**
-   - Target environment: Local POS / Self-service kiosk terminal (Touchscreen, Barcode Scanner, Mouse/Keyboard).
-   - **Min Touch Target**: Minimum `48dp` (preferably `56dp` to `64dp` for primary kiosk buttons like "Checkout" or "Select User").
-   - **Zero Friction**: Common actions (scanning a user barcode $\rightarrow$ scanning products $\rightarrow$ checkout) should take **under 10 seconds** without requiring keyboard input.
+1. **Mouse & Barcode-Centric (Desktop Hardware Ergonomics)**
+   - Target environment: Local desktop POS terminal running Windows with a USB Barcode Scanner & Mouse.
+   - **Automatic Input Focus**: Input fields (User Search, PIN inputs, Product Search, Weight fields) automatically receive focus on screen load or dialog display, eliminating unnecessary mouse clicks or keyboard navigation.
+   - **Minimal Keyboard Friction**: Mouse clicking and scanning handle almost all interactions. Typing is kept to an absolute minimum.
 
-2. **High Visual Clarity & Instant Feedback**
-   - **High Contrast**: Ensure clear readability from a distance of 1–2 meters.
-   - **Immediate State Feedback**: Barcode scans trigger instant visual highlights and audible audio chimes.
-   - **Balance Awareness**: User balance is always prominently visible on all user screens.
+2. **Strict Privacy on Main Screen**
+   - **Hidden Balances**: User account balances are **never** displayed on the public Main Screen.
+   - **Avatar & Name Only**: User cards display only the user's **Name** and their **Initials in a circular avatar badge**. Account balances are revealed only after the user logs into their shopping session.
 
-3. **Safe & Forgiving Operations**
-   - **Confirmation Modals**: Require confirmation for destructive actions or balance-altering operations (e.g., checkout, admin withdrawals, reversals).
-   - **Clear Undo & Reversal Flows**: Admin cancellation flow explicitly shows original vs reversed transaction details.
+3. **High Visual Clarity & Instant Feedback**
+   - **Light Mode Only (Clean White & Navy Blue)**: Crisp, professional light palette with Navy Blue accents for high contrast and readability.
+   - **Immediate State Feedback**: Barcode scans trigger instant visual highlights and audible confirmation chimes.
+
+4. **Non-Intrusive Inactivity Auto-Logout**
+   - **1-Minute Countdown Warning**: A prominent warning modal with an active running countdown appears only when **1 minute remains** before automatic logout, allowing the user to extend their session or log out immediately.
 
 ---
 
-## 🎨 Color System & Tokens
+## 🎨 Color System & Tokens (Navy Blue & White Theme)
 
-Lojinha uses a sleek, modern Material 3 design system with vibrant dark and light palettes optimized for kiosk screens.
+Lojinha uses a clean, light **Navy Blue & White** color system.
 
-### Light & Dark Color Palette
-
-| Token Name | Dark Mode (Default Kiosk) | Light Mode | Purpose |
-|---|---|---|---|
-| `surface` | `#121318` | `#F8FAFC` | Main background |
-| `surfaceContainer` | `#1E2028` | `#FFFFFF` | Cards, panels, modal dialogs |
-| `surfaceContainerHigh` | `#282A36` | `#F1F5F9` | Hover states, active items |
-| `primary` | `#6366F1` (Indigo) | `#4F46E5` | Primary buttons, active selections |
-| `onPrimary` | `#FFFFFF` | `#FFFFFF` | Text/Icon on primary elements |
-| `secondary` | `#A855F7` (Purple) | `#7E22CE` | Secondary accents, user badges |
-| `success` / `deposit` | `#10B981` (Emerald) | `#059669` | Positive balance, deposits, checkout success |
-| `danger` / `negative` | `#EF4444` (Crimson) | `#DC2626` | Negative balance, withdrawal, delete actions |
-| `warning` / `lowBalance` | `#F59E0B` (Amber) | `#D97706` | Low balance warnings |
-| `textPrimary` | `#F8FAFC` | `#0F172A` | Primary titles, names, prices |
-| `textSecondary` | `#94A3B8` | `#64748B` | Labels, secondary currency `(≈ $ 2,79)` |
-| `divider` | `#2D313E` | `#E2E8F0` | Border separators |
+| Token Name | Hex Value | Purpose |
+|---|---|---|
+| `surface` | `#FFFFFF` | Main screen background |
+| `surfaceContainer` | `#F8FAFC` | Cards, panels, hover areas |
+| `surfaceContainerHigh` | `#F1F5F9` | Card borders, secondary containers |
+| `primaryNavy` | `#0F172A` | Primary text, main headers, dark navy branding |
+| `accentNavy` | `#1E3A8A` / `#2563EB` | Primary buttons, active tabs, highlight borders |
+| `onPrimary` | `#FFFFFF` | Text/Icons on navy background |
+| `secondary` | `#475569` | Subtitles, muted labels |
+| `success` / `deposit` | `#059669` (Emerald) | Positive balance, deposits, checkout completion |
+| `danger` / `negative` | `#DC2626` (Crimson) | Negative balance, withdrawal, delete actions |
+| `warning` / `lowBalance` | `#D97706` (Amber) | Low balance alerts, 1-minute logout popup |
+| `textPrimary` | `#0F172A` | Primary titles, product names, BRL amounts |
+| `textSecondary` | `#64748B` | Labels, secondary currency `(≈ $ 2,79)` |
+| `divider` | `#E2E8F0` | Structural dividers & borders |
 
 ---
 
@@ -49,45 +50,38 @@ Lojinha uses a sleek, modern Material 3 design system with vibrant dark and ligh
 
 ### Hierarchy
 - **Display / Big Totals**: `28sp` - `36sp` Bold (e.g., Checkout Total `R$ 45,90`)
-- **Screen Titles & Names**: `20sp` - `24sp` SemiBold (e.g., User Name, Screen Header)
+- **Screen Titles & Names**: `20sp` - `24sp` SemiBold (e.g., User Name, Header)
 - **Section Subtitles / Card Headers**: `16sp` - `18sp` Medium
 - **Body & Cart Items**: `14sp` - `16sp` Regular
 - **Captions & Secondary Currency**: `12sp` - `14sp` Regular (Muted text)
 
 ### Monetary & Unit Formatting Rules
 1. **Primary Currency (BRL)**:
-   - Always formatted with `R$` prefix and comma decimal separator: `R$ 10,50`.
-   - Positive balances: Standard primary color or success green.
-   - Negative balances: Crisp danger crimson (e.g., `-R$ 12,30`).
+   - Formatted with `R$` prefix and comma decimal separator: `R$ 10,50`.
+   - Positive balance: Deep Navy or Success Emerald (`#059669`).
+   - Negative balance: Crimson Red (`#DC2626`) (e.g., `-R$ 12,30`).
 2. **Secondary Currency (USD / EUR Helper)**:
-   - Appears adjacent or directly below the BRL amount in muted text:
-     - Single-line: `R$ 15,50` `(≈ $ 2,79)`
-     - Stacked:
-       - **R$ 15,50**
-       - *(≈ € 2,55)*
+   - Displayed adjacent or below the BRL amount in muted text: `R$ 15,50` `(≈ $ 2,79)`.
 3. **Quantities & Weights**:
-   - Piece items: Integer suffix `x1`, `x2` or `2 pcs`.
-   - Weighted items: Decimal with comma and unit: `1,5 kg` or `250 g`.
+   - Piece items: `1x`, `2x` or `2 pcs`.
+   - Weighted items: Decimal formatted with comma and unit: `1,5 kg` or `250 g`.
 
 ---
 
 ## 🖥️ Screen Layout Specifications
 
 ### 1. Header Bar (Universal Component)
-Present at the top of every screen.
+Clean top navigation bar present on all screens.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│ 🛒 Lojinha    [🇩🇪 DE] [🇬🇧 EN] [🇧🇷 BR]       ⏱️ Auto-logout: 02:45   [👤 User]  [🚪 Logout] │
+│ 🛒 Lojinha POS    [🇩🇪 DE] [🇬🇧 EN] [🇧🇷 BR]                        [👤 User Name] [🚪 Logout]│
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Left**: App Logo / Branding.
-- **Center**: Language flags (instant 1-tap language switch).
-- **Right**:
-  - Inactivity timer countdown (when logged in).
-  - Current logged-in user indicator.
-  - Quick Logout button (always accessible).
+- **Left**: App Logo & Title in Navy Blue.
+- **Center**: Language flags (1-click language switch).
+- **Right**: Active User Indicator & Logout button.
 
 ---
 
@@ -95,21 +89,21 @@ Present at the top of every screen.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│  🔍 Search user by name...                      [📷 Scan User Barcode]  [🔒 Admin Login]│
+│  🔍 Search user by name... (Auto-Focused)                       [🔒 Admin Login]        │
 ├─────────────────────────────────────────────────────────────────────────────────────────┤
 │ ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐             │
-│ │ 👤 Maria Silva       │  │ 👤 João Santos       │  │ 👤 Ana Costa         │             │
-│ │ R$ 45,50 (≈ $8.19)   │  │ -R$ 12,00 (≈ -$2.16) │  │ R$ 120,00 (≈ $21.60) │             │
+│ │   ( MS )             │  │   ( JS )             │  │   ( AC )             │             │
+│ │  Maria Silva         │  │  João Santos         │  │  Ana Costa           │             │
 │ └──────────────────────┘  └──────────────────────┘  └──────────────────────┘             │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Autofocus Search**: Text field focused by default for quick keyboard filtering.
-- **Barcode Listener**: Active background listener for user barcode scans. Scanning immediately logs the user in (or opens PIN modal if protected).
-- **User Cards Grid**:
-  - User avatar / initials icon.
-  - Large readable name.
-  - Color-coded current balance (Green if positive, Red if negative).
+- **Auto-Focused Search Input**: Focused automatically on load so scanning a barcode or typing immediately filters users.
+- **Privacy-First User Cards**:
+  - Circular avatar container with user's initials (e.g., `( MS )` for Maria Silva).
+  - Clear, readable user name.
+  - **No account balances displayed on the Main Screen**.
+- **Instant Scan Login**: Scanning a user barcode logs the user in immediately.
 
 ---
 
@@ -117,8 +111,8 @@ Present at the top of every screen.
 
 ```
 ┌───────────────────────────────────────────────┬─────────────────────────────────────────┐
-│  🛍️ Product Catalog                           │ 🛒 Shopping Cart (Maria Silva)          │
-│  🔍 Search product...                         │ Balance: R$ 45,50                       │
+│  🛍️ Products                                  │ 🛒 Cart (Maria Silva)                   │
+│  🔍 Search product... (Auto-Focused)          │ Balance: R$ 45,50                       │
 ├───────────────────────────────────────────────┼─────────────────────────────────────────┤
 │ ┌───────────────┐ ┌───────────────┐           │ 1. Club Mate (330ml)                   │
 │ │ 🥤 Club Mate  │ │ 🍫 Snickers   │           │    1 x R$ 8,00              R$ 8,00    │
@@ -133,84 +127,67 @@ Present at the top of every screen.
 └───────────────────────────────────────────────┴─────────────────────────────────────────┘
 ```
 
-- **Product Grid (Left)**:
-  - Big visual buttons with clear product titles and prices.
-  - Badge indicator for weighted items (`KG` or `g`).
-  - Scanning a barcode adds item directly to cart.
-- **Weight Input Dialog (Triggered on weighted product scan/click)**:
-  - Numeric input keypad supporting both `,` and `.` decimal values.
-  - Quick preset weight buttons (`250g`, `500g`, `1kg`, `1.5kg`).
-- **Cart Side Panel (Right)**:
-  - Scrollable list of added products with `+` / `-` / `Delete` controls.
-  - **Live Bottom Summary**:
-    - Cart Total
-    - Secondary Currency Conversion
-    - Projected Balance After Purchase (`Current Balance - Total`)
-  - **Checkout Button**: Large high-contrast primary button (Min height `56dp`).
+- **Product Input**:
+  - Scanning product barcode adds 1 piece (or opens weight prompt for weight items).
+  - Manual search field is auto-focused for instant text search.
+- **Weight Input Dialog**:
+  - Weight input field is **auto-focused** with preset click buttons (`250g`, `500g`, `1kg`, `1.5kg`). Accepts `,` and `.`.
+- **Right Cart Panel**:
+  - Shows line items, total price, secondary currency, and projected **Balance After Purchase**.
+  - Single-click **Complete Purchase** button.
 
 ---
 
-### 4. Checkout & Confirmation Modals
+### 4. Transaction History & Filterable Ledger
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│ 📜 Transaction History                                                                  │
+│ 🔍 Filter transactions (Product name, date, type...): [ All Types  ▼ ]                 │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│ ┌─────────────────────────────────────────────────────────────────────────────────────┐ │
+│ │ 🛒 PURCHASE  •  17 Aug 2026, 14:30                          Total: -R$ 15,50       │ │
+│ │    • 1x Club Mate (330ml) @ R$ 8,00 = R$ 8,00                                      │ │
+│ │    • 1,5 kg Apples @ R$ 5,00/kg = R$ 7,50                                          │ │
+│ └─────────────────────────────────────────────────────────────────────────────────────┘ │
+│ ┌─────────────────────────────────────────────────────────────────────────────────────┐ │
+│ │ 💵 ADMIN DEPOSIT  •  15 Aug 2026, 10:15                      Total: +R$ 50,00       │ │
+│ │    • Note: Cash deposit via Admin                                                   │ │
+│ └─────────────────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Direct Visibility**: Purchased items are **clearly visible directly within each transaction entry** (no need to open collapsed drawers to see what was bought).
+- **Search & Filter Options**:
+  - Text search filter (filters by product name, note, or transaction ID).
+  - Transaction Type Dropdown Filter (`ALL`, `PURCHASE`, `DEPOSIT`, `WITHDRAWAL`, `CANCELLATION`).
+
+---
+
+### 5. Inactivity Auto-Logout Warning Popup
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  Confirm Purchase                                    [X] │
+│  ⚠️ Inactivity Warning                               [X] │
 ├──────────────────────────────────────────────────────────┤
-│  Customer: Maria Silva                                   │
-│  Total Items: 2                                          │
-│  Total Price: R$ 15,50 (≈ $ 2,79)                        │
 │                                                          │
-│  Current Balance: R$ 45,50                               │
-│  New Balance:     R$ 30,00                               │
+│     You will be logged out automatically in:             │
 │                                                          │
-│  [ Cancel ]                  [ ✅ Confirm & Pay ]       │
+│                      ⏰ 00:59                            │
+│                                                          │
+│  [ 🚪 Logout Now ]            [ ✅ Stay Logged In ]     │
 └──────────────────────────────────────────────────────────┘
 ```
 
-- Clear breakdown of items, total cost, and resulting user balance.
-- Confirmation redirects immediately to the **Transaction History Screen**.
+- Triggers automatically when **1 minute remains** on the inactivity timer.
+- Pressing any key, moving the mouse, or clicking "Stay Logged In" resets the timer and closes the popup.
 
 ---
 
-### 5. Transaction History & User Settings
+## ⚡ Summary of Key Interactions
 
-- **Ledger Cards**: Clean timeline list showing:
-  - Transaction Type Badge (`PURCHASE`, `DEPOSIT`, `CANCELLATION`).
-  - Date & Timestamp.
-  - Amount (`-R$ 15,50` for purchases, `+R$ 50,00` for deposits).
-  - Expandable detail drawer for purchase item snapshots.
-- **User Settings Modal**:
-  - 1-Tap language selector (`DE`, `EN`, `BR`).
-  - Secondary Currency selector dropdown (`NONE`, `USD`, `EUR`).
-  - PIN configuration / change.
-
----
-
-### 6. Admin Management UI Guidelines
-
-- **Distinct Admin Theme Banner**: Top subtle amber or purple accent bar to immediately signpost Admin Mode.
-- **Tab Navigation**:
-  - 📦 **Products**: Catalog management, stock updates, barcode assignments, global & custom markups.
-  - 👤 **Users**: User creation, PIN reset, barcode linking, Quick Deposit/Withdrawal UI.
-  - 📜 **Ledger**: System-wide transaction audit trail with 1-click reversal workflow.
-  - ⚙️ **System Settings**: Admin password change, exchange rate configuration (`1 BRL = X USD`), inactivity auto-logout timeout.
-
----
-
-## ⚡ Micro-Interactions & Animations
-
-1. **Cart Item Added**:
-   - Soft scale animation (`1.0` $\rightarrow$ `1.08` $\rightarrow$ `1.0`) on cart summary badge when scanning/adding products.
-2. **Barcode Scan Confirmation**:
-   - Brief green flash border around the shopping screen container on valid product scan.
-   - Gentle error shake effect on invalid/unrecognized barcode.
-3. **Screen Navigation**:
-   - Smooth horizontal slide or fade transition (`200ms` duration).
-
----
-
-## ♿ Accessibility & Edge Case Rules
-
-- **Zero Mouse Dependency**: All core shopping flows can be navigated via Barcode Scanner + Numeric Keypad / Touchscreen.
-- **Empty States**: Friendly visual illustrations/icons when Cart is empty, search has no results, or user list is empty.
-- **Offline Reliability Indicator**: Display a subtle green "Offline Mode Active (SQLite)" status badge in Admin view.
+1. **Main Screen**: Scan User Barcode or click User Card $\rightarrow$ Immediate Login. (Balances are hidden).
+2. **Shopping Screen**: Scan Product Barcode or click Product Card $\rightarrow$ Item added to cart.
+3. **Weight Prompt**: Auto-focused input field + 1-click preset buttons.
+4. **History Screen**: Instant text search filter + clear item list view.
+5. **Auto-Logout**: Silent background timer; 1-minute remaining triggers warning dialog.
