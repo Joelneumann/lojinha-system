@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.room)
 }
 
@@ -32,4 +33,8 @@ kotlin {
             implementation(libs.kotlin.test)
         }
     }
+}
+
+dependencies {
+    add("kspJvm", libs.androidx.room.compiler)
 }

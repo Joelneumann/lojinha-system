@@ -1,15 +1,15 @@
 [versions]
-androidx-lifecycle = "2.11.0-beta01"
+androidx-lifecycle = "2.8.4"
 androidx-room = "2.7.0-alpha12"
 androidx-sqlite = "2.5.0-alpha12"
-composeMultiplatform = "1.11.1"
+composeMultiplatform = "1.7.3"
 junit = "4.13.2"
-kotlin = "2.2.0"
-kotlinx-coroutines = "1.11.0"
+kotlin = "2.1.20"
+kotlinx-coroutines = "1.10.1"
 kotlinx-serialization = "1.8.0"
 kotlinx-datetime = "0.6.2"
-material3 = "1.11.0-alpha07"
-ksp = "2.2.0-1.0.31"
+material3 = "1.7.3"
+ksp = "2.1.20-1.0.31"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
