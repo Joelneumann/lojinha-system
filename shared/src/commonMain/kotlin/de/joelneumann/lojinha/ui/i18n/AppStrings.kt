@@ -26,6 +26,7 @@ interface AppStrings {
     val weightInputHint: String
     val weightTooltip: String
     val history: String
+    val account: String
     val historyFilterPlaceholder: String
     val historyFilterAll: String
     val historyTypePurchase: String

@@ -26,6 +26,7 @@ object PortugueseStrings : AppStrings {
     override val weightInputHint = ""
     override val weightTooltip = "• Decimais (1,5 / 0,25) ou ≤20 = kg\n• Números inteiros >20 (500) = gramas (g)\n• Ou digite unidades diretamente (1,5 kg / 500g)"
     override val history = "Histórico de Transações"
+    override val account = "Conta"
     override val historyFilterPlaceholder = "🔍 Filtrar histórico (Produto, data, nota...)"
     override val historyFilterAll = "Todos os Tipos"
     override val historyTypePurchase = "Compra"

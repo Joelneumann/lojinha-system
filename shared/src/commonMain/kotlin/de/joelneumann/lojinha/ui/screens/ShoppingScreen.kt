@@ -104,13 +104,30 @@ fun ShoppingScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Text(
-                            text = "${strings.shopping} — ${user.name}",
+                            text = user.name,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy
                         )
+
+                        OutlinedButton(
+                            onClick = { onNavigateToHistory() },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(
+                                text = "👤 ${strings.account}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = PrimaryNavy
+                            )
+                        }
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {

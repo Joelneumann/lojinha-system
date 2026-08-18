@@ -26,6 +26,7 @@ object GermanStrings : AppStrings {
     override val weightInputHint = ""
     override val weightTooltip = "• Kommazahlen (1,5 / 0,25) oder ≤20 = kg\n• Ganzzahlen >20 (500) = Gramm (g)\n• Einheiten auch direkt tippbar (1,5 kg / 500g)"
     override val history = "Transaktionsverlauf"
+    override val account = "Konto"
     override val historyFilterPlaceholder = "🔍 Verlauf filtern (Produkt, Datum, Notiz...)"
     override val historyFilterAll = "Alle Typen"
     override val historyTypePurchase = "Einkauf"
