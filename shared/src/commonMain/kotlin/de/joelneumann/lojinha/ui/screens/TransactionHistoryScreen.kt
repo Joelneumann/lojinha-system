@@ -394,16 +394,15 @@ private fun TransactionItemCard(
     val balanceBefore = txWithBalance.balanceBefore
     val balanceAfter = txWithBalance.balanceAfter
     val strings = I18n.get(language)
-    val dateStr = remember(tx.timestamp) {
-        val sdf = SimpleDateFormat("dd MMM yyyy, HH:mm")
-        sdf.format(Date(tx.timestamp))
+    val dateStr = remember(tx.timestamp, language) {
+        Formatting.formatTimestamp(tx.timestamp, language)
     }
 
     val displayNote = remember(tx, allTransactionsMap, language) {
         if (tx.type == TransactionType.CANCELLATION && tx.referenceTransactionId != null) {
             val refTx = allTransactionsMap[tx.referenceTransactionId]
             if (refTx != null) {
-                val refDateStr = SimpleDateFormat("dd MMM yyyy, HH:mm").format(Date(refTx.timestamp))
+                val refDateStr = Formatting.formatTimestamp(refTx.timestamp, language)
                 val refTypeStr = when (refTx.type) {
                     TransactionType.PURCHASE -> strings.historyTypePurchase
                     TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit

@@ -6,7 +6,9 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DomainAndRulesTest {
 
@@ -136,5 +138,17 @@ class DomainAndRulesTest {
         assertEquals("Möchten Sie den Kauf über R$ 10,00 bestätigen?", de.confirmPurchaseMsg("R$ 10,00"))
         assertEquals("Confirm purchase for R$ 10,00?", en.confirmPurchaseMsg("R$ 10,00"))
         assertEquals("Confirmar compra no valor de R$ 10,00?", br.confirmPurchaseMsg("R$ 10,00"))
+    }
+
+    @Test
+    fun testTimestampFormatting() {
+        val timestamp = 1776534600000L
+        val enStr = Formatting.formatTimestamp(timestamp, Language.EN)
+        val deStr = Formatting.formatTimestamp(timestamp, Language.DE)
+        val brStr = Formatting.formatTimestamp(timestamp, Language.BR)
+
+        assertTrue(enStr.contains("AM") || enStr.contains("PM"))
+        assertFalse(deStr.contains("AM") || deStr.contains("PM"))
+        assertFalse(brStr.contains("AM") || brStr.contains("PM"))
     }
 }

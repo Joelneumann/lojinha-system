@@ -421,7 +421,7 @@ private fun AdminTransactionsTab(
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(transactions, key = { it.id }) { tx ->
-                val dateStr = remember(tx.timestamp) { SimpleDateFormat("dd MMM yyyy, HH:mm").format(Date(tx.timestamp)) }
+                val dateStr = remember(tx.timestamp, language) { Formatting.formatTimestamp(tx.timestamp, language) }
                 val isCancelled = tx.type == TransactionType.CANCELLATION || transactions.any { it.referenceTransactionId == tx.id }
 
                 Surface(

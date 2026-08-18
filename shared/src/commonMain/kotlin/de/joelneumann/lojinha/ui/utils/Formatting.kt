@@ -68,4 +68,14 @@ object Formatting {
             else -> round(valDouble).toLong()
         }
     }
+
+    fun formatTimestamp(timestampMs: Long, language: de.joelneumann.lojinha.domain.model.Language): String {
+        val (pattern, locale) = when (language) {
+            de.joelneumann.lojinha.domain.model.Language.EN -> "MMM dd, yyyy, hh:mm a" to java.util.Locale.US
+            de.joelneumann.lojinha.domain.model.Language.DE -> "dd.MM.yyyy, HH:mm" to java.util.Locale.GERMANY
+            de.joelneumann.lojinha.domain.model.Language.BR -> "dd/MM/yyyy, HH:mm" to java.util.Locale.forLanguageTag("pt-BR")
+        }
+        val sdf = java.text.SimpleDateFormat(pattern, locale)
+        return sdf.format(java.util.Date(timestampMs))
+    }
 }
