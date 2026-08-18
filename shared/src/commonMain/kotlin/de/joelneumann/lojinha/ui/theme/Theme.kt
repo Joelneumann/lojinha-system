@@ -3,7 +3,18 @@ package de.joelneumann.lojinha.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+
+/**
+ * Development UI Scale Factor.
+ * Adjust this constant to scale the entire application UI proportionally (layout dp & font sp).
+ * 1.0f = 100% (Standard), 1.15f = 115% (Easier to see / Kiosk mode), 1.25f = 125% (Large).
+ */
+const val DEV_UI_SCALE_FACTOR: Float = 1.15f
 
 val SurfaceWhite = Color(0xFFFFFFFF)
 val SurfaceContainerLight = Color(0xFFF8FAFC)
@@ -35,8 +46,20 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun LojinhaTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = LightColorScheme,
-        content = content
-    )
+    val currentDensity = LocalDensity.current
+    val scaledDensity = remember(currentDensity) {
+        Density(
+            density = currentDensity.density * DEV_UI_SCALE_FACTOR,
+            fontScale = currentDensity.fontScale * DEV_UI_SCALE_FACTOR
+        )
+    }
+
+    CompositionLocalProvider(
+        LocalDensity provides scaledDensity
+    ) {
+        MaterialTheme(
+            colorScheme = LightColorScheme,
+            content = content
+        )
+    }
 }
