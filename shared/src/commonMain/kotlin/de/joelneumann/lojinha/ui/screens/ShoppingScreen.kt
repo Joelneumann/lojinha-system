@@ -619,52 +619,103 @@ private fun CartLineItemRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(
                     text = cartItem.product.name,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
+                    color = PrimaryNavy,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
+                val unitSuffix = if (cartItem.product.unitType == UnitType.WEIGHT) " / kg" else ""
                 Text(
-                    text = "${Formatting.formatQuantity(cartItem.quantity, cartItem.product.unitType)} x ${Formatting.formatBrl(cartItem.unitPriceWithMarkup)}",
+                    text = "${Formatting.formatQuantity(cartItem.quantity, cartItem.product.unitType)} × ${Formatting.formatBrl(cartItem.unitPriceWithMarkup)}$unitSuffix",
                     fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                     color = TextSecondaryMuted
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (cartItem.product.unitType == UnitType.PIECE) {
-                    IconButton(
-                        onClick = { onQtyChange(cartItem.quantity - 1) },
-                        modifier = Modifier.size(28.dp).background(SurfaceWhite, CircleShape)
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SurfaceWhite,
+                        border = BorderStroke(1.dp, DividerBorder)
                     ) {
-                        Text("-", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .width(30.dp)
+                                    .clickable { onQtyChange(cartItem.quantity - 1) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("-", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
 
-                    Text(
-                        text = "${cartItem.quantity}",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                            VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
 
-                    IconButton(
-                        onClick = { onQtyChange(cartItem.quantity + 1) },
-                        modifier = Modifier.size(28.dp).background(SurfaceWhite, CircleShape)
-                    ) {
-                        Text("+", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(
+                                text = "${cartItem.quantity}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryNavy,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.widthIn(min = 36.dp).padding(horizontal = 4.dp)
+                            )
+
+                            VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .width(30.dp)
+                                    .clickable { onQtyChange(cartItem.quantity + 1) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("+", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+                        }
                     }
                 } else {
-                    IconButton(
-                        onClick = { onRemove() },
-                        modifier = Modifier.size(28.dp).background(SurfaceWhite, CircleShape)
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SurfaceWhite,
+                        border = BorderStroke(1.dp, DividerBorder)
                     ) {
-                        Text("✕", color = ColorDangerCrimson, fontSize = 12.sp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text(
+                                text = Formatting.formatQuantity(cartItem.quantity, UnitType.WEIGHT),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryNavy,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 10.dp)
+                            )
+
+                            VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .width(30.dp)
+                                    .clickable { onRemove() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("✕", color = ColorDangerCrimson, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
-
-                Spacer(modifier = Modifier.width(4.dp))
 
                 Text(
                     text = Formatting.formatBrl(cartItem.lineTotal),

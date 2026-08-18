@@ -36,15 +36,10 @@ object Formatting {
         return when (unitType) {
             UnitType.PIECE -> "$quantity pcs"
             UnitType.WEIGHT -> {
-                val kg = quantity.toDouble() / 1000.0
                 val kgInt = quantity / 1000
-                val remainderGrams = quantity % 1000
-                if (remainderGrams == 0L) {
-                    "$kgInt kg"
-                } else {
-                    val decStr = (remainderGrams / 10).toString().padStart(2, '0').trimEnd('0')
-                    "$kgInt,$decStr kg"
-                }
+                val remainderGrams = abs(quantity % 1000)
+                val gramsStr = remainderGrams.toString().padStart(3, '0')
+                "$kgInt,$gramsStr kg"
             }
         }
     }
