@@ -50,17 +50,27 @@ object Formatting {
     }
 
     fun parseWeightInputToGrams(input: String): Long? {
-        val cleaned = input.trim().replace("kg", "", ignoreCase = true).replace("g", "", ignoreCase = true).trim()
+        val trimmed = input.trim().lowercase()
+        if (trimmed.isBlank()) return null
+
+        val hasKg = trimmed.contains("kg")
+        val hasG = !hasKg && trimmed.contains("g")
+
+        val cleaned = trimmed
+            .replace("kg", "")
+            .replace("g", "")
+            .trim()
+
         if (cleaned.isBlank()) return null
         val normalized = cleaned.replace(',', '.')
         val valDouble = normalized.toDoubleOrNull() ?: return null
         if (valDouble <= 0.0) return null
 
-        // If user typed 500 without decimals, and <= 50, treat as kg (e.g. 1.5 -> 1500g). If > 50 (e.g. 500), check if typed in grams or kg.
-        return if (normalized.contains('.') || valDouble <= 20.0) {
-            round(valDouble * 1000.0).toLong()
-        } else {
-            round(valDouble).toLong()
+        return when {
+            hasKg -> round(valDouble * 1000.0).toLong()
+            hasG -> round(valDouble).toLong()
+            normalized.contains('.') || valDouble <= 20.0 -> round(valDouble * 1000.0).toLong()
+            else -> round(valDouble).toLong()
         }
     }
 }

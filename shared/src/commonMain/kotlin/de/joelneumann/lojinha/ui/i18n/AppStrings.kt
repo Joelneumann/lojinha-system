@@ -24,6 +24,7 @@ interface AppStrings {
     val weightDialogTitle: String
     fun weightDialogMsg(productName: String): String
     val weightInputHint: String
+    val weightTooltip: String
     val history: String
     val historyFilterPlaceholder: String
     val historyFilterAll: String

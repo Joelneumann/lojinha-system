@@ -115,10 +115,6 @@ class ShoppingViewModel(
         _cartItems.value = currentList
     }
 
-    fun setWeightPreset(grams: Long) {
-        _weightInput.value = Formatting.formatQuantity(grams, UnitType.WEIGHT).replace(" kg", "")
-        _weightError.value = null
-    }
 
     fun updateWeightInput(input: String) {
         _weightInput.value = input

@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
@@ -333,6 +335,7 @@ fun ShoppingScreen(
     // Weight Prompt Input Dialog Modal
     if (weightProductDialog != null) {
         val weightFocusRequester = remember { FocusRequester() }
+        var showWeightTooltip by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { weightFocusRequester.requestFocus() }
 
         Dialog(onDismissRequest = { viewModel.closeWeightDialog() }) {
@@ -363,31 +366,40 @@ fun ShoppingScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Preset weight click buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf("250g" to 250L, "500g" to 500L, "1 kg" to 1000L, "1,5 kg" to 1500L).forEach { (label, grams) ->
-                            OutlinedButton(
-                                onClick = { viewModel.setWeightPreset(grams) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(4.dp)
-                            ) {
-                                Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
                     OutlinedTextField(
                         value = weightInput,
                         onValueChange = { viewModel.updateWeightInput(it) },
-                        placeholder = { Text("e.g. 1,5 kg or 500 g") },
                         singleLine = true,
                         isError = weightError != null,
+                        shape = RoundedCornerShape(12.dp),
+                        trailingIcon = {
+                            IconButton(
+                                onClick = { showWeightTooltip = !showWeightTooltip },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (showWeightTooltip) PrimaryNavy else androidx.compose.ui.graphics.Color.Transparent,
+                                    border = BorderStroke(
+                                        width = 1.5.dp,
+                                        color = if (showWeightTooltip) PrimaryNavy else TextSecondaryMuted
+                                    ),
+                                    modifier = Modifier.size(22.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = "i",
+                                            color = if (showWeightTooltip) SurfaceWhite else TextSecondaryMuted,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(weightFocusRequester)
@@ -402,6 +414,24 @@ fun ShoppingScreen(
                             viewModel.submitWeightDialog(settings.globalMarkupPercent)
                         })
                     )
+
+                    if (showWeightTooltip) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SurfaceContainerHighLight,
+                            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = strings.weightTooltip,
+                                fontSize = 12.sp,
+                                color = TextSecondarySubtle,
+                                modifier = Modifier.padding(12.dp),
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
 
                     if (weightError != null) {
                         Spacer(modifier = Modifier.height(6.dp))

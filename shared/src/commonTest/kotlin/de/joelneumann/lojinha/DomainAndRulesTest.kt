@@ -93,7 +93,12 @@ class DomainAndRulesTest {
     fun testWeightInputParser() {
         assertEquals(1500L, Formatting.parseWeightInputToGrams("1,5"))
         assertEquals(1500L, Formatting.parseWeightInputToGrams("1.5 kg"))
+        assertEquals(30000L, Formatting.parseWeightInputToGrams("30kg"))
+        assertEquals(30000L, Formatting.parseWeightInputToGrams("30 kg"))
+        assertEquals(30L, Formatting.parseWeightInputToGrams("30g"))
+        assertEquals(30000L, Formatting.parseWeightInputToGrams("30"))
         assertEquals(500L, Formatting.parseWeightInputToGrams("500g"))
+        assertEquals(500L, Formatting.parseWeightInputToGrams("500"))
         assertEquals(250L, Formatting.parseWeightInputToGrams("0,25"))
     }
 
