@@ -34,9 +34,6 @@ fun App() {
 
     val appViewModel = remember { AppViewModel(userRepository, settingsRepository) }
     val userSelectionViewModel = remember { UserSelectionViewModel(userRepository) }
-    val shoppingViewModel = remember { ShoppingViewModel(productRepository, userRepository, transactionRepository) }
-    val historyViewModel = remember { TransactionHistoryViewModel(transactionRepository, userRepository) }
-    val adminViewModel = remember { AdminViewModel(productRepository, userRepository, transactionRepository, settingsRepository) }
 
     val currentScreen by appViewModel.currentScreen.collectAsState()
     val currentUser by appViewModel.currentUser.collectAsState()
@@ -44,6 +41,10 @@ fun App() {
     val settings by appViewModel.settings.collectAsState()
     val showInactivityWarning by appViewModel.showInactivityWarning.collectAsState()
     val inactivitySeconds by appViewModel.inactivitySecondsRemaining.collectAsState()
+
+    val shoppingViewModel = remember(currentUser?.id) { ShoppingViewModel(productRepository, userRepository, transactionRepository) }
+    val historyViewModel = remember(currentUser?.id) { TransactionHistoryViewModel(transactionRepository, userRepository) }
+    val adminViewModel = remember { AdminViewModel(productRepository, userRepository, transactionRepository, settingsRepository) }
 
     val interactionSource = remember { MutableInteractionSource() }
 
