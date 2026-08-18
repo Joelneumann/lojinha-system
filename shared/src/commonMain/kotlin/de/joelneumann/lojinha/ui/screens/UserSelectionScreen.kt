@@ -73,8 +73,6 @@ fun UserSelectionScreen(
                 value = searchQuery,
                 onValueChange = { query ->
                     viewModel.updateSearchQuery(query)
-                    // Also check if barcode buffer matches user
-                    viewModel.onUserBarcodeScanned(query, onUserLoggedIn)
                 },
                 placeholder = {
                     Text(
@@ -87,7 +85,7 @@ fun UserSelectionScreen(
                     .focusRequester(focusRequester)
                     .onKeyEvent { keyEvent ->
                         if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                            viewModel.onUserBarcodeScanned(searchQuery, onUserLoggedIn)
+                            viewModel.onSearchSubmitted(onUserLoggedIn)
                             true
                         } else false
                     },
@@ -101,7 +99,7 @@ fun UserSelectionScreen(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = {
-                    viewModel.onUserBarcodeScanned(searchQuery, onUserLoggedIn)
+                    viewModel.onSearchSubmitted(onUserLoggedIn)
                 })
             )
 

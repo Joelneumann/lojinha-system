@@ -53,17 +53,24 @@ class UserSelectionViewModel(
         _searchQuery.value = query
     }
 
-    fun onUserBarcodeScanned(barcode: String, onLoginSuccess: (User) -> Unit) {
+    fun onSearchSubmitted(onLoginSuccess: (User) -> Unit) {
+        val query = _searchQuery.value.trim()
+        if (query.isBlank()) return
+
         viewModelScope.launch {
-            val user = userRepository.getUserByBarcode(barcode.trim())
-            if (user != null && user.isActive) {
-                if (user.pin.isNull_or_blank()) {
-                    onLoginSuccess(user)
-                } else {
-                    _selectedUserForPin.value = user
-                    _pinInput.value = ""
-                    _pinError.value = null
-                }
+            // 1. Try matching user by barcode first
+            val userByBarcode = userRepository.getUserByBarcode(query)
+            if (userByBarcode != null && userByBarcode.isActive) {
+                onUserCardClicked(userByBarcode, onLoginSuccess)
+                _searchQuery.value = ""
+                return@launch
+            }
+
+            // 2. Otherwise check filtered user list
+            val filtered = _users.value.filter { it.name.contains(query, ignoreCase = true) }
+            if (filtered.size == 1) {
+                onUserCardClicked(filtered.first(), onLoginSuccess)
+                _searchQuery.value = ""
             }
         }
     }
