@@ -61,6 +61,12 @@ fun ShoppingScreen(
         searchFocusRequester.requestFocus()
     }
 
+    LaunchedEffect(weightProductDialog) {
+        if (weightProductDialog == null) {
+            searchFocusRequester.requestFocus()
+        }
+    }
+
     val filteredProducts = remember(products, searchQuery) {
         if (searchQuery.isBlank()) products
         else products.filter { p ->
@@ -183,7 +189,10 @@ fun ShoppingScreen(
                         user = user,
                         rate = rate,
                         language = language,
-                        onClick = { viewModel.onProductSelected(product, settings.globalMarkupPercent) }
+                        onClick = {
+                            viewModel.onProductSelected(product, settings.globalMarkupPercent)
+                            searchFocusRequester.requestFocus()
+                        }
                     )
                 }
             }
@@ -234,8 +243,12 @@ fun ShoppingScreen(
                                     language = language,
                                     onQtyChange = { newQty ->
                                         viewModel.updateCartItemQuantity(cartItem.product.id, newQty)
+                                        searchFocusRequester.requestFocus()
                                     },
-                                    onRemove = { viewModel.removeCartItem(cartItem.product.id) }
+                                    onRemove = {
+                                        viewModel.removeCartItem(cartItem.product.id)
+                                        searchFocusRequester.requestFocus()
+                                    }
                                 )
                             }
                         }
