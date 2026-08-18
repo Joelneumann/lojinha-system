@@ -136,7 +136,7 @@ fun ShoppingScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { query ->
-                    viewModel.updateSearchQuery(query, settings.globalMarkupPercent)
+                    viewModel.updateSearchQuery(query)
                 },
                 placeholder = {
                     Text(
@@ -149,7 +149,7 @@ fun ShoppingScreen(
                     .focusRequester(searchFocusRequester)
                     .onKeyEvent { keyEvent ->
                         if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                            viewModel.onBarcodeScanned(searchQuery, settings.globalMarkupPercent)
+                            viewModel.onSearchSubmitted(settings.globalMarkupPercent)
                             true
                         } else false
                     },
@@ -160,7 +160,11 @@ fun ShoppingScreen(
                     focusedBorderColor = AccentNavy,
                     unfocusedBorderColor = DividerBorder
                 ),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    viewModel.onSearchSubmitted(settings.globalMarkupPercent)
+                })
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -506,54 +510,62 @@ private fun ProductCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(135.dp),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
         border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(14.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
-                Text(
-                    text = product.name,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy,
-                    maxLines = 2
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (product.unitType == UnitType.WEIGHT) "${Formatting.formatBrl(unitPrice)} / kg" else Formatting.formatBrl(unitPrice),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AccentNavy
-                )
-            }
+            // Full-width Product Name at Top
+            Text(
+                text = product.name,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = PrimaryNavy,
+                maxLines = 2,
+                lineHeight = 19.sp,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .background(SurfaceContainerHighLight, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
+            // Bottom Section: Price & Unit Label underneath
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = Formatting.formatBrl(unitPrice),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentNavy
+                    )
+                    if (product.unitType == UnitType.WEIGHT) {
+                        Text(
+                            text = " / kg",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondaryMuted,
+                            modifier = Modifier.padding(bottom = 1.dp, start = 2.dp)
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = SurfaceContainerHighLight,
+                    modifier = Modifier.wrapContentSize()
                 ) {
                     Text(
                         text = if (product.unitType == UnitType.PIECE) strings.unitPiece else strings.unitWeight,
                         fontSize = 11.sp,
-                        color = TextSecondaryMuted
+                        fontWeight = FontWeight.Medium,
+                        color = TextSecondaryMuted,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                     )
                 }
-
-                Text(
-                    text = "${strings.stock}: ${Formatting.formatQuantity(product.stockQuantity, product.unitType)}",
-                    fontSize = 11.sp,
-                    color = TextSecondarySubtle
-                )
             }
         }
     }

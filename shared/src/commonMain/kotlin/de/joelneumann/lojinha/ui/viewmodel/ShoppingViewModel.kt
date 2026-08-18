@@ -64,19 +64,30 @@ class ShoppingViewModel(
         }
     }
 
-    fun updateSearchQuery(query: String, globalMarkup: Double) {
+    fun updateSearchQuery(query: String) {
         _searchQuery.value = query
-        // Check if query is a full barcode match
-        onBarcodeScanned(query, globalMarkup)
     }
 
-    fun onBarcodeScanned(barcode: String, globalMarkup: Double) {
-        if (barcode.isBlank()) return
-        val product = _products.value.firstOrNull { p ->
-            p.barcodes.any { b -> b.code.equals(barcode.trim(), ignoreCase = true) }
+    fun onSearchSubmitted(globalMarkup: Double) {
+        val query = _searchQuery.value.trim()
+        if (query.isBlank()) return
+
+        // 1. Try matching product by barcode first
+        val productByBarcode = _products.value.firstOrNull { p ->
+            p.barcodes.any { b -> b.code.equals(query, ignoreCase = true) }
         }
-        if (product != null) {
-            onProductSelected(product, globalMarkup)
+        if (productByBarcode != null) {
+            onProductSelected(productByBarcode, globalMarkup)
+            _searchQuery.value = ""
+            return
+        }
+
+        // 2. Otherwise check filtered product list by name
+        val filtered = _products.value.filter { p ->
+            p.name.contains(query, ignoreCase = true)
+        }
+        if (filtered.size == 1) {
+            onProductSelected(filtered.first(), globalMarkup)
             _searchQuery.value = ""
         }
     }
