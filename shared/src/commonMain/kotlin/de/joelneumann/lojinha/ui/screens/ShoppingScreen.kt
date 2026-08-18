@@ -171,17 +171,17 @@ fun ShoppingScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Product Grid
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 160.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+            // Product List (Vertical List of Cards)
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filteredProducts, key = { it.id }) { product ->
                     ProductCard(
                         product = product,
                         globalMarkup = settings.globalMarkupPercent,
+                        user = user,
+                        rate = rate,
                         language = language,
                         onClick = { viewModel.onProductSelected(product, settings.globalMarkupPercent) }
                     )
@@ -202,24 +202,12 @@ fun ShoppingScreen(
                     .fillMaxSize()
                     .padding(20.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "🛒 ${strings.cart} (${cartItems.size})",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryNavy
-                    )
-
-                    if (cartItems.isNotEmpty()) {
-                        TextButton(onClick = { viewModel.clearCart() }) {
-                            Text("Clear", color = ColorDangerCrimson, fontSize = 13.sp)
-                        }
-                    }
-                }
+                Text(
+                    text = strings.cart,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy
+                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = DividerBorder)
 
@@ -241,6 +229,8 @@ fun ShoppingScreen(
                             items(cartItems, key = { it.product.id }) { cartItem ->
                                 CartLineItemRow(
                                     cartItem = cartItem,
+                                    user = user,
+                                    rate = rate,
                                     language = language,
                                     onQtyChange = { newQty ->
                                         viewModel.updateCartItemQuantity(cartItem.product.id, newQty)
@@ -529,6 +519,8 @@ fun ShoppingScreen(
 private fun ProductCard(
     product: Product,
     globalMarkup: Double,
+    user: User,
+    rate: Double,
     language: Language,
     onClick: () -> Unit
 ) {
@@ -539,52 +531,35 @@ private fun ProductCard(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(135.dp),
-        shape = RoundedCornerShape(14.dp),
+            .wrapContentHeight(),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
         border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Full-width Product Name at Top
-            Text(
-                text = product.name,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryNavy,
-                maxLines = 2,
-                lineHeight = 19.sp,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Bottom Section: Price & Unit Label underneath
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = Formatting.formatBrl(unitPrice),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AccentNavy
-                    )
-                    if (product.unitType == UnitType.WEIGHT) {
-                        Text(
-                            text = " / kg",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = TextSecondaryMuted,
-                            modifier = Modifier.padding(bottom = 1.dp, start = 2.dp)
-                        )
-                    }
-                }
-
+            // Left Column: Multiline Product Name & Unit Badge underneath
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp)
+            ) {
+                Text(
+                    text = product.name,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy,
+                    lineHeight = 19.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = SurfaceContainerHighLight,
                     modifier = Modifier.wrapContentSize()
                 ) {
@@ -597,6 +572,37 @@ private fun ProductCard(
                     )
                 }
             }
+
+            // Right Column: Price & Secondary Currency underneath (Structured like Cart!)
+            Column(horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = Formatting.formatBrl(unitPrice),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentNavy
+                    )
+                    if (product.unitType == UnitType.WEIGHT) {
+                        Text(
+                            text = " / kg",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondaryMuted,
+                            modifier = Modifier.padding(bottom = 1.dp, start = 2.dp)
+                        )
+                    }
+                }
+
+                val secText = Formatting.formatSecondaryCurrency(unitPrice, user.secondaryCurrency, rate)
+                if (secText.isNotEmpty()) {
+                    Text(
+                        text = secText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextSecondaryMuted
+                    )
+                }
+            }
         }
     }
 }
@@ -604,6 +610,8 @@ private fun ProductCard(
 @Composable
 private fun CartLineItemRow(
     cartItem: CartItem,
+    user: User,
+    rate: Double,
     language: Language,
     onQtyChange: (Long) -> Unit,
     onRemove: () -> Unit
@@ -717,12 +725,23 @@ private fun CartLineItemRow(
                     }
                 }
 
-                Text(
-                    text = Formatting.formatBrl(cartItem.lineTotal),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = Formatting.formatBrl(cartItem.lineTotal),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
+                    )
+                    val secText = Formatting.formatSecondaryCurrency(cartItem.lineTotal, user.secondaryCurrency, rate)
+                    if (secText.isNotEmpty()) {
+                        Text(
+                            text = secText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondaryMuted
+                        )
+                    }
+                }
             }
         }
     }
