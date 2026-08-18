@@ -62,11 +62,10 @@ fun App() {
                 topBar = {
                     HeaderBar(
                         currentScreen = currentScreen,
-                        currentUser = currentUser,
                         currentLanguage = currentLanguage,
                         onLanguageSelected = { appViewModel.setLanguage(it) },
                         onLogoutClicked = { appViewModel.logout() },
-                        onNavigateToMain = { appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT) }
+                        onAdminLoginClicked = { userSelectionViewModel.openAdminAuthDialog() }
                     )
                 }
             ) { innerPadding ->

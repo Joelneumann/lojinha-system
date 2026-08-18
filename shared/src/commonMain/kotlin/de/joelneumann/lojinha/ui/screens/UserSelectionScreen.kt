@@ -68,64 +68,42 @@ fun UserSelectionScreen(
             .padding(24.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top Bar: Search Input (Auto-Focused) & Admin Login Gateway
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { query ->
-                        viewModel.updateSearchQuery(query)
-                        // Also check if barcode buffer matches user
-                        viewModel.onUserBarcodeScanned(query, onUserLoggedIn)
-                    },
-                    placeholder = {
-                        Text(
-                            text = strings.searchUserPlaceholder,
-                            color = TextSecondaryMuted
-                        )
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(focusRequester)
-                        .onKeyEvent { keyEvent ->
-                            if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                                viewModel.onUserBarcodeScanned(searchQuery, onUserLoggedIn)
-                                true
-                            } else false
-                        },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = SurfaceWhite,
-                        unfocusedContainerColor = SurfaceWhite,
-                        focusedBorderColor = AccentNavy,
-                        unfocusedBorderColor = DividerBorder
-                    ),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = {
-                        viewModel.onUserBarcodeScanned(searchQuery, onUserLoggedIn)
-                    })
-                )
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Button(
-                    onClick = { viewModel.openAdminAuthDialog() },
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
-                ) {
+            // Search Input (Auto-Focused)
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { query ->
+                    viewModel.updateSearchQuery(query)
+                    // Also check if barcode buffer matches user
+                    viewModel.onUserBarcodeScanned(query, onUserLoggedIn)
+                },
+                placeholder = {
                     Text(
-                        text = strings.adminLoginBtn,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SurfaceWhite
+                        text = strings.searchUserPlaceholder,
+                        color = TextSecondaryMuted
                     )
-                }
-            }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+                    .onKeyEvent { keyEvent ->
+                        if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
+                            viewModel.onUserBarcodeScanned(searchQuery, onUserLoggedIn)
+                            true
+                        } else false
+                    },
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = SurfaceWhite,
+                    unfocusedContainerColor = SurfaceWhite,
+                    focusedBorderColor = AccentNavy,
+                    unfocusedBorderColor = DividerBorder
+                ),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    viewModel.onUserBarcodeScanned(searchQuery, onUserLoggedIn)
+                })
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 

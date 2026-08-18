@@ -11,10 +11,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Language
-import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.viewmodel.AppScreen
@@ -22,41 +22,94 @@ import de.joelneumann.lojinha.ui.viewmodel.AppScreen
 @Composable
 fun HeaderBar(
     currentScreen: AppScreen,
-    currentUser: User?,
     currentLanguage: Language,
     onLanguageSelected: (Language) -> Unit,
     onLogoutClicked: () -> Unit,
-    onNavigateToMain: () -> Unit
+    onAdminLoginClicked: () -> Unit
 ) {
     val strings = I18n.get(currentLanguage)
+
+    val screenTitle = when (currentScreen) {
+        AppScreen.MAIN_USER_SELECT -> "Lojinha"
+        AppScreen.SHOPPING -> strings.shopping
+        AppScreen.TRANSACTION_HISTORY -> strings.history
+        AppScreen.ADMIN_PANEL -> strings.adminPanel
+    }
 
     Surface(
         modifier = Modifier.fillMaxWidth().height(64.dp),
         color = SurfaceWhite,
         shadowElevation = 2.dp
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Box(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)
         ) {
-            // Left: Logo & Title
+            // Left: Action Button (Admin Login on Main, Logout/Exit on others)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable { onNavigateToMain() }
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.align(Alignment.CenterStart)
             ) {
-                Text(
-                    text = strings.appTitle,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                )
+                if (currentScreen == AppScreen.MAIN_USER_SELECT) {
+                    Button(
+                        onClick = onAdminLoginClicked,
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = strings.adminLoginBtn,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SurfaceWhite
+                        )
+                    }
+                } else if (currentScreen == AppScreen.ADMIN_PANEL) {
+                    Button(
+                        onClick = onLogoutClicked,
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "🚪 Main Menu",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SurfaceWhite
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onLogoutClicked,
+                        colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "🚪 ${strings.logout}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SurfaceWhite
+                        )
+                    }
+                }
             }
 
-            // Center: Language Switcher Flags
+            // Center: Screen Heading Title
+            Text(
+                text = screenTitle,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = PrimaryNavy,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center)
+            )
+
+            // Right: Language Switcher Flags
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.align(Alignment.CenterEnd)
             ) {
                 Language.entries.forEach { lang ->
                     val isSelected = lang == currentLanguage
@@ -77,71 +130,6 @@ fun HeaderBar(
                             fontSize = 14.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             color = if (isSelected) SurfaceWhite else PrimaryNavy
-                        )
-                    }
-                }
-            }
-
-            // Right: Active User & Logout button
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (currentUser != null) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .background(SurfaceContainerHighLight, RoundedCornerShape(20.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(AccentNavy),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = currentUser.initials,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SurfaceWhite
-                            )
-                        }
-                        Text(
-                            text = currentUser.name,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = PrimaryNavy
-                        )
-                    }
-
-                    Button(
-                        onClick = onLogoutClicked,
-                        colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "🚪 ${strings.logout}",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SurfaceWhite
-                        )
-                    }
-                } else if (currentScreen == AppScreen.ADMIN_PANEL) {
-                    Button(
-                        onClick = onLogoutClicked,
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "🚪 Main Menu",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SurfaceWhite
                         )
                     }
                 }
