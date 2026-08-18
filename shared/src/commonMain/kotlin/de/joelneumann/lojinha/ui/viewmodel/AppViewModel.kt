@@ -56,6 +56,14 @@ class AppViewModel(
 
     fun setLanguage(language: Language) {
         _currentLanguage.value = language
+        val user = _currentUser.value
+        if (user != null && user.language != language) {
+            val updated = user.copy(language = language)
+            _currentUser.value = updated
+            viewModelScope.launch {
+                userRepository.saveUser(updated)
+            }
+        }
     }
 
     fun loginUser(user: User) {
@@ -87,6 +95,7 @@ class AppViewModel(
 
     fun updateCurrentUser(user: User) {
         _currentUser.value = user
+        _currentLanguage.value = user.language
         viewModelScope.launch {
             userRepository.saveUser(user)
         }
@@ -98,6 +107,7 @@ class AppViewModel(
             val updated = userRepository.getUserById(user.id)
             if (updated != null) {
                 _currentUser.value = updated
+                _currentLanguage.value = updated.language
             }
         }
     }

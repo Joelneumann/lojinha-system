@@ -53,8 +53,22 @@ fun TransactionHistoryScreen(
         viewModel.loadUserTransactions(user.id)
     }
 
-    val filteredTransactions = remember(transactions, searchFilter, selectedTypeFilter) {
-        transactions.filter { tx ->
+    val transactionsWithBalance = remember(transactions) {
+        val sortedAsc = transactions.sortedBy { it.timestamp }
+        var current = 0L
+        val list = ArrayList<TransactionWithBalance>(sortedAsc.size)
+        for (tx in sortedAsc) {
+            val before = current
+            val after = before + tx.totalAmount
+            current = after
+            list.add(TransactionWithBalance(tx, before, after))
+        }
+        list.sortedByDescending { it.transaction.timestamp }
+    }
+
+    val filteredTransactions = remember(transactionsWithBalance, searchFilter, selectedTypeFilter) {
+        transactionsWithBalance.filter { item ->
+            val tx = item.transaction
             val matchesType = selectedTypeFilter == null || tx.type == selectedTypeFilter
             val matchesText = searchFilter.isBlank() ||
                     tx.userNameSnapshot.contains(searchFilter, ignoreCase = true) ||
@@ -217,8 +231,8 @@ fun TransactionHistoryScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(filteredTransactions, key = { it.id }) { tx ->
-                    TransactionItemCard(tx = tx, language = language, rate = rate, secondaryCurrency = user.secondaryCurrency)
+                items(filteredTransactions, key = { it.transaction.id }) { txWithBalance ->
+                    TransactionItemCard(txWithBalance = txWithBalance, language = language, rate = rate, secondaryCurrency = user.secondaryCurrency)
                 }
             }
         }
@@ -354,13 +368,22 @@ fun TransactionHistoryScreen(
     }
 }
 
+data class TransactionWithBalance(
+    val transaction: Transaction,
+    val balanceBefore: Long,
+    val balanceAfter: Long
+)
+
 @Composable
 private fun TransactionItemCard(
-    tx: Transaction,
+    txWithBalance: TransactionWithBalance,
     language: Language,
     rate: Double,
     secondaryCurrency: SecondaryCurrency
 ) {
+    val tx = txWithBalance.transaction
+    val balanceBefore = txWithBalance.balanceBefore
+    val balanceAfter = txWithBalance.balanceAfter
     val strings = I18n.get(language)
     val dateStr = remember(tx.timestamp) {
         val sdf = SimpleDateFormat("dd MMM yyyy, HH:mm")
@@ -426,6 +449,52 @@ private fun TransactionItemCard(
                     fontSize = 13.sp,
                     color = TextSecondarySubtle
                 )
+            }
+
+            // Balance Flow Banner: Before ➔ After
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = SurfaceContainerHighLight,
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${strings.balance}:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextSecondarySubtle
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = Formatting.formatBrl(balanceBefore),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextSecondaryMuted
+                        )
+
+                        Text(
+                            text = "➔",
+                            fontSize = 12.sp,
+                            color = TextSecondarySubtle
+                        )
+
+                        Text(
+                            text = Formatting.formatBrl(balanceAfter),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (balanceAfter >= 0) PrimaryNavy else ColorDangerCrimson
+                        )
+                    }
+                }
             }
 
             // Direct Visibility of Purchased Items inside Transaction Card
