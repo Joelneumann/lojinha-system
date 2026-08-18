@@ -1,7 +1,6 @@
 package de.joelneumann.lojinha.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,6 +38,7 @@ fun TransactionHistoryScreen(
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit
 ) {
+    val strings = I18n.get(language)
     val transactions by viewModel.transactions.collectAsState()
     val searchFilter by viewModel.searchFilter.collectAsState()
     val selectedTypeFilter by viewModel.selectedTypeFilter.collectAsState()
@@ -89,13 +89,13 @@ fun TransactionHistoryScreen(
             ) {
                 Column {
                     Text(
-                        text = I18n.get("history", language),
+                        text = strings.history,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
                     )
                     Text(
-                        text = "${user.name} — ${I18n.get("balance", language)}: ${Formatting.formatBrl(user.balance)}${Formatting.formatSecondaryCurrency(user.balance, user.secondaryCurrency, rate)}",
+                        text = "${user.name} — ${strings.balance}: ${Formatting.formatBrl(user.balance)}${Formatting.formatSecondaryCurrency(user.balance, user.secondaryCurrency, rate)}",
                         fontSize = 14.sp,
                         color = TextSecondaryMuted
                     )
@@ -107,14 +107,14 @@ fun TransactionHistoryScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(I18n.get("continue_shopping", language), color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                        Text(strings.continueShopping, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
 
                     OutlinedButton(
                         onClick = { viewModel.openSettingsModal(user) },
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(I18n.get("user_settings", language), fontWeight = FontWeight.Bold)
+                        Text(strings.userSettings, fontWeight = FontWeight.Bold)
                     }
 
                     Button(
@@ -122,7 +122,7 @@ fun TransactionHistoryScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(I18n.get("logout", language), color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                        Text(strings.logout, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -139,7 +139,7 @@ fun TransactionHistoryScreen(
             OutlinedTextField(
                 value = searchFilter,
                 onValueChange = { viewModel.updateSearchFilter(it) },
-                placeholder = { Text(I18n.get("history_filter_placeholder", language), color = TextSecondaryMuted) },
+                placeholder = { Text(strings.historyFilterPlaceholder, color = TextSecondaryMuted) },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(10.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -154,10 +154,10 @@ fun TransactionHistoryScreen(
             // Filter Type Buttons
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 val filterOptions: List<Pair<String, TransactionType?>> = listOf(
-                    I18n.get("history_filter_all", language) to null,
-                    I18n.get("history_type_purchase", language) to TransactionType.PURCHASE,
-                    I18n.get("history_type_deposit", language) to TransactionType.ADMIN_DEPOSIT,
-                    I18n.get("history_type_cancellation", language) to TransactionType.CANCELLATION
+                    strings.historyFilterAll to null,
+                    strings.historyTypePurchase to TransactionType.PURCHASE,
+                    strings.historyTypeDeposit to TransactionType.ADMIN_DEPOSIT,
+                    strings.historyTypeCancellation to TransactionType.CANCELLATION
                 )
 
                 filterOptions.forEach { (label, type) ->
@@ -207,7 +207,7 @@ fun TransactionHistoryScreen(
                     modifier = Modifier.padding(24.dp)
                 ) {
                     Text(
-                        text = I18n.get("user_settings_title", language),
+                        text = strings.userSettingsTitle,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
@@ -216,7 +216,7 @@ fun TransactionHistoryScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // PIN Setting
-                    Text(text = I18n.get("set_pin", language), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = strings.setPin, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(6.dp))
                     OutlinedTextField(
                         value = pinInput,
@@ -229,7 +229,7 @@ fun TransactionHistoryScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Language Selection
-                    Text(text = I18n.get("preferred_language", language), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = strings.preferredLanguage, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Language.entries.forEach { lang ->
@@ -250,13 +250,13 @@ fun TransactionHistoryScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Secondary Display Currency Selection
-                    Text(text = I18n.get("secondary_currency", language), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = strings.secondaryCurrency, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(6.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(
-                            SecondaryCurrency.NONE to I18n.get("secondary_currency_none", language),
-                            SecondaryCurrency.USD to I18n.get("secondary_currency_usd", language),
-                            SecondaryCurrency.EUR to I18n.get("secondary_currency_eur", language)
+                            SecondaryCurrency.NONE to strings.secondaryCurrencyNone,
+                            SecondaryCurrency.USD to strings.secondaryCurrencyUsd,
+                            SecondaryCurrency.EUR to strings.secondaryCurrencyEur
                         ).forEach { (curr, label) ->
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -278,7 +278,7 @@ fun TransactionHistoryScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Assigned Barcode ID (Read-Only)
-                    Text(text = I18n.get("assigned_barcode_id", language), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = strings.assignedBarcodeId, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(6.dp))
                     Box(
                         modifier = Modifier
@@ -305,7 +305,7 @@ fun TransactionHistoryScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text(I18n.get("cancel", language))
+                            Text(strings.cancel)
                         }
 
                         Button(
@@ -316,7 +316,7 @@ fun TransactionHistoryScreen(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                         ) {
-                            Text(I18n.get("save", language), color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                            Text(strings.save, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -332,17 +332,18 @@ private fun TransactionItemCard(
     rate: Double,
     secondaryCurrency: SecondaryCurrency
 ) {
+    val strings = I18n.get(language)
     val dateStr = remember(tx.timestamp) {
         val sdf = SimpleDateFormat("dd MMM yyyy, HH:mm")
         sdf.format(Date(tx.timestamp))
     }
 
     val typeLabel = when (tx.type) {
-        TransactionType.PURCHASE -> "🛒 ${I18n.get("history_type_purchase", language)}"
-        TransactionType.ADMIN_DEPOSIT -> "💵 ${I18n.get("history_type_deposit", language)}"
-        TransactionType.ADMIN_WITHDRAWAL -> "📤 ${I18n.get("history_type_withdrawal", language)}"
-        TransactionType.CANCELLATION -> "🔄 ${I18n.get("history_type_cancellation", language)}"
-        TransactionType.CORRECTION -> "✏️ ${I18n.get("history_type_correction", language)}"
+        TransactionType.PURCHASE -> "🛒 ${strings.historyTypePurchase}"
+        TransactionType.ADMIN_DEPOSIT -> "💵 ${strings.historyTypeDeposit}"
+        TransactionType.ADMIN_WITHDRAWAL -> "📤 ${strings.historyTypeWithdrawal}"
+        TransactionType.CANCELLATION -> "🔄 ${strings.historyTypeCancellation}"
+        TransactionType.CORRECTION -> "✏️ ${strings.historyTypeCorrection}"
     }
 
     val isPositive = tx.totalAmount > 0
@@ -401,7 +402,7 @@ private fun TransactionItemCard(
             // Direct Visibility of Purchased Items inside Transaction Card
             if (tx.items.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
-                Divider(color = DividerBorder)
+                HorizontalDivider(color = DividerBorder)
                 Spacer(modifier = Modifier.height(8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     tx.items.forEach { item ->

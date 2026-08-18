@@ -1,7 +1,6 @@
 package de.joelneumann.lojinha.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -18,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -42,6 +40,7 @@ fun UserSelectionScreen(
     onUserLoggedIn: (User) -> Unit,
     onNavigateToAdmin: () -> Unit
 ) {
+    val strings = I18n.get(language)
     val users by viewModel.users.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedUserForPin by viewModel.selectedUserForPin.collectAsState()
@@ -84,7 +83,7 @@ fun UserSelectionScreen(
                     },
                     placeholder = {
                         Text(
-                            text = I18n.get("search_user_placeholder", language),
+                            text = strings.searchUserPlaceholder,
                             color = TextSecondaryMuted
                         )
                     },
@@ -120,7 +119,7 @@ fun UserSelectionScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
                 ) {
                     Text(
-                        text = I18n.get("admin_login_btn", language),
+                        text = strings.adminLoginBtn,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = SurfaceWhite
@@ -131,7 +130,7 @@ fun UserSelectionScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = I18n.get("select_user_title", language),
+                text = strings.selectUserTitle,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = PrimaryNavy
@@ -171,7 +170,7 @@ fun UserSelectionScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = I18n.get("enter_pin_title", language),
+                            text = strings.enterPinTitle,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy
@@ -180,7 +179,7 @@ fun UserSelectionScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "${I18n.get("enter_pin_prompt", language)} ${selectedUserForPin?.name}:",
+                            text = "${strings.enterPinPrompt} ${selectedUserForPin?.name}:",
                             fontSize = 14.sp,
                             color = TextSecondarySubtle,
                             textAlign = TextAlign.Center
@@ -212,7 +211,7 @@ fun UserSelectionScreen(
                         if (pinError != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = I18n.get(pinError!!, language),
+                                text = strings.pinIncorrect,
                                 fontSize = 12.sp,
                                 color = ColorDangerCrimson
                             )
@@ -229,7 +228,7 @@ fun UserSelectionScreen(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text(I18n.get("cancel", language))
+                                Text(strings.cancel)
                             }
 
                             Button(
@@ -238,7 +237,7 @@ fun UserSelectionScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                             ) {
-                                Text(I18n.get("confirm", language), color = SurfaceWhite)
+                                Text(strings.confirm, color = SurfaceWhite)
                             }
                         }
                     }
@@ -262,7 +261,7 @@ fun UserSelectionScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = I18n.get("admin_login_btn", language),
+                            text = strings.adminLoginBtn,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy
@@ -271,7 +270,7 @@ fun UserSelectionScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = I18n.get("admin_password_prompt", language),
+                            text = strings.adminPasswordPrompt,
                             fontSize = 14.sp,
                             color = TextSecondarySubtle
                         )
@@ -302,7 +301,7 @@ fun UserSelectionScreen(
                         if (adminPasswordError != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = I18n.get(adminPasswordError!!, language),
+                                text = strings.adminPasswordIncorrect,
                                 fontSize = 12.sp,
                                 color = ColorDangerCrimson
                             )
@@ -319,7 +318,7 @@ fun UserSelectionScreen(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text(I18n.get("cancel", language))
+                                Text(strings.cancel)
                             }
 
                             Button(
@@ -328,7 +327,7 @@ fun UserSelectionScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
                             ) {
-                                Text(I18n.get("confirm", language), color = SurfaceWhite)
+                                Text(strings.confirm, color = SurfaceWhite)
                             }
                         }
                     }
@@ -358,7 +357,6 @@ private fun UserCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Circular Avatar Badge with Initials ONLY
             Box(
                 modifier = Modifier
                     .size(48.dp)

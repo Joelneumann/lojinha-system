@@ -1,8 +1,6 @@
 package de.joelneumann.lojinha.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,6 +31,7 @@ fun AdminScreen(
     language: Language,
     onCloseAdmin: () -> Unit
 ) {
+    val strings = I18n.get(language)
     val currentTab by viewModel.currentTab.collectAsState()
     val products by viewModel.products.collectAsState()
     val users by viewModel.users.collectAsState()
@@ -70,7 +69,7 @@ fun AdminScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = I18n.get("admin_panel", language),
+                    text = strings.adminPanel,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -79,10 +78,10 @@ fun AdminScreen(
                 // Tabs Navigation
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val tabs = listOf(
-                        AdminTab.PRODUCTS to I18n.get("tab_products", language),
-                        AdminTab.USERS to I18n.get("tab_users", language),
-                        AdminTab.TRANSACTIONS to I18n.get("tab_transactions", language),
-                        AdminTab.SETTINGS to I18n.get("tab_settings", language)
+                        AdminTab.PRODUCTS to strings.tabProducts,
+                        AdminTab.USERS to strings.tabUsers,
+                        AdminTab.TRANSACTIONS to strings.tabTransactions,
+                        AdminTab.SETTINGS to strings.tabSettings
                     )
 
                     tabs.forEach { (tab, label) ->
@@ -159,7 +158,7 @@ fun AdminScreen(
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        text = "${I18n.get("deposit_withdraw", language)} (${depositUser!!.name})",
+                        text = "${strings.depositWithdraw} (${depositUser!!.name})",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
@@ -262,6 +261,7 @@ private fun AdminProductsTab(
     onToggleActive: (Product) -> Unit,
     onDelete: (Product) -> Unit
 ) {
+    val strings = I18n.get(language)
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -274,7 +274,7 @@ private fun AdminProductsTab(
                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text(I18n.get("add_product", language), color = SurfaceWhite)
+                Text(strings.addProduct, color = SurfaceWhite)
             }
         }
 
@@ -312,10 +312,10 @@ private fun AdminProductsTab(
                                 Text("Edit", fontSize = 12.sp)
                             }
                             OutlinedButton(onClick = { onToggleActive(product) }, shape = RoundedCornerShape(6.dp)) {
-                                Text(if (product.isActive) "Deactivate" else "Activate", fontSize = 12.sp)
+                                Text(if (product.isActive) strings.softDelete else "Activate", fontSize = 12.sp)
                             }
                             TextButton(onClick = { onDelete(product) }) {
-                                Text("Delete", color = ColorDangerCrimson, fontSize = 12.sp)
+                                Text(strings.hardDelete, color = ColorDangerCrimson, fontSize = 12.sp)
                             }
                         }
                     }
@@ -335,6 +335,7 @@ private fun AdminUsersTab(
     onToggleActive: (User) -> Unit,
     onDelete: (User) -> Unit
 ) {
+    val strings = I18n.get(language)
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -347,7 +348,7 @@ private fun AdminUsersTab(
                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text(I18n.get("add_user", language), color = SurfaceWhite)
+                Text(strings.addUser, color = SurfaceWhite)
             }
         }
 
@@ -394,10 +395,10 @@ private fun AdminUsersTab(
                                 Text("Edit", fontSize = 12.sp)
                             }
                             OutlinedButton(onClick = { onToggleActive(user) }, shape = RoundedCornerShape(6.dp)) {
-                                Text(if (user.isActive) "Deactivate" else "Activate", fontSize = 12.sp)
+                                Text(if (user.isActive) strings.softDelete else "Activate", fontSize = 12.sp)
                             }
                             TextButton(onClick = { onDelete(user) }) {
-                                Text("Delete", color = ColorDangerCrimson, fontSize = 12.sp)
+                                Text(strings.hardDelete, color = ColorDangerCrimson, fontSize = 12.sp)
                             }
                         }
                     }
@@ -413,6 +414,7 @@ private fun AdminTransactionsTab(
     language: Language,
     onReverse: (Transaction) -> Unit
 ) {
+    val strings = I18n.get(language)
     Column(modifier = Modifier.fillMaxSize()) {
         Text("System Transactions & Strict Reversals (${transactions.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(12.dp))
@@ -444,7 +446,7 @@ private fun AdminTransactionsTab(
                                 colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                                 shape = RoundedCornerShape(6.dp)
                             ) {
-                                Text(I18n.get("reversal_btn", language), fontSize = 12.sp, color = SurfaceWhite)
+                                Text(strings.reversalBtn, fontSize = 12.sp, color = SurfaceWhite)
                             }
                         } else {
                             Text("CANCELED / REVERSED", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted)
@@ -543,6 +545,7 @@ private fun ProductEditDialog(
     onSave: (Product) -> Unit,
     onCancel: () -> Unit
 ) {
+    val strings = I18n.get(language)
     var name by remember { mutableStateOf(product.name) }
     var basePriceBrl by remember { mutableStateOf((product.basePrice.toDouble() / 100.0).toString()) }
     var unitType by remember { mutableStateOf(product.unitType) }
@@ -555,7 +558,7 @@ private fun ProductEditDialog(
     Dialog(onDismissRequest = onCancel) {
         Surface(shape = RoundedCornerShape(16.dp), color = SurfaceWhite, modifier = Modifier.width(480.dp).wrapContentHeight()) {
             Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
-                Text(I18n.get("edit_product", language), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(strings.editProduct, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Product Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -601,7 +604,7 @@ private fun ProductEditDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text(I18n.get("cancel", language)) }
+                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text(strings.cancel) }
                     Button(
                         onClick = {
                             val priceCents = kotlin.math.round((basePriceBrl.replace(',', '.').toDoubleOrNull() ?: 0.0) * 100).toLong()
@@ -620,7 +623,7 @@ private fun ProductEditDialog(
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                     ) {
-                        Text(I18n.get("save", language), color = SurfaceWhite)
+                        Text(strings.save, color = SurfaceWhite)
                     }
                 }
             }
@@ -635,6 +638,7 @@ private fun UserEditDialog(
     onSave: (User) -> Unit,
     onCancel: () -> Unit
 ) {
+    val strings = I18n.get(language)
     var name by remember { mutableStateOf(user.name) }
     var pin by remember { mutableStateOf(user.pin ?: "") }
     var barcode by remember { mutableStateOf(user.userBarcode ?: "") }
@@ -644,7 +648,7 @@ private fun UserEditDialog(
     Dialog(onDismissRequest = onCancel) {
         Surface(shape = RoundedCornerShape(16.dp), color = SurfaceWhite, modifier = Modifier.width(420.dp).wrapContentHeight()) {
             Column(modifier = Modifier.padding(24.dp)) {
-                Text(I18n.get("edit_user", language), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(strings.editUser, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -675,7 +679,7 @@ private fun UserEditDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text(I18n.get("cancel", language)) }
+                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text(strings.cancel) }
                     Button(
                         onClick = {
                             val bCode = barcode.ifBlank { null }
@@ -692,7 +696,7 @@ private fun UserEditDialog(
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                     ) {
-                        Text(I18n.get("save", language), color = SurfaceWhite)
+                        Text(strings.save, color = SurfaceWhite)
                     }
                 }
             }

@@ -1,7 +1,6 @@
 package de.joelneumann.lojinha.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -46,6 +44,7 @@ fun ShoppingScreen(
     settings: SystemSettings,
     onNavigateToHistory: () -> Unit
 ) {
+    val strings = I18n.get(language)
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val cartItems by viewModel.cartItems.collectAsState()
@@ -99,7 +98,7 @@ fun ShoppingScreen(
                 ) {
                     Column {
                         Text(
-                            text = "${I18n.get("shopping", language)} — ${user.name}",
+                            text = "${strings.shopping} — ${user.name}",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy
@@ -108,7 +107,7 @@ fun ShoppingScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${I18n.get("balance", language)}: ",
+                            text = "${strings.balance}: ",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
                             color = TextSecondaryMuted
@@ -141,7 +140,7 @@ fun ShoppingScreen(
                 },
                 placeholder = {
                     Text(
-                        text = I18n.get("search_product_placeholder", language),
+                        text = strings.searchProductPlaceholder,
                         color = TextSecondaryMuted
                     )
                 },
@@ -203,7 +202,7 @@ fun ShoppingScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "🛒 ${I18n.get("cart", language)} (${cartItems.size})",
+                        text = "🛒 ${strings.cart} (${cartItems.size})",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
@@ -216,7 +215,7 @@ fun ShoppingScreen(
                     }
                 }
 
-                Divider(modifier = Modifier.padding(vertical = 12.dp), color = DividerBorder)
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = DividerBorder)
 
                 // Cart Line Items List
                 Box(modifier = Modifier.weight(1f)) {
@@ -247,7 +246,7 @@ fun ShoppingScreen(
                     }
                 }
 
-                Divider(modifier = Modifier.padding(vertical = 12.dp), color = DividerBorder)
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = DividerBorder)
 
                 // Cart Summary Bottom Block
                 Column(
@@ -262,7 +261,7 @@ fun ShoppingScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "${I18n.get("total", language)}:",
+                            text = "${strings.total}:",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy
@@ -293,7 +292,7 @@ fun ShoppingScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "${I18n.get("balance_after", language)}:",
+                            text = "${strings.balanceAfter}:",
                             fontSize = 14.sp,
                             color = TextSecondarySubtle
                         )
@@ -317,7 +316,7 @@ fun ShoppingScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                 ) {
                     Text(
-                        text = I18n.get("complete_purchase", language),
+                        text = strings.completePurchase,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = SurfaceWhite
@@ -343,7 +342,7 @@ fun ShoppingScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = I18n.get("weight_dialog_title", language),
+                        text = strings.weightDialogTitle,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
@@ -352,7 +351,7 @@ fun ShoppingScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = I18n.get("weight_dialog_msg", language).replace("{product}", weightProductDialog!!.name),
+                        text = strings.weightDialogMsg(weightProductDialog!!.name),
                         fontSize = 14.sp,
                         color = TextSecondarySubtle,
                         textAlign = TextAlign.Center
@@ -416,7 +415,7 @@ fun ShoppingScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text(I18n.get("cancel", language))
+                            Text(strings.cancel)
                         }
 
                         Button(
@@ -425,7 +424,7 @@ fun ShoppingScreen(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                         ) {
-                            Text(I18n.get("confirm", language), color = SurfaceWhite)
+                            Text(strings.confirm, color = SurfaceWhite)
                         }
                     }
                 }
@@ -446,7 +445,7 @@ fun ShoppingScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = I18n.get("confirm_purchase_title", language),
+                        text = strings.confirmPurchaseTitle,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
@@ -455,7 +454,7 @@ fun ShoppingScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = I18n.get("confirm_purchase_msg", language).replace("{amount}", Formatting.formatBrl(cartTotal)),
+                        text = strings.confirmPurchaseMsg(Formatting.formatBrl(cartTotal)),
                         fontSize = 15.sp,
                         color = TextSecondarySubtle,
                         textAlign = TextAlign.Center
@@ -472,7 +471,7 @@ fun ShoppingScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text(I18n.get("cancel", language))
+                            Text(strings.cancel)
                         }
 
                         Button(
@@ -483,7 +482,7 @@ fun ShoppingScreen(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                         ) {
-                            Text(I18n.get("confirm", language), color = SurfaceWhite)
+                            Text(strings.confirm, color = SurfaceWhite)
                         }
                     }
                 }
@@ -499,6 +498,7 @@ private fun ProductCard(
     language: Language,
     onClick: () -> Unit
 ) {
+    val strings = I18n.get(language)
     val unitPrice = product.calculateEffectiveUnitPrice(globalMarkup)
 
     Card(
@@ -543,14 +543,14 @@ private fun ProductCard(
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = if (product.unitType == UnitType.PIECE) I18n.get("unit_piece", language) else I18n.get("unit_weight", language),
+                        text = if (product.unitType == UnitType.PIECE) strings.unitPiece else strings.unitWeight,
                         fontSize = 11.sp,
                         color = TextSecondaryMuted
                     )
                 }
 
                 Text(
-                    text = "${I18n.get("stock", language)}: ${Formatting.formatQuantity(product.stockQuantity, product.unitType)}",
+                    text = "${strings.stock}: ${Formatting.formatQuantity(product.stockQuantity, product.unitType)}",
                     fontSize = 11.sp,
                     color = TextSecondarySubtle
                 )

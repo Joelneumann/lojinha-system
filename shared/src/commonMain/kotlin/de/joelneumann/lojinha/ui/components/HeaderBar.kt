@@ -28,6 +28,8 @@ fun HeaderBar(
     onLogoutClicked: () -> Unit,
     onNavigateToMain: () -> Unit
 ) {
+    val strings = I18n.get(currentLanguage)
+
     Surface(
         modifier = Modifier.fillMaxWidth().height(64.dp),
         color = SurfaceWhite,
@@ -44,7 +46,7 @@ fun HeaderBar(
                 modifier = Modifier.clickable { onNavigateToMain() }
             ) {
                 Text(
-                    text = I18n.get("app_title", currentLanguage),
+                    text = strings.appTitle,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -122,7 +124,7 @@ fun HeaderBar(
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "🚪 ${I18n.get("logout", currentLanguage)}",
+                            text = "🚪 ${strings.logout}",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = SurfaceWhite

@@ -22,6 +22,7 @@ fun InactivityWarningDialog(
     onStayLoggedIn: () -> Unit,
     onLogoutNow: () -> Unit
 ) {
+    val strings = I18n.get(language)
     val mins = secondsRemaining / 60
     val secs = secondsRemaining % 60
     val formattedTime = "${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}"
@@ -38,7 +39,7 @@ fun InactivityWarningDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = I18n.get("inactivity_warning_title", language),
+                    text = strings.inactivityWarningTitle,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = ColorWarningAmber
@@ -47,7 +48,7 @@ fun InactivityWarningDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = I18n.get("inactivity_warning_msg", language),
+                    text = strings.inactivityWarningMsg,
                     fontSize = 14.sp,
                     color = TextSecondarySubtle
                 )
@@ -81,7 +82,7 @@ fun InactivityWarningDialog(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson)
                     ) {
-                        Text(text = "🚪 ${I18n.get("logout", language)}", fontWeight = FontWeight.Bold)
+                        Text(text = "🚪 ${strings.logout}", fontWeight = FontWeight.Bold)
                     }
 
                     Button(
@@ -90,7 +91,7 @@ fun InactivityWarningDialog(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                     ) {
-                        Text(text = I18n.get("stay_logged_in", language), fontWeight = FontWeight.Bold)
+                        Text(text = strings.stayLoggedIn, fontWeight = FontWeight.Bold)
                     }
                 }
             }

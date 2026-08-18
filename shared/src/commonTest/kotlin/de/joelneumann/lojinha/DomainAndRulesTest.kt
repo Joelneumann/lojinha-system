@@ -116,4 +116,19 @@ class DomainAndRulesTest {
         )
         assertEquals(750L, weightItem.totalLinePrice) // R$ 7,50
     }
+
+    @Test
+    fun testI18nStronglyTyped() {
+        val de = de.joelneumann.lojinha.ui.i18n.I18n.get(Language.DE)
+        val en = de.joelneumann.lojinha.ui.i18n.I18n.get(Language.EN)
+        val br = de.joelneumann.lojinha.ui.i18n.I18n.get(Language.BR)
+
+        assertEquals("🛒 Lojinha POS", de.appTitle)
+        assertEquals("🛒 Lojinha POS", en.appTitle)
+        assertEquals("🛒 Lojinha POS", br.appTitle)
+
+        assertEquals("Möchten Sie den Kauf über R$ 10,00 bestätigen?", de.confirmPurchaseMsg("R$ 10,00"))
+        assertEquals("Confirm purchase for R$ 10,00?", en.confirmPurchaseMsg("R$ 10,00"))
+        assertEquals("Confirmar compra no valor de R$ 10,00?", br.confirmPurchaseMsg("R$ 10,00"))
+    }
 }
