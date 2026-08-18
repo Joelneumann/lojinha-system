@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -75,56 +76,84 @@ fun TransactionHistoryScreen(
             .background(SurfaceContainerLight)
             .padding(24.dp)
     ) {
-        // Header Bar Actions
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SurfaceWhite,
-            shadowElevation = 2.dp,
-            modifier = Modifier.fillMaxWidth()
+        // Top Action Row: Continue Shopping (Left), User & Balance Box (Center), User Settings (Right)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Button(
+                onClick = onContinueShopping,
+                colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.height(56.dp)
             ) {
-                Column {
+                Text(
+                    text = strings.continueShopping,
+                    color = SurfaceWhite,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = SurfaceWhite,
+                shadowElevation = 2.dp,
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                modifier = Modifier.weight(1f).height(56.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = strings.history,
-                        fontSize = 20.sp,
+                        text = user.name,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
                     )
-                    Text(
-                        text = "${user.name} — ${strings.balance}: ${Formatting.formatBrl(user.balance)}${Formatting.formatSecondaryCurrency(user.balance, user.secondaryCurrency, rate)}",
-                        fontSize = 14.sp,
-                        color = TextSecondaryMuted
-                    )
-                }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = onContinueShopping,
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(strings.continueShopping, color = SurfaceWhite, fontWeight = FontWeight.Bold)
-                    }
-
-                    OutlinedButton(
-                        onClick = { viewModel.openSettingsModal(user) },
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(strings.userSettings, fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = onLogout,
-                        colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(strings.logout, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${strings.balance}: ",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondarySubtle
+                        )
+                        Text(
+                            text = Formatting.formatBrl(user.balance),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (user.balance >= 0) ColorSuccessEmerald else ColorDangerCrimson
+                        )
+                        val secText = Formatting.formatSecondaryCurrency(user.balance, user.secondaryCurrency, rate)
+                        if (secText.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = secText,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = TextSecondaryMuted
+                            )
+                        }
                     }
                 }
+            }
+
+            OutlinedButton(
+                onClick = { viewModel.openSettingsModal(user) },
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, DividerBorder),
+                modifier = Modifier.height(56.dp)
+            ) {
+                Text(
+                    text = strings.userSettings,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy,
+                    fontSize = 14.sp
+                )
             }
         }
 
