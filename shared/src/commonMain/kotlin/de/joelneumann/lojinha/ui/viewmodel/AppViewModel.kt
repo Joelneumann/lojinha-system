@@ -73,6 +73,10 @@ class AppViewModel(
     }
 
     fun navigateTo(screen: AppScreen) {
+        if (screen == AppScreen.MAIN_USER_SELECT) {
+            logout()
+            return
+        }
         _currentScreen.value = screen
         if (screen == AppScreen.SHOPPING || screen == AppScreen.TRANSACTION_HISTORY) {
             resetInactivityTimer()

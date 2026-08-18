@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha
 
 import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -119,9 +120,9 @@ class DomainAndRulesTest {
 
     @Test
     fun testI18nStronglyTyped() {
-        val de = de.joelneumann.lojinha.ui.i18n.I18n.get(Language.DE)
-        val en = de.joelneumann.lojinha.ui.i18n.I18n.get(Language.EN)
-        val br = de.joelneumann.lojinha.ui.i18n.I18n.get(Language.BR)
+        val de = I18n.get(Language.DE)
+        val en = I18n.get(Language.EN)
+        val br = I18n.get(Language.BR)
 
         assertEquals("🛒 Lojinha POS", de.appTitle)
         assertEquals("🛒 Lojinha POS", en.appTitle)
