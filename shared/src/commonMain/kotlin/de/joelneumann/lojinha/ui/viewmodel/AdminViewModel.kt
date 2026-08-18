@@ -246,7 +246,7 @@ class AdminViewModel(
             timestamp = nowMillis,
             type = TransactionType.CANCELLATION,
             referenceTransactionId = tx.id,
-            note = "Reversal of transaction ${tx.id}",
+            note = "Reversal of ${tx.type.name} from ${java.text.SimpleDateFormat("dd MMM yyyy, HH:mm").format(java.util.Date(tx.timestamp))}",
             totalAmount = refundAmount,
             items = tx.items
         )

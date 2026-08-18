@@ -221,6 +221,8 @@ fun TransactionHistoryScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        val allTransactionsMap = remember(transactions) { transactions.associateBy { it.id } }
+
         // Transaction Ledger List
         if (filteredTransactions.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -232,7 +234,13 @@ fun TransactionHistoryScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filteredTransactions, key = { it.transaction.id }) { txWithBalance ->
-                    TransactionItemCard(txWithBalance = txWithBalance, language = language, rate = rate, secondaryCurrency = user.secondaryCurrency)
+                    TransactionItemCard(
+                        txWithBalance = txWithBalance,
+                        allTransactionsMap = allTransactionsMap,
+                        language = language,
+                        rate = rate,
+                        secondaryCurrency = user.secondaryCurrency
+                    )
                 }
             }
         }
@@ -377,6 +385,7 @@ data class TransactionWithBalance(
 @Composable
 private fun TransactionItemCard(
     txWithBalance: TransactionWithBalance,
+    allTransactionsMap: Map<String, Transaction>,
     language: Language,
     rate: Double,
     secondaryCurrency: SecondaryCurrency
@@ -388,6 +397,27 @@ private fun TransactionItemCard(
     val dateStr = remember(tx.timestamp) {
         val sdf = SimpleDateFormat("dd MMM yyyy, HH:mm")
         sdf.format(Date(tx.timestamp))
+    }
+
+    val displayNote = remember(tx, allTransactionsMap, language) {
+        if (tx.type == TransactionType.CANCELLATION && tx.referenceTransactionId != null) {
+            val refTx = allTransactionsMap[tx.referenceTransactionId]
+            if (refTx != null) {
+                val refDateStr = SimpleDateFormat("dd MMM yyyy, HH:mm").format(Date(refTx.timestamp))
+                val refTypeStr = when (refTx.type) {
+                    TransactionType.PURCHASE -> strings.historyTypePurchase
+                    TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit
+                    TransactionType.ADMIN_WITHDRAWAL -> strings.historyTypeWithdrawal
+                    TransactionType.CANCELLATION -> strings.historyTypeCancellation
+                    TransactionType.CORRECTION -> strings.historyTypeCorrection
+                }
+                strings.cancellationNote(refTypeStr, refDateStr)
+            } else {
+                tx.note
+            }
+        } else {
+            tx.note
+        }
     }
 
     val typeLabel = when (tx.type) {
@@ -442,10 +472,10 @@ private fun TransactionItemCard(
                 }
             }
 
-            if (!tx.note.isNull_or_blank()) {
+            if (!displayNote.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Note: ${tx.note}",
+                    text = "Note: $displayNote",
                     fontSize = 13.sp,
                     color = TextSecondarySubtle
                 )

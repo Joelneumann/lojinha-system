@@ -34,6 +34,7 @@ object PortugueseStrings : AppStrings {
     override val historyTypeWithdrawal = "Saque"
     override val historyTypeCancellation = "Cancelamento"
     override val historyTypeCorrection = "Correção"
+    override fun cancellationNote(type: String, date: String) = "Cancelamento de $type de $date"
     override val continueShopping = "🛍️ Continuar Comprando"
     override val userSettings = "⚙️ Configurações"
     override val userSettingsTitle = "Configurações do Usuário"

@@ -34,6 +34,7 @@ interface AppStrings {
     val historyTypeWithdrawal: String
     val historyTypeCancellation: String
     val historyTypeCorrection: String
+    fun cancellationNote(type: String, date: String): String
     val continueShopping: String
     val userSettings: String
     val userSettingsTitle: String
