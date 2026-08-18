@@ -502,10 +502,10 @@ private fun ProductCard(
     val unitPrice = product.calculateEffectiveUnitPrice(globalMarkup)
 
     Card(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(135.dp)
-            .clickable { onClick() },
+            .height(135.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
         border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
