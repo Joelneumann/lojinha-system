@@ -24,6 +24,12 @@ interface UserDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateUser(user: UserEntity)
 
+    @Query("UPDATE users SET isDeleted = 1, isActive = 0 WHERE id = :id")
+    suspend fun softDeleteUser(id: String)
+
+    @Query("UPDATE users SET isDeleted = 0, isActive = 1 WHERE id = :id")
+    suspend fun restoreUser(id: String)
+
     @Query("UPDATE users SET isActive = 0 WHERE id = :id")
     suspend fun deactivateUser(id: String)
 

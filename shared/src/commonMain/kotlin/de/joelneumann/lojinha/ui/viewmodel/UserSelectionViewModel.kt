@@ -44,7 +44,7 @@ class UserSelectionViewModel(
     fun loadUsers() {
         viewModelScope.launch {
             userRepository.getUsersFlow().collect { list ->
-                _users.value = list.filter { it.isActive }
+                _users.value = list.filter { it.isActive && !it.isDeleted }
             }
         }
     }
@@ -60,7 +60,7 @@ class UserSelectionViewModel(
         viewModelScope.launch {
             // 1. Try matching user by barcode first
             val userByBarcode = userRepository.getUserByBarcode(query)
-            if (userByBarcode != null && userByBarcode.isActive) {
+            if (userByBarcode != null && userByBarcode.isActive && !userByBarcode.isDeleted) {
                 onUserCardClicked(userByBarcode, onLoginSuccess)
                 _searchQuery.value = ""
                 return@launch

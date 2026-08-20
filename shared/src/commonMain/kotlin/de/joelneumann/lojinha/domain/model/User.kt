@@ -12,7 +12,8 @@ data class User(
     val pin: String? = null,
     val userBarcode: String? = null,
     val userBarcodeNumber: String? = null,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val isDeleted: Boolean = false
 ) {
     init {
         require((userBarcode == null && userBarcodeNumber == null) || (userBarcode != null && userBarcodeNumber != null)) {

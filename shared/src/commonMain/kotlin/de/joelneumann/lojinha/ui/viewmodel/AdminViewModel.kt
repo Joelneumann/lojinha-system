@@ -175,12 +175,24 @@ class AdminViewModel(
         }
     }
 
+    fun softDeleteUser(userId: String) {
+        viewModelScope.launch {
+            userRepository.softDeleteUser(userId)
+            loadData()
+        }
+    }
+
+    fun restoreUser(userId: String) {
+        viewModelScope.launch {
+            userRepository.restoreUser(userId)
+            loadData()
+        }
+    }
+
     fun attemptDeleteUser(user: User) {
         viewModelScope.launch {
-            val success = userRepository.hardDeleteUser(user.id)
-            if (!success) {
-                _userDeleteErrorMessage.value = "User has transaction history! User has been soft-deleted (deactivated) to preserve the audit trail."
-            }
+            userRepository.softDeleteUser(user.id)
+            loadData()
         }
     }
 

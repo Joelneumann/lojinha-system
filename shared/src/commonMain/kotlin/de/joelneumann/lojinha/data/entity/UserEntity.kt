@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import de.joelneumann.lojinha.domain.model.Language
@@ -16,7 +17,8 @@ data class UserEntity(
     val pin: String?,
     val userBarcode: String?,
     val userBarcodeNumber: String?,
-    val isActive: Boolean
+    val isActive: Boolean,
+    @ColumnInfo(defaultValue = "0") val isDeleted: Boolean = false
 ) {
     fun toDomain(): User = User(
         id = id,
@@ -27,7 +29,8 @@ data class UserEntity(
         pin = pin,
         userBarcode = userBarcode,
         userBarcodeNumber = userBarcodeNumber,
-        isActive = isActive
+        isActive = isActive,
+        isDeleted = isDeleted
     )
 
     companion object {
@@ -40,7 +43,8 @@ data class UserEntity(
             pin = user.pin,
             userBarcode = user.userBarcode,
             userBarcodeNumber = user.userBarcodeNumber,
-            isActive = user.isActive
+            isActive = user.isActive,
+            isDeleted = user.isDeleted
         )
     }
 }

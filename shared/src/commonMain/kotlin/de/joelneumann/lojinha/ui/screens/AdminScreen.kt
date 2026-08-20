@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -14,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -194,6 +196,7 @@ fun AdminScreen(
                     },
                     onToggleActive = { viewModel.toggleUserActive(it) },
                     onDeleteUser = { viewModel.attemptDeleteUser(it) },
+                    onRestoreUser = { viewModel.restoreUser(it.id) },
                     onRequestToggleExpand = { targetUserId ->
                         val action = {
                             expandedUserId = if (expandedUserId == targetUserId) null else targetUserId
@@ -1136,6 +1139,7 @@ private fun AdminUsersTab(
     onAdjustBalance: (User, Long, String, Boolean) -> Unit,
     onToggleActive: (User) -> Unit,
     onDeleteUser: (User) -> Unit,
+    onRestoreUser: (User) -> Unit,
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandUser: (String) -> Unit,
     onUnsavedStateChanged: (Boolean) -> Unit
@@ -1143,9 +1147,13 @@ private fun AdminUsersTab(
     val strings = I18n.get(language)
     var searchQuery by remember { mutableStateOf("") }
 
-    val filteredUsers = remember(users, searchQuery) {
-        if (searchQuery.isBlank()) users
-        else users.filter { u ->
+    val activeUsers = remember(users) { users.filter { it.isActive && !it.isDeleted } }
+    val deactivatedUsers = remember(users) { users.filter { !it.isActive && !it.isDeleted } }
+    val deletedUsers = remember(users) { users.filter { it.isDeleted } }
+
+    val filteredUsers = remember(activeUsers, searchQuery) {
+        if (searchQuery.isBlank()) activeUsers
+        else activeUsers.filter { u ->
             u.name.contains(searchQuery, ignoreCase = true) ||
                     (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
                     (u.pin != null && u.pin.contains(searchQuery, ignoreCase = true))
@@ -1214,7 +1222,7 @@ private fun AdminUsersTab(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (searchQuery.isBlank()) "${users.size} Accounts" else "${filteredUsers.size} / ${users.size} Accounts",
+                        text = if (searchQuery.isBlank()) "${activeUsers.size} Accounts" else "${filteredUsers.size} / ${activeUsers.size} Accounts",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = PrimaryNavy
@@ -1234,15 +1242,21 @@ private fun AdminUsersTab(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        if (filteredUsers.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No user accounts found.", color = TextSecondaryMuted)
-            }
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 32.dp)
-            ) {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 32.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            if (filteredUsers.isEmpty()) {
+                item(key = "empty-users-msg") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No matching active user accounts found.", color = TextSecondaryMuted)
+                    }
+                }
+            } else {
                 items(filteredUsers, key = { it.id }) { user ->
                     val isExpanded = expandedUserId == user.id
                     AdminUserAccordionCard(
@@ -1256,6 +1270,26 @@ private fun AdminUsersTab(
                         onToggleActive = onToggleActive,
                         onDeleteUser = onDeleteUser,
                         onUnsavedStateChanged = onUnsavedStateChanged
+                    )
+                }
+            }
+
+            if (deactivatedUsers.isNotEmpty()) {
+                item(key = "deactivated-users-section") {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    AdminDeactivatedUsersSection(
+                        deactivatedUsers = deactivatedUsers,
+                        onToggleActive = onToggleActive
+                    )
+                }
+            }
+
+            if (deletedUsers.isNotEmpty()) {
+                item(key = "deleted-users-section") {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    AdminDeletedUsersSection(
+                        deletedUsers = deletedUsers,
+                        onRestoreUser = onRestoreUser
                     )
                 }
             }
@@ -1296,7 +1330,7 @@ private fun AdminUserAccordionCard(
     val duplicateUser = remember(barcodeToCheck, allUsers, user.id) {
         if (barcodeToCheck.isBlank()) null
         else allUsers.firstOrNull { u ->
-            u.id != user.id && (
+            !u.isDeleted && u.id != user.id && (
                 (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(barcodeToCheck, ignoreCase = true)) ||
                 (u.userBarcode != null && u.userBarcode.equals(barcodeToCheck, ignoreCase = true))
             )
@@ -1788,7 +1822,7 @@ private fun AdminUserAccordionCard(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Confirm Delete Account", fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
-            text = { Text("Are you sure you want to delete account '${user.name}'? This action cannot be undone.") },
+            text = { Text("Are you sure you want to delete user account '${user.name}'?\n\nThe user account will be soft-deleted and moved to the 'Deleted Users' section at the bottom of the page.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -1797,7 +1831,7 @@ private fun AdminUserAccordionCard(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
-                    Text("Delete Account", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text("Yes, Delete User", color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -3270,7 +3304,7 @@ private fun UserEditDialog(
     val duplicateUser = remember(barcodeToCheck, allUsers, user.id) {
         if (barcodeToCheck.isBlank()) null
         else allUsers.firstOrNull { u ->
-            u.id != user.id && (
+            !u.isDeleted && u.id != user.id && (
                 (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(barcodeToCheck, ignoreCase = true)) ||
                 (u.userBarcode != null && u.userBarcode.equals(barcodeToCheck, ignoreCase = true))
             )
@@ -3510,5 +3544,387 @@ private fun UserEditDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AdminDeactivatedUsersSection(
+    deactivatedUsers: List<User>,
+    onToggleActive: (User) -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = SurfaceContainerLight,
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "⚠️ Deactivated Users",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorWarningAmber
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = ColorWarningAmber.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "${deactivatedUsers.size} ${if (deactivatedUsers.size == 1) "User" else "Users"}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorWarningAmber,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = if (isExpanded) "▲ Hide Deactivated Users" else "▼ Show Deactivated Users",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AccentNavy
+                )
+            }
+
+            if (isExpanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                ) {
+                    HorizontalDivider(color = DividerBorder)
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        deactivatedUsers.forEach { user ->
+                            DeactivatedUserCard(
+                                user = user,
+                                onActivateUser = { onToggleActive(user) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeactivatedUserCard(
+    user: User,
+    onActivateUser: () -> Unit
+) {
+    var showActivateConfirm by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = SurfaceWhite,
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // User Initials Circle Avatar
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(ColorWarningAmber.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = user.initials,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorWarningAmber
+                    )
+                }
+
+                Column {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = user.name,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryNavy
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = ColorWarningAmber.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "Deactivated",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorWarningAmber,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Balance: ${Formatting.formatBrl(user.balance)}" +
+                                if (user.userBarcodeNumber != null) " • ID: ${user.userBarcodeNumber}" else "",
+                        fontSize = 13.sp,
+                        color = TextSecondaryMuted
+                    )
+                }
+            }
+
+            // Activate Action Button
+            Button(
+                onClick = { showActivateConfirm = true },
+                colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(38.dp)
+            ) {
+                Text("⚡ Activate Account", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+            }
+        }
+    }
+
+    if (showActivateConfirm) {
+        AlertDialog(
+            onDismissRequest = { showActivateConfirm = false },
+            title = { Text("Confirm Account Activation", fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
+            text = { Text("Are you sure you want to activate user account '${user.name}'?\n\nThis will move the account back into the active users list.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onActivateUser()
+                        showActivateConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
+                ) {
+                    Text("Yes, Activate User", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showActivateConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AdminDeletedUsersSection(
+    deletedUsers: List<User>,
+    onRestoreUser: (User) -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = SurfaceContainerLight,
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🗑️ Deleted Users",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorDangerCrimson
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = ColorDangerCrimson.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = "${deletedUsers.size} ${if (deletedUsers.size == 1) "User" else "Users"}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorDangerCrimson,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = if (isExpanded) "▲ Hide Deleted Users" else "▼ Show Deleted Users",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AccentNavy
+                )
+            }
+
+            if (isExpanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                ) {
+                    HorizontalDivider(color = DividerBorder)
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        deletedUsers.forEach { user ->
+                            DeletedUserCard(
+                                user = user,
+                                onRestoreUser = { onRestoreUser(user) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeletedUserCard(
+    user: User,
+    onRestoreUser: () -> Unit
+) {
+    var showRestoreConfirm by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = SurfaceWhite,
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // User Initials Circle Avatar
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(ColorDangerCrimson.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = user.initials,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorDangerCrimson
+                    )
+                }
+
+                Column {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = user.name,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryNavy
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = ColorDangerCrimson.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "Deleted",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Balance: ${Formatting.formatBrl(user.balance)}" +
+                                if (user.userBarcodeNumber != null) " • ID: ${user.userBarcodeNumber}" else "",
+                        fontSize = 13.sp,
+                        color = TextSecondaryMuted
+                    )
+                }
+            }
+
+            // Restore Action Button
+            Button(
+                onClick = { showRestoreConfirm = true },
+                colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(38.dp)
+            ) {
+                Text("♻️ Restore User", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+            }
+        }
+    }
+
+    if (showRestoreConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirm = false },
+            title = { Text("Confirm Account Restoration", fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
+            text = { Text("Are you sure you want to restore user account '${user.name}'?\n\nThis will reactivate the account and move it back into the active users list.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onRestoreUser()
+                        showRestoreConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
+                ) {
+                    Text("Yes, Restore User", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showRestoreConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

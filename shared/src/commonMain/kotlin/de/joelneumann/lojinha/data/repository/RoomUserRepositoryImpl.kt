@@ -37,6 +37,14 @@ class RoomUserRepositoryImpl(
         userDao.deactivateUser(id)
     }
 
+    override suspend fun softDeleteUser(id: String) {
+        userDao.softDeleteUser(id)
+    }
+
+    override suspend fun restoreUser(id: String) {
+        userDao.restoreUser(id)
+    }
+
     override suspend fun canHardDeleteUser(id: String): Boolean {
         val txCount = transactionDao.getTransactionCountForUser(id)
         return txCount == 0
@@ -47,7 +55,7 @@ class RoomUserRepositoryImpl(
             userDao.deleteUser(id)
             true
         } else {
-            userDao.deactivateUser(id)
+            userDao.softDeleteUser(id)
             false
         }
     }
