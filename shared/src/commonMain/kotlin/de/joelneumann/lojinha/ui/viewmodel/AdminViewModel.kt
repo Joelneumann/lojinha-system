@@ -230,6 +230,30 @@ class AdminViewModel(
         }
     }
 
+    fun adjustUserBalance(userId: String, userName: String, centsDelta: Long, note: String) {
+        val isDeposit = centsDelta > 0
+        val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
+        val nowMillis = System.currentTimeMillis()
+        val txId = "tx-admin-" + nowMillis + "-" + kotlin.random.Random.nextInt(1000, 9999)
+
+        val tx = Transaction(
+            id = txId,
+            userId = userId,
+            userNameSnapshot = userName,
+            timestamp = nowMillis,
+            type = txType,
+            note = note.ifBlank { if (isDeposit) "Deposit via Admin" else "Withdrawal via Admin" },
+            totalAmount = centsDelta,
+            items = emptyList()
+        )
+
+        viewModelScope.launch {
+            userRepository.updateBalance(userId, centsDelta)
+            transactionRepository.recordTransaction(tx)
+            loadData()
+        }
+    }
+
     // Strict Reversal Workflow
     fun reverseTransaction(tx: Transaction) {
         if (tx.type == TransactionType.CANCELLATION) return // Already a cancellation
