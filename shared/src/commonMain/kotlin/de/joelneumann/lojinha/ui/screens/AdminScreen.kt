@@ -439,6 +439,27 @@ private fun AdminProductsTab(
                 singleLine = true
             )
 
+            // Found items count pill between search field and action button
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = SurfaceWhite,
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                shadowElevation = 1.dp,
+                modifier = Modifier.fillMaxHeight()
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (searchQuery.isBlank()) "${products.size} Products" else "${filteredProducts.size} / ${products.size} Products",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy
+                    )
+                }
+            }
+
             Button(
                 onClick = onAdd,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
@@ -1097,6 +1118,27 @@ private fun AdminUsersTab(
                 singleLine = true
             )
 
+            // Found items count pill between search field and action button
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = SurfaceWhite,
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                shadowElevation = 1.dp,
+                modifier = Modifier.fillMaxHeight()
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (searchQuery.isBlank()) "${users.size} Accounts" else "${filteredUsers.size} / ${users.size} Accounts",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy
+                    )
+                }
+            }
+
             Button(
                 onClick = onAdd,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
@@ -1688,6 +1730,27 @@ private fun AdminTransactionsTab(
                 ),
                 singleLine = true
             )
+
+            // Found items count pill in search row
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = SurfaceWhite,
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                shadowElevation = 1.dp,
+                modifier = Modifier.fillMaxHeight()
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (searchQuery.isBlank()) "${transactions.size} Transactions" else "${filteredTransactions.size} / ${transactions.size} Transactions",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
