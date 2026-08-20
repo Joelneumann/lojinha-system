@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -52,8 +53,10 @@ fun UserSelectionScreen(
 
     val focusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    LaunchedEffect(selectedUserForPin, showAdminAuthDialog) {
+        if (selectedUserForPin == null && !showAdminAuthDialog) {
+            focusRequester.requestFocus()
+        }
     }
 
     val filteredUsers = remember(users, searchQuery) {
@@ -68,7 +71,7 @@ fun UserSelectionScreen(
             .padding(24.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Search Input (Auto-Focused)
+            // Search Input (Always Focused for Barcode Scanner & Keyboard Input)
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { query ->
@@ -83,6 +86,11 @@ fun UserSelectionScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused && selectedUserForPin == null && !showAdminAuthDialog) {
+                            focusRequester.requestFocus()
+                        }
+                    }
                     .onKeyEvent { keyEvent ->
                         if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
                             viewModel.onSearchSubmitted(onUserLoggedIn)
