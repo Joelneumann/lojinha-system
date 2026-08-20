@@ -946,33 +946,59 @@ private fun AdminProductAccordionCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left: Save Changes Button
-                        Button(
-                            onClick = {
-                                val updatedProduct = product.copy(
-                                    name = draftName.trim(),
-                                    basePrice = parsedPriceCents,
-                                    unitType = draftUnitType,
-                                    stockQuantity = parsedStock,
-                                    customMarkupPercent = parsedMarkup,
-                                    barcodes = draftBarcodes
-                                )
-                                onSaveProduct(updatedProduct)
-                                onUnsavedStateChanged(false)
-                            },
-                            enabled = hasUnsaved && draftName.isNotBlank() && assignedBarcodeConflictProduct == null,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = AccentNavy,
-                                disabledContainerColor = SurfaceContainerHighLight
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(42.dp)
+                        // Left: Save Changes & Revert Changes Buttons
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = if (hasUnsaved) "💾 Save Changes" else "✓ Saved",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Button(
+                                onClick = {
+                                    val updatedProduct = product.copy(
+                                        name = draftName.trim(),
+                                        basePrice = parsedPriceCents,
+                                        unitType = draftUnitType,
+                                        stockQuantity = parsedStock,
+                                        customMarkupPercent = parsedMarkup,
+                                        barcodes = draftBarcodes
+                                    )
+                                    onSaveProduct(updatedProduct)
+                                    onUnsavedStateChanged(false)
+                                },
+                                enabled = hasUnsaved && draftName.isNotBlank() && assignedBarcodeConflictProduct == null,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AccentNavy,
+                                    disabledContainerColor = SurfaceContainerHighLight
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(42.dp)
+                            ) {
+                                Text(
+                                    text = if (hasUnsaved) "💾 Save Changes" else "✓ Saved",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            if (hasUnsaved) {
+                                OutlinedButton(
+                                    onClick = {
+                                        draftName = product.name
+                                        draftPriceBrl = Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()
+                                        draftUnitType = product.unitType
+                                        draftStock = product.stockQuantity.toString()
+                                        draftMarkup = product.customMarkupPercent?.toString() ?: ""
+                                        draftBarcodes = product.barcodes
+                                        newBarcodeCode = ""
+                                        newBarcodeDesc = ""
+                                        stockDeltaInput = ""
+                                        onUnsavedStateChanged(false)
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(42.dp)
+                                ) {
+                                    Text("↩️ Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                                }
+                            }
                         }
 
                         // Right: Danger Area (Activate/Deactivate & Delete)
@@ -1601,35 +1627,59 @@ private fun AdminUserAccordionCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left: Save Changes Button
-                        Button(
-                            onClick = {
-                                val bCode = draftUserBarcode.trim().ifBlank { null }
-                                val bNum = draftUserBarcodeNumber.trim().ifBlank { null }
-                                val updatedUser = user.copy(
-                                    name = draftName.trim(),
-                                    pin = draftPin.trim().ifBlank { null },
-                                    userBarcode = if (bCode != null && bNum != null) bCode else null,
-                                    userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
-                                    language = draftLanguage,
-                                    secondaryCurrency = draftSecondaryCurrency
-                                )
-                                onSaveUser(updatedUser)
-                                onUnsavedStateChanged(false)
-                            },
-                            enabled = hasUnsaved && draftName.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = AccentNavy,
-                                disabledContainerColor = SurfaceContainerHighLight
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(42.dp)
+                        // Left: Save Changes & Revert Changes Buttons
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = if (hasUnsaved) "💾 Save Changes" else "✓ Saved",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Button(
+                                onClick = {
+                                    val bCode = draftUserBarcode.trim().ifBlank { null }
+                                    val bNum = draftUserBarcodeNumber.trim().ifBlank { null }
+                                    val updatedUser = user.copy(
+                                        name = draftName.trim(),
+                                        pin = draftPin.trim().ifBlank { null },
+                                        userBarcode = if (bCode != null && bNum != null) bCode else null,
+                                        userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
+                                        language = draftLanguage,
+                                        secondaryCurrency = draftSecondaryCurrency
+                                    )
+                                    onSaveUser(updatedUser)
+                                    onUnsavedStateChanged(false)
+                                },
+                                enabled = hasUnsaved && draftName.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AccentNavy,
+                                    disabledContainerColor = SurfaceContainerHighLight
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(42.dp)
+                            ) {
+                                Text(
+                                    text = if (hasUnsaved) "💾 Save Changes" else "✓ Saved",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            if (hasUnsaved) {
+                                OutlinedButton(
+                                    onClick = {
+                                        draftName = user.name
+                                        draftPin = user.pin ?: ""
+                                        draftUserBarcode = user.userBarcode ?: ""
+                                        draftUserBarcodeNumber = user.userBarcodeNumber ?: ""
+                                        draftLanguage = user.language
+                                        draftSecondaryCurrency = user.secondaryCurrency
+                                        moneyInput = ""
+                                        onUnsavedStateChanged(false)
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(42.dp)
+                                ) {
+                                    Text("↩️ Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                                }
+                            }
                         }
 
                         // Right: Danger Area (Activate/Deactivate & Delete)
@@ -3125,6 +3175,14 @@ private fun ProductEditDialog(
                     )
                 }
 
+                val initialPriceBrl = Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()
+                val hasDialogChanges = name != product.name ||
+                        basePriceBrl != initialPriceBrl ||
+                        unitType != product.unitType ||
+                        stockQuantity != product.stockQuantity.toString() ||
+                        customMarkup != (product.customMarkupPercent?.toString() ?: "") ||
+                        barcodeList != product.barcodes
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -3135,6 +3193,25 @@ private fun ProductEditDialog(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(strings.cancel, fontSize = 14.sp)
+                    }
+
+                    if (!isNewProduct && hasDialogChanges) {
+                        OutlinedButton(
+                            onClick = {
+                                name = product.name
+                                basePriceBrl = initialPriceBrl
+                                unitType = product.unitType
+                                stockQuantity = product.stockQuantity.toString()
+                                customMarkup = product.customMarkupPercent?.toString() ?: ""
+                                barcodeList = product.barcodes
+                                barcodeCode = ""
+                                barcodeDesc = ""
+                            },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("↩️ Revert", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        }
                     }
 
                     Button(
@@ -3370,6 +3447,13 @@ private fun UserEditDialog(
 
                 HorizontalDivider(color = DividerBorder)
 
+                val hasUserDialogChanges = name != user.name ||
+                        pin != (user.pin ?: "") ||
+                        barcode != (user.userBarcode ?: "") ||
+                        barcodeNumber != (user.userBarcodeNumber ?: "") ||
+                        selectedLang != user.language ||
+                        selectedSecondaryCurrency != user.secondaryCurrency
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -3380,6 +3464,23 @@ private fun UserEditDialog(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(strings.cancel, fontSize = 14.sp)
+                    }
+
+                    if (!isNewUser && hasUserDialogChanges) {
+                        OutlinedButton(
+                            onClick = {
+                                name = user.name
+                                pin = user.pin ?: ""
+                                barcode = user.userBarcode ?: ""
+                                barcodeNumber = user.userBarcodeNumber ?: ""
+                                selectedLang = user.language
+                                selectedSecondaryCurrency = user.secondaryCurrency
+                            },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("↩️ Revert", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        }
                     }
 
                     Button(
