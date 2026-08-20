@@ -56,55 +56,47 @@ fun AdminScreen(
             .background(SurfaceContainerLight)
             .padding(24.dp)
     ) {
-        // Admin Top Bar & Tabs
+        // Full-Width Navigation Tab Bar
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = SurfaceWhite,
             shadowElevation = 2.dp,
+            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
             modifier = Modifier.fillMaxWidth()
         ) {
+            val tabs = listOf(
+                AdminTab.PRODUCTS to "📦 ${strings.tabProducts}",
+                AdminTab.USERS to "👥 ${strings.tabUsers}",
+                AdminTab.TRANSACTIONS to "📜 ${strings.tabTransactions}",
+                AdminTab.SETTINGS to "⚙️ ${strings.tabSettings}"
+            )
+
             Row(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = strings.adminPanel,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                )
-
-                // Tabs Navigation
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val tabs = listOf(
-                        AdminTab.PRODUCTS to strings.tabProducts,
-                        AdminTab.USERS to strings.tabUsers,
-                        AdminTab.TRANSACTIONS to strings.tabTransactions,
-                        AdminTab.SETTINGS to strings.tabSettings
-                    )
-
-                    tabs.forEach { (tab, label) ->
-                        val isSel = currentTab == tab
-                        Button(
-                            onClick = { viewModel.selectTab(tab) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSel) AccentNavy else SurfaceContainerHighLight,
-                                contentColor = if (isSel) SurfaceWhite else PrimaryNavy
-                            ),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(label, fontSize = 13.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium)
-                        }
+                tabs.forEach { (tab, label) ->
+                    val isSel = currentTab == tab
+                    Button(
+                        onClick = { viewModel.selectTab(tab) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isSel) AccentNavy else SurfaceContainerHighLight,
+                            contentColor = if (isSel) SurfaceWhite else PrimaryNavy
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        elevation = if (isSel) ButtonDefaults.buttonElevation(defaultElevation = 2.dp) else ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 14.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium
+                        )
                     }
-                }
-
-                Button(
-                    onClick = onCloseAdmin,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Exit Admin", color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             }
         }
