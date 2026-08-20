@@ -4,9 +4,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class Language(val code: String, val flagEmoji: String, val label: String) {
-    DE("de", "🇩🇪", "Deutsch"),
+    BR("pt-BR", "🇧🇷", "Português (BR)"),
     EN("en", "🇬🇧", "English"),
-    BR("pt-BR", "🇧🇷", "Português (BR)");
+    DE("de", "🇩🇪", "Deutsch");
 
     companion object {
         fun fromCode(code: String): Language = entries.firstOrNull { it.code.equals(code, ignoreCase = true) } ?: DE
