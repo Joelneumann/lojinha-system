@@ -1690,11 +1690,23 @@ private fun AdminTransactionsTab(
             ) {
                 items(filteredTransactions, key = { it.id }) { tx ->
                     val isExpanded = expandedTransactionId == tx.id
-                    val isReversed = tx.type == TransactionType.CANCELLATION || transactions.any { it.referenceTransactionId == tx.id }
+
+                    val cancellationChild = transactions.firstOrNull { it.referenceTransactionId == tx.id && it.type == TransactionType.CANCELLATION }
+                    val correctionChild = transactions.firstOrNull { it.referenceTransactionId == tx.id && it.type == TransactionType.CORRECTION }
+
+                    val isCanceled = tx.type == TransactionType.CANCELLATION || cancellationChild != null || (tx.items.isNotEmpty() && tx.items.all { it.quantity == 0L })
+                    val isCorrected = !isCanceled && (tx.type == TransactionType.CORRECTION || correctionChild != null)
+
+                    val activeItems = correctionChild?.items?.ifEmpty { tx.items } ?: tx.items
+                    val refTx = transactions.firstOrNull { it.id == tx.referenceTransactionId }
+
                     AdminTransactionAccordionCard(
                         transaction = tx,
+                        activeItems = activeItems,
+                        referencedTransaction = refTx,
                         isExpanded = isExpanded,
-                        isReversed = isReversed,
+                        isCanceled = isCanceled,
+                        isCorrected = isCorrected,
                         language = language,
                         onExpandToggle = { onRequestToggleExpand(tx.id) },
                         onStornoPurchaseWithUpdatedItems = onStornoPurchaseWithUpdatedItems,
@@ -1709,8 +1721,11 @@ private fun AdminTransactionsTab(
 @Composable
 private fun AdminTransactionAccordionCard(
     transaction: Transaction,
+    activeItems: List<TransactionItem>,
+    referencedTransaction: Transaction?,
     isExpanded: Boolean,
-    isReversed: Boolean,
+    isCanceled: Boolean,
+    isCorrected: Boolean,
     language: Language,
     onExpandToggle: () -> Unit,
     onStornoPurchaseWithUpdatedItems: (Transaction, List<TransactionItem>) -> Unit,
@@ -1721,11 +1736,20 @@ private fun AdminTransactionAccordionCard(
 
     // Storno Mode Toggle & Draft State
     var isStornoMode by remember(transaction.id) { mutableStateOf(false) }
-    var draftItems by remember(transaction.id, transaction.items) { mutableStateOf(transaction.items) }
+    var draftItems by remember(transaction.id, activeItems) { mutableStateOf(activeItems) }
 
     // Weight input text state map (index -> string)
-    var weightInputStrings by remember(transaction.id, transaction.items) {
-        mutableStateOf(transaction.items.mapIndexed { idx, item -> idx to item.quantity.toString() }.toMap())
+    var weightInputStrings by remember(transaction.id, activeItems) {
+        mutableStateOf(activeItems.mapIndexed { idx, item -> idx to item.quantity.toString() }.toMap())
+    }
+
+    // Automatically cancel and close edit mode when accordion is collapsed or another card is opened
+    LaunchedEffect(isExpanded) {
+        if (!isExpanded) {
+            isStornoMode = false
+            draftItems = activeItems
+            weightInputStrings = activeItems.mapIndexed { idx, item -> idx to item.quantity.toString() }.toMap()
+        }
     }
 
     // Approval Prompts State
@@ -1771,7 +1795,7 @@ private fun AdminTransactionAccordionCard(
                             TransactionType.ADMIN_DEPOSIT -> ColorSuccessEmerald.copy(alpha = 0.12f)
                             TransactionType.ADMIN_WITHDRAWAL -> ColorWarningAmber.copy(alpha = 0.15f)
                             TransactionType.CANCELLATION -> ColorDangerCrimson.copy(alpha = 0.12f)
-                            TransactionType.CORRECTION -> AccentNavy.copy(alpha = 0.15f)
+                            TransactionType.CORRECTION -> ColorWarningAmber.copy(alpha = 0.15f)
                         }
                     ) {
                         Text(
@@ -1783,13 +1807,13 @@ private fun AdminTransactionAccordionCard(
                                 TransactionType.ADMIN_DEPOSIT -> ColorSuccessEmerald
                                 TransactionType.ADMIN_WITHDRAWAL -> ColorWarningAmber
                                 TransactionType.CANCELLATION -> ColorDangerCrimson
-                                TransactionType.CORRECTION -> AccentNavy
+                                TransactionType.CORRECTION -> ColorWarningAmber
                             },
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                         )
                     }
 
-                    if (isReversed) {
+                    if (isCanceled) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = ColorDangerCrimson.copy(alpha = 0.12f)
@@ -1799,6 +1823,19 @@ private fun AdminTransactionAccordionCard(
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ColorDangerCrimson,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else if (isCorrected) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = ColorWarningAmber.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "CORRECTED",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorWarningAmber,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
@@ -1840,19 +1877,29 @@ private fun AdminTransactionAccordionCard(
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Transaction Note / Reference
-                    if (transaction.note != null || transaction.referenceTransactionId != null) {
+                    // Transaction Note / Human Readable Reference
+                    if (transaction.note != null || referencedTransaction != null) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = SurfaceContainerHighLight,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
                                 if (transaction.note != null) {
-                                    Text("Note: ${transaction.note}", fontSize = 13.sp, color = PrimaryNavy)
+                                    Text("Description: ${transaction.note}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = PrimaryNavy)
                                 }
-                                if (transaction.referenceTransactionId != null) {
-                                    Text("Ref Transaction ID: ${transaction.referenceTransactionId}", fontSize = 12.sp, color = TextSecondaryMuted)
+                                if (referencedTransaction != null) {
+                                    val refDate = Formatting.formatTimestamp(referencedTransaction.timestamp, language)
+                                    val refAmount = Formatting.formatBrl(kotlin.math.abs(referencedTransaction.totalAmount))
+                                    Text(
+                                        text = "🔗 Reference: ${referencedTransaction.type.name} on $refDate ($refAmount)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = AccentNavy
+                                    )
                                 }
                             }
                         }
@@ -1873,7 +1920,7 @@ private fun AdminTransactionAccordionCard(
                                     color = PrimaryNavy
                                 )
 
-                                if (!isReversed && !isStornoMode) {
+                                if (!isCanceled && !isStornoMode) {
                                     Button(
                                         onClick = { isStornoMode = true },
                                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
@@ -1906,7 +1953,7 @@ private fun AdminTransactionAccordionCard(
                                     ) {
                                         Text("Product", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1.8f))
                                         Text("Unit Price", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1f))
-                                        if (isStornoMode && !isReversed) {
+                                        if (isStornoMode && !isCanceled) {
                                             Text("Original", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                             Text("Adjusted Qty/Weight", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy, modifier = Modifier.weight(2.2f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                         } else {
@@ -1944,7 +1991,7 @@ private fun AdminTransactionAccordionCard(
                                                 modifier = Modifier.weight(1f)
                                             )
 
-                                            if (isStornoMode && !isReversed) {
+                                            if (isStornoMode && !isCanceled) {
                                                 // Column 3: Original Qty / Weight BEFORE edit
                                                 Text(
                                                     text = Formatting.formatQuantity(origItem.quantity, origItem.unitType),
@@ -2111,7 +2158,7 @@ private fun AdminTransactionAccordionCard(
                     // Bottom Action Buttons Area (Aligned to the Right)
                     HorizontalDivider(color = DividerBorder)
 
-                    if (!isReversed) {
+                    if (!isCanceled) {
                         if (transaction.type == TransactionType.PURCHASE) {
                             if (isStornoMode) {
                                 Row(
@@ -2123,8 +2170,8 @@ private fun AdminTransactionAccordionCard(
                                         // Cancel Storno Edit Mode
                                         OutlinedButton(
                                             onClick = {
-                                                draftItems = transaction.items
-                                                weightInputStrings = transaction.items.mapIndexed { idx, item -> idx to item.quantity.toString() }.toMap()
+                                                draftItems = activeItems
+                                                weightInputStrings = activeItems.mapIndexed { idx, item -> idx to item.quantity.toString() }.toMap()
                                                 isStornoMode = false
                                             },
                                             shape = RoundedCornerShape(8.dp),
@@ -2144,7 +2191,7 @@ private fun AdminTransactionAccordionCard(
                                         }
 
                                         // Option 2: Apply Selected Item Changes
-                                        val isDraftModified = draftItems != transaction.items
+                                        val isDraftModified = draftItems != activeItems
                                         Button(
                                             onClick = { showUpdateItemsConfirm = true },
                                             enabled = isDraftModified,
@@ -2155,7 +2202,7 @@ private fun AdminTransactionAccordionCard(
                                             shape = RoundedCornerShape(8.dp),
                                             modifier = Modifier.height(44.dp)
                                         ) {
-                                            Text("🔄 Apply Selected Item Storno", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                            Text("🔄 Apply Storno Changes", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }

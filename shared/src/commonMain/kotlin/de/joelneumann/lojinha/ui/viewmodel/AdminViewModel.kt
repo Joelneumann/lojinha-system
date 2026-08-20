@@ -280,6 +280,14 @@ class AdminViewModel(
         val costDifference = updatedCost - originalCost // Negative = reduced cost (refund), Positive = increased cost (charge)
         val balanceDelta = -costDifference // Positive = credit/refund, Negative = debit/charge
 
+        val dateStr = Formatting.formatTimestamp(originalTx.timestamp, Language.EN)
+        val origAmountStr = Formatting.formatBrl(originalCost)
+        val humanNote = if (isAllZero) {
+            "Complete Storno of Purchase ($dateStr - $origAmountStr)"
+        } else {
+            "Item quantity correction for Purchase ($dateStr - Original $origAmountStr)"
+        }
+
         val stornoId = "tx-storno-" + nowMillis + "-" + Random.nextInt(1000, 9999)
         val stornoTx = Transaction(
             id = stornoId,
@@ -288,7 +296,7 @@ class AdminViewModel(
             timestamp = nowMillis,
             type = if (isAllZero) TransactionType.CANCELLATION else TransactionType.CORRECTION,
             referenceTransactionId = originalTx.id,
-            note = if (isAllZero) "Complete Storno of Purchase ${originalTx.id}" else "Adjusted item quantities for Purchase ${originalTx.id}",
+            note = humanNote,
             totalAmount = balanceDelta,
             items = updatedItems
         )
@@ -321,6 +329,8 @@ class AdminViewModel(
         val cancellationId = "tx-storno-" + nowMillis + "-" + Random.nextInt(1000, 9999)
 
         val refundAmount = -tx.totalAmount
+        val dateStr = Formatting.formatTimestamp(tx.timestamp, Language.EN)
+        val amountStr = Formatting.formatBrl(tx.totalAmount)
 
         val stornoTx = Transaction(
             id = cancellationId,
@@ -329,7 +339,7 @@ class AdminViewModel(
             timestamp = nowMillis,
             type = TransactionType.CANCELLATION,
             referenceTransactionId = tx.id,
-            note = "Storno of ${tx.type.name} Transaction ${tx.id}",
+            note = "Storno of ${tx.type.name} ($dateStr - $amountStr)",
             totalAmount = refundAmount,
             items = emptyList()
         )
