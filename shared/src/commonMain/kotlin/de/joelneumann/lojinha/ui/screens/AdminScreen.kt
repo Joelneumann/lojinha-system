@@ -105,7 +105,14 @@ fun AdminScreen(
                 tabs.forEach { (tab, label) ->
                     val isSel = currentTab == tab
                     Button(
-                        onClick = { safeNavigate { viewModel.selectTab(tab) } },
+                        onClick = {
+                            safeNavigate {
+                                expandedUserId = null
+                                expandedProductId = null
+                                expandedTransactionId = null
+                                viewModel.selectTab(tab)
+                            }
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp),
