@@ -68,7 +68,7 @@ fun ShoppingScreen(
     }
 
     val filteredProducts = remember(products, searchQuery) {
-        if (searchQuery.isBlank()) products
+        if (searchQuery.isBlank()) emptyList()
         else products.filter { p ->
             p.name.contains(searchQuery, ignoreCase = true) ||
                     p.barcodes.any { b -> b.code.contains(searchQuery, ignoreCase = true) }
@@ -194,23 +194,50 @@ fun ShoppingScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Product List (Vertical List of Cards)
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(filteredProducts, key = { it.id }) { product ->
-                    ProductCard(
-                        product = product,
-                        globalMarkup = settings.globalMarkupPercent,
-                        user = user,
-                        rate = rate,
-                        language = language,
-                        onClick = {
-                            viewModel.onProductSelected(product, settings.globalMarkupPercent)
-                            searchFocusRequester.requestFocus()
-                        }
+            // Product Display Area (Clean empty state until user searches)
+            if (searchQuery.isBlank()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🔍 Scan product barcode or type to search",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextSecondaryMuted,
+                        textAlign = TextAlign.Center
                     )
+                }
+            } else if (filteredProducts.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No products found matching \"$searchQuery\"",
+                        fontSize = 14.sp,
+                        color = TextSecondaryMuted,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredProducts, key = { it.id }) { product ->
+                        ProductCard(
+                            product = product,
+                            globalMarkup = settings.globalMarkupPercent,
+                            user = user,
+                            rate = rate,
+                            language = language,
+                            onClick = {
+                                viewModel.onProductSelected(product, settings.globalMarkupPercent)
+                                searchFocusRequester.requestFocus()
+                            }
+                        )
+                    }
                 }
             }
         }
