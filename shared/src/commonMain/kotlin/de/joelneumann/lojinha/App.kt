@@ -51,7 +51,6 @@ fun App() {
 
     val shoppingViewModel = remember(currentUser?.id) { ShoppingViewModel(productRepository, userRepository, transactionRepository) }
     val historyViewModel = remember(currentUser?.id) { TransactionHistoryViewModel(transactionRepository, userRepository) }
-    val adminViewModel = remember { AdminViewModel(productRepository, userRepository, transactionRepository, settingsRepository) }
 
     val cartItems by shoppingViewModel.cartItems.collectAsState()
     var showAbandonCartGuardDialog by remember { mutableStateOf(false) }
@@ -100,7 +99,6 @@ fun App() {
                                     appViewModel.loginUser(user)
                                 },
                                 onNavigateToAdmin = {
-                                    adminViewModel.loadData()
                                     appViewModel.navigateTo(AppScreen.ADMIN_PANEL)
                                 }
                             )
@@ -140,6 +138,9 @@ fun App() {
                         }
 
                         AppScreen.ADMIN_PANEL -> {
+                            val adminViewModel = remember {
+                                AdminViewModel(productRepository, userRepository, transactionRepository, settingsRepository)
+                            }
                             AdminScreen(
                                 viewModel = adminViewModel,
                                 language = currentLanguage,
