@@ -431,7 +431,7 @@ private fun AdminUsersTab(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(56.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -448,7 +448,7 @@ private fun AdminUsersTab(
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .defaultMinSize(minHeight = 52.dp)
+                    .fillMaxHeight()
                     .onKeyEvent { keyEvent ->
                         if (keyEvent.type == KeyEventType.KeyDown &&
                             (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)
@@ -475,7 +475,7 @@ private fun AdminUsersTab(
                 onClick = onAdd,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                 shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.height(52.dp)
+                modifier = Modifier.fillMaxHeight()
             ) {
                 Text(strings.addUser, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
@@ -1219,64 +1219,213 @@ private fun UserEditDialog(
     onCancel: () -> Unit
 ) {
     val strings = I18n.get(language)
+    val isNewUser = remember(user.id) { user.id.isBlank() || user.name.isBlank() }
+
     var name by remember { mutableStateOf(user.name) }
     var pin by remember { mutableStateOf(user.pin ?: "") }
     var barcode by remember { mutableStateOf(user.userBarcode ?: "") }
     var barcodeNumber by remember { mutableStateOf(user.userBarcodeNumber ?: "") }
     var selectedLang by remember { mutableStateOf(user.language) }
+    var selectedSecondaryCurrency by remember { mutableStateOf(user.secondaryCurrency) }
+    var initialBalanceInput by remember { mutableStateOf(if (isNewUser) "0,00" else Formatting.formatBrl(user.balance).replace("R$", "").trim()) }
 
     Dialog(onDismissRequest = onCancel) {
-        Surface(shape = RoundedCornerShape(16.dp), color = SurfaceWhite, modifier = Modifier.width(420.dp).wrapContentHeight()) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(strings.editUser, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(value = pin, onValueChange = { pin = it }, label = { Text("PIN (Optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = barcode,
-                    onValueChange = {
-                        barcode = it
-                        if (barcodeNumber.isBlank()) barcodeNumber = it
-                    },
-                    label = { Text("User Barcode String") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = barcodeNumber,
-                    onValueChange = { barcodeNumber = it },
-                    label = { Text("User Barcode Number Display") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = SurfaceWhite,
+            shadowElevation = 8.dp,
+            modifier = Modifier.width(480.dp).wrapContentHeight()
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = if (isNewUser) strings.addUser else strings.editUser,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text(strings.cancel) }
+                HorizontalDivider(color = DividerBorder)
+
+                // User Name & PIN
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("User Name", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            placeholder = { Text("Full Name", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("PIN (Optional)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = pin,
+                            onValueChange = { pin = it },
+                            placeholder = { Text("No PIN", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
+                // Barcode Symbol & Barcode ID
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Barcode Symbol", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = barcode,
+                            onValueChange = {
+                                barcode = it
+                                if (barcodeNumber.isBlank()) barcodeNumber = it
+                            },
+                            placeholder = { Text("e.g. USR-001", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Barcode Number (ID)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = barcodeNumber,
+                            onValueChange = { barcodeNumber = it },
+                            placeholder = { Text("e.g. 100000000001", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
+                // Preferred Language Selection
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(strings.preferredLanguage, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Language.entries.forEach { lang ->
+                            val isSel = selectedLang == lang
+                            OutlinedButton(
+                                onClick = { selectedLang = lang },
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                contentPadding = PaddingValues(0.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (isSel) AccentNavy else SurfaceWhite,
+                                    contentColor = if (isSel) SurfaceWhite else PrimaryNavy
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("${lang.flagEmoji} ${lang.code.uppercase()}", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+
+                // Secondary Currency Selection
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(strings.secondaryCurrency, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(
+                            SecondaryCurrency.NONE to "None",
+                            SecondaryCurrency.USD to "USD ($)",
+                            SecondaryCurrency.EUR to "EUR (€)"
+                        ).forEach { (curr, label) ->
+                            val isSel = selectedSecondaryCurrency == curr
+                            OutlinedButton(
+                                onClick = { selectedSecondaryCurrency = curr },
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                contentPadding = PaddingValues(0.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (isSel) AccentNavy else SurfaceWhite,
+                                    contentColor = if (isSel) SurfaceWhite else PrimaryNavy
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(label, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+
+                // Initial Balance (if new user)
+                if (isNewUser) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text("Initial Balance (R$)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = initialBalanceInput,
+                            onValueChange = { initialBalanceInput = it },
+                            placeholder = { Text("0,00", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = DividerBorder)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(strings.cancel, fontSize = 14.sp)
+                    }
+
                     Button(
                         onClick = {
-                            val bCode = barcode.ifBlank { null }
-                            val bNum = barcodeNumber.ifBlank { null }
+                            val bCode = barcode.trim().ifBlank { null }
+                            val bNum = barcodeNumber.trim().ifBlank { null }
+                            val initialCents = if (isNewUser) {
+                                val valDouble = initialBalanceInput.replace(',', '.').trim().toDoubleOrNull() ?: 0.0
+                                kotlin.math.round(valDouble * 100.0).toLong()
+                            } else {
+                                user.balance
+                            }
+
                             val updated = user.copy(
-                                name = name,
-                                pin = pin.ifBlank { null },
+                                name = name.trim(),
+                                pin = pin.trim().ifBlank { null },
                                 userBarcode = if (bCode != null && bNum != null) bCode else null,
                                 userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
-                                language = selectedLang
+                                language = selectedLang,
+                                secondaryCurrency = selectedSecondaryCurrency,
+                                balance = initialCents
                             )
                             onSave(updated)
                         },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
+                        enabled = name.isNotBlank(),
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(strings.save, color = SurfaceWhite)
+                        Text(strings.save, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
             }
