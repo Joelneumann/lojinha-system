@@ -135,7 +135,14 @@ fun AdminScreen(
                     products = products,
                     language = language,
                     expandedProductId = expandedProductId,
-                    onAdd = { viewModel.openNewProductModal() },
+                    onAdd = {
+                        val action = {
+                            expandedProductId = null
+                            hasUnsavedProductChanges = false
+                            viewModel.openNewProductModal()
+                        }
+                        safeNavigate(action)
+                    },
                     onSaveProduct = { viewModel.saveProduct(it) },
                     onAdjustStock = { productId, delta ->
                         viewModel.adjustProductStock(productId, delta)
@@ -165,7 +172,14 @@ fun AdminScreen(
                     users = users,
                     language = language,
                     expandedUserId = expandedUserId,
-                    onAdd = { viewModel.openNewUserModal() },
+                    onAdd = {
+                        val action = {
+                            expandedUserId = null
+                            hasUnsavedUserChanges = false
+                            viewModel.openNewUserModal()
+                        }
+                        safeNavigate(action)
+                    },
                     onSaveUser = { viewModel.saveUser(it) },
                     onAdjustBalance = { user, cents, note, isDeposit ->
                         val delta = if (isDeposit) cents else -cents
@@ -3143,7 +3157,6 @@ private fun UserEditDialog(
     var barcodeNumber by remember { mutableStateOf(user.userBarcodeNumber ?: "") }
     var selectedLang by remember { mutableStateOf(user.language) }
     var selectedSecondaryCurrency by remember { mutableStateOf(user.secondaryCurrency) }
-    var initialBalanceInput by remember { mutableStateOf(if (isNewUser) "0,00" else Formatting.formatBrl(user.balance).replace("R$", "").trim()) }
 
     // User barcode duplicate validation against other users
     val barcodeToCheck = remember(barcode, barcodeNumber) {
@@ -3305,22 +3318,6 @@ private fun UserEditDialog(
                     }
                 }
 
-                // Initial Balance (if new user)
-                if (isNewUser) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("Initial Balance (R$)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        OutlinedTextField(
-                            value = initialBalanceInput,
-                            onValueChange = { initialBalanceInput = it },
-                            placeholder = { Text("0,00", fontSize = 13.sp, color = TextSecondaryMuted) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-
                 if (isUserBarcodeIncomplete) {
                     val missingMsg = if (isBarcodeSymbolFilled) "⚠️ Barcode Number (ID) is missing!" else "⚠️ Barcode Symbol is missing!"
                     Text(
@@ -3360,12 +3357,7 @@ private fun UserEditDialog(
                         onClick = {
                             val bCode = barcode.trim().ifBlank { null }
                             val bNum = barcodeNumber.trim().ifBlank { null }
-                            val initialCents = if (isNewUser) {
-                                val valDouble = initialBalanceInput.replace(',', '.').trim().toDoubleOrNull() ?: 0.0
-                                kotlin.math.round(valDouble * 100.0).toLong()
-                            } else {
-                                user.balance
-                            }
+                            val userBalance = if (isNewUser) 0L else user.balance
 
                             val updated = user.copy(
                                 name = name.trim(),
@@ -3374,7 +3366,7 @@ private fun UserEditDialog(
                                 userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
                                 language = selectedLang,
                                 secondaryCurrency = selectedSecondaryCurrency,
-                                balance = initialCents
+                                balance = userBalance
                             )
                             onSave(updated)
                         },
