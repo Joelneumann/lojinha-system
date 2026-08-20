@@ -328,26 +328,63 @@ private fun AdminUsersTab(
     onDelete: (User) -> Unit
 ) {
     val strings = I18n.get(language)
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredUsers = remember(users, searchQuery) {
+        if (searchQuery.isBlank()) users
+        else users.filter { u ->
+            u.name.contains(searchQuery, ignoreCase = true) ||
+                    (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
+                    (u.pin != null && u.pin.contains(searchQuery, ignoreCase = true))
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("User Management (${users.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            // Search bar to filter user accounts
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = {
+                    Text(
+                        text = "🔍 Search account by name or barcode...",
+                        color = TextSecondaryMuted
+                    )
+                },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = SurfaceWhite,
+                    unfocusedContainerColor = SurfaceWhite,
+                    focusedBorderColor = AccentNavy,
+                    unfocusedBorderColor = DividerBorder
+                ),
+                singleLine = true
+            )
+
             Button(
                 onClick = onAdd,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxHeight()
             ) {
-                Text(strings.addUser, color = SurfaceWhite)
+                Text(strings.addUser, color = SurfaceWhite, fontWeight = FontWeight.Bold)
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(users, key = { it.id }) { user ->
+        if (filteredUsers.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No user accounts found.", color = TextSecondaryMuted)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(filteredUsers, key = { it.id }) { user ->
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = SurfaceWhite,
@@ -398,6 +435,7 @@ private fun AdminUsersTab(
             }
         }
     }
+}
 }
 
 @Composable
