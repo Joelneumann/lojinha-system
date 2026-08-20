@@ -1628,9 +1628,15 @@ private fun AdminTransactionsTab(
         if (searchQuery.isBlank()) transactions
         else transactions.filter { tx ->
             val dateStr = Formatting.formatTimestamp(tx.timestamp, language)
+            val dateStrEn = Formatting.formatTimestamp(tx.timestamp, Language.EN)
+            val dateStrDe = Formatting.formatTimestamp(tx.timestamp, Language.DE)
+            val dateStrBr = Formatting.formatTimestamp(tx.timestamp, Language.BR)
             tx.userNameSnapshot.contains(searchQuery, ignoreCase = true) ||
                     tx.type.name.contains(searchQuery, ignoreCase = true) ||
                     dateStr.contains(searchQuery, ignoreCase = true) ||
+                    dateStrEn.contains(searchQuery, ignoreCase = true) ||
+                    dateStrDe.contains(searchQuery, ignoreCase = true) ||
+                    dateStrBr.contains(searchQuery, ignoreCase = true) ||
                     tx.items.any { item -> item.productName.contains(searchQuery, ignoreCase = true) }
         }
     }

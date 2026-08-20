@@ -66,14 +66,22 @@ fun TransactionHistoryScreen(
         list.sortedByDescending { it.transaction.timestamp }
     }
 
-    val filteredTransactions = remember(transactionsWithBalance, searchFilter, selectedTypeFilter) {
+    val filteredTransactions = remember(transactionsWithBalance, searchFilter, selectedTypeFilter, language) {
         transactionsWithBalance.filter { item ->
             val tx = item.transaction
             val matchesType = selectedTypeFilter == null || tx.type == selectedTypeFilter
+            val dateStr = Formatting.formatTimestamp(tx.timestamp, language)
+            val dateStrEn = Formatting.formatTimestamp(tx.timestamp, Language.EN)
+            val dateStrDe = Formatting.formatTimestamp(tx.timestamp, Language.DE)
+            val dateStrBr = Formatting.formatTimestamp(tx.timestamp, Language.BR)
             val matchesText = searchFilter.isBlank() ||
                     tx.userNameSnapshot.contains(searchFilter, ignoreCase = true) ||
                     (tx.note != null && tx.note.contains(searchFilter, ignoreCase = true)) ||
-                    tx.items.any { it.productName.contains(searchFilter, ignoreCase = true) }
+                    tx.items.any { it.productName.contains(searchFilter, ignoreCase = true) } ||
+                    dateStr.contains(searchFilter, ignoreCase = true) ||
+                    dateStrEn.contains(searchFilter, ignoreCase = true) ||
+                    dateStrDe.contains(searchFilter, ignoreCase = true) ||
+                    dateStrBr.contains(searchFilter, ignoreCase = true)
             matchesType && matchesText
         }
     }

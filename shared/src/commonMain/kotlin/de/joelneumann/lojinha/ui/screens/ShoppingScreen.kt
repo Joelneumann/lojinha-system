@@ -92,66 +92,71 @@ fun ShoppingScreen(
                 .fillMaxHeight()
                 .padding(20.dp)
         ) {
-            // User Balance Prominent Header Bar
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = SurfaceWhite,
-                shadowElevation = 2.dp,
-                modifier = Modifier.fillMaxWidth()
+            // User Header Row (Balance Box + Prominent Account Button outside box)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Left: User Name & Balance Card
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.weight(1f)
                 ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = user.name,
-                            fontSize = 16.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy
                         )
 
-                        OutlinedButton(
-                            onClick = { onNavigateToHistory() },
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            modifier = Modifier.height(32.dp)
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "👤 ${strings.account}",
-                                fontSize = 12.sp,
+                                text = "${strings.balance}: ",
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = PrimaryNavy
-                            )
-                        }
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "${strings.balance}: ",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = TextSecondaryMuted
-                        )
-                        Text(
-                            text = Formatting.formatBrl(user.balance),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (user.balance >= 0) ColorSuccessEmerald else ColorDangerCrimson
-                        )
-                        val secText = Formatting.formatSecondaryCurrency(user.balance, user.secondaryCurrency, rate)
-                        if (secText.isNotEmpty()) {
-                            Text(
-                                text = secText,
-                                fontSize = 14.sp,
                                 color = TextSecondaryMuted
                             )
+                            Text(
+                                text = Formatting.formatBrl(user.balance),
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (user.balance >= 0) ColorSuccessEmerald else ColorDangerCrimson
+                            )
+                            val secText = Formatting.formatSecondaryCurrency(user.balance, user.secondaryCurrency, rate)
+                            if (secText.isNotEmpty()) {
+                                Text(
+                                    text = secText,
+                                    fontSize = 14.sp,
+                                    color = TextSecondaryMuted
+                                )
+                            }
                         }
                     }
+                }
+
+                // Right: Big, Prominent Account Button (Outside the box)
+                Button(
+                    onClick = { onNavigateToHistory() },
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+                    modifier = Modifier.height(52.dp)
+                ) {
+                    Text(
+                        text = "👤 ${strings.account}",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SurfaceWhite
+                    )
                 }
             }
 
