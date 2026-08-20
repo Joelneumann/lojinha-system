@@ -131,6 +131,15 @@ class AdminViewModel(
         }
     }
 
+    fun adjustProductStock(productId: String, deltaQuantity: Long) {
+        viewModelScope.launch {
+            val prod = _products.value.firstOrNull { it.id == productId } ?: return@launch
+            val newStock = (prod.stockQuantity + deltaQuantity).coerceAtLeast(0L)
+            productRepository.saveProduct(prod.copy(stockQuantity = newStock))
+            loadData()
+        }
+    }
+
     // User CRUD
     fun openNewUserModal() {
         _editUser.value = User(
