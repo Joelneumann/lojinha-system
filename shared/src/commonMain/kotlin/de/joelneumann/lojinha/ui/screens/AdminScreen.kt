@@ -335,6 +335,7 @@ fun AdminScreen(
     if (showProductModal && editProduct != null) {
         ProductEditDialog(
             product = editProduct!!,
+            allProducts = products,
             language = language,
             onSave = { viewModel.saveProduct(it) },
             onCancel = { viewModel.closeProductModal() }
@@ -345,6 +346,7 @@ fun AdminScreen(
     if (showUserModal && editUser != null) {
         UserEditDialog(
             user = editUser!!,
+            allUsers = users,
             language = language,
             onSave = { viewModel.saveUser(it) },
             onCancel = { viewModel.closeUserModal() }
@@ -485,6 +487,7 @@ private fun AdminProductsTab(
                     val isExpanded = expandedProductId == product.id
                     AdminProductAccordionCard(
                         product = product,
+                        allProducts = products,
                         isExpanded = isExpanded,
                         language = language,
                         onExpandToggle = { onRequestToggleExpand(product.id) },
@@ -503,6 +506,7 @@ private fun AdminProductsTab(
 @Composable
 private fun AdminProductAccordionCard(
     product: Product,
+    allProducts: List<Product>,
     isExpanded: Boolean,
     language: Language,
     onExpandToggle: () -> Unit,
@@ -529,6 +533,17 @@ private fun AdminProductAccordionCard(
     // New barcode inputs
     var newBarcodeCode by remember(product.id) { mutableStateOf("") }
     var newBarcodeDesc by remember(product.id) { mutableStateOf("") }
+
+    // Barcode duplicate validation against other products
+    val newBarcodeConflictProduct = remember(newBarcodeCode, allProducts, product.id) {
+        val trimmed = newBarcodeCode.trim()
+        if (trimmed.isBlank()) null
+        else allProducts.firstOrNull { p -> p.id != product.id && p.barcodes.any { b -> b.code.equals(trimmed, ignoreCase = true) } }
+    }
+
+    val assignedBarcodeConflictProduct = remember(draftBarcodes, allProducts, product.id) {
+        allProducts.firstOrNull { p -> p.id != product.id && p.barcodes.any { b -> draftBarcodes.any { db -> db.code.equals(b.code, ignoreCase = true) } } }
+    }
 
     // Quick Stock Adjustment Draft state
     var stockDeltaInput by remember(product.id) { mutableStateOf("") }
@@ -864,15 +879,16 @@ private fun AdminProductAccordionCard(
 
                             Button(
                                 onClick = {
-                                    if (newBarcodeCode.isNotBlank()) {
+                                    if (newBarcodeCode.isNotBlank() && newBarcodeConflictProduct == null) {
                                         val code = newBarcodeCode.trim()
-                                        if (draftBarcodes.none { it.code == code }) {
+                                        if (draftBarcodes.none { it.code.equals(code, ignoreCase = true) }) {
                                             draftBarcodes = draftBarcodes + Barcode(code, newBarcodeDesc.trim().ifBlank { null })
                                             newBarcodeCode = ""
                                             newBarcodeDesc = ""
                                         }
                                     }
                                 },
+                                enabled = newBarcodeCode.isNotBlank() && newBarcodeConflictProduct == null,
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                                 modifier = Modifier.height(52.dp)
@@ -880,10 +896,30 @@ private fun AdminProductAccordionCard(
                                 Text("+ Add Barcode", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         }
+
+                        if (newBarcodeConflictProduct != null) {
+                            Text(
+                                text = "❌ Barcode '${newBarcodeCode.trim()}' is already assigned to product '${newBarcodeConflictProduct.name}'!",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                     }
 
                     // SECTION 3: Save Button & Danger Zone Actions Row
                     HorizontalDivider(color = DividerBorder)
+
+                    if (assignedBarcodeConflictProduct != null) {
+                        Text(
+                            text = "❌ Contains barcode assigned to product '${assignedBarcodeConflictProduct.name}'!",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorDangerCrimson,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -904,7 +940,7 @@ private fun AdminProductAccordionCard(
                                 onSaveProduct(updatedProduct)
                                 onUnsavedStateChanged(false)
                             },
-                            enabled = hasUnsaved && draftName.isNotBlank(),
+                            enabled = hasUnsaved && draftName.isNotBlank() && assignedBarcodeConflictProduct == null,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = AccentNavy,
                                 disabledContainerColor = SurfaceContainerHighLight
@@ -1164,6 +1200,7 @@ private fun AdminUsersTab(
                     val isExpanded = expandedUserId == user.id
                     AdminUserAccordionCard(
                         user = user,
+                        allUsers = users,
                         isExpanded = isExpanded,
                         language = language,
                         onExpandToggle = { onRequestToggleExpand(user.id) },
@@ -1182,6 +1219,7 @@ private fun AdminUsersTab(
 @Composable
 private fun AdminUserAccordionCard(
     user: User,
+    allUsers: List<User>,
     isExpanded: Boolean,
     language: Language,
     onExpandToggle: () -> Unit,
@@ -1200,6 +1238,27 @@ private fun AdminUserAccordionCard(
     var draftUserBarcodeNumber by remember(user.id, user.userBarcodeNumber) { mutableStateOf(user.userBarcodeNumber ?: "") }
     var draftLanguage by remember(user.id, user.language) { mutableStateOf(user.language) }
     var draftSecondaryCurrency by remember(user.id, user.secondaryCurrency) { mutableStateOf(user.secondaryCurrency) }
+
+    // User barcode duplicate validation against other users
+    val barcodeToCheck = remember(draftUserBarcode, draftUserBarcodeNumber) {
+        val b1 = draftUserBarcode.trim()
+        val b2 = draftUserBarcodeNumber.trim()
+        if (b2.isNotBlank()) b2 else b1
+    }
+
+    val duplicateUser = remember(barcodeToCheck, allUsers, user.id) {
+        if (barcodeToCheck.isBlank()) null
+        else allUsers.firstOrNull { u ->
+            u.id != user.id && (
+                (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(barcodeToCheck, ignoreCase = true)) ||
+                (u.userBarcode != null && u.userBarcode.equals(barcodeToCheck, ignoreCase = true))
+            )
+        }
+    }
+
+    val isBarcodeSymbolFilled = draftUserBarcode.isNotBlank()
+    val isBarcodeNumberFilled = draftUserBarcodeNumber.isNotBlank()
+    val isUserBarcodeIncomplete = (isBarcodeSymbolFilled && !isBarcodeNumberFilled) || (!isBarcodeSymbolFilled && isBarcodeNumberFilled)
 
     // Quick Money Adjustment Draft state
     var moneyInput by remember(user.id) { mutableStateOf("") }
@@ -1487,6 +1546,27 @@ private fun AdminUserAccordionCard(
                         }
                     }
 
+                    if (isUserBarcodeIncomplete) {
+                        val missingMsg = if (isBarcodeSymbolFilled) "⚠️ Barcode Number (ID) is missing!" else "⚠️ Barcode Symbol is missing!"
+                        Text(
+                            text = "$missingMsg Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty.",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorWarningAmber,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+
+                    if (duplicateUser != null) {
+                        Text(
+                            text = "❌ Barcode '${barcodeToCheck}' is already assigned to user '${duplicateUser.name}'!",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorDangerCrimson,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+
                     // SECTION 3: Save Button & Danger Zone Actions Row
                     HorizontalDivider(color = DividerBorder)
 
@@ -1511,7 +1591,7 @@ private fun AdminUserAccordionCard(
                                 onSaveUser(updatedUser)
                                 onUnsavedStateChanged(false)
                             },
-                            enabled = hasUnsaved,
+                            enabled = hasUnsaved && draftName.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = AccentNavy,
                                 disabledContainerColor = SurfaceContainerHighLight
@@ -2766,6 +2846,7 @@ private fun AdminSettingsTab(
 @Composable
 private fun ProductEditDialog(
     product: Product,
+    allProducts: List<Product>,
     language: Language,
     onSave: (Product) -> Unit,
     onCancel: () -> Unit
@@ -2781,6 +2862,17 @@ private fun ProductEditDialog(
     var barcodeCode by remember { mutableStateOf("") }
     var barcodeDesc by remember { mutableStateOf("") }
     var barcodeList by remember { mutableStateOf(product.barcodes) }
+
+    // Barcode duplicate validation against other products
+    val newBarcodeConflictProduct = remember(barcodeCode, allProducts, product.id) {
+        val trimmed = barcodeCode.trim()
+        if (trimmed.isBlank()) null
+        else allProducts.firstOrNull { p -> p.id != product.id && p.barcodes.any { b -> b.code.equals(trimmed, ignoreCase = true) } }
+    }
+
+    val assignedBarcodeConflictProduct = remember(barcodeList, allProducts, product.id) {
+        allProducts.firstOrNull { p -> p.id != product.id && p.barcodes.any { b -> barcodeList.any { bl -> bl.code.equals(b.code, ignoreCase = true) } } }
+    }
 
     Dialog(onDismissRequest = onCancel) {
         Surface(
@@ -2953,15 +3045,16 @@ private fun ProductEditDialog(
 
                         Button(
                             onClick = {
-                                if (barcodeCode.isNotBlank()) {
+                                if (barcodeCode.isNotBlank() && newBarcodeConflictProduct == null) {
                                     val code = barcodeCode.trim()
-                                    if (barcodeList.none { it.code == code }) {
+                                    if (barcodeList.none { it.code.equals(code, ignoreCase = true) }) {
                                         barcodeList = barcodeList + Barcode(code, barcodeDesc.trim().ifBlank { null })
                                         barcodeCode = ""
                                         barcodeDesc = ""
                                     }
                                 }
                             },
+                            enabled = barcodeCode.isNotBlank() && newBarcodeConflictProduct == null,
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                             modifier = Modifier.height(52.dp)
@@ -2969,9 +3062,29 @@ private fun ProductEditDialog(
                             Text("+ Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
+
+                    if (newBarcodeConflictProduct != null) {
+                        Text(
+                            text = "❌ Barcode '${barcodeCode.trim()}' is already assigned to product '${newBarcodeConflictProduct.name}'!",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorDangerCrimson,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
 
                 HorizontalDivider(color = DividerBorder)
+
+                if (assignedBarcodeConflictProduct != null) {
+                    Text(
+                        text = "❌ Contains barcode assigned to product '${assignedBarcodeConflictProduct.name}'!",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorDangerCrimson,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3000,12 +3113,12 @@ private fun ProductEditDialog(
                             )
                             onSave(updated)
                         },
-                        enabled = name.isNotBlank(),
+                        enabled = name.isNotBlank() && assignedBarcodeConflictProduct == null,
                         modifier = Modifier.weight(1f).height(44.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(strings.save, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(if (isNewProduct) strings.addProduct else strings.save, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -3016,6 +3129,7 @@ private fun ProductEditDialog(
 @Composable
 private fun UserEditDialog(
     user: User,
+    allUsers: List<User>,
     language: Language,
     onSave: (User) -> Unit,
     onCancel: () -> Unit
@@ -3030,6 +3144,27 @@ private fun UserEditDialog(
     var selectedLang by remember { mutableStateOf(user.language) }
     var selectedSecondaryCurrency by remember { mutableStateOf(user.secondaryCurrency) }
     var initialBalanceInput by remember { mutableStateOf(if (isNewUser) "0,00" else Formatting.formatBrl(user.balance).replace("R$", "").trim()) }
+
+    // User barcode duplicate validation against other users
+    val barcodeToCheck = remember(barcode, barcodeNumber) {
+        val b1 = barcode.trim()
+        val b2 = barcodeNumber.trim()
+        if (b2.isNotBlank()) b2 else b1
+    }
+
+    val duplicateUser = remember(barcodeToCheck, allUsers, user.id) {
+        if (barcodeToCheck.isBlank()) null
+        else allUsers.firstOrNull { u ->
+            u.id != user.id && (
+                (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(barcodeToCheck, ignoreCase = true)) ||
+                (u.userBarcode != null && u.userBarcode.equals(barcodeToCheck, ignoreCase = true))
+            )
+        }
+    }
+
+    val isBarcodeSymbolFilled = barcode.isNotBlank()
+    val isBarcodeNumberFilled = barcodeNumber.isNotBlank()
+    val isUserBarcodeIncomplete = (isBarcodeSymbolFilled && !isBarcodeNumberFilled) || (!isBarcodeSymbolFilled && isBarcodeNumberFilled)
 
     Dialog(onDismissRequest = onCancel) {
         Surface(
@@ -3186,6 +3321,27 @@ private fun UserEditDialog(
                     }
                 }
 
+                if (isUserBarcodeIncomplete) {
+                    val missingMsg = if (isBarcodeSymbolFilled) "⚠️ Barcode Number (ID) is missing!" else "⚠️ Barcode Symbol is missing!"
+                    Text(
+                        text = "$missingMsg Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty.",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorWarningAmber,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                if (duplicateUser != null) {
+                    Text(
+                        text = "❌ Barcode '${barcodeToCheck}' is already assigned to user '${duplicateUser.name}'!",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorDangerCrimson,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
                 HorizontalDivider(color = DividerBorder)
 
                 Row(
@@ -3222,15 +3378,15 @@ private fun UserEditDialog(
                             )
                             onSave(updated)
                         },
-                        enabled = name.isNotBlank(),
+                        enabled = name.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
                         modifier = Modifier.weight(1f).height(44.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(strings.save, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(if (isNewUser) strings.addUser else strings.save, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
+                }
             }
         }
     }
-}
 }
