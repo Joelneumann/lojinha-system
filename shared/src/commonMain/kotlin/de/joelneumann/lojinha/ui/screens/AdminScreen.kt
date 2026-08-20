@@ -18,6 +18,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -61,11 +62,12 @@ fun AdminScreen(
     var expandedTransactionId by remember { mutableStateOf<String?>(null) }
     var hasUnsavedUserChanges by remember { mutableStateOf(false) }
     var hasUnsavedProductChanges by remember { mutableStateOf(false) }
+    var hasUnsavedSettingsChanges by remember { mutableStateOf(false) }
     var pendingNavigationAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var showUnsavedChangesGuardDialog by remember { mutableStateOf(false) }
 
     val safeNavigate = { action: () -> Unit ->
-        if (hasUnsavedUserChanges || hasUnsavedProductChanges) {
+        if (hasUnsavedUserChanges || hasUnsavedProductChanges || hasUnsavedSettingsChanges) {
             pendingNavigationAction = action
             showUnsavedChangesGuardDialog = true
         } else {
@@ -213,7 +215,10 @@ fun AdminScreen(
                 AdminTab.SETTINGS -> AdminSettingsTab(
                     settings = settings,
                     language = language,
-                    onSaveSettings = { viewModel.updateSystemSettings(it) }
+                    onSaveSettings = { viewModel.updateSystemSettings(it) },
+                    onUnsavedStateChanged = { unsaved ->
+                        hasUnsavedSettingsChanges = unsaved
+                    }
                 )
             }
         }
@@ -227,11 +232,13 @@ fun AdminScreen(
                 pendingNavigationAction = null
             },
             title = { Text("Unsaved Changes", fontWeight = FontWeight.Bold, color = ColorWarningAmber) },
-            text = { Text("You have unsaved changes on the expanded user account. Leaving will discard your modifications. Do you want to proceed?") },
+            text = { Text("You have unsaved changes. Leaving will discard your modifications. Do you want to proceed?") },
             confirmButton = {
                 Button(
                     onClick = {
                         hasUnsavedUserChanges = false
+                        hasUnsavedProductChanges = false
+                        hasUnsavedSettingsChanges = false
                         showUnsavedChangesGuardDialog = false
                         val navAction = pendingNavigationAction
                         pendingNavigationAction = null
@@ -2338,78 +2345,351 @@ private fun AdminTransactionAccordionCard(
 private fun AdminSettingsTab(
     settings: SystemSettings,
     language: Language,
-    onSaveSettings: (SystemSettings) -> Unit
+    onSaveSettings: (SystemSettings) -> Unit,
+    onUnsavedStateChanged: (Boolean) -> Unit
 ) {
-    var adminPassword by remember { mutableStateOf(settings.adminPasswordHash) }
-    var globalMarkup by remember { mutableStateOf(settings.globalMarkupPercent.toString()) }
-    var usdRate by remember { mutableStateOf(settings.usdExchangeRate.toString()) }
-    var eurRate by remember { mutableStateOf(settings.eurExchangeRate.toString()) }
-    var inactivityTimeout by remember { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
+    var newPassword by remember(settings) { mutableStateOf("") }
+    var confirmPassword by remember(settings) { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("System Settings", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    var globalMarkup by remember(settings) { mutableStateOf(settings.globalMarkupPercent.toString()) }
+    var usdRate by remember(settings) { mutableStateOf(settings.usdExchangeRate.toString()) }
+    var eurRate by remember(settings) { mutableStateOf(settings.eurExchangeRate.toString()) }
+    var inactivityTimeout by remember(settings) { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
 
-        OutlinedTextField(
-            value = adminPassword,
-            onValueChange = { adminPassword = it },
-            label = { Text("Admin Password") },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+    // Reset fields when settings prop updates
+    LaunchedEffect(settings) {
+        newPassword = ""
+        confirmPassword = ""
+        globalMarkup = settings.globalMarkupPercent.toString()
+        usdRate = settings.usdExchangeRate.toString()
+        eurRate = settings.eurExchangeRate.toString()
+        inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
+    }
 
-        OutlinedTextField(
-            value = globalMarkup,
-            onValueChange = { globalMarkup = it },
-            label = { Text("Global Product Markup % (e.g. 10.0)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+    val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
+    val doPasswordsMatch = newPassword == confirmPassword
+    val isPasswordValid = !isPasswordEntered || (newPassword.isNotBlank() && doPasswordsMatch)
 
-        OutlinedTextField(
-            value = usdRate,
-            onValueChange = { usdRate = it },
-            label = { Text("USD Exchange Rate (1 BRL = X USD, e.g. 0.18)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+    val hasFieldChanges = remember(settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout) {
+        newPassword.isNotEmpty() ||
+                globalMarkup != settings.globalMarkupPercent.toString() ||
+                usdRate != settings.usdExchangeRate.toString() ||
+                eurRate != settings.eurExchangeRate.toString() ||
+                inactivityTimeout != settings.inactivityTimeoutMinutes.toString()
+    }
 
-        OutlinedTextField(
-            value = eurRate,
-            onValueChange = { eurRate = it },
-            label = { Text("EUR Exchange Rate (1 BRL = X EUR, e.g. 0.16)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+    LaunchedEffect(hasFieldChanges) {
+        onUnsavedStateChanged(hasFieldChanges)
+    }
 
-        OutlinedTextField(
-            value = inactivityTimeout,
-            onValueChange = { inactivityTimeout = it },
-            label = { Text("Inactivity Timeout (Minutes)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Button(
-            onClick = {
-                val newSet = settings.copy(
-                    adminPasswordHash = adminPassword,
-                    globalMarkupPercent = globalMarkup.toDoubleOrNull() ?: settings.globalMarkupPercent,
-                    usdExchangeRate = usdRate.toDoubleOrNull() ?: settings.usdExchangeRate,
-                    eurExchangeRate = eurRate.toDoubleOrNull() ?: settings.eurExchangeRate,
-                    inactivityTimeoutMinutes = inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes
-                )
-                onSaveSettings(newSet)
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-            shape = RoundedCornerShape(8.dp)
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Scrollable Cards Grid Container (Weight 1f)
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            contentAlignment = Alignment.TopCenter
         ) {
-            Text("Save System Settings", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+            Column(
+                modifier = Modifier.widthIn(max = 920.dp).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Header Row (Compact)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "⚙️ System & Admin Settings",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryNavy
+                        )
+                        Text(
+                            text = "Manage product markup, exchange rates, kiosk timers, and admin authentication.",
+                            fontSize = 12.sp,
+                            color = TextSecondaryMuted
+                        )
+                    }
+
+                    if (hasFieldChanges) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = ColorWarningAmber.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "● Unsaved Edits",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorWarningAmber,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = DividerBorder)
+
+                // 2-Column Compact Grid of Setting Cards
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Left Column: Price & Exchange
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // Card 1: 🏷️ Price
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SurfaceWhite,
+                            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                            shadowElevation = 1.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text("🏷️ Product Pricing Rules", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                OutlinedTextField(
+                                    value = globalMarkup,
+                                    onValueChange = { globalMarkup = it },
+                                    label = { Text("Global Product Markup % (e.g. 10.0)", fontSize = 12.sp) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = SurfaceWhite,
+                                        unfocusedContainerColor = SurfaceWhite,
+                                        focusedBorderColor = AccentNavy,
+                                        unfocusedBorderColor = DividerBorder
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // Card 2: 🔱 Exchange
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SurfaceWhite,
+                            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                            shadowElevation = 1.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text("🔱 Currency Exchange Rates", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = usdRate,
+                                        onValueChange = { usdRate = it },
+                                        label = { Text("USD (1 BRL = X USD)", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = SurfaceWhite,
+                                            unfocusedContainerColor = SurfaceWhite,
+                                            focusedBorderColor = AccentNavy,
+                                            unfocusedBorderColor = DividerBorder
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = eurRate,
+                                        onValueChange = { eurRate = it },
+                                        label = { Text("EUR (1 BRL = X EUR)", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = SurfaceWhite,
+                                            unfocusedContainerColor = SurfaceWhite,
+                                            focusedBorderColor = AccentNavy,
+                                            unfocusedBorderColor = DividerBorder
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Right Column: Time & Admin Security
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // Card 3: ⏱️ Time
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SurfaceWhite,
+                            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                            shadowElevation = 1.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text("⏱️ Kiosk System Timers", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                OutlinedTextField(
+                                    value = inactivityTimeout,
+                                    onValueChange = { inactivityTimeout = it },
+                                    label = { Text("Inactivity Timeout (Minutes)", fontSize = 12.sp) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = SurfaceWhite,
+                                        unfocusedContainerColor = SurfaceWhite,
+                                        focusedBorderColor = AccentNavy,
+                                        unfocusedBorderColor = DividerBorder
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // Card 4: 🔐 Admin Security
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SurfaceWhite,
+                            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                            shadowElevation = 1.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text("🔐 Admin Security", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = newPassword,
+                                        onValueChange = { newPassword = it },
+                                        label = { Text("New Password", fontSize = 11.sp) },
+                                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                        trailingIcon = {
+                                            IconButton(onClick = { showPassword = !showPassword }) {
+                                                Text(if (showPassword) "🙈" else "👁️", fontSize = 13.sp)
+                                            }
+                                        },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = SurfaceWhite,
+                                            unfocusedContainerColor = SurfaceWhite,
+                                            focusedBorderColor = AccentNavy,
+                                            unfocusedBorderColor = DividerBorder
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    OutlinedTextField(
+                                        value = confirmPassword,
+                                        onValueChange = { confirmPassword = it },
+                                        label = { Text("Confirm Password", fontSize = 11.sp) },
+                                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                        trailingIcon = {
+                                            IconButton(onClick = { showPassword = !showPassword }) {
+                                                Text(if (showPassword) "🙈" else "👁️", fontSize = 13.sp)
+                                            }
+                                        },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = SurfaceWhite,
+                                            unfocusedContainerColor = SurfaceWhite,
+                                            focusedBorderColor = AccentNavy,
+                                            unfocusedBorderColor = DividerBorder
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                if (isPasswordEntered) {
+                                    if (!doPasswordsMatch) {
+                                        Text("❌ Passwords do not match", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                                    } else if (newPassword.isNotBlank()) {
+                                        Text("✓ Passwords match", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Action Buttons Row (Placed directly under cards grid, right aligned)
+                HorizontalDivider(color = DividerBorder)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                newPassword = ""
+                                confirmPassword = ""
+                                globalMarkup = settings.globalMarkupPercent.toString()
+                                usdRate = settings.usdExchangeRate.toString()
+                                eurRate = settings.eurExchangeRate.toString()
+                                inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
+                                onUnsavedStateChanged(false)
+                            },
+                            enabled = hasFieldChanges,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(44.dp)
+                        ) {
+                            Text("✖️ Discard", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        Button(
+                            onClick = {
+                                if (hasFieldChanges && isPasswordValid) {
+                                    val updatedSettings = settings.copy(
+                                        adminPasswordHash = if (newPassword.isNotBlank()) newPassword else settings.adminPasswordHash,
+                                        globalMarkupPercent = globalMarkup.toDoubleOrNull() ?: settings.globalMarkupPercent,
+                                        usdExchangeRate = usdRate.toDoubleOrNull() ?: settings.usdExchangeRate,
+                                        eurExchangeRate = eurRate.toDoubleOrNull() ?: settings.eurExchangeRate,
+                                        inactivityTimeoutMinutes = inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes
+                                    )
+                                    onSaveSettings(updatedSettings)
+                                    newPassword = ""
+                                    confirmPassword = ""
+                                    onUnsavedStateChanged(false)
+                                }
+                            },
+                            enabled = hasFieldChanges && isPasswordValid,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AccentNavy,
+                                disabledContainerColor = SurfaceContainerHighLight
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(44.dp)
+                        ) {
+                            Text(
+                                text = if (hasFieldChanges) "💾 Save Changes" else "✓ Saved",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -2880,8 +3160,8 @@ private fun UserEditDialog(
                     ) {
                         Text(strings.save, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
-                }
             }
         }
     }
+}
 }
