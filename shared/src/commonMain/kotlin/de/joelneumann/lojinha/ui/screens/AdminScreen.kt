@@ -7,12 +7,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -146,6 +150,13 @@ fun AdminScreen(
                     onRequestToggleExpand = { targetUserId ->
                         val action = {
                             expandedUserId = if (expandedUserId == targetUserId) null else targetUserId
+                            hasUnsavedUserChanges = false
+                        }
+                        safeNavigate(action)
+                    },
+                    onRequestExpandUser = { targetUserId ->
+                        val action = {
+                            expandedUserId = targetUserId
                             hasUnsavedUserChanges = false
                         }
                         safeNavigate(action)
@@ -338,7 +349,10 @@ private fun AdminProductsTab(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 32.dp)
+        ) {
             items(products, key = { it.id }) { product ->
                 Surface(
                     shape = RoundedCornerShape(10.dp),
@@ -394,6 +408,7 @@ private fun AdminUsersTab(
     onToggleActive: (User) -> Unit,
     onDeleteUser: (User) -> Unit,
     onRequestToggleExpand: (String?) -> Unit,
+    onRequestExpandUser: (String) -> Unit,
     onUnsavedStateChanged: (Boolean) -> Unit
 ) {
     val strings = I18n.get(language)
@@ -409,6 +424,12 @@ private fun AdminUsersTab(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        val openFirstResult = {
+            if (filteredUsers.isNotEmpty()) {
+                onRequestExpandUser(filteredUsers.first().id)
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -427,7 +448,19 @@ private fun AdminUsersTab(
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .defaultMinSize(minHeight = 52.dp),
+                    .defaultMinSize(minHeight = 52.dp)
+                    .onKeyEvent { keyEvent ->
+                        if (keyEvent.type == KeyEventType.KeyDown &&
+                            (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)
+                        ) {
+                            openFirstResult()
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { openFirstResult() }),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = SurfaceWhite,
@@ -455,7 +488,10 @@ private fun AdminUsersTab(
                 Text("No user accounts found.", color = TextSecondaryMuted)
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 32.dp)
+            ) {
                 items(filteredUsers, key = { it.id }) { user ->
                     val isExpanded = expandedUserId == user.id
                     AdminUserAccordionCard(
@@ -960,7 +996,10 @@ private fun AdminTransactionsTab(
         Text("System Transactions & Strict Reversals (${transactions.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 32.dp)
+        ) {
             items(transactions, key = { it.id }) { tx ->
                 val dateStr = remember(tx.timestamp, language) { Formatting.formatTimestamp(tx.timestamp, language) }
                 val isCancelled = tx.type == TransactionType.CANCELLATION || transactions.any { it.referenceTransactionId == tx.id }
