@@ -1730,72 +1730,227 @@ private fun ProductEditDialog(
     onCancel: () -> Unit
 ) {
     val strings = I18n.get(language)
+    val isNewProduct = remember(product.id) { product.id.isBlank() || product.name.isBlank() }
+
     var name by remember { mutableStateOf(product.name) }
-    var basePriceBrl by remember { mutableStateOf((product.basePrice.toDouble() / 100.0).toString()) }
+    var basePriceBrl by remember { mutableStateOf(if (isNewProduct) "0,00" else (product.basePrice.toDouble() / 100.0).toString().replace('.', ',')) }
     var unitType by remember { mutableStateOf(product.unitType) }
-    var stockQuantity by remember { mutableStateOf(product.stockQuantity.toString()) }
+    var stockQuantity by remember { mutableStateOf(if (isNewProduct) "0" else product.stockQuantity.toString()) }
     var customMarkup by remember { mutableStateOf(product.customMarkupPercent?.toString() ?: "") }
     var barcodeCode by remember { mutableStateOf("") }
     var barcodeDesc by remember { mutableStateOf("") }
     var barcodeList by remember { mutableStateOf(product.barcodes) }
 
     Dialog(onDismissRequest = onCancel) {
-        Surface(shape = RoundedCornerShape(16.dp), color = SurfaceWhite, modifier = Modifier.width(480.dp).wrapContentHeight()) {
-            Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
-                Text(strings.editProduct, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = SurfaceWhite,
+            shadowElevation = 8.dp,
+            modifier = Modifier.width(660.dp).wrapContentHeight()
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = if (isNewProduct) strings.addProduct else strings.editProduct,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy
+                )
 
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Product Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = DividerBorder)
 
-                OutlinedTextField(value = basePriceBrl, onValueChange = { basePriceBrl = it }, label = { Text("Base Price BRL (e.g. 8.00)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(8.dp))
+                // Row 1: Product Name & Base Price (R$)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1.5f)) {
+                        Text("Product Name", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            placeholder = { Text("Product Name", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    UnitType.entries.forEach { u ->
-                        OutlinedButton(
-                            onClick = { unitType = u },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(containerColor = if (unitType == u) AccentNavy else SurfaceWhite, contentColor = if (unitType == u) SurfaceWhite else PrimaryNavy)
-                        ) {
-                            Text(u.name)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Base Price (R$)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = basePriceBrl,
+                            onValueChange = { basePriceBrl = it },
+                            placeholder = { Text("0,00", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
+                // Row 2: Unit Type, Initial Stock & Custom Markup
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Unit Type", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        UnitType.entries.forEach { u ->
+                            val isSel = unitType == u
+                            OutlinedButton(
+                                onClick = { unitType = u },
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                contentPadding = PaddingValues(0.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (isSel) AccentNavy else SurfaceWhite,
+                                    contentColor = if (isSel) SurfaceWhite else PrimaryNavy
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(u.name, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = stockQuantity, onValueChange = { stockQuantity = it }, label = { Text(if (unitType == UnitType.PIECE) "Stock (Units)" else "Stock (Grams, e.g. 15000)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = customMarkup, onValueChange = { customMarkup = it }, label = { Text("Custom Markup % (Optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(if (unitType == UnitType.PIECE) "Initial Stock (Units)" else "Initial Stock (Grams / mL)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = stockQuantity,
+                            onValueChange = { stockQuantity = it },
+                            placeholder = { Text("0", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("Barcodes (${barcodeList.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                barcodeList.forEach { b ->
-                    Text("• ${b.code} (${b.description ?: "Default"})", fontSize = 12.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Custom Markup % (Optional)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = customMarkup,
+                            onValueChange = { customMarkup = it },
+                            placeholder = { Text("Standard", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(value = barcodeCode, onValueChange = { barcodeCode = it }, placeholder = { Text("Code") }, modifier = Modifier.weight(1f), singleLine = true)
-                    OutlinedTextField(value = barcodeDesc, onValueChange = { barcodeDesc = it }, placeholder = { Text("Desc") }, modifier = Modifier.weight(1f), singleLine = true)
-                    Button(onClick = {
-                        if (barcodeCode.isNotBlank()) {
-                            barcodeList = barcodeList + Barcode(barcodeCode.trim(), barcodeDesc.ifBlank { null })
-                            barcodeCode = ""
-                            barcodeDesc = ""
+                // Section 3: Barcodes Management
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Associated Barcodes (${barcodeList.size})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    if (barcodeList.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            barcodeList.forEach { b ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SurfaceContainerHighLight,
+                                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text("🏷️ ${b.code}${if (b.description != null) " (${b.description})" else ""}", fontSize = 12.sp, color = PrimaryNavy)
+                                        Text(
+                                            text = "✕",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ColorDangerCrimson,
+                                            modifier = Modifier.clickable {
+                                                barcodeList = barcodeList.filter { it.code != b.code }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
-                    }) { Text("+ Add") }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = barcodeCode,
+                            onValueChange = { barcodeCode = it },
+                            placeholder = { Text("Barcode Code", fontSize = 12.sp) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = barcodeDesc,
+                            onValueChange = { barcodeDesc = it },
+                            placeholder = { Text("Description (Optional)", fontSize = 12.sp) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            singleLine = true
+                        )
+
+                        Button(
+                            onClick = {
+                                if (barcodeCode.isNotBlank()) {
+                                    val code = barcodeCode.trim()
+                                    if (barcodeList.none { it.code == code }) {
+                                        barcodeList = barcodeList + Barcode(code, barcodeDesc.trim().ifBlank { null })
+                                        barcodeCode = ""
+                                        barcodeDesc = ""
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                            modifier = Modifier.height(52.dp)
+                        ) {
+                            Text("+ Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text(strings.cancel) }
+                HorizontalDivider(color = DividerBorder)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(strings.cancel, fontSize = 14.sp)
+                    }
+
                     Button(
                         onClick = {
                             val priceCents = kotlin.math.round((basePriceBrl.replace(',', '.').toDoubleOrNull() ?: 0.0) * 100).toLong()
                             val stock = stockQuantity.toLongOrNull() ?: 0L
                             val markup = customMarkup.toDoubleOrNull()
                             val updated = product.copy(
-                                name = name,
+                                name = name.trim(),
                                 basePrice = priceCents,
                                 unitType = unitType,
                                 stockQuantity = stock,
@@ -1804,10 +1959,12 @@ private fun ProductEditDialog(
                             )
                             onSave(updated)
                         },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
+                        enabled = name.isNotBlank(),
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(strings.save, color = SurfaceWhite)
+                        Text(strings.save, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
             }
