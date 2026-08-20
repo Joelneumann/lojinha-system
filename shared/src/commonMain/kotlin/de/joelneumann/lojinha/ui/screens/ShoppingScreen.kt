@@ -171,11 +171,14 @@ fun ShoppingScreen(
                 placeholder = {
                     Text(
                         text = strings.searchProductPlaceholder,
-                        color = TextSecondaryMuted
+                        color = TextSecondaryMuted,
+                        fontSize = 15.sp
                     )
                 },
+                textStyle = LocalTextStyle.current.copy(fontSize = 15.sp),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(56.dp)
                     .focusRequester(searchFocusRequester)
                     .onKeyEvent { keyEvent ->
                         if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
@@ -421,6 +424,7 @@ fun ShoppingScreen(
                     OutlinedTextField(
                         value = weightInput,
                         onValueChange = { viewModel.updateWeightInput(it) },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                         singleLine = true,
                         isError = weightError != null,
                         shape = RoundedCornerShape(12.dp),
@@ -454,6 +458,7 @@ fun ShoppingScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(56.dp)
                             .focusRequester(weightFocusRequester)
                             .onKeyEvent { keyEvent ->
                                 if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {

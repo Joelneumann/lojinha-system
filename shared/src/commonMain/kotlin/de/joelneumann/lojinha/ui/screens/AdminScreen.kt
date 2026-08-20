@@ -306,9 +306,10 @@ fun AdminScreen(
                     OutlinedTextField(
                         value = depositAmountInput,
                         onValueChange = { viewModel.updateDepositAmount(it) },
-                        placeholder = { Text("e.g. 50,00 or 10.50") },
+                        placeholder = { Text("e.g. 50,00 or 10.50", fontSize = 14.sp) },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -318,9 +319,10 @@ fun AdminScreen(
                     OutlinedTextField(
                         value = depositNoteInput,
                         onValueChange = { viewModel.updateDepositNote(it) },
-                        placeholder = { Text("e.g. Cash deposit via Admin") },
+                        placeholder = { Text("e.g. Cash deposit via Admin", fontSize = 14.sp) },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -437,6 +439,7 @@ private fun AdminProductsTab(
                         fontSize = 14.sp
                     )
                 },
+                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
@@ -713,7 +716,8 @@ private fun AdminProductAccordionCard(
                                 value = stockDeltaInput,
                                 onValueChange = { stockDeltaInput = it },
                                 placeholder = { Text("e.g. 10 or -5", fontSize = 13.sp, color = TextSecondaryMuted) },
-                                modifier = Modifier.weight(1f),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.weight(1f).height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedContainerColor = SurfaceWhite,
@@ -751,7 +755,8 @@ private fun AdminProductAccordionCard(
                             OutlinedTextField(
                                 value = draftName,
                                 onValueChange = { draftName = it },
-                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 singleLine = true
                             )
@@ -764,7 +769,8 @@ private fun AdminProductAccordionCard(
                                 value = draftPriceBrl,
                                 onValueChange = { draftPriceBrl = it },
                                 placeholder = { Text("0,00", fontSize = 13.sp, color = TextSecondaryMuted) },
-                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 singleLine = true
                             )
@@ -773,56 +779,46 @@ private fun AdminProductAccordionCard(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.weight(1.5f),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Unit Type Selection
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Unit Type", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    UnitType.entries.forEach { unit ->
-                                        val isSel = draftUnitType == unit
-                                        OutlinedButton(
-                                            onClick = { draftUnitType = unit },
-                                            modifier = Modifier.weight(1f).height(44.dp),
-                                            contentPadding = PaddingValues(0.dp),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                containerColor = if (isSel) AccentNavy else SurfaceWhite,
-                                                contentColor = if (isSel) SurfaceWhite else PrimaryNavy
-                                            ),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text(unit.name, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                        }
+                        // Unit Type Radio Options
+                        Column(modifier = Modifier.weight(1.5f)) {
+                            Text("Unit Type", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                UnitType.entries.forEach { u ->
+                                    val isSel = draftUnitType == u
+                                    OutlinedButton(
+                                        onClick = { draftUnitType = u },
+                                        modifier = Modifier.weight(1f).height(40.dp),
+                                        contentPadding = PaddingValues(0.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (isSel) AccentNavy else SurfaceWhite,
+                                            contentColor = if (isSel) SurfaceWhite else PrimaryNavy
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(u.name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
-
-                            // Total Stock Quantity
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Current Stock Quantity", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                OutlinedTextField(
-                                    value = draftStock,
-                                    onValueChange = { draftStock = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp),
-                                    singleLine = true
-                                )
-                            }
                         }
 
-                        // Custom Markup % (Optional) - aligned directly on top/below Base Price (weight 1f)
+                        // Total Stock Quantity
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Current Stock Quantity", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = draftStock,
+                                onValueChange = { draftStock = it },
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                singleLine = true
+                            )
+                        }
+
+                        // Custom Markup % (Optional)
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Custom Markup % (Optional)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                             Spacer(modifier = Modifier.height(4.dp))
@@ -830,7 +826,8 @@ private fun AdminProductAccordionCard(
                                 value = draftMarkup,
                                 onValueChange = { draftMarkup = it },
                                 placeholder = { Text("Standard", fontSize = 13.sp, color = TextSecondaryMuted) },
-                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 singleLine = true
                             )
@@ -884,7 +881,8 @@ private fun AdminProductAccordionCard(
                                 value = newBarcodeCode,
                                 onValueChange = { newBarcodeCode = it },
                                 placeholder = { Text("Barcode Code / Number", fontSize = 13.sp, color = TextSecondaryMuted) },
-                                modifier = Modifier.weight(1f),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.weight(1f).height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 singleLine = true
                             )
@@ -893,7 +891,8 @@ private fun AdminProductAccordionCard(
                                 value = newBarcodeDesc,
                                 onValueChange = { newBarcodeDesc = it },
                                 placeholder = { Text("Description (Optional)", fontSize = 13.sp, color = TextSecondaryMuted) },
-                                modifier = Modifier.weight(1f),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.weight(1f).height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 singleLine = true
                             )
@@ -1150,6 +1149,7 @@ private fun AdminUsersTab(
                         fontSize = 14.sp
                     )
                 },
+                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
@@ -1421,7 +1421,8 @@ private fun AdminUserAccordionCard(
                                 value = moneyInput,
                                 onValueChange = { moneyInput = it },
                                 placeholder = { Text("e.g. 20 or -20", fontSize = 13.sp, color = TextSecondaryMuted) },
-                                modifier = Modifier.weight(1f),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.weight(1f).height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedContainerColor = SurfaceWhite,
@@ -1461,7 +1462,8 @@ private fun AdminUserAccordionCard(
                             OutlinedTextField(
                                 value = draftName,
                                 onValueChange = { draftName = it },
-                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 singleLine = true
                             )
@@ -1474,7 +1476,8 @@ private fun AdminUserAccordionCard(
                                 value = draftPin,
                                 onValueChange = { draftPin = it },
                                 placeholder = { Text("No PIN", fontSize = 13.sp, color = TextSecondaryMuted) },
-                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 singleLine = true
                             )
@@ -1492,7 +1495,8 @@ private fun AdminUserAccordionCard(
                                 value = draftUserBarcode,
                                 onValueChange = { draftUserBarcode = it },
                                 placeholder = { Text("e.g. USR-001", fontSize = 13.sp, color = TextSecondaryMuted) },
-                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 singleLine = true
                             )
@@ -1505,7 +1509,8 @@ private fun AdminUserAccordionCard(
                                 value = draftUserBarcodeNumber,
                                 onValueChange = { draftUserBarcodeNumber = it },
                                 placeholder = { Text("e.g. 100000000001", fontSize = 13.sp, color = TextSecondaryMuted) },
-                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 singleLine = true
                             )
@@ -1807,6 +1812,7 @@ private fun AdminTransactionsTab(
                         fontSize = 14.sp
                     )
                 },
+                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
@@ -2631,6 +2637,7 @@ private fun AdminSettingsTab(
                                     value = globalMarkup,
                                     onValueChange = { globalMarkup = it },
                                     label = { Text("Global Product Markup % (e.g. 10.0)", fontSize = 12.sp) },
+                                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                     singleLine = true,
                                     shape = RoundedCornerShape(8.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
@@ -2639,7 +2646,7 @@ private fun AdminSettingsTab(
                                         focusedBorderColor = AccentNavy,
                                         unfocusedBorderColor = DividerBorder
                                     ),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth().height(60.dp)
                                 )
                             }
                         }
@@ -2665,6 +2672,7 @@ private fun AdminSettingsTab(
                                         value = usdRate,
                                         onValueChange = { usdRate = it },
                                         label = { Text("USD (1 BRL = X USD)", fontSize = 11.sp) },
+                                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                         singleLine = true,
                                         shape = RoundedCornerShape(8.dp),
                                         colors = OutlinedTextFieldDefaults.colors(
@@ -2673,12 +2681,13 @@ private fun AdminSettingsTab(
                                             focusedBorderColor = AccentNavy,
                                             unfocusedBorderColor = DividerBorder
                                         ),
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(1f).height(60.dp)
                                     )
                                     OutlinedTextField(
                                         value = eurRate,
                                         onValueChange = { eurRate = it },
                                         label = { Text("EUR (1 BRL = X EUR)", fontSize = 11.sp) },
+                                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                         singleLine = true,
                                         shape = RoundedCornerShape(8.dp),
                                         colors = OutlinedTextFieldDefaults.colors(
@@ -2687,7 +2696,7 @@ private fun AdminSettingsTab(
                                             focusedBorderColor = AccentNavy,
                                             unfocusedBorderColor = DividerBorder
                                         ),
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(1f).height(60.dp)
                                     )
                                 }
                             }
@@ -2716,6 +2725,7 @@ private fun AdminSettingsTab(
                                     value = inactivityTimeout,
                                     onValueChange = { inactivityTimeout = it },
                                     label = { Text("Inactivity Timeout (Minutes)", fontSize = 12.sp) },
+                                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                     singleLine = true,
                                     shape = RoundedCornerShape(8.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
@@ -2724,7 +2734,7 @@ private fun AdminSettingsTab(
                                         focusedBorderColor = AccentNavy,
                                         unfocusedBorderColor = DividerBorder
                                     ),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth().height(60.dp)
                                 )
                             }
                         }
@@ -2750,6 +2760,7 @@ private fun AdminSettingsTab(
                                         value = newPassword,
                                         onValueChange = { newPassword = it },
                                         label = { Text("New Password", fontSize = 11.sp) },
+                                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                         trailingIcon = {
                                             IconButton(onClick = { showPassword = !showPassword }) {
@@ -2764,13 +2775,14 @@ private fun AdminSettingsTab(
                                             focusedBorderColor = AccentNavy,
                                             unfocusedBorderColor = DividerBorder
                                         ),
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(1f).height(60.dp)
                                     )
 
                                     OutlinedTextField(
                                         value = confirmPassword,
                                         onValueChange = { confirmPassword = it },
                                         label = { Text("Confirm Password", fontSize = 11.sp) },
+                                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                         trailingIcon = {
                                             IconButton(onClick = { showPassword = !showPassword }) {
@@ -2785,7 +2797,7 @@ private fun AdminSettingsTab(
                                             focusedBorderColor = AccentNavy,
                                             unfocusedBorderColor = DividerBorder
                                         ),
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(1f).height(60.dp)
                                     )
                                 }
 
@@ -2929,8 +2941,9 @@ private fun ProductEditDialog(
                             value = name,
                             onValueChange = { name = it },
                             placeholder = { Text("Product Name", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
@@ -2942,8 +2955,9 @@ private fun ProductEditDialog(
                             value = basePriceBrl,
                             onValueChange = { basePriceBrl = it },
                             placeholder = { Text("0,00", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
@@ -2983,8 +2997,9 @@ private fun ProductEditDialog(
                             value = stockQuantity,
                             onValueChange = { stockQuantity = it },
                             placeholder = { Text("0", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
@@ -2996,8 +3011,9 @@ private fun ProductEditDialog(
                             value = customMarkup,
                             onValueChange = { customMarkup = it },
                             placeholder = { Text("Standard", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
@@ -3050,7 +3066,8 @@ private fun ProductEditDialog(
                             value = barcodeCode,
                             onValueChange = { barcodeCode = it },
                             placeholder = { Text("Barcode Code", fontSize = 12.sp) },
-                            modifier = Modifier.weight(1f),
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                            modifier = Modifier.weight(1f).height(56.dp),
                             shape = RoundedCornerShape(8.dp),
                             singleLine = true
                         )
@@ -3059,7 +3076,8 @@ private fun ProductEditDialog(
                             value = barcodeDesc,
                             onValueChange = { barcodeDesc = it },
                             placeholder = { Text("Description (Optional)", fontSize = 12.sp) },
-                            modifier = Modifier.weight(1f),
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                            modifier = Modifier.weight(1f).height(56.dp),
                             shape = RoundedCornerShape(8.dp),
                             singleLine = true
                         )
@@ -3220,8 +3238,9 @@ private fun UserEditDialog(
                             value = name,
                             onValueChange = { name = it },
                             placeholder = { Text("Full Name", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
@@ -3233,8 +3252,9 @@ private fun UserEditDialog(
                             value = pin,
                             onValueChange = { pin = it },
                             placeholder = { Text("No PIN", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
@@ -3255,8 +3275,9 @@ private fun UserEditDialog(
                                 if (barcodeNumber.isBlank()) barcodeNumber = it
                             },
                             placeholder = { Text("e.g. USR-001", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
@@ -3268,8 +3289,9 @@ private fun UserEditDialog(
                             value = barcodeNumber,
                             onValueChange = { barcodeNumber = it },
                             placeholder = { Text("e.g. 100000000001", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(8.dp)
                         )
                     }

@@ -80,11 +80,14 @@ fun UserSelectionScreen(
                 placeholder = {
                     Text(
                         text = strings.searchUserPlaceholder,
-                        color = TextSecondaryMuted
+                        color = TextSecondaryMuted,
+                        fontSize = 15.sp
                     )
                 },
+                textStyle = LocalTextStyle.current.copy(fontSize = 15.sp),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(56.dp)
                     .focusRequester(focusRequester)
                     .onFocusChanged { focusState ->
                         if (!focusState.isFocused && selectedUserForPin == null && !showAdminAuthDialog) {
@@ -111,34 +114,35 @@ fun UserSelectionScreen(
                 })
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = strings.selectUserTitle,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryNavy
-            )
-
             Spacer(modifier = Modifier.height(16.dp))
 
-            // User Cards Grid (Privacy First: NO Balances rendered!)
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 180.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(filteredUsers, key = { it.id }) { user ->
-                    UserCard(
-                        user = user,
-                        onClick = { viewModel.onUserCardClicked(user, onUserLoggedIn) }
+            if (filteredUsers.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No users found.",
+                        color = TextSecondaryMuted
                     )
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 160.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredUsers, key = { it.id }) { user ->
+                        UserCard(
+                            user = user,
+                            onClick = { viewModel.onUserCardClicked(user, onUserLoggedIn) }
+                        )
+                    }
                 }
             }
         }
 
-        // User PIN Dialog Modal
         if (selectedUserForPin != null) {
             val pinFocusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) { pinFocusRequester.requestFocus() }
@@ -153,13 +157,6 @@ fun UserSelectionScreen(
                         modifier = Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = strings.enterPinTitle,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryNavy
-                        )
-
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
@@ -175,10 +172,12 @@ fun UserSelectionScreen(
                             value = pinInput,
                             onValueChange = { viewModel.updatePinInput(it) },
                             visualTransformation = PasswordVisualTransformation(),
+                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                             singleLine = true,
                             isError = pinError != null,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(56.dp)
                                 .focusRequester(pinFocusRequester)
                                 .onKeyEvent { keyEvent ->
                                     if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
@@ -265,10 +264,12 @@ fun UserSelectionScreen(
                             value = adminPasswordInput,
                             onValueChange = { viewModel.updateAdminPassword(it) },
                             visualTransformation = PasswordVisualTransformation(),
+                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                             singleLine = true,
                             isError = adminPasswordError != null,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(56.dp)
                                 .focusRequester(adminFocusRequester)
                                 .onKeyEvent { keyEvent ->
                                     if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {

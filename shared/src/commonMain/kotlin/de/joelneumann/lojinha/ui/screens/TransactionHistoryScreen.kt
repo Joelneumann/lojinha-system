@@ -190,8 +190,11 @@ fun TransactionHistoryScreen(
             OutlinedTextField(
                 value = searchFilter,
                 onValueChange = { viewModel.updateSearchFilter(it) },
-                placeholder = { Text(strings.historyFilterPlaceholder, color = TextSecondaryMuted) },
-                modifier = Modifier.weight(1f),
+                placeholder = { Text(strings.historyFilterPlaceholder, color = TextSecondaryMuted, fontSize = 13.5.sp) },
+                textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
                 shape = RoundedCornerShape(10.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = SurfaceWhite,
@@ -280,9 +283,10 @@ fun TransactionHistoryScreen(
                     OutlinedTextField(
                         value = pinInput,
                         onValueChange = { viewModel.updatePinInput(it) },
-                        placeholder = { Text("e.g. 1234 (leave blank for none)") },
+                        placeholder = { Text("e.g. 1234 (leave blank for none)", fontSize = 13.sp, color = TextSecondaryMuted) },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
