@@ -7,6 +7,7 @@ import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.utils.Formatting
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -263,39 +264,80 @@ class AdminViewModel(
         }
     }
 
-    // Strict Reversal Workflow
-    fun reverseTransaction(tx: Transaction) {
-        if (tx.type == TransactionType.CANCELLATION) return // Already a cancellation
-
+    // Strict Storno Workflow
+    fun stornoPurchaseWithUpdatedItems(originalTx: Transaction, updatedItems: List<TransactionItem>) {
         val nowMillis = System.currentTimeMillis()
-        val cancellationId = "tx-rev-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+        val isAllZero = updatedItems.all { it.quantity == 0L }
 
-        val refundAmount = -tx.totalAmount // Negate original transaction total amount
+        // Calculate original cost (positive) and updated cost (positive)
+        val originalCost = kotlin.math.abs(originalTx.totalAmount)
+        val updatedCost = updatedItems.sumOf { item ->
+            when (item.unitType) {
+                UnitType.PIECE -> item.unitPriceAtPurchase * item.quantity
+                UnitType.WEIGHT -> kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
+            }
+        }
+        val costDifference = updatedCost - originalCost // Negative = reduced cost (refund), Positive = increased cost (charge)
+        val balanceDelta = -costDifference // Positive = credit/refund, Negative = debit/charge
 
-        val reversalTx = Transaction(
+        val stornoId = "tx-storno-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+        val stornoTx = Transaction(
+            id = stornoId,
+            userId = originalTx.userId,
+            userNameSnapshot = originalTx.userNameSnapshot,
+            timestamp = nowMillis,
+            type = if (isAllZero) TransactionType.CANCELLATION else TransactionType.CORRECTION,
+            referenceTransactionId = originalTx.id,
+            note = if (isAllZero) "Complete Storno of Purchase ${originalTx.id}" else "Adjusted item quantities for Purchase ${originalTx.id}",
+            totalAmount = balanceDelta,
+            items = updatedItems
+        )
+
+        viewModelScope.launch {
+            // Adjust user balance
+            userRepository.updateBalance(originalTx.userId, balanceDelta)
+
+            // Adjust stock levels for each product (qtyChange = updated - original)
+            updatedItems.forEach { updatedItem ->
+                val originalItem = originalTx.items.firstOrNull { it.productId == updatedItem.productId }
+                val originalQty = originalItem?.quantity ?: 0L
+                val qtyChange = updatedItem.quantity - originalQty
+                if (qtyChange != 0L) {
+                    val p = productRepository.getProductById(updatedItem.productId)
+                    if (p != null) {
+                        productRepository.updateStock(updatedItem.productId, -qtyChange)
+                    }
+                }
+            }
+
+            transactionRepository.recordTransaction(stornoTx)
+            loadData()
+        }
+    }
+
+    fun stornoNonPurchaseTransaction(tx: Transaction) {
+        if (tx.type == TransactionType.CANCELLATION) return
+        val nowMillis = System.currentTimeMillis()
+        val cancellationId = "tx-storno-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+
+        val refundAmount = -tx.totalAmount
+
+        val stornoTx = Transaction(
             id = cancellationId,
             userId = tx.userId,
             userNameSnapshot = tx.userNameSnapshot,
             timestamp = nowMillis,
             type = TransactionType.CANCELLATION,
             referenceTransactionId = tx.id,
-            note = "Reversal of ${tx.type.name} from ${java.text.SimpleDateFormat("dd MMM yyyy, HH:mm").format(java.util.Date(tx.timestamp))}",
+            note = "Storno of ${tx.type.name} Transaction ${tx.id}",
             totalAmount = refundAmount,
-            items = tx.items
+            items = emptyList()
         )
 
         viewModelScope.launch {
-            // Refund user balance
             userRepository.updateBalance(tx.userId, refundAmount)
-            // Restore inventory for items if products exist
-            tx.items.forEach { item ->
-                val p = productRepository.getProductById(item.productId)
-                if (p != null) {
-                    productRepository.updateStock(item.productId, item.quantity)
-                }
-            }
-            // Record cancellation transaction
-            transactionRepository.recordTransaction(reversalTx)
+            transactionRepository.recordTransaction(stornoTx)
+            loadData()
         }
     }
 
