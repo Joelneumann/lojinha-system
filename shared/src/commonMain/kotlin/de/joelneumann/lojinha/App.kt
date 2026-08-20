@@ -23,6 +23,13 @@ import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
 import de.joelneumann.lojinha.ui.theme.LojinhaTheme
 import de.joelneumann.lojinha.ui.viewmodel.*
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.theme.*
+
 @Composable
 fun App() {
     val database = remember { DatabaseFactory.createDatabase() }
@@ -46,6 +53,18 @@ fun App() {
     val historyViewModel = remember(currentUser?.id) { TransactionHistoryViewModel(transactionRepository, userRepository) }
     val adminViewModel = remember { AdminViewModel(productRepository, userRepository, transactionRepository, settingsRepository) }
 
+    val cartItems by shoppingViewModel.cartItems.collectAsState()
+    var showAbandonCartGuardDialog by remember { mutableStateOf(false) }
+
+    val handleLogoutRequest = {
+        val hasCartItems = (currentScreen == AppScreen.SHOPPING || currentScreen == AppScreen.TRANSACTION_HISTORY) && cartItems.isNotEmpty()
+        if (hasCartItems) {
+            showAbandonCartGuardDialog = true
+        } else {
+            appViewModel.logout()
+        }
+    }
+
     val interactionSource = remember { MutableInteractionSource() }
 
     LojinhaTheme {
@@ -65,7 +84,7 @@ fun App() {
                         currentScreen = currentScreen,
                         currentLanguage = currentLanguage,
                         onLanguageSelected = { appViewModel.setLanguage(it) },
-                        onLogoutClicked = { appViewModel.logout() },
+                        onLogoutClicked = handleLogoutRequest,
                         onAdminLoginClicked = { userSelectionViewModel.openAdminAuthDialog() }
                     )
                 }
@@ -112,9 +131,7 @@ fun App() {
                                     onContinueShopping = {
                                         appViewModel.navigateTo(AppScreen.SHOPPING)
                                     },
-                                    onLogout = {
-                                        appViewModel.logout()
-                                    },
+                                    onLogout = handleLogoutRequest,
                                     onUserUpdated = { updated ->
                                         appViewModel.updateCurrentUser(updated)
                                     }
@@ -142,7 +159,38 @@ fun App() {
                     secondsRemaining = inactivitySeconds,
                     language = currentLanguage,
                     onStayLoggedIn = { appViewModel.resetInactivityTimer() },
-                    onLogoutNow = { appViewModel.logout() }
+                    onLogoutNow = handleLogoutRequest
+                )
+            }
+
+            // Abandon Cart Logout Guard Dialog
+            if (showAbandonCartGuardDialog) {
+                val strings = I18n.get(currentLanguage)
+                AlertDialog(
+                    onDismissRequest = { showAbandonCartGuardDialog = false },
+                    title = { Text(strings.abandonCartTitle, fontWeight = FontWeight.Bold, color = ColorWarningAmber) },
+                    text = { Text(strings.abandonCartMsg) },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                shoppingViewModel.clearCart()
+                                showAbandonCartGuardDialog = false
+                                appViewModel.logout()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(strings.discardAndLogout, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        OutlinedButton(
+                            onClick = { showAbandonCartGuardDialog = false },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(strings.keepShopping)
+                        }
+                    }
                 )
             }
         }

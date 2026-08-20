@@ -74,4 +74,8 @@ object GermanStrings : AppStrings {
     override val markupPercent = "Aufschlag %"
     override val barcodeCode = "Barcode"
     override val barcodeDesc = "Beschreibung"
+    override val abandonCartTitle = "Einkaufswagen verwerfen?"
+    override val abandonCartMsg = "Du hast Artikel im Einkaufswagen. Wenn du dich abmeldest, wird dein Einkaufswagen geleert. Möchtest du fortfahren?"
+    override val discardAndLogout = "Verwerfen & Abmelden"
+    override val keepShopping = "Weiter einkaufen"
 }

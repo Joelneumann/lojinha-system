@@ -74,4 +74,8 @@ object PortugueseStrings : AppStrings {
     override val markupPercent = "Margem %"
     override val barcodeCode = "Código de Barras"
     override val barcodeDesc = "Descrição"
+    override val abandonCartTitle = "Descartar Carrinho de Compras?"
+    override val abandonCartMsg = "Você tem itens no seu carrinho de compras. Sair irá limpar o seu carrinho. Tem certeza de que deseja continuar?"
+    override val discardAndLogout = "Descartar e Sair"
+    override val keepShopping = "Continuar Comprando"
 }

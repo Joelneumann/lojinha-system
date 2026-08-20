@@ -74,4 +74,8 @@ object EnglishStrings : AppStrings {
     override val markupPercent = "Markup %"
     override val barcodeCode = "Barcode"
     override val barcodeDesc = "Description"
+    override val abandonCartTitle = "Abandon Shopping Cart?"
+    override val abandonCartMsg = "You have items in your shopping cart. Logging out will clear your cart. Do you want to proceed?"
+    override val discardAndLogout = "Discard & Log Out"
+    override val keepShopping = "Keep Shopping"
 }

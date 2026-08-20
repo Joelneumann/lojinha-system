@@ -74,4 +74,8 @@ interface AppStrings {
     val markupPercent: String
     val barcodeCode: String
     val barcodeDesc: String
+    val abandonCartTitle: String
+    val abandonCartMsg: String
+    val discardAndLogout: String
+    val keepShopping: String
 }
