@@ -44,11 +44,51 @@ fun HeaderBar(
         Box(
             modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)
         ) {
-            // Left: Action Button (Admin Login on Main, Logout/Exit on others)
+            // Left: Language Switcher Flags
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.align(Alignment.CenterStart)
+            ) {
+                Language.entries.forEach { lang ->
+                    val isSelected = lang == currentLanguage
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
+                            .border(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected) AccentBlue else DividerBorder,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable { onLanguageSelected(lang) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "${lang.flagEmoji} ${lang.code.uppercase()}",
+                            fontSize = 14.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) SurfaceWhite else PrimaryNavy
+                        )
+                    }
+                }
+            }
+
+            // Center: Screen Heading Title
+            Text(
+                text = screenTitle,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = PrimaryNavy,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center)
+            )
+
+            // Right: Navigation / Action Buttons (Admin Login on Main, Logout/Exit on others)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.align(Alignment.CenterStart)
+                modifier = Modifier.align(Alignment.CenterEnd)
             ) {
                 if (currentScreen == AppScreen.MAIN_USER_SELECT) {
                     Button(
@@ -90,46 +130,6 @@ fun HeaderBar(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = SurfaceWhite
-                        )
-                    }
-                }
-            }
-
-            // Center: Screen Heading Title
-            Text(
-                text = screenTitle,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryNavy,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.Center)
-            )
-
-            // Right: Language Switcher Flags
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
-                Language.entries.forEach { lang ->
-                    val isSelected = lang == currentLanguage
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
-                            .border(
-                                width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) AccentBlue else DividerBorder,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clickable { onLanguageSelected(lang) }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "${lang.flagEmoji} ${lang.code.uppercase()}",
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) SurfaceWhite else PrimaryNavy
                         )
                     }
                 }
