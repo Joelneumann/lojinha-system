@@ -16,7 +16,7 @@ import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
 import de.joelneumann.lojinha.ui.components.general.InactivityWarningDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
-import de.joelneumann.lojinha.ui.screens.AdminScreen
+import de.joelneumann.lojinha.ui.screens.admin.AdminScreen
 import de.joelneumann.lojinha.ui.screens.ShoppingScreen
 import de.joelneumann.lojinha.ui.screens.TransactionHistoryScreen
 import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
@@ -115,12 +115,16 @@ fun App() {
                 }
 
                 AppScreen.ADMIN_PANEL -> {
-                    val adminViewModel = remember {
-                        AdminViewModel(productRepository, userRepository, transactionRepository, settingsRepository)
-                    }
-                    AdminScreen(
-                        viewModel = adminViewModel,
-                        settings = settings,
+                    val adminProductsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel(productRepository, settingsRepository) }
+                    val adminUsersViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel(userRepository, transactionRepository) }
+                    val adminTransactionsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
+                    val adminSettingsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel(settingsRepository) }
+
+                    de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
+                        productsViewModel = adminProductsViewModel,
+                        usersViewModel = adminUsersViewModel,
+                        transactionsViewModel = adminTransactionsViewModel,
+                        settingsViewModel = adminSettingsViewModel,
                         onExitAdmin = {
                             userSelectionViewModel.loadUsers()
                             appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
