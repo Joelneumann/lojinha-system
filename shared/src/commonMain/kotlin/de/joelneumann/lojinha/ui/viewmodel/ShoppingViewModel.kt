@@ -95,6 +95,7 @@ class ShoppingViewModel(
     fun onProductSelected(product: Product, globalMarkup: Double) {
         if (product.unitType == UnitType.PIECE) {
             addPieceItemToCart(product, globalMarkup)
+            _searchQuery.value = ""
         } else {
             _weightProductDialog.value = product
             _weightInput.value = ""
@@ -135,6 +136,7 @@ class ShoppingViewModel(
                 currentList.add(CartItem(product = product, quantity = grams, unitPriceWithMarkup = unitPrice))
             }
             _cartItems.value = currentList
+            _searchQuery.value = ""
             closeWeightDialog()
         } else {
             _weightError.value = "Invalid weight format"

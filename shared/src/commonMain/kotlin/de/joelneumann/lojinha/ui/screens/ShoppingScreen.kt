@@ -2,9 +2,8 @@ package de.joelneumann.lojinha.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -196,10 +195,8 @@ fun ShoppingContent(
                         )
                     }
                 } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 220.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(filteredProducts, key = { it.id }) { product ->
@@ -208,7 +205,10 @@ fun ShoppingContent(
                                 globalMarkup = settings.globalMarkupPercent,
                                 user = user,
                                 rate = rate,
-                                onClick = { onProductSelected(product) }
+                                onClick = {
+                                    onProductSelected(product)
+                                    searchFocusRequester.requestFocus()
+                                }
                             )
                         }
                     }
