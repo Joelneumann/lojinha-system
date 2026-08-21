@@ -13,7 +13,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
@@ -25,7 +24,6 @@ fun CartPanel(
     cartItems: List<CartItem>,
     user: User,
     rate: Double,
-    language: Language,
     cartTotal: Long,
     balanceAfter: Long,
     onQtyChange: (productId: String, newQty: Long) -> Unit,
@@ -33,7 +31,7 @@ fun CartPanel(
     onCompletePurchase: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
 
     Surface(
         modifier = modifier.fillMaxHeight(),
@@ -74,7 +72,6 @@ fun CartPanel(
                                 cartItem = cartItem,
                                 user = user,
                                 rate = rate,
-                                language = language,
                                 onQtyChange = { newQty -> onQtyChange(cartItem.product.id, newQty) },
                                 onRemove = { onRemoveItem(cartItem.product.id) }
                             )

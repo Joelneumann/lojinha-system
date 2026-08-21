@@ -38,15 +38,16 @@ import de.joelneumann.lojinha.ui.components.general.HeaderBar
 
 import de.joelneumann.lojinha.ui.components.general.LogoutButton
 
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
+
 @Composable
 fun AdminScreen(
     viewModel: AdminViewModel,
-    language: Language,
     settings: SystemSettings,
-    onLanguageSelected: (Language) -> Unit,
     onExitAdmin: () -> Unit
 ) {
-    val strings = I18n.get(language)
+    val language = LanguageManager.currentLanguage
+    val strings = I18n.current
     val currentTab by viewModel.currentTab.collectAsState()
     val products by viewModel.products.collectAsState()
     val users by viewModel.users.collectAsState()
@@ -86,11 +87,8 @@ fun AdminScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         HeaderBar(
             title = strings.adminPanel,
-            currentLanguage = language,
-            onLanguageSelected = onLanguageSelected,
             actions = {
                 LogoutButton(
-                    language = language,
                     onClick = onExitAdmin
                 )
             }

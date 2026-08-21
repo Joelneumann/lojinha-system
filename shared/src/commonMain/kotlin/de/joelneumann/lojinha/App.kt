@@ -4,17 +4,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import de.joelneumann.lojinha.data.database.DatabaseFactory
 import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
@@ -44,7 +37,6 @@ fun App() {
     val historyViewModel = remember { TransactionHistoryViewModel(transactionRepository, userRepository) }
 
     val currentScreen by appViewModel.currentScreen.collectAsState()
-    val currentLanguage by appViewModel.currentLanguage.collectAsState()
     val settings by appViewModel.settings.collectAsState()
     val currentUser by appViewModel.currentUser.collectAsState()
     val showInactivityWarning by appViewModel.showInactivityWarning.collectAsState()
@@ -65,7 +57,7 @@ fun App() {
     val interactionSource = remember { MutableInteractionSource() }
 
     LojinhaTheme {
-        val strings = I18n.get(currentLanguage)
+        val strings = I18n.current
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -80,9 +72,7 @@ fun App() {
                 AppScreen.MAIN_USER_SELECT -> {
                     UserSelectionScreen(
                         viewModel = userSelectionViewModel,
-                        language = currentLanguage,
                         settings = settings,
-                        onLanguageSelected = { appViewModel.setLanguage(it) },
                         onUserLoggedIn = { user ->
                             appViewModel.loginUser(user)
                         },
@@ -97,9 +87,7 @@ fun App() {
                         ShoppingScreen(
                             viewModel = shoppingViewModel,
                             user = currentUser!!,
-                            language = currentLanguage,
                             settings = settings,
-                            onLanguageSelected = { appViewModel.setLanguage(it) },
                             onLogout = handleLogoutRequest,
                             onNavigateToHistory = {
                                 appViewModel.refreshCurrentUser()
@@ -114,9 +102,7 @@ fun App() {
                         TransactionHistoryScreen(
                             viewModel = historyViewModel,
                             user = currentUser!!,
-                            language = currentLanguage,
                             settings = settings,
-                            onLanguageSelected = { appViewModel.setLanguage(it) },
                             onContinueShopping = {
                                 appViewModel.navigateTo(AppScreen.SHOPPING)
                             },
@@ -134,9 +120,7 @@ fun App() {
                     }
                     AdminScreen(
                         viewModel = adminViewModel,
-                        language = currentLanguage,
                         settings = settings,
-                        onLanguageSelected = { appViewModel.setLanguage(it) },
                         onExitAdmin = {
                             userSelectionViewModel.loadUsers()
                             appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
@@ -149,7 +133,6 @@ fun App() {
             if (showInactivityWarning) {
                 InactivityWarningDialog(
                     secondsRemaining = inactivitySecondsRemaining,
-                    language = currentLanguage,
                     onStayLoggedIn = { appViewModel.onUserInteracted() },
                     onLogoutNow = { appViewModel.logout() }
                 )

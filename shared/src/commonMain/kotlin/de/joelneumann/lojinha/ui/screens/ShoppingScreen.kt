@@ -2,8 +2,9 @@ package de.joelneumann.lojinha.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,7 +15,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.SystemSettings
@@ -31,9 +31,7 @@ import de.joelneumann.lojinha.ui.viewmodel.ShoppingViewModel
 fun ShoppingScreen(
     viewModel: ShoppingViewModel,
     user: User,
-    language: Language,
     settings: SystemSettings,
-    onLanguageSelected: (Language) -> Unit,
     onLogout: () -> Unit,
     onNavigateToHistory: () -> Unit
 ) {
@@ -47,7 +45,6 @@ fun ShoppingScreen(
 
     ShoppingContent(
         user = user,
-        language = language,
         settings = settings,
         products = products,
         searchQuery = searchQuery,
@@ -56,7 +53,6 @@ fun ShoppingScreen(
         weightInput = weightInput,
         weightError = weightError,
         showCheckoutConfirmation = showCheckoutConfirmation,
-        onLanguageSelected = onLanguageSelected,
         onLogout = onLogout,
         onSearchQueryChange = viewModel::updateSearchQuery,
         onSearchSubmitted = { viewModel.onSearchSubmitted(settings.globalMarkupPercent) },
@@ -76,7 +72,6 @@ fun ShoppingScreen(
 @Composable
 fun ShoppingContent(
     user: User,
-    language: Language,
     settings: SystemSettings,
     products: List<Product>,
     searchQuery: String,
@@ -85,7 +80,6 @@ fun ShoppingContent(
     weightInput: String,
     weightError: String?,
     showCheckoutConfirmation: Boolean,
-    onLanguageSelected: (Language) -> Unit,
     onLogout: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmitted: () -> Unit,
@@ -100,7 +94,7 @@ fun ShoppingContent(
     onSubmitWeightDialog: () -> Unit,
     onNavigateToHistory: () -> Unit
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
     val searchFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -133,8 +127,6 @@ fun ShoppingContent(
     Column(modifier = Modifier.fillMaxSize()) {
         HeaderBar(
             title = strings.shopping,
-            currentLanguage = language,
-            onLanguageSelected = onLanguageSelected,
             actions = {
                 Button(
                     onClick = onNavigateToHistory,
@@ -151,7 +143,6 @@ fun ShoppingContent(
                 }
 
                 LogoutButton(
-                    language = language,
                     onClick = onLogout
                 )
             }
@@ -168,8 +159,7 @@ fun ShoppingContent(
                 // User Header Row
                 UserBalanceHeader(
                     user = user,
-                    rate = rate,
-                    language = language
+                    rate = rate
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -187,10 +177,7 @@ fun ShoppingContent(
 
                 // Product Display Area
                 if (searchQuery.isBlank()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = "🔍 Scan product barcode or type to search",
                             fontSize = 15.sp,
@@ -200,10 +187,7 @@ fun ShoppingContent(
                         )
                     }
                 } else if (filteredProducts.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = "No products found matching \"$searchQuery\"",
                             fontSize = 14.sp,
@@ -212,8 +196,10 @@ fun ShoppingContent(
                         )
                     }
                 } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 220.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(filteredProducts, key = { it.id }) { product ->
@@ -222,61 +208,48 @@ fun ShoppingContent(
                                 globalMarkup = settings.globalMarkupPercent,
                                 user = user,
                                 rate = rate,
-                                language = language,
-                                onClick = {
-                                    onProductSelected(product)
-                                    searchFocusRequester.requestFocus()
-                                }
+                                onClick = { onProductSelected(product) }
                             )
                         }
                     }
                 }
             }
 
-            // Right Panel: Sticky Cart Panel
+            // Right Panel: Sticky Cart Sidebar
             CartPanel(
                 cartItems = cartItems,
                 user = user,
                 rate = rate,
-                language = language,
                 cartTotal = cartTotal,
                 balanceAfter = balanceAfter,
-                onQtyChange = { productId, newQty ->
-                    onUpdateCartQty(productId, newQty)
-                    searchFocusRequester.requestFocus()
-                },
-                onRemoveItem = { productId ->
-                    onRemoveCartItem(productId)
-                    searchFocusRequester.requestFocus()
-                },
+                onQtyChange = onUpdateCartQty,
+                onRemoveItem = onRemoveCartItem,
                 onCompletePurchase = onOpenCheckout,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(0.9f)
             )
         }
-    }
 
-    // Weight Prompt Input Dialog Modal
-    if (weightProductDialog != null) {
-        WeightInputDialog(
-            productName = weightProductDialog.name,
-            weightInput = weightInput,
-            weightError = weightError,
-            language = language,
-            onWeightInputChange = onWeightInputChange,
-            onDismiss = onCloseWeightDialog,
-            onSubmit = onSubmitWeightDialog
-        )
-    }
+        // Weight Input Modal Dialog
+        weightProductDialog?.let { product ->
+            WeightInputDialog(
+                productName = product.name,
+                weightInput = weightInput,
+                weightError = weightError,
+                onWeightInputChange = onWeightInputChange,
+                onDismiss = onCloseWeightDialog,
+                onSubmit = onSubmitWeightDialog
+            )
+        }
 
-    // Checkout Confirmation Modal Dialog using generic ConfirmationDialog
-    if (showCheckoutConfirmation) {
-        ConfirmationDialog(
-            title = strings.confirmPurchaseTitle,
-            message = strings.confirmPurchaseMsg(Formatting.formatBrl(cartTotal)),
-            language = language,
-            onDismiss = onCloseCheckout,
-            onConfirm = onCompletePurchase,
-            confirmButtonColor = ColorSuccessEmerald
-        )
+        // Complete Purchase Confirmation Modal Dialog
+        if (showCheckoutConfirmation) {
+            ConfirmationDialog(
+                title = strings.confirmPurchaseTitle,
+                message = strings.confirmPurchaseMsg(Formatting.formatBrl(cartTotal)),
+                onDismiss = onCloseCheckout,
+                onConfirm = onCompletePurchase,
+                confirmButtonColor = ColorSuccessEmerald
+            )
+        }
     }
 }

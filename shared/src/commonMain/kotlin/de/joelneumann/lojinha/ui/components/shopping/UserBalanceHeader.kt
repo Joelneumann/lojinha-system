@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
@@ -19,10 +18,9 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 fun UserBalanceHeader(
     user: User,
     rate: Double,
-    language: Language,
     modifier: Modifier = Modifier
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
 
     Surface(
         shape = RoundedCornerShape(12.dp),

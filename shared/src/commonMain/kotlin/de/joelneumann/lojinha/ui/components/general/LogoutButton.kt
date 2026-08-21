@@ -10,18 +10,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 
 @Composable
 fun LogoutButton(
-    language: Language,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
 
     Button(
         onClick = onClick,

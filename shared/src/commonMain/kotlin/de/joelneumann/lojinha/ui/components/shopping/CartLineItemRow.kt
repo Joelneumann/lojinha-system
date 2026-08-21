@@ -14,7 +14,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.theme.*
@@ -26,7 +25,6 @@ fun CartLineItemRow(
     cartItem: CartItem,
     user: User,
     rate: Double,
-    language: Language,
     onQtyChange: (Long) -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier

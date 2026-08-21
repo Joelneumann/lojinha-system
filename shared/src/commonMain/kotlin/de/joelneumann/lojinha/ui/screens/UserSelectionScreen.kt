@@ -10,12 +10,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
-import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
+import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.ui.components.userselection.UserGrid
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
@@ -24,9 +23,7 @@ import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 @Composable
 fun UserSelectionScreen(
     viewModel: UserSelectionViewModel,
-    language: Language,
     settings: SystemSettings,
-    onLanguageSelected: (Language) -> Unit,
     onUserLoggedIn: (User) -> Unit,
     onNavigateToAdmin: () -> Unit
 ) {
@@ -48,8 +45,6 @@ fun UserSelectionScreen(
         showAdminAuthDialog = showAdminAuthDialog,
         adminPasswordInput = adminPasswordInput,
         adminPasswordError = adminPasswordError,
-        language = language,
-        onLanguageSelected = onLanguageSelected,
         onOpenAdminAuthDialog = viewModel::openAdminAuthDialog,
         onSearchQueryChange = viewModel::updateSearchQuery,
         onSearchSubmitted = { viewModel.onSearchSubmitted(onUserLoggedIn) },
@@ -73,8 +68,6 @@ fun UserSelectionContent(
     showAdminAuthDialog: Boolean,
     adminPasswordInput: String,
     adminPasswordError: String?,
-    language: Language,
-    onLanguageSelected: (Language) -> Unit,
     onOpenAdminAuthDialog: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmitted: () -> Unit,
@@ -86,7 +79,7 @@ fun UserSelectionContent(
     onAdminPasswordSubmit: () -> Unit,
     onAdminPasswordDismiss: () -> Unit
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(selectedUserForPin, showAdminAuthDialog) {
@@ -103,8 +96,6 @@ fun UserSelectionContent(
     Column(modifier = Modifier.fillMaxSize()) {
         HeaderBar(
             title = "Lojinha",
-            currentLanguage = language,
-            onLanguageSelected = onLanguageSelected,
             actions = {
                 Button(
                     onClick = onOpenAdminAuthDialog,
@@ -158,7 +149,6 @@ fun UserSelectionContent(
                     inputValue = pinInput,
                     onValueChange = onPinChange,
                     errorText = if (pinError != null) strings.pinIncorrect else null,
-                    language = language,
                     onDismiss = onPinDismiss,
                     onSubmit = onPinSubmit
                 )
@@ -172,7 +162,6 @@ fun UserSelectionContent(
                     inputValue = adminPasswordInput,
                     onValueChange = onAdminPasswordChange,
                     errorText = if (adminPasswordError != null) strings.adminPasswordIncorrect else null,
-                    language = language,
                     onDismiss = onAdminPasswordDismiss,
                     onSubmit = onAdminPasswordSubmit
                 )

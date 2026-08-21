@@ -24,7 +24,6 @@ fun UserSettingsModalDialog(
     pinInput: String,
     selectedLanguage: Language,
     selectedSecondaryCurrency: SecondaryCurrency,
-    language: Language,
     onPinInputChange: (String) -> Unit,
     onLanguageSelect: (Language) -> Unit,
     onSecondaryCurrencySelect: (SecondaryCurrency) -> Unit,
@@ -32,7 +31,7 @@ fun UserSettingsModalDialog(
     onSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(

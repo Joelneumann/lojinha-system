@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
@@ -24,11 +23,10 @@ fun ProductCard(
     globalMarkup: Double,
     user: User,
     rate: Double,
-    language: Language,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
     val unitPrice = product.calculateEffectiveUnitPrice(globalMarkup)
 
     Card(

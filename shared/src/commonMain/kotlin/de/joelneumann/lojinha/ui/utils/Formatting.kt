@@ -97,7 +97,10 @@ object Formatting {
         }
     }
 
-    fun formatTimestamp(timestampMs: Long, language: de.joelneumann.lojinha.domain.model.Language): String {
+    fun formatTimestamp(
+        timestampMs: Long,
+        language: de.joelneumann.lojinha.domain.model.Language = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
+    ): String {
         val (pattern, locale) = when (language) {
             de.joelneumann.lojinha.domain.model.Language.EN -> "MMM dd, yyyy, hh:mm a" to java.util.Locale.US
             de.joelneumann.lojinha.domain.model.Language.DE -> "dd.MM.yyyy, HH:mm" to java.util.Locale.GERMANY

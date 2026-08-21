@@ -11,18 +11,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
 @Composable
 fun InactivityWarningDialog(
     secondsRemaining: Int,
-    language: Language,
     onStayLoggedIn: () -> Unit,
     onLogoutNow: () -> Unit
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
     val mins = secondsRemaining / 60
     val secs = secondsRemaining % 60
     val formattedTime = "${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}"

@@ -12,7 +12,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
@@ -20,7 +19,6 @@ import de.joelneumann.lojinha.ui.theme.*
 fun ConfirmationDialog(
     title: String,
     message: String,
-    language: Language,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
@@ -28,7 +26,7 @@ fun ConfirmationDialog(
     confirmText: String? = null,
     cancelText: String? = null
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(

@@ -23,7 +23,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
@@ -32,13 +31,12 @@ fun WeightInputDialog(
     productName: String,
     weightInput: String,
     weightError: String?,
-    language: Language,
     onWeightInputChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
     val weightFocusRequester = remember { FocusRequester() }
     var showWeightTooltip by remember { mutableStateOf(false) }
 

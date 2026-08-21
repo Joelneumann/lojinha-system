@@ -20,7 +20,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
@@ -29,14 +28,13 @@ fun PasswordInputDialog(
     promptText: String,
     inputValue: String,
     onValueChange: (String) -> Unit,
-    language: Language,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
     title: String? = null,
     errorText: String? = null
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
     val inputFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {

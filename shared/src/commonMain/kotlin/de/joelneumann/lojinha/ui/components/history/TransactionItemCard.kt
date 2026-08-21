@@ -11,11 +11,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.screens.TransactionWithBalance
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
@@ -24,7 +24,6 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 fun TransactionItemCard(
     txWithBalance: TransactionWithBalance,
     allTransactionsMap: Map<String, Transaction>,
-    language: Language,
     rate: Double,
     secondaryCurrency: SecondaryCurrency,
     modifier: Modifier = Modifier
@@ -32,16 +31,16 @@ fun TransactionItemCard(
     val tx = txWithBalance.transaction
     val balanceBefore = txWithBalance.balanceBefore
     val balanceAfter = txWithBalance.balanceAfter
-    val strings = I18n.get(language)
-    val dateStr = remember(tx.timestamp, language) {
-        Formatting.formatTimestamp(tx.timestamp, language)
+    val strings = I18n.current
+    val dateStr = remember(tx.timestamp, LanguageManager.currentLanguage) {
+        Formatting.formatTimestamp(tx.timestamp)
     }
 
-    val displayNote = remember(tx, allTransactionsMap, language) {
+    val displayNote = remember(tx, allTransactionsMap, LanguageManager.currentLanguage) {
         if (tx.type == TransactionType.CANCELLATION && tx.referenceTransactionId != null) {
             val refTx = allTransactionsMap[tx.referenceTransactionId]
             if (refTx != null) {
-                val refDateStr = Formatting.formatTimestamp(refTx.timestamp, language)
+                val refDateStr = Formatting.formatTimestamp(refTx.timestamp)
                 val refTypeStr = when (refTx.type) {
                     TransactionType.PURCHASE -> strings.historyTypePurchase
                     TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit

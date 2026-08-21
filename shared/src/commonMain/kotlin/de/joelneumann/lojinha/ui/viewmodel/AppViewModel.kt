@@ -7,6 +7,7 @@ import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,9 +33,6 @@ class AppViewModel(
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
-    private val _currentLanguage = MutableStateFlow(Language.DE)
-    val currentLanguage: StateFlow<Language> = _currentLanguage.asStateFlow()
-
     private val _settings = MutableStateFlow(SystemSettings())
     val settings: StateFlow<SystemSettings> = _settings.asStateFlow()
 
@@ -55,7 +53,7 @@ class AppViewModel(
     }
 
     fun setLanguage(language: Language) {
-        _currentLanguage.value = language
+        LanguageManager.setLanguage(language)
         val user = _currentUser.value
         if (user != null && user.language != language) {
             val updated = user.copy(language = language)
@@ -68,13 +66,14 @@ class AppViewModel(
 
     fun loginUser(user: User) {
         _currentUser.value = user
-        _currentLanguage.value = user.language
+        LanguageManager.setLanguage(user.language)
         _currentScreen.value = AppScreen.SHOPPING
         resetInactivityTimer()
     }
 
     fun logout() {
         _currentUser.value = null
+        LanguageManager.resetToDefault()
         _currentScreen.value = AppScreen.MAIN_USER_SELECT
         stopInactivityTimer()
         _showInactivityWarning.value = false
@@ -95,7 +94,7 @@ class AppViewModel(
 
     fun updateCurrentUser(user: User) {
         _currentUser.value = user
-        _currentLanguage.value = user.language
+        LanguageManager.setLanguage(user.language)
         viewModelScope.launch {
             userRepository.saveUser(user)
         }
@@ -107,7 +106,7 @@ class AppViewModel(
             val updated = userRepository.getUserById(user.id)
             if (updated != null) {
                 _currentUser.value = updated
-                _currentLanguage.value = updated.language
+                LanguageManager.setLanguage(updated.language)
             }
         }
     }

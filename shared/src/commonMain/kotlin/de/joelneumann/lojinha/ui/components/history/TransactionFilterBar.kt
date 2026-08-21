@@ -8,7 +8,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -18,12 +17,11 @@ import de.joelneumann.lojinha.ui.theme.*
 fun TransactionFilterBar(
     searchFilter: String,
     selectedTypeFilter: TransactionType?,
-    language: Language,
     onSearchFilterChange: (String) -> Unit,
     onTypeFilterSelect: (TransactionType?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
 
     Row(
         modifier = modifier.fillMaxWidth(),

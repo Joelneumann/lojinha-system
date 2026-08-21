@@ -15,16 +15,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 
 @Composable
 fun HeaderBar(
     title: String,
-    currentLanguage: Language,
-    onLanguageSelected: (Language) -> Unit,
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
+    val currentLanguage = LanguageManager.currentLanguage
+
     Surface(
         modifier = modifier.fillMaxWidth().height(64.dp),
         color = SurfaceWhite,
@@ -50,7 +51,7 @@ fun HeaderBar(
                                 color = if (isSelected) AccentBlue else DividerBorder,
                                 shape = RoundedCornerShape(8.dp)
                             )
-                            .clickable { onLanguageSelected(lang) }
+                            .clickable { LanguageManager.setLanguage(lang) }
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(

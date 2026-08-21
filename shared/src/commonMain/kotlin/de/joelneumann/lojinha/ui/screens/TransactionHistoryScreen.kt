@@ -26,6 +26,7 @@ import de.joelneumann.lojinha.ui.components.history.TransactionItemCard
 import de.joelneumann.lojinha.ui.components.history.UserSettingsModalDialog
 import de.joelneumann.lojinha.ui.components.shopping.UserBalanceHeader
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
@@ -34,9 +35,7 @@ import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 fun TransactionHistoryScreen(
     viewModel: TransactionHistoryViewModel,
     user: User,
-    language: Language,
     settings: SystemSettings,
-    onLanguageSelected: (Language) -> Unit,
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit
@@ -56,7 +55,6 @@ fun TransactionHistoryScreen(
 
     TransactionHistoryContent(
         user = user,
-        language = language,
         settings = settings,
         transactions = transactions,
         searchFilter = searchFilter,
@@ -65,7 +63,6 @@ fun TransactionHistoryScreen(
         pinInput = pinInput,
         selectedLanguage = selectedLanguage,
         selectedSecondaryCurrency = selectedSecondaryCurrency,
-        onLanguageSelected = onLanguageSelected,
         onContinueShopping = onContinueShopping,
         onLogout = onLogout,
         onUserUpdated = onUserUpdated,
@@ -83,7 +80,6 @@ fun TransactionHistoryScreen(
 @Composable
 fun TransactionHistoryContent(
     user: User,
-    language: Language,
     settings: SystemSettings,
     transactions: List<Transaction>,
     searchFilter: String,
@@ -92,7 +88,6 @@ fun TransactionHistoryContent(
     pinInput: String,
     selectedLanguage: Language,
     selectedSecondaryCurrency: SecondaryCurrency,
-    onLanguageSelected: (Language) -> Unit,
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit,
@@ -105,7 +100,7 @@ fun TransactionHistoryContent(
     onUpdateSecondaryCurrency: (SecondaryCurrency) -> Unit,
     onSaveUserSettings: () -> Unit
 ) {
-    val strings = I18n.get(language)
+    val strings = I18n.current
 
     val transactionsWithBalance = remember(transactions) {
         val sortedAsc = transactions.sortedBy { it.timestamp }
@@ -120,11 +115,11 @@ fun TransactionHistoryContent(
         list.sortedByDescending { it.transaction.timestamp }
     }
 
-    val filteredTransactions = remember(transactionsWithBalance, searchFilter, selectedTypeFilter, language) {
+    val filteredTransactions = remember(transactionsWithBalance, searchFilter, selectedTypeFilter, LanguageManager.currentLanguage) {
         transactionsWithBalance.filter { item ->
             val tx = item.transaction
             val matchesType = selectedTypeFilter == null || tx.type == selectedTypeFilter
-            val dateStr = Formatting.formatTimestamp(tx.timestamp, language)
+            val dateStr = Formatting.formatTimestamp(tx.timestamp)
             val dateStrEn = Formatting.formatTimestamp(tx.timestamp, Language.EN)
             val dateStrDe = Formatting.formatTimestamp(tx.timestamp, Language.DE)
             val dateStrBr = Formatting.formatTimestamp(tx.timestamp, Language.BR)
@@ -152,8 +147,6 @@ fun TransactionHistoryContent(
         // Header Bar with "Continue Shopping" button on the left of Logout
         HeaderBar(
             title = strings.history,
-            currentLanguage = language,
-            onLanguageSelected = onLanguageSelected,
             actions = {
                 Button(
                     onClick = onContinueShopping,
@@ -170,7 +163,6 @@ fun TransactionHistoryContent(
                 }
 
                 LogoutButton(
-                    language = language,
                     onClick = onLogout
                 )
             }
@@ -191,7 +183,6 @@ fun TransactionHistoryContent(
                 UserBalanceHeader(
                     user = user,
                     rate = rate,
-                    language = language,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -216,7 +207,6 @@ fun TransactionHistoryContent(
             TransactionFilterBar(
                 searchFilter = searchFilter,
                 selectedTypeFilter = selectedTypeFilter,
-                language = language,
                 onSearchFilterChange = onSearchFilterChange,
                 onTypeFilterSelect = onTypeFilterSelect
             )
@@ -237,7 +227,6 @@ fun TransactionHistoryContent(
                         TransactionItemCard(
                             txWithBalance = txWithBalance,
                             allTransactionsMap = allTransactionsMap,
-                            language = language,
                             rate = rate,
                             secondaryCurrency = user.secondaryCurrency
                         )
@@ -253,7 +242,6 @@ fun TransactionHistoryContent(
                 pinInput = pinInput,
                 selectedLanguage = selectedLanguage,
                 selectedSecondaryCurrency = selectedSecondaryCurrency,
-                language = language,
                 onPinInputChange = onUpdatePinInput,
                 onLanguageSelect = onUpdateLanguage,
                 onSecondaryCurrencySelect = onUpdateSecondaryCurrency,
