@@ -48,19 +48,39 @@ fun AdminUsersTabScreen(
     val deactivatedUsers = remember(users) { users.filter { !it.isActive && !it.isDeleted } }
     val deletedUsers = remember(users) { users.filter { it.isDeleted } }
 
-    val filteredUsers = remember(activeUsers, searchQuery) {
+    val filteredActiveUsers = remember(activeUsers, searchQuery) {
         if (searchQuery.isBlank()) activeUsers
         else activeUsers.filter { u ->
             u.name.contains(searchQuery, ignoreCase = true) ||
                     (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
-                    (u.pin != null && u.pin.contains(searchQuery, ignoreCase = true))
+                    (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
         }
     }
 
+    val filteredDeactivatedUsers = remember(deactivatedUsers, searchQuery) {
+        if (searchQuery.isBlank()) deactivatedUsers
+        else deactivatedUsers.filter { u ->
+            u.name.contains(searchQuery, ignoreCase = true) ||
+                    (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
+                    (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
+        }
+    }
+
+    val filteredDeletedUsers = remember(deletedUsers, searchQuery) {
+        if (searchQuery.isBlank()) deletedUsers
+        else deletedUsers.filter { u ->
+            u.name.contains(searchQuery, ignoreCase = true) ||
+                    (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
+                    (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
+        }
+    }
+
+    val totalMatches = filteredActiveUsers.size + filteredDeactivatedUsers.size + filteredDeletedUsers.size
+
     Column(modifier = Modifier.fillMaxSize()) {
         val openFirstResult = {
-            if (filteredUsers.isNotEmpty()) {
-                onRequestExpandUser(filteredUsers.first().id)
+            if (filteredActiveUsers.isNotEmpty()) {
+                onRequestExpandUser(filteredActiveUsers.first().id)
             }
         }
 
@@ -68,7 +88,7 @@ fun AdminUsersTabScreen(
             searchQuery = searchQuery,
             onQueryChange = viewModel::updateSearchQuery,
             placeholder = "🔍 Search account by name or barcode...",
-            countText = if (searchQuery.isBlank()) "${activeUsers.size} Accounts" else "${filteredUsers.size} / ${activeUsers.size} Accounts",
+            countText = if (searchQuery.isBlank()) "${activeUsers.size} Accounts" else "${filteredActiveUsers.size} / ${activeUsers.size} Accounts",
             onSearchSubmitted = openFirstResult,
             actionButtonText = strings.addUser,
             onActionButtonClick = viewModel::openNewUserModal
@@ -81,17 +101,17 @@ fun AdminUsersTabScreen(
             contentPadding = PaddingValues(bottom = 32.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            if (filteredUsers.isEmpty()) {
+            if (filteredActiveUsers.isEmpty() && filteredDeactivatedUsers.isEmpty() && filteredDeletedUsers.isEmpty()) {
                 item(key = "empty-users-msg") {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No matching active user accounts found.", color = TextSecondaryMuted)
+                        Text("No matching user accounts found.", color = TextSecondaryMuted)
                     }
                 }
             } else {
-                items(filteredUsers, key = { it.id }) { user ->
+                items(filteredActiveUsers, key = { it.id }) { user ->
                     val isExpanded = expandedUserId == user.id
                     AdminUserAccordionCard(
                         user = user,
@@ -110,17 +130,17 @@ fun AdminUsersTabScreen(
                 }
             }
 
-            if (deactivatedUsers.isNotEmpty()) {
+            if (filteredDeactivatedUsers.isNotEmpty()) {
                 item(key = "deactivated-users-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
                         title = "⚠️ Deactivated Users",
-                        countText = "${deactivatedUsers.size} ${if (deactivatedUsers.size == 1) "User" else "Users"}",
+                        countText = "${filteredDeactivatedUsers.size} ${if (filteredDeactivatedUsers.size == 1) "User" else "Users"}",
                         accentColor = ColorWarningAmber,
                         showLabel = "Show Deactivated Users",
                         hideLabel = "Hide Deactivated Users"
                     ) {
-                        deactivatedUsers.forEach { user ->
+                        filteredDeactivatedUsers.forEach { user ->
                             DeactivatedUserCard(
                                 user = user,
                                 onActivateUser = { viewModel.toggleUserActive(user) }
@@ -130,17 +150,17 @@ fun AdminUsersTabScreen(
                 }
             }
 
-            if (deletedUsers.isNotEmpty()) {
+            if (filteredDeletedUsers.isNotEmpty()) {
                 item(key = "deleted-users-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
                         title = "🗑️ Deleted Users",
-                        countText = "${deletedUsers.size} ${if (deletedUsers.size == 1) "User" else "Users"}",
+                        countText = "${filteredDeletedUsers.size} ${if (filteredDeletedUsers.size == 1) "User" else "Users"}",
                         accentColor = ColorDangerCrimson,
                         showLabel = "Show Deleted Users",
                         hideLabel = "Hide Deleted Users"
                     ) {
-                        deletedUsers.forEach { user ->
+                        filteredDeletedUsers.forEach { user ->
                             DeletedUserCard(
                                 user = user,
                                 onRestoreUser = { viewModel.restoreUser(user.id) }

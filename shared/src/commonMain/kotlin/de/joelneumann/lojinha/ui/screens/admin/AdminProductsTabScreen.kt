@@ -45,10 +45,22 @@ fun AdminProductsTabScreen(
         }
     }
 
+    val filteredDisabledProducts = remember(disabledProducts, searchQuery) {
+        if (searchQuery.isBlank()) disabledProducts
+        else disabledProducts.filter { p ->
+            p.name.contains(searchQuery, ignoreCase = true) ||
+                    p.barcodes.any { b -> b.code.contains(searchQuery, ignoreCase = true) || (b.description != null && b.description.contains(searchQuery, ignoreCase = true)) }
+        }
+    }
+
+    val totalMatches = filteredActiveProducts.size + filteredDisabledProducts.size
+
     Column(modifier = Modifier.fillMaxSize()) {
         val openFirstResult = {
             if (filteredActiveProducts.isNotEmpty()) {
                 onRequestExpandProduct(filteredActiveProducts.first().id)
+            } else if (filteredDisabledProducts.isNotEmpty()) {
+                // First result is disabled
             }
         }
 
@@ -69,13 +81,13 @@ fun AdminProductsTabScreen(
             contentPadding = PaddingValues(bottom = 32.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            if (filteredActiveProducts.isEmpty()) {
+            if (filteredActiveProducts.isEmpty() && filteredDisabledProducts.isEmpty()) {
                 item(key = "empty-products-msg") {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No matching active products found.", color = TextSecondaryMuted)
+                        Text("No matching products found.", color = TextSecondaryMuted)
                     }
                 }
             } else {
@@ -95,17 +107,17 @@ fun AdminProductsTabScreen(
                 }
             }
 
-            if (disabledProducts.isNotEmpty()) {
+            if (filteredDisabledProducts.isNotEmpty()) {
                 item(key = "disabled-products-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
                         title = "⚠️ Disabled Products",
-                        countText = "${disabledProducts.size} ${if (disabledProducts.size == 1) "Product" else "Products"}",
+                        countText = "${filteredDisabledProducts.size} ${if (filteredDisabledProducts.size == 1) "Product" else "Products"}",
                         accentColor = ColorWarningAmber,
                         showLabel = "Show Disabled Products",
                         hideLabel = "Hide Disabled Products"
                     ) {
-                        disabledProducts.forEach { product ->
+                        filteredDisabledProducts.forEach { product ->
                             DisabledProductCard(
                                 product = product,
                                 onEnableProduct = { viewModel.toggleProductActive(product) }
