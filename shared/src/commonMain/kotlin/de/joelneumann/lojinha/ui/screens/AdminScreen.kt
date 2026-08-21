@@ -36,6 +36,8 @@ import java.util.Date
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
 
+import de.joelneumann.lojinha.ui.components.general.LogoutButton
+
 @Composable
 fun AdminScreen(
     viewModel: AdminViewModel,
@@ -87,19 +89,10 @@ fun AdminScreen(
             currentLanguage = language,
             onLanguageSelected = onLanguageSelected,
             actions = {
-                Button(
-                    onClick = onExitAdmin,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "🚪 Main Menu",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SurfaceWhite
-                    )
-                }
+                LogoutButton(
+                    language = language,
+                    onClick = onExitAdmin
+                )
             }
         )
 

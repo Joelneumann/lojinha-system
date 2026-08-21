@@ -150,19 +150,10 @@ fun ShoppingContent(
                     )
                 }
 
-                Button(
-                    onClick = onLogout,
-                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "🚪 ${strings.logout}",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SurfaceWhite
-                    )
-                }
+                LogoutButton(
+                    language = language,
+                    onClick = onLogout
+                )
             }
         )
 
