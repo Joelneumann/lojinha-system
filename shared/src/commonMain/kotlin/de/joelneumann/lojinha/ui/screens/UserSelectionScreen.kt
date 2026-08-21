@@ -1,34 +1,17 @@
 package de.joelneumann.lojinha.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.*
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.components.PasswordInputDialog
+import de.joelneumann.lojinha.ui.components.SearchInputField
+import de.joelneumann.lojinha.ui.components.UserGrid
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
@@ -41,7 +24,6 @@ fun UserSelectionScreen(
     onUserLoggedIn: (User) -> Unit,
     onNavigateToAdmin: () -> Unit
 ) {
-    val strings = I18n.get(language)
     val users by viewModel.users.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedUserForPin by viewModel.selectedUserForPin.collectAsState()
@@ -51,6 +33,50 @@ fun UserSelectionScreen(
     val adminPasswordInput by viewModel.adminPasswordInput.collectAsState()
     val adminPasswordError by viewModel.adminPasswordError.collectAsState()
 
+    UserSelectionContent(
+        users = users,
+        searchQuery = searchQuery,
+        selectedUserForPin = selectedUserForPin,
+        pinInput = pinInput,
+        pinError = pinError,
+        showAdminAuthDialog = showAdminAuthDialog,
+        adminPasswordInput = adminPasswordInput,
+        adminPasswordError = adminPasswordError,
+        language = language,
+        onSearchQueryChange = viewModel::updateSearchQuery,
+        onSearchSubmitted = { viewModel.onSearchSubmitted(onUserLoggedIn) },
+        onUserClick = { user -> viewModel.onUserCardClicked(user, onUserLoggedIn) },
+        onPinChange = viewModel::updatePinInput,
+        onPinSubmit = { viewModel.submitPin(onUserLoggedIn) },
+        onPinDismiss = viewModel::cancelPinDialog,
+        onAdminPasswordChange = viewModel::updateAdminPassword,
+        onAdminPasswordSubmit = { viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin) },
+        onAdminPasswordDismiss = viewModel::closeAdminAuthDialog
+    )
+}
+
+@Composable
+fun UserSelectionContent(
+    users: List<User>,
+    searchQuery: String,
+    selectedUserForPin: User?,
+    pinInput: String,
+    pinError: String?,
+    showAdminAuthDialog: Boolean,
+    adminPasswordInput: String,
+    adminPasswordError: String?,
+    language: Language,
+    onSearchQueryChange: (String) -> Unit,
+    onSearchSubmitted: () -> Unit,
+    onUserClick: (User) -> Unit,
+    onPinChange: (String) -> Unit,
+    onPinSubmit: () -> Unit,
+    onPinDismiss: () -> Unit,
+    onAdminPasswordChange: (String) -> Unit,
+    onAdminPasswordSubmit: () -> Unit,
+    onAdminPasswordDismiss: () -> Unit
+) {
+    val strings = I18n.get(language)
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(selectedUserForPin, showAdminAuthDialog) {
@@ -71,303 +97,52 @@ fun UserSelectionScreen(
             .padding(24.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Search Input (Always Focused for Barcode Scanner & Keyboard Input)
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { query ->
-                    viewModel.updateSearchQuery(query)
-                },
-                placeholder = {
-                    Text(
-                        text = strings.searchUserPlaceholder,
-                        color = TextSecondaryMuted,
-                        fontSize = 15.sp
-                    )
-                },
-                textStyle = LocalTextStyle.current.copy(fontSize = 15.sp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused && selectedUserForPin == null && !showAdminAuthDialog) {
-                            focusRequester.requestFocus()
-                        }
+            SearchInputField(
+                query = searchQuery,
+                onQueryChange = onSearchQueryChange,
+                placeholder = strings.searchUserPlaceholder,
+                onSearchSubmitted = onSearchSubmitted,
+                focusRequester = focusRequester,
+                onFocusChanged = { focusState ->
+                    if (!focusState.isFocused && selectedUserForPin == null && !showAdminAuthDialog) {
+                        focusRequester.requestFocus()
                     }
-                    .onKeyEvent { keyEvent ->
-                        if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                            viewModel.onSearchSubmitted(onUserLoggedIn)
-                            true
-                        } else false
-                    },
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = SurfaceWhite,
-                    unfocusedContainerColor = SurfaceWhite,
-                    focusedBorderColor = AccentNavy,
-                    unfocusedBorderColor = DividerBorder
-                ),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {
-                    viewModel.onSearchSubmitted(onUserLoggedIn)
-                })
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (filteredUsers.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No users found.",
-                        color = TextSecondaryMuted
-                    )
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredUsers, key = { it.id }) { user ->
-                        UserCard(
-                            user = user,
-                            onClick = { viewModel.onUserCardClicked(user, onUserLoggedIn) }
-                        )
-                    }
-                }
-            }
+            UserGrid(
+                users = filteredUsers,
+                onUserClick = onUserClick
+            )
         }
 
-        if (selectedUserForPin != null) {
-            val pinFocusRequester = remember { FocusRequester() }
-            LaunchedEffect(Unit) { pinFocusRequester.requestFocus() }
-
-            Dialog(onDismissRequest = { viewModel.cancelPinDialog() }) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = SurfaceWhite,
-                    modifier = Modifier.width(360.dp).wrapContentHeight()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = "${strings.enterPinPrompt} ${selectedUserForPin?.name}:",
-                            fontSize = 14.sp,
-                            color = TextSecondarySubtle,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        OutlinedTextField(
-                            value = pinInput,
-                            onValueChange = { viewModel.updatePinInput(it) },
-                            visualTransformation = PasswordVisualTransformation(),
-                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                            singleLine = true,
-                            isError = pinError != null,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .focusRequester(pinFocusRequester)
-                                .onKeyEvent { keyEvent ->
-                                    if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                                        viewModel.submitPin(onUserLoggedIn)
-                                        true
-                                    } else false
-                                },
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = {
-                                viewModel.submitPin(onUserLoggedIn)
-                            })
-                        )
-
-                        if (pinError != null) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = strings.pinIncorrect,
-                                fontSize = 12.sp,
-                                color = ColorDangerCrimson
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { viewModel.cancelPinDialog() },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(strings.cancel)
-                            }
-
-                            Button(
-                                onClick = { viewModel.submitPin(onUserLoggedIn) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
-                            ) {
-                                Text(strings.confirm, color = SurfaceWhite)
-                            }
-                        }
-                    }
-                }
-            }
+        // User PIN Authentication Dialog
+        selectedUserForPin?.let { user ->
+            PasswordInputDialog(
+                title = user.name,
+                promptText = "${strings.enterPinPrompt} ${user.name}:",
+                inputValue = pinInput,
+                onValueChange = onPinChange,
+                errorText = if (pinError != null) strings.pinIncorrect else null,
+                language = language,
+                onDismiss = onPinDismiss,
+                onSubmit = onPinSubmit
+            )
         }
 
-        // Admin Password Modal
+        // Admin Password Authentication Dialog
         if (showAdminAuthDialog) {
-            val adminFocusRequester = remember { FocusRequester() }
-            LaunchedEffect(Unit) { adminFocusRequester.requestFocus() }
-
-            Dialog(onDismissRequest = { viewModel.closeAdminAuthDialog() }) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = SurfaceWhite,
-                    modifier = Modifier.width(360.dp).wrapContentHeight()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = strings.adminLoginBtn,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryNavy
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = strings.adminPasswordPrompt,
-                            fontSize = 14.sp,
-                            color = TextSecondarySubtle
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        OutlinedTextField(
-                            value = adminPasswordInput,
-                            onValueChange = { viewModel.updateAdminPassword(it) },
-                            visualTransformation = PasswordVisualTransformation(),
-                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                            singleLine = true,
-                            isError = adminPasswordError != null,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .focusRequester(adminFocusRequester)
-                                .onKeyEvent { keyEvent ->
-                                    if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                                        viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin)
-                                        true
-                                    } else false
-                                },
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = {
-                                viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin)
-                            })
-                        )
-
-                        if (adminPasswordError != null) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = strings.adminPasswordIncorrect,
-                                fontSize = 12.sp,
-                                color = ColorDangerCrimson
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { viewModel.closeAdminAuthDialog() },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(strings.cancel)
-                            }
-
-                            Button(
-                                onClick = { viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
-                            ) {
-                                Text(strings.confirm, color = SurfaceWhite)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun UserCard(
-    user: User,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(145.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(AccentNavy),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.initials,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SurfaceWhite
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = user.name,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = PrimaryNavy,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                lineHeight = 18.sp
+            PasswordInputDialog(
+                title = strings.adminLoginBtn,
+                promptText = strings.adminPasswordPrompt,
+                inputValue = adminPasswordInput,
+                onValueChange = onAdminPasswordChange,
+                errorText = if (adminPasswordError != null) strings.adminPasswordIncorrect else null,
+                language = language,
+                onDismiss = onAdminPasswordDismiss,
+                onSubmit = onAdminPasswordSubmit
             )
         }
     }
