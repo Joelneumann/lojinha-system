@@ -19,6 +19,11 @@ import de.joelneumann.lojinha.ui.components.admin.AdminSegmentedOptionsRow
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+
 @Composable
 fun UserEditDialog(
     user: User,
@@ -30,7 +35,10 @@ fun UserEditDialog(
     val isNewUser = remember(user.id) { user.id.isBlank() || user.name.isBlank() }
 
     var name by remember { mutableStateOf(user.name) }
-    var pin by remember { mutableStateOf(user.pin ?: "") }
+    var shouldResetPin by remember { mutableStateOf(false) }
+    var pin by remember { mutableStateOf("") }
+    var isPinVisible by remember { mutableStateOf(false) }
+
     var barcode by remember { mutableStateOf(user.userBarcode ?: "") }
     var barcodeNumber by remember { mutableStateOf(user.userBarcodeNumber ?: "") }
     var selectedLang by remember { mutableStateOf(user.language) }
@@ -90,13 +98,78 @@ fun UserEditDialog(
                         modifier = Modifier.weight(1f)
                     )
 
-                    AdminLabeledField(
-                        label = "PIN (Optional)",
-                        value = pin,
-                        onValueChange = { pin = it },
-                        placeholder = "No PIN",
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        if (isNewUser) {
+                            Text("Initial PIN (Optional)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = pin,
+                                onValueChange = { pin = it },
+                                placeholder = { Text("No PIN", fontSize = 13.sp, color = TextSecondaryMuted) },
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { isPinVisible = !isPinVisible }) {
+                                        Text(if (isPinVisible) "👁️" else "🙈", fontSize = 14.sp)
+                                    }
+                                },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable { shouldResetPin = !shouldResetPin }
+                            ) {
+                                Checkbox(
+                                    checked = shouldResetPin,
+                                    onCheckedChange = { shouldResetPin = it }
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Reset PIN",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryNavy
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            if (shouldResetPin) {
+                                OutlinedTextField(
+                                    value = pin,
+                                    onValueChange = { pin = it },
+                                    placeholder = { Text("New PIN (or blank for none)", fontSize = 13.sp, color = TextSecondaryMuted) },
+                                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                    visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                    trailingIcon = {
+                                        IconButton(onClick = { isPinVisible = !isPinVisible }) {
+                                            Text(if (isPinVisible) "👁️" else "🙈", fontSize = 14.sp)
+                                        }
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            } else {
+                                OutlinedTextField(
+                                    value = if (user.pin != null) "••••••••" else "No PIN set",
+                                    onValueChange = {},
+                                    enabled = false,
+                                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        disabledContainerColor = SurfaceContainerHighLight,
+                                        disabledTextColor = TextSecondaryMuted,
+                                        disabledBorderColor = DividerBorder
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Row(
@@ -169,7 +242,8 @@ fun UserEditDialog(
                 HorizontalDivider(color = DividerBorder)
 
                 val hasUserDialogChanges = name != user.name ||
-                        pin != (user.pin ?: "") ||
+                        shouldResetPin ||
+                        (isNewUser && pin.isNotBlank()) ||
                         barcode != (user.userBarcode ?: "") ||
                         barcodeNumber != (user.userBarcodeNumber ?: "") ||
                         selectedLang != user.language ||
@@ -191,7 +265,8 @@ fun UserEditDialog(
                         OutlinedButton(
                             onClick = {
                                 name = user.name
-                                pin = user.pin ?: ""
+                                shouldResetPin = false
+                                pin = ""
                                 barcode = user.userBarcode ?: ""
                                 barcodeNumber = user.userBarcodeNumber ?: ""
                                 selectedLang = user.language
@@ -209,10 +284,11 @@ fun UserEditDialog(
                             val bCode = barcode.trim().ifBlank { null }
                             val bNum = barcodeNumber.trim().ifBlank { null }
                             val userBalance = if (isNewUser) 0L else user.balance
+                            val finalPin = if (isNewUser) pin.trim().ifBlank { null } else if (shouldResetPin) pin.trim().ifBlank { null } else user.pin
 
                             val updated = user.copy(
                                 name = name.trim(),
-                                pin = pin.trim().ifBlank { null },
+                                pin = finalPin,
                                 userBarcode = if (bCode != null && bNum != null) bCode else null,
                                 userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
                                 language = selectedLang,

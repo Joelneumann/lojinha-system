@@ -5,10 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -32,6 +34,7 @@ fun UserSettingsModalDialog(
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
+    var isPinVisible by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -59,6 +62,12 @@ fun UserSettingsModalDialog(
                     onValueChange = onPinInputChange,
                     placeholder = { Text("e.g. 1234 (leave blank for none)", fontSize = 13.sp, color = TextSecondaryMuted) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp),
+                    visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { isPinVisible = !isPinVisible }) {
+                            Text(if (isPinVisible) "👁️" else "🙈", fontSize = 14.sp)
+                        }
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 )

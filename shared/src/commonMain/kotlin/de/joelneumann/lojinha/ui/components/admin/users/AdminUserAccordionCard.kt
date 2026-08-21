@@ -17,6 +17,10 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+
 @Composable
 fun AdminUserAccordionCard(
     user: User,
@@ -33,7 +37,10 @@ fun AdminUserAccordionCard(
     val strings = I18n.current
 
     var draftName by remember(user.id, user.name) { mutableStateOf(user.name) }
-    var draftPin by remember(user.id, user.pin) { mutableStateOf(user.pin ?: "") }
+    var shouldResetPin by remember(user.id) { mutableStateOf(false) }
+    var draftPin by remember(user.id) { mutableStateOf("") }
+    var isPinVisible by remember { mutableStateOf(false) }
+
     var draftUserBarcode by remember(user.id, user.userBarcode) { mutableStateOf(user.userBarcode ?: "") }
     var draftUserBarcodeNumber by remember(user.id, user.userBarcodeNumber) { mutableStateOf(user.userBarcodeNumber ?: "") }
     var draftLanguage by remember(user.id, user.language) { mutableStateOf(user.language) }
@@ -65,10 +72,10 @@ fun AdminUserAccordionCard(
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     val hasUnsaved = remember(
-        draftName, draftPin, draftUserBarcode, draftUserBarcodeNumber, draftLanguage, draftSecondaryCurrency, user
+        draftName, shouldResetPin, draftPin, draftUserBarcode, draftUserBarcodeNumber, draftLanguage, draftSecondaryCurrency, user
     ) {
         draftName != user.name ||
-                draftPin != (user.pin ?: "") ||
+                shouldResetPin ||
                 draftUserBarcode != (user.userBarcode ?: "") ||
                 draftUserBarcodeNumber != (user.userBarcodeNumber ?: "") ||
                 draftLanguage != user.language ||
@@ -168,13 +175,58 @@ fun AdminUserAccordionCard(
                 modifier = Modifier.weight(1f)
             )
 
-            AdminLabeledField(
-                label = "PIN (Optional)",
-                value = draftPin,
-                onValueChange = { draftPin = it },
-                placeholder = "No PIN",
-                modifier = Modifier.weight(1f)
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { shouldResetPin = !shouldResetPin }
+                ) {
+                    Checkbox(
+                        checked = shouldResetPin,
+                        onCheckedChange = { shouldResetPin = it }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Reset PIN / Password",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+
+                if (shouldResetPin) {
+                    OutlinedTextField(
+                        value = draftPin,
+                        onValueChange = { draftPin = it },
+                        placeholder = { Text("New PIN (or blank for none)", fontSize = 13.sp, color = TextSecondaryMuted) },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                        visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isPinVisible = !isPinVisible }) {
+                                Text(if (isPinVisible) "👁️" else "🙈", fontSize = 14.sp)
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = if (user.pin != null) "••••••••" else "No PIN set",
+                        onValueChange = {},
+                        enabled = false,
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledContainerColor = SurfaceContainerHighLight,
+                            disabledTextColor = TextSecondaryMuted,
+                            disabledBorderColor = DividerBorder
+                        )
+                    )
+                }
+            }
         }
 
         Row(
@@ -255,20 +307,24 @@ fun AdminUserAccordionCard(
             onSave = {
                 val bCode = draftUserBarcode.trim().ifBlank { null }
                 val bNum = draftUserBarcodeNumber.trim().ifBlank { null }
+                val finalPin = if (shouldResetPin) draftPin.trim().ifBlank { null } else user.pin
                 val updatedUser = user.copy(
                     name = draftName.trim(),
-                    pin = draftPin.trim().ifBlank { null },
+                    pin = finalPin,
                     userBarcode = if (bCode != null && bNum != null) bCode else null,
                     userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
                     language = draftLanguage,
                     secondaryCurrency = draftSecondaryCurrency
                 )
                 onSaveUser(updatedUser)
+                shouldResetPin = false
+                draftPin = ""
                 onUnsavedStateChanged(false)
             },
             onRevert = {
                 draftName = user.name
-                draftPin = user.pin ?: ""
+                shouldResetPin = false
+                draftPin = ""
                 draftUserBarcode = user.userBarcode ?: ""
                 draftUserBarcodeNumber = user.userBarcodeNumber ?: ""
                 draftLanguage = user.language
