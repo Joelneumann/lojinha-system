@@ -9,9 +9,9 @@ import androidx.compose.ui.unit.dp
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
-import de.joelneumann.lojinha.ui.components.PasswordInputDialog
-import de.joelneumann.lojinha.ui.components.SearchInputField
-import de.joelneumann.lojinha.ui.components.UserGrid
+import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
+import de.joelneumann.lojinha.ui.components.general.SearchInputField
+import de.joelneumann.lojinha.ui.components.userselection.UserGrid
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel

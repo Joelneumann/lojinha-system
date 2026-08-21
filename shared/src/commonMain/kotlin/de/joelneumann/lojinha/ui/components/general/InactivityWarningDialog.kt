@@ -1,4 +1,4 @@
-package de.joelneumann.lojinha.ui.components
+package de.joelneumann.lojinha.ui.components.general
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*

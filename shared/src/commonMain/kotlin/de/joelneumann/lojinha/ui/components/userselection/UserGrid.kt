@@ -1,4 +1,4 @@
-package de.joelneumann.lojinha.ui.components
+package de.joelneumann.lojinha.ui.components.userselection
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box

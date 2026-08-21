@@ -14,8 +14,8 @@ import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
-import de.joelneumann.lojinha.ui.components.HeaderBar
-import de.joelneumann.lojinha.ui.components.InactivityWarningDialog
+import de.joelneumann.lojinha.ui.components.general.HeaderBar
+import de.joelneumann.lojinha.ui.components.general.InactivityWarningDialog
 import de.joelneumann.lojinha.ui.screens.AdminScreen
 import de.joelneumann.lojinha.ui.screens.ShoppingScreen
 import de.joelneumann.lojinha.ui.screens.TransactionHistoryScreen
