@@ -4,7 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,8 @@ fun ShoppingScreen(
     user: User,
     language: Language,
     settings: SystemSettings,
+    onLanguageSelected: (Language) -> Unit,
+    onLogout: () -> Unit,
     onNavigateToHistory: () -> Unit
 ) {
     val products by viewModel.products.collectAsState()
@@ -53,6 +56,8 @@ fun ShoppingScreen(
         weightInput = weightInput,
         weightError = weightError,
         showCheckoutConfirmation = showCheckoutConfirmation,
+        onLanguageSelected = onLanguageSelected,
+        onLogout = onLogout,
         onSearchQueryChange = viewModel::updateSearchQuery,
         onSearchSubmitted = { viewModel.onSearchSubmitted(settings.globalMarkupPercent) },
         onProductSelected = { product -> viewModel.onProductSelected(product, settings.globalMarkupPercent) },
@@ -80,6 +85,8 @@ fun ShoppingContent(
     weightInput: String,
     weightError: String?,
     showCheckoutConfirmation: Boolean,
+    onLanguageSelected: (Language) -> Unit,
+    onLogout: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmitted: () -> Unit,
     onProductSelected: (Product) -> Unit,
@@ -123,102 +130,138 @@ fun ShoppingContent(
         else -> 0.0
     }
 
-    Row(modifier = Modifier.fillMaxSize().background(SurfaceContainerLight)) {
-        // Left Panel: Products Section
-        Column(
-            modifier = Modifier
-                .weight(1.3f)
-                .fillMaxHeight()
-                .padding(20.dp)
-        ) {
-            // User Header Row
-            UserBalanceHeader(
-                user = user,
-                rate = rate,
-                language = language,
-                onNavigateToHistory = onNavigateToHistory
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Search Bar Input (Auto-Focused)
-            SearchInputField(
-                query = searchQuery,
-                onQueryChange = onSearchQueryChange,
-                placeholder = strings.searchProductPlaceholder,
-                onSearchSubmitted = onSearchSubmitted,
-                focusRequester = searchFocusRequester
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Product Display Area
-            if (searchQuery.isBlank()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+    Column(modifier = Modifier.fillMaxSize()) {
+        HeaderBar(
+            title = strings.shopping,
+            currentLanguage = language,
+            onLanguageSelected = onLanguageSelected,
+            actions = {
+                Button(
+                    onClick = onNavigateToHistory,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        text = "🔍 Scan product barcode or type to search",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextSecondaryMuted,
-                        textAlign = TextAlign.Center
+                        text = "👤 ${strings.account}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SurfaceWhite
                     )
                 }
-            } else if (filteredProducts.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+
+                Button(
+                    onClick = onLogout,
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        text = "No products found matching \"$searchQuery\"",
-                        fontSize = 14.sp,
-                        color = TextSecondaryMuted,
-                        textAlign = TextAlign.Center
+                        text = "🚪 ${strings.logout}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SurfaceWhite
                     )
                 }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredProducts, key = { it.id }) { product ->
-                        ProductCard(
-                            product = product,
-                            globalMarkup = settings.globalMarkupPercent,
-                            user = user,
-                            rate = rate,
-                            language = language,
-                            onClick = {
-                                onProductSelected(product)
-                                searchFocusRequester.requestFocus()
-                            }
+            }
+        )
+
+        Row(modifier = Modifier.fillMaxSize().background(SurfaceContainerLight)) {
+            // Left Panel: Products Section
+            Column(
+                modifier = Modifier
+                    .weight(1.3f)
+                    .fillMaxHeight()
+                    .padding(20.dp)
+            ) {
+                // User Header Row
+                UserBalanceHeader(
+                    user = user,
+                    rate = rate,
+                    language = language
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Search Bar Input (Auto-Focused)
+                SearchInputField(
+                    query = searchQuery,
+                    onQueryChange = onSearchQueryChange,
+                    placeholder = strings.searchProductPlaceholder,
+                    onSearchSubmitted = onSearchSubmitted,
+                    focusRequester = searchFocusRequester
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Product Display Area
+                if (searchQuery.isBlank()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "🔍 Scan product barcode or type to search",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextSecondaryMuted,
+                            textAlign = TextAlign.Center
                         )
+                    }
+                } else if (filteredProducts.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No products found matching \"$searchQuery\"",
+                            fontSize = 14.sp,
+                            color = TextSecondaryMuted,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredProducts, key = { it.id }) { product ->
+                            ProductCard(
+                                product = product,
+                                globalMarkup = settings.globalMarkupPercent,
+                                user = user,
+                                rate = rate,
+                                language = language,
+                                onClick = {
+                                    onProductSelected(product)
+                                    searchFocusRequester.requestFocus()
+                                }
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // Right Panel: Sticky Cart Panel
-        CartPanel(
-            cartItems = cartItems,
-            user = user,
-            rate = rate,
-            language = language,
-            cartTotal = cartTotal,
-            balanceAfter = balanceAfter,
-            onQtyChange = { productId, newQty ->
-                onUpdateCartQty(productId, newQty)
-                searchFocusRequester.requestFocus()
-            },
-            onRemoveItem = { productId ->
-                onRemoveCartItem(productId)
-                searchFocusRequester.requestFocus()
-            },
-            onCompletePurchase = onOpenCheckout,
-            modifier = Modifier.weight(1f)
-        )
+            // Right Panel: Sticky Cart Panel
+            CartPanel(
+                cartItems = cartItems,
+                user = user,
+                rate = rate,
+                language = language,
+                cartTotal = cartTotal,
+                balanceAfter = balanceAfter,
+                onQtyChange = { productId, newQty ->
+                    onUpdateCartQty(productId, newQty)
+                    searchFocusRequester.requestFocus()
+                },
+                onRemoveItem = { productId ->
+                    onRemoveCartItem(productId)
+                    searchFocusRequester.requestFocus()
+                },
+                onCompletePurchase = onOpenCheckout,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 
     // Weight Prompt Input Dialog Modal

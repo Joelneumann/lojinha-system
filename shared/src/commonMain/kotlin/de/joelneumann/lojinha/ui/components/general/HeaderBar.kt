@@ -15,36 +15,25 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Language
-import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
-import de.joelneumann.lojinha.ui.viewmodel.AppScreen
 
 @Composable
 fun HeaderBar(
-    currentScreen: AppScreen,
+    title: String,
     currentLanguage: Language,
     onLanguageSelected: (Language) -> Unit,
-    onLogoutClicked: () -> Unit,
-    onAdminLoginClicked: () -> Unit
+    modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {}
 ) {
-    val strings = I18n.get(currentLanguage)
-
-    val screenTitle = when (currentScreen) {
-        AppScreen.MAIN_USER_SELECT -> "Lojinha"
-        AppScreen.SHOPPING -> strings.shopping
-        AppScreen.TRANSACTION_HISTORY -> strings.history
-        AppScreen.ADMIN_PANEL -> strings.adminPanel
-    }
-
     Surface(
-        modifier = Modifier.fillMaxWidth().height(64.dp),
+        modifier = modifier.fillMaxWidth().height(64.dp),
         color = SurfaceWhite,
         shadowElevation = 2.dp
     ) {
         Box(
             modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)
         ) {
-            // Left: Language Switcher Flags
+            // Left: Language Switcher Flags (Always on the left)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -74,9 +63,9 @@ fun HeaderBar(
                 }
             }
 
-            // Center: Screen Heading Title
+            // Center: Title Parameter
             Text(
-                text = screenTitle,
+                text = title,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = PrimaryNavy,
@@ -84,56 +73,13 @@ fun HeaderBar(
                 modifier = Modifier.align(Alignment.Center)
             )
 
-            // Right: Navigation / Action Buttons (Admin Login on Main, Logout/Exit on others)
+            // Right: Custom Action Buttons Parameter Slot
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
-                if (currentScreen == AppScreen.MAIN_USER_SELECT) {
-                    Button(
-                        onClick = onAdminLoginClicked,
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = strings.adminLoginBtn,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SurfaceWhite
-                        )
-                    }
-                } else if (currentScreen == AppScreen.ADMIN_PANEL) {
-                    Button(
-                        onClick = onLogoutClicked,
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = "🚪 Main Menu",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SurfaceWhite
-                        )
-                    }
-                } else {
-                    Button(
-                        onClick = onLogoutClicked,
-                        colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = "🚪 ${strings.logout}",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SurfaceWhite
-                        )
-                    }
-                }
-            }
+                modifier = Modifier.align(Alignment.CenterEnd),
+                content = actions
+            )
         }
     }
 }

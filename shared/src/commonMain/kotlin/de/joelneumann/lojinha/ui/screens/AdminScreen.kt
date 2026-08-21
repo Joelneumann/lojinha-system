@@ -33,18 +33,22 @@ import de.joelneumann.lojinha.ui.viewmodel.AdminViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import de.joelneumann.lojinha.domain.model.SystemSettings
+import de.joelneumann.lojinha.ui.components.general.HeaderBar
+
 @Composable
 fun AdminScreen(
     viewModel: AdminViewModel,
     language: Language,
-    onCloseAdmin: () -> Unit
+    settings: SystemSettings,
+    onLanguageSelected: (Language) -> Unit,
+    onExitAdmin: () -> Unit
 ) {
     val strings = I18n.get(language)
     val currentTab by viewModel.currentTab.collectAsState()
     val products by viewModel.products.collectAsState()
     val users by viewModel.users.collectAsState()
     val transactions by viewModel.transactions.collectAsState()
-    val settings by viewModel.settings.collectAsState()
 
     val depositUser by viewModel.depositUser.collectAsState()
     val depositAmountInput by viewModel.depositAmountInput.collectAsState()
@@ -77,12 +81,34 @@ fun AdminScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(SurfaceContainerLight)
-            .padding(24.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        HeaderBar(
+            title = strings.adminPanel,
+            currentLanguage = language,
+            onLanguageSelected = onLanguageSelected,
+            actions = {
+                Button(
+                    onClick = onExitAdmin,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "🚪 Main Menu",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SurfaceWhite
+                    )
+                }
+            }
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(SurfaceContainerLight)
+                .padding(24.dp)
+        ) {
         // Full-Width Navigation Tab Bar
         Surface(
             shape = RoundedCornerShape(12.dp),
@@ -392,6 +418,7 @@ fun AdminScreen(
             }
         )
     }
+}
 }
 
 @Composable

@@ -28,6 +28,8 @@ import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import de.joelneumann.lojinha.ui.components.general.HeaderBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionHistoryScreen(
@@ -35,6 +37,7 @@ fun TransactionHistoryScreen(
     user: User,
     language: Language,
     settings: SystemSettings,
+    onLanguageSelected: (Language) -> Unit,
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit
@@ -92,12 +95,34 @@ fun TransactionHistoryScreen(
         else -> 0.0
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(SurfaceContainerLight)
-            .padding(24.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        HeaderBar(
+            title = strings.history,
+            currentLanguage = language,
+            onLanguageSelected = onLanguageSelected,
+            actions = {
+                Button(
+                    onClick = onLogout,
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "🚪 ${strings.logout}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SurfaceWhite
+                    )
+                }
+            }
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(SurfaceContainerLight)
+                .padding(24.dp)
+        ) {
         // Top Action Row: Continue Shopping (Left), User & Balance Box (Center), User Settings (Right)
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -386,6 +411,7 @@ fun TransactionHistoryScreen(
             }
         }
     }
+}
 }
 
 data class TransactionWithBalance(
