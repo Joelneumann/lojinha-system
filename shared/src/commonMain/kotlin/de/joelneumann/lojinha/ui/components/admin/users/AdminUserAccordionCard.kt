@@ -1,0 +1,371 @@
+package de.joelneumann.lojinha.ui.components.admin.users
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.SecondaryCurrency
+import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.components.admin.*
+import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.Formatting
+
+@Composable
+fun AdminUserAccordionCard(
+    user: User,
+    allUsers: List<User>,
+    isExpanded: Boolean,
+    onExpandToggle: () -> Unit,
+    onSaveUser: (User) -> Unit,
+    onAdjustBalance: (User, Long, String, Boolean) -> Unit,
+    onToggleActive: (User) -> Unit,
+    onDeleteUser: (User) -> Unit,
+    onUnsavedStateChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val strings = I18n.current
+
+    var draftName by remember(user.id, user.name) { mutableStateOf(user.name) }
+    var draftPin by remember(user.id, user.pin) { mutableStateOf(user.pin ?: "") }
+    var draftUserBarcode by remember(user.id, user.userBarcode) { mutableStateOf(user.userBarcode ?: "") }
+    var draftUserBarcodeNumber by remember(user.id, user.userBarcodeNumber) { mutableStateOf(user.userBarcodeNumber ?: "") }
+    var draftLanguage by remember(user.id, user.language) { mutableStateOf(user.language) }
+    var draftSecondaryCurrency by remember(user.id, user.secondaryCurrency) { mutableStateOf(user.secondaryCurrency) }
+
+    val barcodeToCheck = remember(draftUserBarcode, draftUserBarcodeNumber) {
+        val b1 = draftUserBarcode.trim()
+        val b2 = draftUserBarcodeNumber.trim()
+        if (b2.isNotBlank()) b2 else b1
+    }
+
+    val duplicateUser = remember(barcodeToCheck, allUsers, user.id) {
+        if (barcodeToCheck.isBlank()) null
+        else allUsers.firstOrNull { u ->
+            !u.isDeleted && u.id != user.id && (
+                (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(barcodeToCheck, ignoreCase = true)) ||
+                (u.userBarcode != null && u.userBarcode.equals(barcodeToCheck, ignoreCase = true))
+            )
+        }
+    }
+
+    val isBarcodeSymbolFilled = draftUserBarcode.isNotBlank()
+    val isBarcodeNumberFilled = draftUserBarcodeNumber.isNotBlank()
+    val isUserBarcodeIncomplete = (isBarcodeSymbolFilled && !isBarcodeNumberFilled) || (!isBarcodeSymbolFilled && isBarcodeNumberFilled)
+
+    var moneyInput by remember(user.id) { mutableStateOf("") }
+    var pendingBalanceAdjustment by remember { mutableStateOf<Long?>(null) }
+    var showToggleActiveConfirm by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    val hasUnsaved = remember(
+        draftName, draftPin, draftUserBarcode, draftUserBarcodeNumber, draftLanguage, draftSecondaryCurrency, user
+    ) {
+        draftName != user.name ||
+                draftPin != (user.pin ?: "") ||
+                draftUserBarcode != (user.userBarcode ?: "") ||
+                draftUserBarcodeNumber != (user.userBarcodeNumber ?: "") ||
+                draftLanguage != user.language ||
+                draftSecondaryCurrency != user.secondaryCurrency
+    }
+
+    LaunchedEffect(hasUnsaved, isExpanded) {
+        if (isExpanded) {
+            onUnsavedStateChanged(hasUnsaved)
+        }
+    }
+
+    AdminAccordionCard(
+        title = user.name,
+        isExpanded = isExpanded,
+        onExpandToggle = onExpandToggle,
+        hasUnsaved = hasUnsaved,
+        modifier = modifier,
+        headerBadges = {
+            if (!user.isActive) {
+                AdminStatusBadge(
+                    text = "Deactivated",
+                    type = AdminBadgeType.DANGER
+                )
+            }
+        },
+        headerRightContent = {
+            Text(
+                text = "Balance: ${Formatting.formatBrl(user.balance)}",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (user.balance >= 0) ColorSuccessEmerald else ColorDangerCrimson
+            )
+        }
+    ) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = SurfaceContainerHighLight,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "💵 Balance Change (+/-):",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy
+                )
+
+                OutlinedTextField(
+                    value = moneyInput,
+                    onValueChange = { moneyInput = it },
+                    placeholder = { Text("e.g. 20 or -20", fontSize = 13.sp, color = TextSecondaryMuted) },
+                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = SurfaceWhite,
+                        unfocusedContainerColor = SurfaceWhite,
+                        focusedBorderColor = AccentNavy,
+                        unfocusedBorderColor = DividerBorder
+                    ),
+                    singleLine = true
+                )
+
+                Button(
+                    onClick = {
+                        val cleaned = moneyInput.replace(',', '.').trim()
+                        val valDouble = cleaned.toDoubleOrNull()
+                        if (valDouble != null && valDouble != 0.0) {
+                            val cents = kotlin.math.round(valDouble * 100.0).toLong()
+                            pendingBalanceAdjustment = cents
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(44.dp)
+                ) {
+                    Text("💵 Adjust Balance", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            AdminLabeledField(
+                label = "User Name",
+                value = draftName,
+                onValueChange = { draftName = it },
+                modifier = Modifier.weight(1f)
+            )
+
+            AdminLabeledField(
+                label = "PIN (Optional)",
+                value = draftPin,
+                onValueChange = { draftPin = it },
+                placeholder = "No PIN",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            AdminLabeledField(
+                label = "Barcode Symbol",
+                value = draftUserBarcode,
+                onValueChange = { draftUserBarcode = it },
+                placeholder = "e.g. USR-001",
+                modifier = Modifier.weight(1f)
+            )
+
+            AdminLabeledField(
+                label = "Barcode Number (ID)",
+                value = draftUserBarcodeNumber,
+                onValueChange = { draftUserBarcodeNumber = it },
+                placeholder = "e.g. 100000000001",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            AdminSegmentedOptionsRow(
+                label = strings.preferredLanguage,
+                options = Language.entries,
+                selected = draftLanguage,
+                onSelect = { draftLanguage = it },
+                optionLabel = { "${it.flagEmoji} ${it.code.uppercase()}" },
+                modifier = Modifier.weight(1f)
+            )
+
+            AdminSegmentedOptionsRow(
+                label = strings.secondaryCurrency,
+                options = SecondaryCurrency.entries,
+                selected = draftSecondaryCurrency,
+                onSelect = { draftSecondaryCurrency = it },
+                optionLabel = { curr ->
+                    when (curr) {
+                        SecondaryCurrency.NONE -> "None"
+                        SecondaryCurrency.USD -> "USD ($)"
+                        SecondaryCurrency.EUR -> "EUR (€)"
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (isUserBarcodeIncomplete) {
+            val missingMsg = if (isBarcodeSymbolFilled) "⚠️ Barcode Number (ID) is missing!" else "⚠️ Barcode Symbol is missing!"
+            Text(
+                text = "$missingMsg Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty.",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = ColorWarningAmber,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        if (duplicateUser != null) {
+            Text(
+                text = "❌ Barcode '${barcodeToCheck}' is already assigned to user '${duplicateUser.name}'!",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = ColorDangerCrimson,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        HorizontalDivider(color = DividerBorder)
+
+        AdminCardActionsRow(
+            hasUnsaved = hasUnsaved,
+            onSave = {
+                val bCode = draftUserBarcode.trim().ifBlank { null }
+                val bNum = draftUserBarcodeNumber.trim().ifBlank { null }
+                val updatedUser = user.copy(
+                    name = draftName.trim(),
+                    pin = draftPin.trim().ifBlank { null },
+                    userBarcode = if (bCode != null && bNum != null) bCode else null,
+                    userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
+                    language = draftLanguage,
+                    secondaryCurrency = draftSecondaryCurrency
+                )
+                onSaveUser(updatedUser)
+                onUnsavedStateChanged(false)
+            },
+            onRevert = {
+                draftName = user.name
+                draftPin = user.pin ?: ""
+                draftUserBarcode = user.userBarcode ?: ""
+                draftUserBarcodeNumber = user.userBarcodeNumber ?: ""
+                draftLanguage = user.language
+                draftSecondaryCurrency = user.secondaryCurrency
+                moneyInput = ""
+                onUnsavedStateChanged(false)
+            },
+            saveEnabled = hasUnsaved && draftName.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
+            toggleStatusText = if (user.isActive) "⚠️ Deactivate" else "⚡ Activate",
+            onToggleStatus = { showToggleActiveConfirm = true },
+            isStatusActive = user.isActive,
+            onDelete = { showDeleteConfirm = true }
+        )
+    }
+
+    if (pendingBalanceAdjustment != null) {
+        val cents = pendingBalanceAdjustment!!
+        val isDeposit = cents > 0
+        val absCents = kotlin.math.abs(cents)
+        val formattedAmount = Formatting.formatBrl(absCents)
+        val actionText = if (isDeposit) "add $formattedAmount to" else "deduct $formattedAmount from"
+
+        AlertDialog(
+            onDismissRequest = { pendingBalanceAdjustment = null },
+            title = { Text("Confirm Balance Adjustment", fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to $actionText ${user.name}'s account balance?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val note = if (isDeposit) "Deposit via Admin" else "Withdrawal via Admin"
+                        onAdjustBalance(user, absCents, note, isDeposit)
+                        pendingBalanceAdjustment = null
+                        moneyInput = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isDeposit) ColorSuccessEmerald else ColorDangerCrimson
+                    )
+                ) {
+                    Text("Confirm", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pendingBalanceAdjustment = null }) {
+                    Text(strings.cancel)
+                }
+            }
+        )
+    }
+
+    if (showToggleActiveConfirm) {
+        val actionText = if (user.isActive) "deactivate" else "activate"
+        AlertDialog(
+            onDismissRequest = { showToggleActiveConfirm = false },
+            title = { Text("Confirm Account Status Change", fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to $actionText account '${user.name}'?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onToggleActive(user)
+                        showToggleActiveConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (user.isActive) ColorWarningAmber else ColorSuccessEmerald
+                    )
+                ) {
+                    Text("Confirm", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showToggleActiveConfirm = false }) {
+                    Text(strings.cancel)
+                }
+            }
+        )
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Confirm Delete Account", fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
+            text = { Text("Are you sure you want to delete user account '${user.name}'?\n\nThe user account will be soft-deleted and moved to the 'Deleted Users' section at the bottom of the page.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteUser(user)
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
+                ) {
+                    Text("Yes, Delete User", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDeleteConfirm = false }) {
+                    Text(strings.cancel)
+                }
+            }
+        )
+    }
+}

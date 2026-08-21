@@ -13,6 +13,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.SystemSettings
+import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
+import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
+import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 
@@ -75,18 +78,10 @@ fun AdminSettingsTabScreen(
                 )
 
                 if (hasFieldChanges) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = ColorWarningAmber.copy(alpha = 0.15f)
-                    ) {
-                        Text(
-                            text = "● Unsaved Edits",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ColorWarningAmber,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
+                    AdminStatusBadge(
+                        text = "● Unsaved Edits",
+                        type = AdminBadgeType.WARNING
+                    )
                 }
             }
 
@@ -171,57 +166,33 @@ fun AdminSettingsTabScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("New Password:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                OutlinedTextField(
-                                    value = newPassword,
-                                    onValueChange = { newPassword = it },
-                                    placeholder = { Text("Enter new password", color = TextSecondaryMuted, fontSize = 14.sp) },
-                                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                    trailingIcon = {
-                                        IconButton(onClick = { showPassword = !showPassword }) {
-                                            Text(if (showPassword) "🙈" else "👁️", fontSize = 14.sp)
-                                        }
-                                    },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = SurfaceWhite,
-                                        unfocusedContainerColor = SurfaceWhite,
-                                        focusedBorderColor = AccentNavy,
-                                        unfocusedBorderColor = DividerBorder
-                                    ),
-                                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                                )
-                            }
+                            AdminLabeledField(
+                                label = "New Password:",
+                                value = newPassword,
+                                onValueChange = { newPassword = it },
+                                placeholder = "Enter new password",
+                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { showPassword = !showPassword }) {
+                                        Text(if (showPassword) "🙈" else "👁️", fontSize = 14.sp)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Confirm New Password:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                OutlinedTextField(
-                                    value = confirmPassword,
-                                    onValueChange = { confirmPassword = it },
-                                    placeholder = { Text("Confirm new password", color = TextSecondaryMuted, fontSize = 14.sp) },
-                                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                    trailingIcon = {
-                                        IconButton(onClick = { showPassword = !showPassword }) {
-                                            Text(if (showPassword) "🙈" else "👁️", fontSize = 14.sp)
-                                        }
-                                    },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = SurfaceWhite,
-                                        unfocusedContainerColor = SurfaceWhite,
-                                        focusedBorderColor = AccentNavy,
-                                        unfocusedBorderColor = DividerBorder
-                                    ),
-                                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                                )
-                            }
+                            AdminLabeledField(
+                                label = "Confirm New Password:",
+                                value = confirmPassword,
+                                onValueChange = { confirmPassword = it },
+                                placeholder = "Confirm new password",
+                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { showPassword = !showPassword }) {
+                                        Text(if (showPassword) "🙈" else "👁️", fontSize = 14.sp)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
 
                         if (isPasswordEntered) {
@@ -248,25 +219,13 @@ fun AdminSettingsTabScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text("🏷️ Product Pricing Rules", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text("Global Product Markup (%):", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            OutlinedTextField(
-                                value = globalMarkup,
-                                onValueChange = { globalMarkup = it },
-                                placeholder = { Text("e.g. 10.0", color = TextSecondaryMuted, fontSize = 14.sp) },
-                                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                                singleLine = true,
-                                shape = RoundedCornerShape(8.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = SurfaceWhite,
-                                    unfocusedContainerColor = SurfaceWhite,
-                                    focusedBorderColor = AccentNavy,
-                                    unfocusedBorderColor = DividerBorder
-                                ),
-                                modifier = Modifier.fillMaxWidth().height(56.dp)
-                            )
-                        }
+                        AdminLabeledField(
+                            label = "Global Product Markup (%):",
+                            value = globalMarkup,
+                            onValueChange = { globalMarkup = it },
+                            placeholder = "e.g. 10.0",
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -288,45 +247,21 @@ fun AdminSettingsTabScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("USD Rate (1 BRL = X USD):", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                OutlinedTextField(
-                                    value = usdRate,
-                                    onValueChange = { usdRate = it },
-                                    placeholder = { Text("e.g. 0.18", color = TextSecondaryMuted, fontSize = 14.sp) },
-                                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = SurfaceWhite,
-                                        unfocusedContainerColor = SurfaceWhite,
-                                        focusedBorderColor = AccentNavy,
-                                        unfocusedBorderColor = DividerBorder
-                                    ),
-                                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                                )
-                            }
+                            AdminLabeledField(
+                                label = "USD Rate (1 BRL = X USD):",
+                                value = usdRate,
+                                onValueChange = { usdRate = it },
+                                placeholder = "e.g. 0.18",
+                                modifier = Modifier.weight(1f)
+                            )
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("EUR Rate (1 BRL = X EUR):", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                OutlinedTextField(
-                                    value = eurRate,
-                                    onValueChange = { eurRate = it },
-                                    placeholder = { Text("e.g. 0.16", color = TextSecondaryMuted, fontSize = 14.sp) },
-                                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = SurfaceWhite,
-                                        unfocusedContainerColor = SurfaceWhite,
-                                        focusedBorderColor = AccentNavy,
-                                        unfocusedBorderColor = DividerBorder
-                                    ),
-                                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                                )
-                            }
+                            AdminLabeledField(
+                                label = "EUR Rate (1 BRL = X EUR):",
+                                value = eurRate,
+                                onValueChange = { eurRate = it },
+                                placeholder = "e.g. 0.16",
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 }
@@ -345,25 +280,13 @@ fun AdminSettingsTabScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text("⏱️ Kiosk System Timers", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text("Inactivity Timeout (Minutes):", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            OutlinedTextField(
-                                value = inactivityTimeout,
-                                onValueChange = { inactivityTimeout = it },
-                                placeholder = { Text("e.g. 3", color = TextSecondaryMuted, fontSize = 14.sp) },
-                                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                                singleLine = true,
-                                shape = RoundedCornerShape(8.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = SurfaceWhite,
-                                    unfocusedContainerColor = SurfaceWhite,
-                                    focusedBorderColor = AccentNavy,
-                                    unfocusedBorderColor = DividerBorder
-                                ),
-                                modifier = Modifier.fillMaxWidth().height(56.dp)
-                            )
-                        }
+                        AdminLabeledField(
+                            label = "Inactivity Timeout (Minutes):",
+                            value = inactivityTimeout,
+                            onValueChange = { inactivityTimeout = it },
+                            placeholder = "e.g. 3",
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
