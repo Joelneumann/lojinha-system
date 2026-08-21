@@ -551,7 +551,9 @@ private fun AdminProductAccordionCard(
         mutableStateOf(Formatting.formatBrl(product.basePrice).replace("R$", "").trim())
     }
     var draftUnitType by remember(product.id, product.unitType) { mutableStateOf(product.unitType) }
-    var draftStock by remember(product.id, product.stockQuantity) { mutableStateOf(product.stockQuantity.toString()) }
+    var draftStock by remember(product.id, product.stockQuantity, product.unitType) {
+        mutableStateOf(Formatting.formatStockForAdmin(product.stockQuantity, product.unitType))
+    }
     var draftMarkup by remember(product.id, product.customMarkupPercent) {
         mutableStateOf(product.customMarkupPercent?.toString() ?: "")
     }
@@ -585,7 +587,7 @@ private fun AdminProductAccordionCard(
         val valDouble = draftPriceBrl.replace(',', '.').trim().toDoubleOrNull() ?: 0.0
         kotlin.math.round(valDouble * 100.0).toLong()
     }
-    val parsedStock = remember(draftStock) { draftStock.toLongOrNull() ?: 0L }
+    val parsedStock = remember(draftStock, draftUnitType) { Formatting.parseAdminStockToDb(draftStock, draftUnitType) ?: 0L }
     val parsedMarkup = remember(draftMarkup) { draftMarkup.toDoubleOrNull() }
 
     val hasUnsaved = remember(
@@ -718,7 +720,13 @@ private fun AdminProductAccordionCard(
                             OutlinedTextField(
                                 value = stockDeltaInput,
                                 onValueChange = { stockDeltaInput = it },
-                                placeholder = { Text("e.g. 10 or -5", fontSize = 13.sp, color = TextSecondaryMuted) },
+                                placeholder = {
+                                    Text(
+                                        text = if (draftUnitType == UnitType.PIECE) "e.g. +10 or -5 (Units)" else "e.g. +0.500 or -0.250 (kg)",
+                                        fontSize = 13.sp,
+                                        color = TextSecondaryMuted
+                                    )
+                                },
                                 textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                 modifier = Modifier.weight(1f).height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
@@ -733,7 +741,7 @@ private fun AdminProductAccordionCard(
 
                             Button(
                                 onClick = {
-                                    val delta = stockDeltaInput.trim().toLongOrNull()
+                                    val delta = Formatting.parseAdminStockToDb(stockDeltaInput, draftUnitType)
                                     if (delta != null && delta != 0L) {
                                         pendingStockAdjustment = delta
                                     }
@@ -809,11 +817,23 @@ private fun AdminProductAccordionCard(
 
                         // Total Stock Quantity
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Current Stock Quantity", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                            Text(
+                                text = if (draftUnitType == UnitType.PIECE) "Stock Quantity (Units):" else "Stock Quantity (kg):",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = draftStock,
                                 onValueChange = { draftStock = it },
+                                placeholder = {
+                                    Text(
+                                        text = if (draftUnitType == UnitType.PIECE) "e.g. 25 (Full numbers)" else "e.g. 2.500 (Decimal in kg)",
+                                        fontSize = 13.sp,
+                                        color = TextSecondaryMuted
+                                    )
+                                },
                                 textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                 modifier = Modifier.fillMaxWidth().height(56.dp),
                                 shape = RoundedCornerShape(8.dp),
@@ -1047,7 +1067,8 @@ private fun AdminProductAccordionCard(
         val delta = pendingStockAdjustment!!
         val isAdd = delta > 0
         val absQty = kotlin.math.abs(delta)
-        val actionText = if (isAdd) "add $absQty items to" else "deduct $absQty items from"
+        val formattedQty = Formatting.formatQuantity(absQty, draftUnitType)
+        val actionText = if (isAdd) "add $formattedQty to" else "deduct $formattedQty from"
 
         AlertDialog(
             onDismissRequest = { pendingStockAdjustment = null },
@@ -2979,7 +3000,7 @@ private fun ProductEditDialog(
     var name by remember { mutableStateOf(product.name) }
     var basePriceBrl by remember { mutableStateOf(if (isNewProduct) "0,00" else (product.basePrice.toDouble() / 100.0).toString().replace('.', ',')) }
     var unitType by remember { mutableStateOf(product.unitType) }
-    var stockQuantity by remember { mutableStateOf(if (isNewProduct) "0" else product.stockQuantity.toString()) }
+    var stockQuantity by remember { mutableStateOf(if (isNewProduct) "0" else Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)) }
     var customMarkup by remember { mutableStateOf(product.customMarkupPercent?.toString() ?: "") }
     var barcodeCode by remember { mutableStateOf("") }
     var barcodeDesc by remember { mutableStateOf("") }
@@ -3080,12 +3101,23 @@ private fun ProductEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(if (unitType == UnitType.PIECE) "Initial Stock (Units)" else "Initial Stock (Grams / mL)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Text(
+                            text = if (unitType == UnitType.PIECE) "Stock Quantity (Units):" else "Stock Quantity (kg):",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryNavy
+                        )
                         Spacer(modifier = Modifier.height(4.dp))
                         OutlinedTextField(
                             value = stockQuantity,
                             onValueChange = { stockQuantity = it },
-                            placeholder = { Text("0", fontSize = 13.sp, color = TextSecondaryMuted) },
+                            placeholder = {
+                                Text(
+                                    text = if (unitType == UnitType.PIECE) "e.g. 25 (Full numbers)" else "e.g. 2.500 (Decimal in kg)",
+                                    fontSize = 13.sp,
+                                    color = TextSecondaryMuted
+                                )
+                            },
                             textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -3215,10 +3247,11 @@ private fun ProductEditDialog(
                 }
 
                 val initialPriceBrl = Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()
+                val initialStockAdmin = Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)
                 val hasDialogChanges = name != product.name ||
                         basePriceBrl != initialPriceBrl ||
                         unitType != product.unitType ||
-                        stockQuantity != product.stockQuantity.toString() ||
+                        stockQuantity != initialStockAdmin ||
                         customMarkup != (product.customMarkupPercent?.toString() ?: "") ||
                         barcodeList != product.barcodes
 
@@ -3240,7 +3273,7 @@ private fun ProductEditDialog(
                                 name = product.name
                                 basePriceBrl = initialPriceBrl
                                 unitType = product.unitType
-                                stockQuantity = product.stockQuantity.toString()
+                                stockQuantity = Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)
                                 customMarkup = product.customMarkupPercent?.toString() ?: ""
                                 barcodeList = product.barcodes
                                 barcodeCode = ""
@@ -3256,7 +3289,7 @@ private fun ProductEditDialog(
                     Button(
                         onClick = {
                             val priceCents = kotlin.math.round((basePriceBrl.replace(',', '.').toDoubleOrNull() ?: 0.0) * 100).toLong()
-                            val stock = stockQuantity.toLongOrNull() ?: 0L
+                            val stock = Formatting.parseAdminStockToDb(stockQuantity, unitType) ?: 0L
                             val markup = customMarkup.toDoubleOrNull()
                             val updated = product.copy(
                                 name = name.trim(),

@@ -44,6 +44,34 @@ object Formatting {
         }
     }
 
+    fun formatStockForAdmin(stockQuantity: Long, unitType: UnitType): String {
+        return when (unitType) {
+            UnitType.PIECE -> stockQuantity.toString()
+            UnitType.WEIGHT -> {
+                val kg = stockQuantity.toDouble() / 1000.0
+                if (kg == kg.toLong().toDouble()) {
+                    kg.toLong().toString()
+                } else {
+                    kg.toString().replace('.', ',')
+                }
+            }
+        }
+    }
+
+    fun parseAdminStockToDb(input: String, unitType: UnitType): Long? {
+        val trimmed = input.trim()
+        if (trimmed.isBlank()) return null
+        val normalized = trimmed.replace(',', '.')
+
+        return when (unitType) {
+            UnitType.PIECE -> normalized.toLongOrNull()
+            UnitType.WEIGHT -> {
+                val kgDouble = normalized.toDoubleOrNull() ?: return null
+                round(kgDouble * 1000.0).toLong()
+            }
+        }
+    }
+
     fun parseWeightInputToGrams(input: String): Long? {
         val trimmed = input.trim().lowercase()
         if (trimmed.isBlank()) return null

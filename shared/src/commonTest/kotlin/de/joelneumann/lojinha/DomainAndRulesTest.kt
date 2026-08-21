@@ -105,6 +105,19 @@ class DomainAndRulesTest {
     }
 
     @Test
+    fun testAdminStockFormattingAndParsing() {
+        // Test Piece unit type (must NOT be multiplied by 1000)
+        assertEquals("10", Formatting.formatStockForAdmin(10L, UnitType.PIECE))
+        assertEquals(10L, Formatting.parseAdminStockToDb("10", UnitType.PIECE))
+
+        // Test Weight unit type (grams in DB <-> kg in Admin)
+        assertEquals("2,5", Formatting.formatStockForAdmin(2500L, UnitType.WEIGHT))
+        assertEquals(2500L, Formatting.parseAdminStockToDb("2,5", UnitType.WEIGHT))
+        assertEquals(2500L, Formatting.parseAdminStockToDb("2.5", UnitType.WEIGHT))
+        assertEquals(750L, Formatting.parseAdminStockToDb("0,75", UnitType.WEIGHT))
+    }
+
+    @Test
     fun testTransactionLineTotal() {
         val pieceItem = TransactionItem(
             productId = "p1",
