@@ -86,13 +86,19 @@ class BackupRestoreService(
         val backupFileName = "lojinha_backup_${getTimestampString()}.db"
         val targetFile = File(destinationDir, backupFileName)
 
-        // Checkpoint WAL via JDBC to flush all active transactions into lojinha_room.db
+        // Checkpoint WAL via BundledSQLiteDriver to flush all active transactions into lojinha_room.db
         try {
-            val conn = java.sql.DriverManager.getConnection("jdbc:sqlite:${dbFile.absolutePath}")
-            val stmt = conn.createStatement()
-            stmt.execute("PRAGMA wal_checkpoint(FULL)")
-            stmt.close()
-            conn.close()
+            val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
+            try {
+                val stmt = connection.prepare("PRAGMA wal_checkpoint(FULL)")
+                try {
+                    stmt.step()
+                } finally {
+                    stmt.close()
+                }
+            } finally {
+                connection.close()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -198,136 +204,136 @@ class BackupRestoreService(
         var backupSettings: SettingsEntity? = null
         val backupRoutines = mutableListOf<BackupEntity>()
 
-        // 1. Read tables from backupFile using JDBC (read-only connection, safe across any version)
-        val conn = java.sql.DriverManager.getConnection("jdbc:sqlite:${backupFile.absolutePath}")
+        // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
+        val connection = BundledSQLiteDriver().open(backupFile.absolutePath)
         try {
-            val stmt = conn.createStatement()
-            val rsTables = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='table'")
             val tableNames = mutableSetOf<String>()
-            while (rsTables.next()) {
-                tableNames.add(rsTables.getString("name").lowercase())
+            val stmtTables = connection.prepare("SELECT name FROM sqlite_master WHERE type='table'")
+            try {
+                while (stmtTables.step()) {
+                    tableNames.add(stmtTables.getText(0).lowercase())
+                }
+            } finally {
+                stmtTables.close()
             }
-            rsTables.close()
 
             // Read users
             if (tableNames.contains("users")) {
-                val rs = stmt.executeQuery("SELECT * FROM users")
-                while (rs.next()) {
-                    val u = UserEntity(
-                        id = rs.getString("id"),
-                        name = rs.getString("name"),
-                        balance = rs.getLong("balance"),
-                        language = rs.getString("language"),
-                        secondaryCurrency = rs.getString("secondaryCurrency"),
-                        pin = try { rs.getString("pin") } catch (e: Exception) { null },
-                        userBarcode = try { rs.getString("userBarcode") } catch (e: Exception) { null },
-                        userBarcodeNumber = try { rs.getString("userBarcodeNumber") } catch (e: Exception) { null },
-                        isActive = rs.getInt("isActive") != 0,
-                        isDeleted = try { rs.getInt("isDeleted") != 0 } catch (e: Exception) { false }
-                    )
-                    backupUsers.add(u)
+                val stmt = connection.prepare("SELECT id, name, balance, language, secondaryCurrency, pin, userBarcode, userBarcodeNumber, isActive, isDeleted FROM users")
+                try {
+                    while (stmt.step()) {
+                        val u = UserEntity(
+                            id = stmt.getText(0),
+                            name = stmt.getText(1),
+                            balance = stmt.getLong(2),
+                            language = stmt.getText(3),
+                            secondaryCurrency = stmt.getText(4),
+                            pin = if (stmt.isNull(5)) null else stmt.getText(5),
+                            userBarcode = if (stmt.isNull(6)) null else stmt.getText(6),
+                            userBarcodeNumber = if (stmt.isNull(7)) null else stmt.getText(7),
+                            isActive = stmt.getLong(8) != 0L,
+                            isDeleted = try { stmt.getLong(9) != 0L } catch (e: Exception) { false }
+                        )
+                        backupUsers.add(u)
+                    }
+                } finally {
+                    stmt.close()
                 }
-                rs.close()
             }
 
             // Read products
             if (tableNames.contains("products")) {
-                val rs = stmt.executeQuery("SELECT * FROM products")
-                while (rs.next()) {
-                    val barcodesStr = try { rs.getString("barcodes") } catch (e: Exception) { "" }
-                    val customMarkup = try {
-                        val d = rs.getDouble("customMarkupPercent")
-                        if (rs.wasNull()) null else d
-                    } catch (e: Exception) { null }
+                val stmt = connection.prepare("SELECT id, name, barcodes, basePrice, unitType, stockQuantity, customMarkupPercent, isActive FROM products")
+                try {
+                    while (stmt.step()) {
+                        val barcodesStr = if (stmt.isNull(2)) "" else stmt.getText(2)
+                        val customMarkup = if (stmt.isNull(6)) null else stmt.getDouble(6)
 
-                    val p = ProductEntity(
-                        id = rs.getString("id"),
-                        name = rs.getString("name"),
-                        barcodes = converters.toBarcodeList(barcodesStr),
-                        basePrice = rs.getLong("basePrice"),
-                        unitType = rs.getString("unitType"),
-                        stockQuantity = rs.getLong("stockQuantity"),
-                        customMarkupPercent = customMarkup,
-                        isActive = rs.getInt("isActive") != 0
-                    )
-                    backupProducts.add(p)
+                        val p = ProductEntity(
+                            id = stmt.getText(0),
+                            name = stmt.getText(1),
+                            barcodes = converters.toBarcodeList(barcodesStr),
+                            basePrice = stmt.getLong(3),
+                            unitType = stmt.getText(4),
+                            stockQuantity = stmt.getLong(5),
+                            customMarkupPercent = customMarkup,
+                            isActive = stmt.getLong(7) != 0L
+                        )
+                        backupProducts.add(p)
+                    }
+                } finally {
+                    stmt.close()
                 }
-                rs.close()
             }
 
             // Read transactions
             if (tableNames.contains("transactions")) {
-                val rs = stmt.executeQuery("SELECT * FROM transactions")
-                while (rs.next()) {
-                    val itemsStr = try { rs.getString("items") } catch (e: Exception) { "" }
-                    val t = TransactionEntity(
-                        id = rs.getString("id"),
-                        userId = rs.getString("userId"),
-                        userNameSnapshot = rs.getString("userNameSnapshot"),
-                        timestamp = rs.getLong("timestamp"),
-                        type = rs.getString("type"),
-                        referenceTransactionId = try { rs.getString("referenceTransactionId") } catch (e: Exception) { null },
-                        note = try { rs.getString("note") } catch (e: Exception) { null },
-                        totalAmount = rs.getLong("totalAmount"),
-                        items = converters.toTransactionItemList(itemsStr)
-                    )
-                    backupTransactions.add(t)
+                val stmt = connection.prepare("SELECT id, userId, userNameSnapshot, timestamp, type, referenceTransactionId, note, totalAmount, items FROM transactions")
+                try {
+                    while (stmt.step()) {
+                        val itemsStr = if (stmt.isNull(8)) "" else stmt.getText(8)
+                        val t = TransactionEntity(
+                            id = stmt.getText(0),
+                            userId = stmt.getText(1),
+                            userNameSnapshot = stmt.getText(2),
+                            timestamp = stmt.getLong(3),
+                            type = stmt.getText(4),
+                            referenceTransactionId = if (stmt.isNull(5)) null else stmt.getText(5),
+                            note = if (stmt.isNull(6)) null else stmt.getText(6),
+                            totalAmount = stmt.getLong(7),
+                            items = converters.toTransactionItemList(itemsStr)
+                        )
+                        backupTransactions.add(t)
+                    }
+                } finally {
+                    stmt.close()
                 }
-                rs.close()
             }
 
             // Read settings
             if (tableNames.contains("settings")) {
-                val rs = stmt.executeQuery("SELECT * FROM settings LIMIT 1")
-                if (rs.next()) {
-                    backupSettings = SettingsEntity(
-                        id = rs.getInt("id"),
-                        adminPasswordHash = rs.getString("adminPasswordHash"),
-                        globalMarkupPercent = rs.getDouble("globalMarkupPercent"),
-                        usdExchangeRate = rs.getDouble("usdExchangeRate"),
-                        eurExchangeRate = rs.getDouble("eurExchangeRate"),
-                        inactivityTimeoutMinutes = rs.getInt("inactivityTimeoutMinutes"),
-                        backupLocationPath = try { rs.getString("backupLocationPath") } catch (e: Exception) { "" },
-                        autoBackupEnabled = try { rs.getInt("autoBackupEnabled") != 0 } catch (e: Exception) { false },
-                        autoBackupFormat = try { rs.getString("autoBackupFormat") } catch (e: Exception) { "DB" },
-                        autoBackupScheduleType = try { rs.getString("autoBackupScheduleType") } catch (e: Exception) { "DAILY" },
-                        autoBackupTime = try { rs.getString("autoBackupTime") } catch (e: Exception) { "02:00" },
-                        autoBackupIntervalHours = try { rs.getInt("autoBackupIntervalHours") } catch (e: Exception) { 24 },
-                        lastBackupTimestamp = try {
-                            val ts = rs.getLong("lastBackupTimestamp")
-                            if (rs.wasNull()) null else ts
-                        } catch (e: Exception) { null }
-                    )
+                val stmt = connection.prepare("SELECT id, adminPasswordHash, globalMarkupPercent, usdExchangeRate, eurExchangeRate, inactivityTimeoutMinutes FROM settings LIMIT 1")
+                try {
+                    if (stmt.step()) {
+                        backupSettings = SettingsEntity(
+                            id = stmt.getLong(0).toInt(),
+                            adminPasswordHash = stmt.getText(1),
+                            globalMarkupPercent = stmt.getDouble(2),
+                            usdExchangeRate = stmt.getDouble(3),
+                            eurExchangeRate = stmt.getDouble(4),
+                            inactivityTimeoutMinutes = stmt.getLong(5).toInt()
+                        )
+                    }
+                } finally {
+                    stmt.close()
                 }
-                rs.close()
             }
 
             // Read backup_routines
             if (tableNames.contains("backup_routines")) {
-                val rs = stmt.executeQuery("SELECT * FROM backup_routines")
-                while (rs.next()) {
-                    val cfgStr = try { rs.getString("scheduleConfig") } catch (e: Exception) { "" }
-                    val b = BackupEntity(
-                        id = rs.getString("id"),
-                        name = rs.getString("name"),
-                        isEnabled = rs.getInt("isEnabled") != 0,
-                        type = rs.getString("type"),
-                        fileType = rs.getString("fileType"),
-                        scheduleConfig = converters.toBackupScheduleConfig(cfgStr),
-                        backupLocationPath = rs.getString("backupLocationPath"),
-                        lastBackupTimestamp = try {
-                            val ts = rs.getLong("lastBackupTimestamp")
-                            if (rs.wasNull()) null else ts
-                        } catch (e: Exception) { null }
-                    )
-                    backupRoutines.add(b)
+                val stmt = connection.prepare("SELECT id, name, isEnabled, type, fileType, scheduleConfig, backupLocationPath, lastBackupTimestamp FROM backup_routines")
+                try {
+                    while (stmt.step()) {
+                        val cfgStr = if (stmt.isNull(5)) "" else stmt.getText(5)
+                        val lastTs = if (stmt.isNull(7)) null else stmt.getLong(7)
+                        val b = BackupEntity(
+                            id = stmt.getText(0),
+                            name = stmt.getText(1),
+                            isEnabled = stmt.getLong(2) != 0L,
+                            type = stmt.getText(3),
+                            fileType = stmt.getText(4),
+                            scheduleConfig = converters.toBackupScheduleConfig(cfgStr),
+                            backupLocationPath = stmt.getText(6),
+                            lastBackupTimestamp = lastTs
+                        )
+                        backupRoutines.add(b)
+                    }
+                } finally {
+                    stmt.close()
                 }
-                rs.close()
             }
-
-            stmt.close()
         } finally {
-            conn.close()
+            connection.close()
         }
 
         // 2. Clear current database tables
