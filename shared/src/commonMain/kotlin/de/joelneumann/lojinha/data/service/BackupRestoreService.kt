@@ -130,7 +130,7 @@ class BackupRestoreService(
         // 2. Export Users
         val users = db.userDao().getAllUsers().map { it.toDomain() }
         val usersCsv = File(exportFolder, "users.csv")
-        val userLines = mutableListOf("id,name,balance,language,secondaryCurrency,pin,isActive,isDeleted")
+        val userLines = mutableListOf("id,name,balance,language,secondaryCurrency,pin,userBarcode,userBarcodeNumber,isActive,isDeleted")
         users.forEach { u ->
             val line = listOf(
                 escapeCsv(u.id),
@@ -139,6 +139,8 @@ class BackupRestoreService(
                 u.language.code,
                 u.secondaryCurrency.name,
                 escapeCsv(u.pin ?: ""),
+                escapeCsv(u.userBarcode ?: ""),
+                escapeCsv(u.userBarcodeNumber ?: ""),
                 u.isActive.toString(),
                 u.isDeleted.toString()
             ).joinToString(",")
@@ -322,6 +324,8 @@ class BackupRestoreService(
         val langIdx = header.indexOf("language")
         val secCurrIdx = header.indexOf("secondaryCurrency")
         val pinIdx = header.indexOf("pin")
+        val userBarcodeIdx = header.indexOf("userBarcode")
+        val userBarcodeNumberIdx = header.indexOf("userBarcodeNumber")
         val activeIdx = header.indexOf("isActive")
 
         if (nameIdx == -1) {
@@ -329,9 +333,15 @@ class BackupRestoreService(
         }
 
         val existingUsers = db.userDao().getAllUsers().associateBy { it.id }
+        val allExistingUserBarcodesMap = mutableMapOf<String, String>() // barcode string -> userId
+        existingUsers.values.forEach { eu ->
+            eu.userBarcode?.let { if (it.isNotBlank()) allExistingUserBarcodesMap[it] = eu.id }
+            eu.userBarcodeNumber?.let { if (it.isNotBlank()) allExistingUserBarcodesMap[it] = eu.id }
+        }
 
         var addedCount = 0
         var updatedCount = 0
+        var strippedBarcodesCount = 0
         val warnings = mutableListOf<String>()
         val errors = mutableListOf<String>()
 
@@ -357,6 +367,33 @@ class BackupRestoreService(
             val userId = if (rawId.isNotEmpty()) rawId else "u-imp-${getTimestampString()}-$i"
             val isExisting = existingUsers.containsKey(userId)
 
+            val rawUserBarcode = if (userBarcodeIdx != -1 && userBarcodeIdx < cols.size) cols[userBarcodeIdx].trim() else ""
+            val rawUserBarcodeNumber = if (userBarcodeNumberIdx != -1 && userBarcodeNumberIdx < cols.size) cols[userBarcodeNumberIdx].trim() else ""
+
+            var finalUserBarcode: String? = null
+            if (rawUserBarcode.isNotEmpty()) {
+                val assignedUserId = allExistingUserBarcodesMap[rawUserBarcode]
+                if (assignedUserId != null && assignedUserId != userId) {
+                    strippedBarcodesCount++
+                    warnings.add("Row ${i + 1} ('$name'): User barcode '$rawUserBarcode' stripped because it is already assigned to user '$assignedUserId'.")
+                } else {
+                    finalUserBarcode = rawUserBarcode
+                    allExistingUserBarcodesMap[rawUserBarcode] = userId
+                }
+            }
+
+            var finalUserBarcodeNumber: String? = null
+            if (rawUserBarcodeNumber.isNotEmpty()) {
+                val assignedUserId = allExistingUserBarcodesMap[rawUserBarcodeNumber]
+                if (assignedUserId != null && assignedUserId != userId) {
+                    strippedBarcodesCount++
+                    warnings.add("Row ${i + 1} ('$name'): User barcode number '$rawUserBarcodeNumber' stripped because it is already assigned to user '$assignedUserId'.")
+                } else {
+                    finalUserBarcodeNumber = rawUserBarcodeNumber
+                    allExistingUserBarcodesMap[rawUserBarcodeNumber] = userId
+                }
+            }
+
             val userEntity = UserEntity(
                 id = userId,
                 name = name,
@@ -364,8 +401,8 @@ class BackupRestoreService(
                 language = langStr,
                 secondaryCurrency = secCurrStr,
                 pin = pin,
-                userBarcode = null, // Barcodes stripped for safety
-                userBarcodeNumber = null, // Barcodes stripped for safety
+                userBarcode = finalUserBarcode,
+                userBarcodeNumber = finalUserBarcodeNumber,
                 isActive = isActive
             )
 
@@ -377,7 +414,7 @@ class BackupRestoreService(
             totalProcessed = addedCount + updatedCount,
             addedCount = addedCount,
             updatedCount = updatedCount,
-            strippedBarcodesCount = 0,
+            strippedBarcodesCount = strippedBarcodesCount,
             errors = errors,
             warnings = warnings
         )

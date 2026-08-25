@@ -30,16 +30,33 @@ class BackupRestoreServiceTest {
     }
 
     @Test
-    fun testUserBarcodeStrippingLogic() {
-        val rawUserBarcode = "USER001"
-        val rawUserBarcodeNumber = "USER001"
+    fun testUserBarcodeSelectiveCollisionStrippingLogic() {
+        val existingUserBarcodes = mapOf(
+            "USER_BC_001" to "u-existing-001"
+        )
 
-        // On import, user barcodes must be set to null for security and to avoid kiosk barcode collisions
-        val importedUserBarcode: String? = null
-        val importedUserBarcodeNumber: String? = null
+        val newImportUserId = "u-new-002"
+        val sameUserImportId = "u-existing-001"
 
-        assertEquals(null, importedUserBarcode)
-        assertEquals(null, importedUserBarcodeNumber)
+        // Candidate 1: Collides with another user (u-existing-001) -> Stripped (null)
+        val candidateBarcode1 = "USER_BC_001"
+        val assigned1 = existingUserBarcodes[candidateBarcode1]
+        val importedBarcode1: String? = if (assigned1 != null && assigned1 != newImportUserId) null else candidateBarcode1
+
+        assertEquals(null, importedBarcode1)
+
+        // Candidate 2: Same user updating their record -> Preserved
+        val assigned2 = existingUserBarcodes[candidateBarcode1]
+        val importedBarcode2: String? = if (assigned2 != null && assigned2 != sameUserImportId) null else candidateBarcode1
+
+        assertEquals("USER_BC_001", importedBarcode2)
+
+        // Candidate 3: Unique barcode for new user -> Preserved
+        val candidateBarcode3 = "USER_BC_003"
+        val assigned3 = existingUserBarcodes[candidateBarcode3]
+        val importedBarcode3: String? = if (assigned3 != null && assigned3 != newImportUserId) null else candidateBarcode3
+
+        assertEquals("USER_BC_003", importedBarcode3)
     }
 
     @Test
