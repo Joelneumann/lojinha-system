@@ -25,6 +25,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
+        builder.fallbackToDestructiveMigration(true)
         val db = builder.build()
 
         // Seed initial data if database is new/empty

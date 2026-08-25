@@ -21,6 +21,12 @@ interface TransactionDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE userId = :userId")
     suspend fun getTransactionCountForUser(userId: String): Int
 
+    @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
+    suspend fun getAllTransactions(): List<TransactionEntity>
+
+    @Query("DELETE FROM transactions")
+    suspend fun deleteAllTransactions()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(transaction: TransactionEntity)
 }

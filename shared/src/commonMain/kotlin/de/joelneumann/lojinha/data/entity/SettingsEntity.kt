@@ -11,14 +11,28 @@ data class SettingsEntity(
     val globalMarkupPercent: Double,
     val usdExchangeRate: Double,
     val eurExchangeRate: Double,
-    val inactivityTimeoutMinutes: Int
+    val inactivityTimeoutMinutes: Int,
+    val backupLocationPath: String = "",
+    val autoBackupEnabled: Boolean = false,
+    val autoBackupFormat: String = "DB",
+    val autoBackupScheduleType: String = "DAILY",
+    val autoBackupTime: String = "02:00",
+    val autoBackupIntervalHours: Int = 24,
+    val lastBackupTimestamp: Long? = null
 ) {
     fun toDomain(): SystemSettings = SystemSettings(
         adminPasswordHash = adminPasswordHash,
         globalMarkupPercent = globalMarkupPercent,
         usdExchangeRate = usdExchangeRate,
         eurExchangeRate = eurExchangeRate,
-        inactivityTimeoutMinutes = inactivityTimeoutMinutes
+        inactivityTimeoutMinutes = inactivityTimeoutMinutes,
+        backupLocationPath = backupLocationPath,
+        autoBackupEnabled = autoBackupEnabled,
+        autoBackupFormat = autoBackupFormat,
+        autoBackupScheduleType = autoBackupScheduleType,
+        autoBackupTime = autoBackupTime,
+        autoBackupIntervalHours = autoBackupIntervalHours,
+        lastBackupTimestamp = lastBackupTimestamp
     )
 
     companion object {
@@ -28,7 +42,14 @@ data class SettingsEntity(
             globalMarkupPercent = settings.globalMarkupPercent,
             usdExchangeRate = settings.usdExchangeRate,
             eurExchangeRate = settings.eurExchangeRate,
-            inactivityTimeoutMinutes = settings.inactivityTimeoutMinutes
+            inactivityTimeoutMinutes = settings.inactivityTimeoutMinutes,
+            backupLocationPath = settings.backupLocationPath,
+            autoBackupEnabled = settings.autoBackupEnabled,
+            autoBackupFormat = settings.autoBackupFormat,
+            autoBackupScheduleType = settings.autoBackupScheduleType,
+            autoBackupTime = settings.autoBackupTime,
+            autoBackupIntervalHours = settings.autoBackupIntervalHours,
+            lastBackupTimestamp = settings.lastBackupTimestamp
         )
     }
 }

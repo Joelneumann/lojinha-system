@@ -31,6 +31,15 @@ fun App() {
     val settingsRepository = remember { RoomSettingsRepositoryImpl(database.settingsDao()) }
     val transactionRepository = remember { RoomTransactionRepositoryImpl(database.transactionDao()) }
 
+    val backupRepository = remember { de.joelneumann.lojinha.data.repository.RoomBackupRepositoryImpl(database.backupDao()) }
+    val backupRestoreService = remember { de.joelneumann.lojinha.data.service.BackupRestoreService(database) }
+    val coroutineScope = rememberCoroutineScope()
+    val autoBackupScheduler = remember { de.joelneumann.lojinha.data.service.AutoBackupScheduler(backupRestoreService, backupRepository, coroutineScope) }
+
+    LaunchedEffect(Unit) {
+        autoBackupScheduler.startScheduler()
+    }
+
     val appViewModel = remember { AppViewModel(userRepository, settingsRepository) }
     val userSelectionViewModel = remember { UserSelectionViewModel(userRepository) }
     val shoppingViewModel = remember { ShoppingViewModel(productRepository, userRepository, transactionRepository) }
@@ -118,7 +127,7 @@ fun App() {
                     val adminProductsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel(productRepository, settingsRepository) }
                     val adminUsersViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel(userRepository, transactionRepository) }
                     val adminTransactionsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
-                    val adminSettingsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel(settingsRepository) }
+                    val adminSettingsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel(settingsRepository, backupRestoreService, backupRepository) }
 
                     de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
                         productsViewModel = adminProductsViewModel,

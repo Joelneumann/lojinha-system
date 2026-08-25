@@ -28,4 +28,14 @@ class Converters {
     fun toTransactionItemList(value: String): List<TransactionItem> {
         return if (value.isBlank()) emptyList() else json.decodeFromString(value)
     }
+
+    @TypeConverter
+    fun fromBackupScheduleConfig(value: de.joelneumann.lojinha.domain.model.BackupScheduleConfig): String {
+        return json.encodeToString(value)
+    }
+
+    @TypeConverter
+    fun toBackupScheduleConfig(value: String): de.joelneumann.lojinha.domain.model.BackupScheduleConfig {
+        return if (value.isBlank()) de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed("02:00") else json.decodeFromString(value)
+    }
 }
