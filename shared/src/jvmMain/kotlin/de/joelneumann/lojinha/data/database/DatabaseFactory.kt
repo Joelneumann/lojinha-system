@@ -15,7 +15,7 @@ object DatabaseFactory {
 
         val builder = Room.databaseBuilder<AppDatabase>(
             name = dbFile.absolutePath,
-            factory = { AppDatabaseConstructor.initialize() }
+            factory = { AppDatabase_Impl() }
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)

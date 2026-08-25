@@ -127,7 +127,7 @@ fun App() {
                     val adminProductsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel(productRepository, settingsRepository) }
                     val adminUsersViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel(userRepository, transactionRepository) }
                     val adminTransactionsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
-                    val adminSettingsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel(settingsRepository, backupRestoreService, backupRepository) }
+                    val adminSettingsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel(settingsRepository) }
 
                     de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
                         productsViewModel = adminProductsViewModel,

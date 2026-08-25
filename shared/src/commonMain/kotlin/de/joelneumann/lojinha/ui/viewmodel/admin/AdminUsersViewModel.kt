@@ -59,7 +59,7 @@ class AdminUsersViewModel(
 
     fun openNewUserModal() {
         _editUser.value = User(
-            id = "u-" + System.currentTimeMillis(),
+            id = "u-" + de.joelneumann.lojinha.ui.utils.currentTimeMillis(),
             name = "",
             balance = 0L,
             language = Language.DE
@@ -77,9 +77,14 @@ class AdminUsersViewModel(
         _editUser.value = null
     }
 
+    private suspend fun refreshUsers() {
+        _users.value = userRepository.getAllUsers()
+    }
+
     fun saveUser(user: User) {
         viewModelScope.launch {
             userRepository.saveUser(user)
+            refreshUsers()
             closeUserModal()
         }
     }
@@ -87,18 +92,21 @@ class AdminUsersViewModel(
     fun toggleUserActive(user: User) {
         viewModelScope.launch {
             userRepository.saveUser(user.copy(isActive = !user.isActive))
+            refreshUsers()
         }
     }
 
     fun softDeleteUser(userId: String) {
         viewModelScope.launch {
             userRepository.softDeleteUser(userId)
+            refreshUsers()
         }
     }
 
     fun restoreUser(userId: String) {
         viewModelScope.launch {
             userRepository.restoreUser(userId)
+            refreshUsers()
         }
     }
 
@@ -136,7 +144,7 @@ class AdminUsersViewModel(
         val delta = if (isDeposit) cents else -cents
         val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
 
-        val nowMillis = System.currentTimeMillis()
+        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
         val txId = "tx-admin-" + nowMillis + "-" + Random.nextInt(1000, 9999)
 
         val tx = Transaction(
@@ -153,6 +161,7 @@ class AdminUsersViewModel(
         viewModelScope.launch {
             userRepository.updateBalance(user.id, delta)
             transactionRepository.recordTransaction(tx)
+            refreshUsers()
             closeDepositModal()
         }
     }
@@ -160,7 +169,7 @@ class AdminUsersViewModel(
     fun adjustUserBalance(userId: String, userName: String, centsDelta: Long, note: String) {
         val isDeposit = centsDelta > 0
         val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
-        val nowMillis = System.currentTimeMillis()
+        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
         val txId = "tx-admin-" + nowMillis + "-" + Random.nextInt(1000, 9999)
 
         val tx = Transaction(
@@ -177,6 +186,7 @@ class AdminUsersViewModel(
         viewModelScope.launch {
             userRepository.updateBalance(userId, centsDelta)
             transactionRepository.recordTransaction(tx)
+            refreshUsers()
         }
     }
 }

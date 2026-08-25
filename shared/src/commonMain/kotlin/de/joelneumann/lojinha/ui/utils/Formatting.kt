@@ -2,6 +2,8 @@ package de.joelneumann.lojinha.ui.utils
 
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.UnitType
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
 import kotlin.math.round
 
@@ -101,12 +103,24 @@ object Formatting {
         timestampMs: Long,
         language: de.joelneumann.lojinha.domain.model.Language = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
     ): String {
-        val (pattern, locale) = when (language) {
-            de.joelneumann.lojinha.domain.model.Language.EN -> "MMM dd, yyyy, hh:mm a" to java.util.Locale.US
-            de.joelneumann.lojinha.domain.model.Language.DE -> "dd.MM.yyyy, HH:mm" to java.util.Locale.GERMANY
-            de.joelneumann.lojinha.domain.model.Language.BR -> "dd/MM/yyyy, HH:mm" to java.util.Locale.forLanguageTag("pt-BR")
+        val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(timestampMs)
+        val ldt = instant.toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+        val dayStr = ldt.dayOfMonth.toString().padStart(2, '0')
+        val monthStr = ldt.monthNumber.toString().padStart(2, '0')
+        val yearStr = ldt.year.toString()
+        val hour24Str = ldt.hour.toString().padStart(2, '0')
+        val minuteStr = ldt.minute.toString().padStart(2, '0')
+
+        return when (language) {
+            de.joelneumann.lojinha.domain.model.Language.EN -> {
+                val hour12 = if (ldt.hour % 12 == 0) 12 else ldt.hour % 12
+                val amPm = if (ldt.hour >= 12) "PM" else "AM"
+                val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+                val monthName = monthNames[ldt.monthNumber - 1]
+                "$monthName $dayStr, $yearStr, ${hour12.toString().padStart(2, '0')}:$minuteStr $amPm"
+            }
+            de.joelneumann.lojinha.domain.model.Language.DE -> "$dayStr.$monthStr.$yearStr, $hour24Str:$minuteStr"
+            de.joelneumann.lojinha.domain.model.Language.BR -> "$dayStr/$monthStr/$yearStr, $hour24Str:$minuteStr"
         }
-        val sdf = java.text.SimpleDateFormat(pattern, locale)
-        return sdf.format(java.util.Date(timestampMs))
     }
 }

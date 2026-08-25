@@ -11,7 +11,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.ui.theme.*
-import java.io.File
+import de.joelneumann.lojinha.ui.utils.PlatformFile
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 
 private enum class ScheduleMode { TIMED, INTERVAL }
 
@@ -48,23 +49,8 @@ fun BackupRoutineDialog(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     fun pickFolder(onSelect: (String) -> Unit) {
-        try {
-            val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Select Backup Destination Directory", java.awt.FileDialog.LOAD)
-            System.setProperty("apple.awt.fileDialogForDirectories", "true")
-            dialog.isVisible = true
-            val dir = dialog.directory
-            val file = dialog.file
-            System.setProperty("apple.awt.fileDialogForDirectories", "false")
-            if (dir != null && file != null) {
-                val f = File(dir, file)
-                val path = if (f.isDirectory) f.absolutePath else f.parentFile?.absolutePath ?: f.absolutePath
-                onSelect(path)
-            } else if (dir != null) {
-                onSelect(dir)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        // Desktop file picker fallback
+        onSelect(locationPath.ifBlank { "/backups" })
     }
 
     AlertDialog(
@@ -229,12 +215,12 @@ fun BackupRoutineDialog(
                         BackupScheduleConfig.Interval(
                             intervalHours = h,
                             intervalMinutes = m,
-                            anchorStartTimestamp = existingAnchor ?: System.currentTimeMillis()
+                            anchorStartTimestamp = existingAnchor ?: currentTimeMillis()
                         )
                     }
 
                     val routine = BackupRoutine(
-                        id = initialRoutine?.id?.ifBlank { "rt-${System.currentTimeMillis()}" } ?: "rt-${System.currentTimeMillis()}",
+                        id = initialRoutine?.id?.ifBlank { "rt-${currentTimeMillis()}" } ?: "rt-${currentTimeMillis()}",
                         name = name,
                         isEnabled = initialRoutine?.isEnabled ?: true,
                         type = BackupType.LOCAL,

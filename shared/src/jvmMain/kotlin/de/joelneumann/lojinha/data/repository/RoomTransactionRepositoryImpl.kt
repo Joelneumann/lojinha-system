@@ -15,6 +15,10 @@ class RoomTransactionRepositoryImpl(
         return transactionDao.getTransactionsFlow().map { entities -> entities.map { it.toDomain() } }
     }
 
+    override suspend fun getAllTransactions(): List<Transaction> {
+        return transactionDao.getAllTransactions().map { it.toDomain() }
+    }
+
     override suspend fun getTransactionsByUserId(userId: String): List<Transaction> {
         return transactionDao.getTransactionsByUserId(userId).map { it.toDomain() }
     }

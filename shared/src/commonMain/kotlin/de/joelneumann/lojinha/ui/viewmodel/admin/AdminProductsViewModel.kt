@@ -51,7 +51,7 @@ class AdminProductsViewModel(
 
     fun openNewProductModal() {
         _editProduct.value = Product(
-            id = "p-" + System.currentTimeMillis(),
+            id = "p-" + de.joelneumann.lojinha.ui.utils.currentTimeMillis(),
             name = "",
             barcodes = emptyList(),
             basePrice = 0L,
@@ -71,9 +71,14 @@ class AdminProductsViewModel(
         _editProduct.value = null
     }
 
+    private suspend fun refreshProducts() {
+        _products.value = productRepository.getAllProducts()
+    }
+
     fun saveProduct(product: Product) {
         viewModelScope.launch {
             productRepository.saveProduct(product)
+            refreshProducts()
             closeProductModal()
         }
     }
@@ -81,12 +86,14 @@ class AdminProductsViewModel(
     fun toggleProductActive(product: Product) {
         viewModelScope.launch {
             productRepository.saveProduct(product.copy(isActive = !product.isActive))
+            refreshProducts()
         }
     }
 
     fun deleteProduct(productId: String) {
         viewModelScope.launch {
             productRepository.hardDeleteProduct(productId)
+            refreshProducts()
         }
     }
 
@@ -95,6 +102,7 @@ class AdminProductsViewModel(
             val prod = _products.value.firstOrNull { it.id == productId } ?: return@launch
             val newStock = (prod.stockQuantity + deltaQuantity).coerceAtLeast(0L)
             productRepository.saveProduct(prod.copy(stockQuantity = newStock))
+            refreshProducts()
         }
     }
 
@@ -102,6 +110,7 @@ class AdminProductsViewModel(
         viewModelScope.launch {
             val current = _settings.value
             settingsRepository.updateSettings(current.copy(globalMarkupPercent = markupPercent))
+            _settings.value = settingsRepository.getSettings()
         }
     }
 }

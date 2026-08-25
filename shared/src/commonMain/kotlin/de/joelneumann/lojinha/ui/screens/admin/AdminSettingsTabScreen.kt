@@ -14,11 +14,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.ui.components.admin.*
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.PlatformFile
+import de.joelneumann.lojinha.ui.utils.pickFile
+import de.joelneumann.lojinha.ui.utils.pickFolder
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun AdminSettingsTabScreen(
@@ -87,47 +87,6 @@ fun AdminSettingsTabScreen(
 
     LaunchedEffect(hasFieldChanges) {
         onUnsavedStateChanged(hasFieldChanges)
-    }
-
-    // Helper functions for Native File Dialogs
-    fun pickFolder(onSelect: (String) -> Unit) {
-        try {
-            val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Select Backup Destination Directory", java.awt.FileDialog.LOAD)
-            System.setProperty("apple.awt.fileDialogForDirectories", "true")
-            dialog.isVisible = true
-            val dir = dialog.directory
-            val file = dialog.file
-            System.setProperty("apple.awt.fileDialogForDirectories", "false")
-            if (dir != null && file != null) {
-                val f = File(dir, file)
-                val path = if (f.isDirectory) f.absolutePath else f.parentFile?.absolutePath ?: f.absolutePath
-                onSelect(path)
-            } else if (dir != null) {
-                onSelect(dir)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun pickFile(title: String, extensionFilter: String?, onSelect: (File) -> Unit) {
-        try {
-            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
-            if (extensionFilter != null) {
-                dialog.file = "*$extensionFilter"
-            }
-            dialog.isVisible = true
-            val dir = dialog.directory
-            val file = dialog.file
-            if (dir != null && file != null) {
-                val selected = File(dir, file)
-                if (selected.exists()) {
-                    onSelect(selected)
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -473,10 +432,10 @@ fun AdminSettingsTabScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 routines.forEach { routine ->
                                     val lastBackupStr = routine.lastBackupTimestamp?.let {
-                                        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(it))
+                                        Formatting.formatTimestamp(it)
                                     } ?: "Never"
 
-                                    val nextDueStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(routine.calculateNextDueTimestamp()))
+                                    val nextDueStr = Formatting.formatTimestamp(routine.calculateNextDueTimestamp())
 
                                     val scheduleBadgeText = when (val cfg = routine.scheduleConfig) {
                                         is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed -> "TIMED ${cfg.timeOfDay}"

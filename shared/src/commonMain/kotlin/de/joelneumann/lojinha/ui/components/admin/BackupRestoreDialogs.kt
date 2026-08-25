@@ -12,13 +12,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.data.service.CsvImportResult
+import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.ui.theme.*
-import java.io.File
+import de.joelneumann.lojinha.ui.utils.PlatformFile
 
 @Composable
 fun DbRestoreMultiApprovalDialog(
-    file: File,
+    file: PlatformFile,
     adminPasswordHash: String,
     onConfirmRestore: () -> Unit,
     onDismiss: () -> Unit
@@ -76,7 +76,6 @@ fun DbRestoreMultiApprovalDialog(
                             Text("Backup File Details:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
                             Text("Filename: ${file.name}", fontSize = 12.sp, color = AccentNavy)
                             Text("File Path: ${file.absolutePath}", fontSize = 11.sp, color = PrimaryNavy.copy(alpha = 0.7f))
-                            Text("Size: ${file.length() / 1024} KB", fontSize = 12.sp, color = PrimaryNavy)
                         }
                     }
                 } else {
@@ -274,7 +273,7 @@ fun WipeDataMultiApprovalDialog(
 
 @Composable
 fun CsvImportMultiApprovalDialog(
-    file: File,
+    file: PlatformFile,
     importResultPreview: CsvImportResult,
     importType: String, // "Products" or "Users"
     adminPasswordHash: String,

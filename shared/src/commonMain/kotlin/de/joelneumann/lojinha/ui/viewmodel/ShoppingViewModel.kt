@@ -182,7 +182,7 @@ class ShoppingViewModel(
         if (cart.isEmpty()) return
 
         val totalCents = cart.sumOf { it.lineTotal }
-        val nowMillis = System.currentTimeMillis()
+        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
         val txId = "tx-" + nowMillis + "-" + Random.nextInt(1000, 9999)
 
         val txItems = cart.map { item ->

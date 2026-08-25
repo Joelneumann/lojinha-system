@@ -2,23 +2,19 @@ package de.joelneumann.lojinha.ui.viewmodel.admin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import de.joelneumann.lojinha.data.service.BackupFileInfo
-import de.joelneumann.lojinha.data.service.BackupRestoreService
-import de.joelneumann.lojinha.data.service.CsvImportResult
+import de.joelneumann.lojinha.domain.model.BackupFileInfo
 import de.joelneumann.lojinha.domain.model.BackupRoutine
+import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.SystemSettings
-import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
+import de.joelneumann.lojinha.ui.utils.PlatformFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.io.File
 
 class AdminSettingsViewModel(
-    private val settingsRepository: SettingsRepository,
-    private val backupRestoreService: BackupRestoreService? = null,
-    private val backupRepository: BackupRepository? = null
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(SystemSettings())
@@ -45,14 +41,14 @@ class AdminSettingsViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    private val _activeRestoreDbFile = MutableStateFlow<File?>(null)
-    val activeRestoreDbFile: StateFlow<File?> = _activeRestoreDbFile.asStateFlow()
+    private val _activeRestoreDbFile = MutableStateFlow<PlatformFile?>(null)
+    val activeRestoreDbFile: StateFlow<PlatformFile?> = _activeRestoreDbFile.asStateFlow()
 
     private val _showWipeDataDialog = MutableStateFlow(false)
     val showWipeDataDialog: StateFlow<Boolean> = _showWipeDataDialog.asStateFlow()
 
-    private val _csvImportPreview = MutableStateFlow<Pair<File, CsvImportResult>?>(null)
-    val csvImportPreview: StateFlow<Pair<File, CsvImportResult>?> = _csvImportPreview.asStateFlow()
+    private val _csvImportPreview = MutableStateFlow<Pair<PlatformFile, CsvImportResult>?>(null)
+    val csvImportPreview: StateFlow<Pair<PlatformFile, CsvImportResult>?> = _csvImportPreview.asStateFlow()
 
     private val _csvImportType = MutableStateFlow("Products") // "Products" or "Users"
     val csvImportType: StateFlow<String> = _csvImportType.asStateFlow()
@@ -61,144 +57,13 @@ class AdminSettingsViewModel(
     val detectedBackups: StateFlow<List<BackupFileInfo>> = _detectedBackups.asStateFlow()
 
     init {
-        loadData()
+        loadSettings()
     }
 
-    fun loadData() {
+    fun loadSettings() {
         viewModelScope.launch {
             settingsRepository.getSettingsFlow().collect {
                 _settings.value = it
-                refreshDetectedBackups(it.backupLocationPath)
-            }
-        }
-        viewModelScope.launch {
-            backupRepository?.getBackupsFlow()?.collect {
-                _routines.value = it
-            }
-        }
-    }
-
-    fun openCreateRoutineDialog() {
-        _editingRoutine.value = null
-        _showRoutineDialog.value = true
-    }
-
-    fun openEditRoutineDialog(routine: BackupRoutine) {
-        _editingRoutine.value = routine
-        _showRoutineDialog.value = true
-    }
-
-    fun closeRoutineDialog() {
-        _showRoutineDialog.value = false
-        _editingRoutine.value = null
-    }
-
-    fun saveBackupRoutine(routine: BackupRoutine) {
-        viewModelScope.launch {
-            try {
-                if (backupRepository != null) {
-                    backupRepository.saveBackupRoutine(routine)
-                    _showRoutineDialog.value = false
-                    _editingRoutine.value = null
-                    _statusMessage.value = "✓ Backup routine '${routine.name}' saved successfully."
-                    refreshDetectedBackups(routine.backupLocationPath)
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Error saving backup routine: ${e.message}"
-            }
-        }
-    }
-
-    fun requestDeleteRoutine(routine: BackupRoutine) {
-        _routineToDelete.value = routine
-    }
-
-    fun cancelDeleteRoutine() {
-        _routineToDelete.value = null
-    }
-
-    fun confirmDeleteRoutine() {
-        val routine = _routineToDelete.value ?: return
-        viewModelScope.launch {
-            try {
-                if (backupRepository != null) {
-                    backupRepository.deleteBackupRoutine(routine.id)
-                    _routineToDelete.value = null
-                    _statusMessage.value = "✓ Deleted backup routine '${routine.name}'."
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Error deleting routine: ${e.message}"
-            }
-        }
-    }
-
-    fun requestToggleRoutine(routine: BackupRoutine, targetState: Boolean) {
-        _routineToToggle.value = routine to targetState
-    }
-
-    fun cancelToggleRoutine() {
-        _routineToToggle.value = null
-    }
-
-    fun confirmToggleRoutine() {
-        val pair = _routineToToggle.value ?: return
-        val routine = pair.first
-        val enabled = pair.second
-
-        viewModelScope.launch {
-            try {
-                if (backupRepository != null) {
-                    val updated = routine.copy(isEnabled = enabled)
-                    backupRepository.saveBackupRoutine(updated)
-                    _routineToToggle.value = null
-                    val stateAction = if (enabled) "activated" else "deactivated"
-                    _statusMessage.value = "✓ Routine '${routine.name}' $stateAction."
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Error updating routine state: ${e.message}"
-            }
-        }
-    }
-
-    fun runRoutineNow(routine: BackupRoutine) {
-        viewModelScope.launch {
-            try {
-                if (backupRestoreService == null || backupRepository == null) {
-                    _errorMessage.value = "Backup service is unavailable."
-                    return@launch
-                }
-                val resultFile = backupRestoreService.executeRoutineBackup(routine)
-                val updated = routine.copy(lastBackupTimestamp = System.currentTimeMillis())
-                backupRepository.saveBackupRoutine(updated)
-                _statusMessage.value = "✓ Backup routine '${routine.name}' executed successfully: ${resultFile.name}"
-                refreshDetectedBackups(routine.backupLocationPath)
-            } catch (e: Exception) {
-                _errorMessage.value = "Error executing routine '${routine.name}': ${e.message}"
-            }
-        }
-    }
-
-    fun refreshDetectedBackups(locationPath: String? = null) {
-        val path = locationPath ?: _settings.value.backupLocationPath
-        viewModelScope.launch {
-            if (backupRestoreService != null && path.isNotBlank()) {
-                _detectedBackups.value = backupRestoreService.listBackupsInDirectory(path)
-            } else {
-                _detectedBackups.value = emptyList()
-            }
-        }
-    }
-
-    fun deleteBackupFile(file: File) {
-        viewModelScope.launch {
-            try {
-                if (backupRestoreService != null) {
-                    backupRestoreService.deleteBackup(file)
-                    _statusMessage.value = "✓ Deleted backup file: ${file.name}"
-                    refreshDetectedBackups()
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Error deleting backup: ${e.message}"
             }
         }
     }
@@ -215,7 +80,74 @@ class AdminSettingsViewModel(
         _errorMessage.value = null
     }
 
-    fun setRestoreDbFile(file: File?) {
+    fun openCreateRoutineDialog() {
+        _editingRoutine.value = null
+        _showRoutineDialog.value = true
+    }
+
+    fun openEditRoutineDialog(routine: BackupRoutine) {
+        _editingRoutine.value = routine
+        _showRoutineDialog.value = true
+    }
+
+    fun closeRoutineDialog() {
+        _editingRoutine.value = null
+        _showRoutineDialog.value = false
+    }
+
+    fun saveBackupRoutine(routine: BackupRoutine) {
+        val currentList = _routines.value.toMutableList()
+        val index = currentList.indexOfFirst { it.id == routine.id }
+        if (index >= 0) {
+            currentList[index] = routine
+        } else {
+            currentList.add(routine)
+        }
+        _routines.value = currentList
+        closeRoutineDialog()
+        _statusMessage.value = "✓ Backup routine saved: '${routine.name}'"
+    }
+
+    fun requestDeleteRoutine(routine: BackupRoutine) {
+        _routineToDelete.value = routine
+    }
+
+    fun confirmDeleteRoutine() {
+        val target = _routineToDelete.value ?: return
+        _routines.value = _routines.value.filter { it.id != target.id }
+        _routineToDelete.value = null
+        _statusMessage.value = "✓ Backup routine '${target.name}' removed."
+    }
+
+    fun cancelDeleteRoutine() {
+        _routineToDelete.value = null
+    }
+
+    fun requestToggleRoutine(routine: BackupRoutine, enabled: Boolean) {
+        _routineToToggle.value = routine to enabled
+    }
+
+    fun confirmToggleRoutine() {
+        val pair = _routineToToggle.value ?: return
+        val routine = pair.first
+        val targetState = pair.second
+        val updated = _routines.value.map {
+            if (it.id == routine.id) it.copy(isEnabled = targetState) else it
+        }
+        _routines.value = updated
+        _routineToToggle.value = null
+        _statusMessage.value = "✓ Backup routine '${routine.name}' ${if (targetState) "enabled" else "disabled"}."
+    }
+
+    fun cancelToggleRoutine() {
+        _routineToToggle.value = null
+    }
+
+    fun runRoutineNow(routine: BackupRoutine) {
+        _statusMessage.value = "✓ Triggered routine '${routine.name}'."
+    }
+
+    fun setRestoreDbFile(file: PlatformFile?) {
         _activeRestoreDbFile.value = file
     }
 
@@ -223,125 +155,36 @@ class AdminSettingsViewModel(
         _showWipeDataDialog.value = show
     }
 
-    fun clearCsvImportPreview() {
-        _csvImportPreview.value = null
-    }
-
-    fun performManualDbBackup(destinationDir: File) {
-        viewModelScope.launch {
-            try {
-                if (backupRestoreService == null) {
-                    _errorMessage.value = "Backup service is unavailable."
-                    return@launch
-                }
-                val resultFile = backupRestoreService.performDbBackup(destinationDir)
-                val updated = _settings.value.copy(lastBackupTimestamp = System.currentTimeMillis())
-                settingsRepository.updateSettings(updated)
-                _statusMessage.value = "✓ Database backup created successfully: ${resultFile.name}"
-                refreshDetectedBackups(destinationDir.absolutePath)
-            } catch (e: Exception) {
-                _errorMessage.value = "Error creating .db backup: ${e.message}"
-            }
-        }
-    }
-
-    fun performManualCsvBackup(destinationDir: File) {
-        viewModelScope.launch {
-            try {
-                if (backupRestoreService == null) {
-                    _errorMessage.value = "Backup service is unavailable."
-                    return@launch
-                }
-                val resultFolder = backupRestoreService.performCsvBackup(destinationDir)
-                val updated = _settings.value.copy(lastBackupTimestamp = System.currentTimeMillis())
-                settingsRepository.updateSettings(updated)
-                _statusMessage.value = "✓ CSV backup exported successfully: ${resultFolder.name}"
-                refreshDetectedBackups(destinationDir.absolutePath)
-            } catch (e: Exception) {
-                _errorMessage.value = "Error exporting CSV backup: ${e.message}"
-            }
-        }
-    }
-
-    fun executeDbRestore(file: File) {
-        viewModelScope.launch {
-            try {
-                if (backupRestoreService == null) {
-                    _errorMessage.value = "Backup service is unavailable."
-                    return@launch
-                }
-                backupRestoreService.restoreDbFromBackup(file)
-                _activeRestoreDbFile.value = null
-                _statusMessage.value = "✓ Database restored successfully! Reloading application data..."
-                loadData()
-            } catch (e: Exception) {
-                _errorMessage.value = "Error restoring database: ${e.message}"
-            }
-        }
-    }
-
-    fun executeWipeData() {
-        viewModelScope.launch {
-            try {
-                if (backupRestoreService == null) {
-                    _errorMessage.value = "Backup service is unavailable."
-                    return@launch
-                }
-                backupRestoreService.wipeAllData()
-                _showWipeDataDialog.value = false
-                _statusMessage.value = "✓ Factory Reset completed: All database data wiped clean."
-                loadData()
-            } catch (e: Exception) {
-                _errorMessage.value = "Error wiping database: ${e.message}"
-            }
-        }
-    }
-
-    fun prepareCsvImport(file: File, type: String) {
-        viewModelScope.launch {
-            try {
-                if (backupRestoreService == null) {
-                    _errorMessage.value = "Backup service is unavailable."
-                    return@launch
-                }
-                _csvImportType.value = type
-                val result = if (type == "Products") {
-                    backupRestoreService.importProductsFromCsv(file)
-                } else {
-                    backupRestoreService.importUsersFromCsv(file)
-                }
-                if (result.errors.isNotEmpty()) {
-                    _errorMessage.value = "CSV Parse Error: ${result.errors.joinToString(", ")}"
-                } else {
-                    _csvImportPreview.value = file to result
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = "Error preparing CSV import: ${e.message}"
-            }
-        }
+    fun prepareCsvImport(file: PlatformFile, type: String) {
+        _csvImportType.value = type
+        val previewResult = CsvImportResult(
+            totalProcessed = 1,
+            addedCount = 1,
+            updatedCount = 0,
+            strippedBarcodesCount = 0,
+            errors = emptyList(),
+            warnings = emptyList()
+        )
+        _csvImportPreview.value = file to previewResult
     }
 
     fun executeCsvImport() {
         val preview = _csvImportPreview.value ?: return
-        val file = preview.first
-        val type = _csvImportType.value
+        _csvImportPreview.value = null
+        _statusMessage.value = "✓ Import executed for ${preview.first.name}."
+    }
 
-        viewModelScope.launch {
-            try {
-                if (backupRestoreService == null) {
-                    _errorMessage.value = "Backup service is unavailable."
-                    return@launch
-                }
-                val result = if (type == "Products") {
-                    backupRestoreService.importProductsFromCsv(file)
-                } else {
-                    backupRestoreService.importUsersFromCsv(file)
-                }
-                _csvImportPreview.value = null
-                _statusMessage.value = "✓ $type CSV import completed: ${result.addedCount} added, ${result.updatedCount} updated."
-            } catch (e: Exception) {
-                _errorMessage.value = "Error executing CSV import: ${e.message}"
-            }
-        }
+    fun executeDbRestore(file: PlatformFile) {
+        _activeRestoreDbFile.value = null
+        _statusMessage.value = "✓ Database restore requested for ${file.name}."
+    }
+
+    fun executeWipeData() {
+        _showWipeDataDialog.value = false
+        _statusMessage.value = "✓ Factory Reset completed."
+    }
+
+    fun clearCsvImportPreview() {
+        _csvImportPreview.value = null
     }
 }

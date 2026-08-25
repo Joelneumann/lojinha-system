@@ -37,7 +37,7 @@ class BackupRoutineTest {
 
     @Test
     fun testRestartSafetyDeterministicCalculation() {
-        val anchorTime = System.currentTimeMillis() - 10_000_000L
+        val anchorTime = de.joelneumann.lojinha.ui.utils.currentTimeMillis() - 10_000_000L
         val lastRunTime = anchorTime + 3_600_000L
 
         val routine = BackupRoutine(

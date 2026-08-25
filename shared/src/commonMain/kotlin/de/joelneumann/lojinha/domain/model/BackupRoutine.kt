@@ -1,7 +1,12 @@
 package de.joelneumann.lojinha.domain.model
 
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
-import java.util.Calendar
 
 @Serializable
 enum class BackupType {
@@ -26,7 +31,7 @@ sealed interface BackupScheduleConfig {
     data class Interval(
         val intervalHours: Int = 1,
         val intervalMinutes: Int = 0,
-        val anchorStartTimestamp: Long = System.currentTimeMillis()
+        val anchorStartTimestamp: Long = currentTimeMillis()
     ) : BackupScheduleConfig
 }
 
@@ -45,19 +50,29 @@ data class BackupRoutine(
         return when (val config = scheduleConfig) {
             is BackupScheduleConfig.Timed -> {
                 val parts = config.timeOfDay.split(":")
-                val hour = parts.getOrNull(0)?.toIntOrNull() ?: 2
-                val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                val cal = Calendar.getInstance()
-                cal.set(Calendar.HOUR_OF_DAY, hour)
-                cal.set(Calendar.MINUTE, minute)
-                cal.set(Calendar.SECOND, 0)
-                cal.set(Calendar.MILLISECOND, 0)
+                val targetHour = parts.getOrNull(0)?.toIntOrNull() ?: 2
+                val targetMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0
 
+                val tz = TimeZone.currentSystemDefault()
+                val nowInstant = Clock.System.now()
+                val nowLdt = nowInstant.toLocalDateTime(tz)
+
+                var targetLdt = LocalDateTime(
+                    year = nowLdt.year,
+                    month = nowLdt.month,
+                    dayOfMonth = nowLdt.dayOfMonth,
+                    hour = targetHour,
+                    minute = targetMinute,
+                    second = 0,
+                    nanosecond = 0
+                )
+                var targetMs = targetLdt.toInstant(tz).toEpochMilliseconds()
                 val last = lastBackupTimestamp ?: 0L
-                if (cal.timeInMillis <= last) {
-                    cal.add(Calendar.DAY_OF_YEAR, 1)
+
+                if (targetMs <= last || targetMs <= nowInstant.toEpochMilliseconds()) {
+                    targetMs += 86400000L
                 }
-                cal.timeInMillis
+                targetMs
             }
             is BackupScheduleConfig.Interval -> {
                 val intervalMs = (config.intervalHours * 3600L + config.intervalMinutes * 60L) * 1000L

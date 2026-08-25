@@ -3,7 +3,6 @@ package de.joelneumann.lojinha.data.service
 import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
-import de.joelneumann.lojinha.data.database.AppDatabaseConstructor
 import de.joelneumann.lojinha.data.database.Converters
 import de.joelneumann.lojinha.data.entity.BackupEntity
 import de.joelneumann.lojinha.data.entity.ProductEntity

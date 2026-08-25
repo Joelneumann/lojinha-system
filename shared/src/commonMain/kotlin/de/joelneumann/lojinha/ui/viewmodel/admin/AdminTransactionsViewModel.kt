@@ -46,8 +46,12 @@ class AdminTransactionsViewModel(
         _selectedTypeFilter.value = type
     }
 
+    private suspend fun refreshTransactions() {
+        _transactions.value = transactionRepository.getAllTransactions()
+    }
+
     fun stornoPurchaseWithUpdatedItems(originalTx: Transaction, updatedItems: List<TransactionItem>) {
-        val nowMillis = System.currentTimeMillis()
+        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
         val isAllZero = updatedItems.all { it.quantity == 0L }
 
         val originalCost = kotlin.math.abs(originalTx.totalAmount)
@@ -97,12 +101,13 @@ class AdminTransactionsViewModel(
             }
 
             transactionRepository.recordTransaction(stornoTx)
+            refreshTransactions()
         }
     }
 
     fun stornoNonPurchaseTransaction(tx: Transaction) {
         if (tx.type == TransactionType.CANCELLATION) return
-        val nowMillis = System.currentTimeMillis()
+        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
         val cancellationId = "tx-storno-" + nowMillis + "-" + Random.nextInt(1000, 9999)
 
         val refundAmount = -tx.totalAmount
@@ -124,6 +129,7 @@ class AdminTransactionsViewModel(
         viewModelScope.launch {
             userRepository.updateBalance(tx.userId, refundAmount)
             transactionRepository.recordTransaction(stornoTx)
+            refreshTransactions()
         }
     }
 }
