@@ -1,6 +1,9 @@
 package de.joelneumann.lojinha.data.service
 
+import androidx.room.Room
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
+import de.joelneumann.lojinha.data.database.AppDatabaseConstructor
 import de.joelneumann.lojinha.data.entity.ProductEntity
 import de.joelneumann.lojinha.data.entity.SettingsEntity
 import de.joelneumann.lojinha.data.entity.UserEntity
@@ -173,15 +176,38 @@ class BackupRestoreService(
 
     suspend fun restoreDbFromBackup(backupFile: File) = withContext(Dispatchers.IO) {
         require(backupFile.exists() && backupFile.isFile) { "Backup file does not exist: ${backupFile.absolutePath}" }
-        
-        // Remove WAL & SHM files if present
-        val walFile = File(dbFile.parentFile, "${dbFile.name}-wal")
-        val shmFile = File(dbFile.parentFile, "${dbFile.name}-shm")
-        if (walFile.exists()) walFile.delete()
-        if (shmFile.exists()) shmFile.delete()
 
-        dbFile.parentFile?.mkdirs()
-        backupFile.copyTo(dbFile, overwrite = true)
+        val backupBuilder = Room.databaseBuilder<AppDatabase>(
+            name = backupFile.absolutePath,
+            factory = { AppDatabaseConstructor.initialize() }
+        )
+        backupBuilder.setDriver(BundledSQLiteDriver())
+        backupBuilder.setQueryCoroutineContext(Dispatchers.IO)
+        backupBuilder.fallbackToDestructiveMigration(true)
+        val backupDb = backupBuilder.build()
+
+        try {
+            val backupUsers = backupDb.userDao().getAllUsers()
+            val backupProducts = backupDb.productDao().getAllProducts()
+            val backupTransactions = backupDb.transactionDao().getAllTransactions()
+            val backupSettings = backupDb.settingsDao().getSettings()
+            val backupRoutines = backupDb.backupDao().getAllBackups()
+
+            db.userDao().deleteAllUsers()
+            db.productDao().deleteAllProducts()
+            db.transactionDao().deleteAllTransactions()
+            db.backupDao().deleteAllBackups()
+
+            backupUsers.forEach { db.userDao().insertOrUpdateUser(it) }
+            backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
+            backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
+            backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
+            if (backupSettings != null) {
+                db.settingsDao().insertOrUpdateSettings(backupSettings)
+            }
+        } finally {
+            backupDb.close()
+        }
     }
 
     suspend fun wipeAllData() = withContext(Dispatchers.IO) {
