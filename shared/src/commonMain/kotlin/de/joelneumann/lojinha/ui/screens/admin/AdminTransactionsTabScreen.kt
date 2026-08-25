@@ -67,7 +67,8 @@ fun AdminTransactionsTabScreen(
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 32.dp)
+                contentPadding = PaddingValues(bottom = 32.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth()
             ) {
                 items(filteredTransactions, key = { it.id }) { tx ->
                     val isExpanded = expandedTransactionId == tx.id

@@ -79,7 +79,7 @@ fun AdminProductsTabScreen(
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 32.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.weight(1f).fillMaxWidth()
         ) {
             if (filteredActiveProducts.isEmpty() && filteredDisabledProducts.isEmpty()) {
                 item(key = "empty-products-msg") {

@@ -99,7 +99,7 @@ fun AdminUsersTabScreen(
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 32.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.weight(1f).fillMaxWidth()
         ) {
             if (filteredActiveUsers.isEmpty() && filteredDeactivatedUsers.isEmpty() && filteredDeletedUsers.isEmpty()) {
                 item(key = "empty-users-msg") {

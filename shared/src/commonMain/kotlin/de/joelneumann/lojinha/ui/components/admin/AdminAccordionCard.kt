@@ -30,69 +30,84 @@ fun AdminAccordionCard(
     modifier: Modifier = Modifier,
     bodyContent: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = SurfaceWhite,
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = androidx.compose.ui.graphics.SolidColor(
-                if (hasUnsaved && isExpanded) ColorWarningAmber else DividerBorder
-            )
-        ),
-        shadowElevation = 2.dp,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onExpandToggle() }
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val isMobile = maxWidth < 500.dp
+
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SurfaceWhite,
+            border = CardDefaults.outlinedCardBorder().copy(
+                brush = androidx.compose.ui.graphics.SolidColor(
+                    if (hasUnsaved && isExpanded) ColorWarningAmber else DividerBorder
+                )
+            ),
+            shadowElevation = 2.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onExpandToggle() }
+                        .padding(if (isMobile) 12.dp else 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryNavy
-                    )
-                    headerBadges()
-                    if (isExpanded && hasUnsaved) {
-                        AdminStatusBadge(
-                            text = "● Unsaved Edits",
-                            type = AdminBadgeType.WARNING
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = title,
+                                fontSize = if (isMobile) 15.sp else 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryNavy
+                            )
+                            if (isExpanded && hasUnsaved) {
+                                AdminStatusBadge(
+                                    text = "● Unsaved",
+                                    type = AdminBadgeType.WARNING
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            headerBadges()
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        headerRightContent()
+                        Text(
+                            text = if (isExpanded) "▲" else "▼",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondaryMuted
                         )
                     }
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    headerRightContent()
-                    Text(
-                        text = if (isExpanded) "▲" else "▼",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecondaryMuted
-                    )
-                }
-            }
+                if (isExpanded) {
+                    HorizontalDivider(color = DividerBorder)
 
-            if (isExpanded) {
-                HorizontalDivider(color = DividerBorder)
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    bodyContent()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(if (isMobile) 12.dp else 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        bodyContent()
+                    }
                 }
             }
         }

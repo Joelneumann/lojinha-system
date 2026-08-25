@@ -46,8 +46,9 @@ fun AdminWebLoginScreen(
     ) {
         Card(
             modifier = Modifier
-                .width(420.dp)
-                .padding(24.dp),
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 420.dp)
+                .padding(vertical = 16.dp),
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)

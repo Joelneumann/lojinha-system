@@ -10,11 +10,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 
 /**
- * Development UI Scale Factor.
- * Adjust this constant to scale the entire application UI proportionally (layout dp & font sp).
+ * UI Scale Factors.
+ * Adjust these constants to scale the application UI proportionally (layout dp & font sp).
  * 1.0f = 100% (Standard), 1.15f = 115% (Easier to see / Kiosk mode), 1.25f = 125% (Large).
  */
 const val DEV_UI_SCALE_FACTOR: Float = 1.15f
+const val WEB_UI_SCALE_FACTOR: Float = 1.00f
 
 val SurfaceWhite = Color(0xFFFFFFFF)
 val SurfaceContainerLight = Color(0xFFF8FAFC)
@@ -45,12 +46,15 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun LojinhaTheme(content: @Composable () -> Unit) {
+fun LojinhaTheme(
+    scaleFactor: Float = DEV_UI_SCALE_FACTOR,
+    content: @Composable () -> Unit
+) {
     val currentDensity = LocalDensity.current
-    val scaledDensity = remember(currentDensity) {
+    val scaledDensity = remember(currentDensity, scaleFactor) {
         Density(
-            density = currentDensity.density * DEV_UI_SCALE_FACTOR,
-            fontScale = currentDensity.fontScale * DEV_UI_SCALE_FACTOR
+            density = currentDensity.density * scaleFactor,
+            fontScale = currentDensity.fontScale * scaleFactor
         )
     }
 

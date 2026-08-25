@@ -27,17 +27,18 @@ fun AdminCountPill(
         color = SurfaceWhite,
         border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
         shadowElevation = 1.dp,
-        modifier = modifier.fillMaxHeight()
+        modifier = modifier
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 14.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = PrimaryNavy
+                color = PrimaryNavy,
+                maxLines = 1
             )
         }
     }

@@ -2,7 +2,9 @@ package de.joelneumann.lojinha.ui.screens.admin
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -71,112 +73,117 @@ fun AdminScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceContainerLight)) {
-        HeaderBar(
-            title = strings.adminPanel,
-            actions = {
-                LogoutButton(
-                    onClick = handleExitAdminRequest
-                )
-            }
-        )
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(SurfaceContainerLight)) {
+        val isMobile = maxWidth < 600.dp
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(SurfaceWhite)
-                .padding(horizontal = 20.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val tabItems = listOf(
-                AdminTab.PRODUCTS to "📦 ${strings.tabProducts}",
-                AdminTab.USERS to "👥 ${strings.tabUsers}",
-                AdminTab.TRANSACTIONS to "💳 ${strings.tabTransactions}",
-                AdminTab.SETTINGS to "⚙️ ${strings.tabSettings}"
+        Column(modifier = Modifier.fillMaxSize()) {
+            HeaderBar(
+                title = strings.adminPanel,
+                actions = {
+                    LogoutButton(
+                        onClick = handleExitAdminRequest
+                    )
+                }
             )
 
-            tabItems.forEach { (tab, label) ->
-                val isSelected = currentTab == tab
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
-                        .clickable { handleTabSwitchRequest(tab) }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SurfaceWhite)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = if (isMobile) 10.dp else 20.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val tabItems = listOf(
+                    AdminTab.PRODUCTS to "📦 ${strings.tabProducts}",
+                    AdminTab.USERS to "👥 ${strings.tabUsers}",
+                    AdminTab.TRANSACTIONS to "💳 ${strings.tabTransactions}",
+                    AdminTab.SETTINGS to "⚙️ ${strings.tabSettings}"
+                )
+
+                tabItems.forEach { (tab, label) ->
+                    val isSelected = currentTab == tab
+                    Box(
+                        modifier = Modifier
+                            .then(if (isMobile) Modifier.wrapContentWidth() else Modifier.weight(1f))
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
+                            .clickable { handleTabSwitchRequest(tab) }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = label,
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) SurfaceWhite else PrimaryNavy
-                        )
-                        if (isSelected && hasUnsavedChanges) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             Text(
-                                text = "●",
-                                fontSize = 10.sp,
-                                color = ColorWarningAmber
+                                text = label,
+                                fontSize = 14.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) SurfaceWhite else PrimaryNavy
                             )
+                            if (isSelected && hasUnsavedChanges) {
+                                Text(
+                                    text = "●",
+                                    fontSize = 10.sp,
+                                    color = ColorWarningAmber
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        HorizontalDivider(color = DividerBorder)
+            HorizontalDivider(color = DividerBorder)
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-        ) {
-            when (currentTab) {
-                AdminTab.PRODUCTS -> {
-                    AdminProductsTabScreen(
-                        viewModel = productsViewModel,
-                        expandedProductId = expandedProductId,
-                        onRequestToggleExpand = { id ->
-                            expandedProductId = if (expandedProductId == id) null else id
-                        },
-                        onRequestExpandProduct = { id -> expandedProductId = id },
-                        onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
-                    )
-                }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(if (isMobile) 10.dp else 20.dp)
+            ) {
+                when (currentTab) {
+                    AdminTab.PRODUCTS -> {
+                        AdminProductsTabScreen(
+                            viewModel = productsViewModel,
+                            expandedProductId = expandedProductId,
+                            onRequestToggleExpand = { id ->
+                                expandedProductId = if (expandedProductId == id) null else id
+                            },
+                            onRequestExpandProduct = { id -> expandedProductId = id },
+                            onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
+                        )
+                    }
 
-                AdminTab.USERS -> {
-                    AdminUsersTabScreen(
-                        viewModel = usersViewModel,
-                        expandedUserId = expandedUserId,
-                        onRequestToggleExpand = { id ->
-                            expandedUserId = if (expandedUserId == id) null else id
-                        },
-                        onRequestExpandUser = { id -> expandedUserId = id },
-                        onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
-                    )
-                }
+                    AdminTab.USERS -> {
+                        AdminUsersTabScreen(
+                            viewModel = usersViewModel,
+                            expandedUserId = expandedUserId,
+                            onRequestToggleExpand = { id ->
+                                expandedUserId = if (expandedUserId == id) null else id
+                            },
+                            onRequestExpandUser = { id -> expandedUserId = id },
+                            onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
+                        )
+                    }
 
-                AdminTab.TRANSACTIONS -> {
-                    AdminTransactionsTabScreen(
-                        viewModel = transactionsViewModel,
-                        expandedTransactionId = expandedTransactionId,
-                        onRequestToggleExpand = { id ->
-                            expandedTransactionId = if (expandedTransactionId == id) null else id
-                        },
-                        onRequestExpandTransaction = { id -> expandedTransactionId = id }
-                    )
-                }
+                    AdminTab.TRANSACTIONS -> {
+                        AdminTransactionsTabScreen(
+                            viewModel = transactionsViewModel,
+                            expandedTransactionId = expandedTransactionId,
+                            onRequestToggleExpand = { id ->
+                                expandedTransactionId = if (expandedTransactionId == id) null else id
+                            },
+                            onRequestExpandTransaction = { id -> expandedTransactionId = id }
+                        )
+                    }
 
-                AdminTab.SETTINGS -> {
-                    AdminSettingsTabScreen(
-                        viewModel = settingsViewModel,
-                        onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
-                    )
+                    AdminTab.SETTINGS -> {
+                        AdminSettingsTabScreen(
+                            viewModel = settingsViewModel,
+                            onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
+                        )
+                    }
                 }
             }
         }

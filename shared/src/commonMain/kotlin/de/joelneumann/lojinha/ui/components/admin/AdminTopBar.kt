@@ -26,33 +26,74 @@ fun AdminTopBar(
     onActionButtonClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth().height(56.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            SearchInputField(
-                query = searchQuery,
-                onQueryChange = onQueryChange,
-                placeholder = placeholder,
-                onSearchSubmitted = onSearchSubmitted,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val isMobile = maxWidth < 600.dp
 
-        AdminCountPill(
-            text = countText
-        )
-
-        if (actionButtonText != null && onActionButtonClick != null) {
-            Button(
-                onClick = onActionButtonClick,
-                colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxHeight()
+        if (isMobile) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(actionButtonText, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                SearchInputField(
+                    query = searchQuery,
+                    onQueryChange = onQueryChange,
+                    placeholder = placeholder,
+                    onSearchSubmitted = onSearchSubmitted,
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AdminCountPill(
+                        text = countText
+                    )
+
+                    if (actionButtonText != null && onActionButtonClick != null) {
+                        Button(
+                            onClick = onActionButtonClick,
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(38.dp)
+                        ) {
+                            Text(actionButtonText, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    SearchInputField(
+                        query = searchQuery,
+                        onQueryChange = onQueryChange,
+                        placeholder = placeholder,
+                        onSearchSubmitted = onSearchSubmitted,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                AdminCountPill(
+                    text = countText
+                )
+
+                if (actionButtonText != null && onActionButtonClick != null) {
+                    Button(
+                        onClick = onActionButtonClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxHeight()
+                    ) {
+                        Text(actionButtonText, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
             }
         }
     }

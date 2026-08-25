@@ -5,6 +5,7 @@ import de.joelneumann.lojinha.data.repository.*
 import de.joelneumann.lojinha.ui.AdminWebLoginScreen
 import de.joelneumann.lojinha.ui.screens.admin.AdminScreen
 import de.joelneumann.lojinha.ui.theme.LojinhaTheme
+import de.joelneumann.lojinha.ui.theme.WEB_UI_SCALE_FACTOR
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -40,7 +41,7 @@ fun main() {
             }
         }
 
-        LojinhaTheme {
+        LojinhaTheme(scaleFactor = WEB_UI_SCALE_FACTOR) {
             if (!isAuthenticated) {
                 AdminWebLoginScreen(
                     onLoginSubmit = { password ->

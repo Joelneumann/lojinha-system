@@ -56,7 +56,7 @@ fun ProductEditDialog(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
             shadowElevation = 8.dp,
-            modifier = Modifier.width(660.dp).wrapContentHeight()
+            modifier = Modifier.fillMaxWidth(0.95f).widthIn(max = 660.dp).wrapContentHeight()
         ) {
             Column(
                 modifier = Modifier

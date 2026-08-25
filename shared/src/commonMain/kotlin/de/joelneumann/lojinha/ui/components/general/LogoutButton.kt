@@ -25,14 +25,16 @@ fun LogoutButton(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
         shape = RoundedCornerShape(8.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
         modifier = modifier
     ) {
         Text(
             text = "🚪 ${strings.logout}",
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            color = SurfaceWhite
+            color = SurfaceWhite,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

@@ -226,7 +226,7 @@ fun AdminSettingsTabScreen(
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(bottom = 32.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.weight(1f).fillMaxWidth()
         ) {
             // CARD 1: ADMIN MASTER PASSWORD
             item(key = "admin-security-card") {

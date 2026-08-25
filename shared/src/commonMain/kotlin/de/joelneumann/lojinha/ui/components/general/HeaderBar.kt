@@ -3,6 +3,7 @@ package de.joelneumann.lojinha.ui.components.general
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -27,60 +28,116 @@ fun HeaderBar(
     val currentLanguage = LanguageManager.currentLanguage
 
     Surface(
-        modifier = modifier.fillMaxWidth().height(64.dp),
+        modifier = modifier.fillMaxWidth(),
         color = SurfaceWhite,
         shadowElevation = 2.dp
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            // Left: Language Switcher Flags (Always on the left)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.align(Alignment.CenterStart)
-            ) {
-                Language.entries.forEach { lang ->
-                    val isSelected = lang == currentLanguage
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
-                            .border(
-                                width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) AccentBlue else DividerBorder,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clickable { LanguageManager.setLanguage(lang) }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+            val isMobile = maxWidth < 600.dp
+
+            if (isMobile) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "${lang.flagEmoji} ${lang.code.uppercase()}",
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) SurfaceWhite else PrimaryNavy
+                            text = title,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryNavy
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            content = actions
                         )
                     }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                    ) {
+                        Language.entries.forEach { lang ->
+                            val isSelected = lang == currentLanguage
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
+                                    .border(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) AccentBlue else DividerBorder,
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable { LanguageManager.setLanguage(lang) }
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "${lang.flagEmoji} ${lang.code.uppercase()}",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) SurfaceWhite else PrimaryNavy
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Language.entries.forEach { lang ->
+                            val isSelected = lang == currentLanguage
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
+                                    .border(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        color = if (isSelected) AccentBlue else DividerBorder,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { LanguageManager.setLanguage(lang) }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "${lang.flagEmoji} ${lang.code.uppercase()}",
+                                    fontSize = 14.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) SurfaceWhite else PrimaryNavy
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = title,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        content = actions
+                    )
                 }
             }
-
-            // Center: Title Parameter
-            Text(
-                text = title,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryNavy,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.Center)
-            )
-
-            // Right: Custom Action Buttons Parameter Slot
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.align(Alignment.CenterEnd),
-                content = actions
-            )
         }
     }
 }
