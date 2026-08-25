@@ -4,8 +4,11 @@ import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.AppDatabaseConstructor
+import de.joelneumann.lojinha.data.database.Converters
+import de.joelneumann.lojinha.data.entity.BackupEntity
 import de.joelneumann.lojinha.data.entity.ProductEntity
 import de.joelneumann.lojinha.data.entity.SettingsEntity
+import de.joelneumann.lojinha.data.entity.TransactionEntity
 import de.joelneumann.lojinha.data.entity.UserEntity
 import de.joelneumann.lojinha.domain.model.Barcode
 import de.joelneumann.lojinha.domain.model.Language
@@ -82,6 +85,17 @@ class BackupRestoreService(
         require(destinationDir.exists() && destinationDir.isDirectory) { "Destination directory does not exist or is not a directory: ${destinationDir.absolutePath}" }
         val backupFileName = "lojinha_backup_${getTimestampString()}.db"
         val targetFile = File(destinationDir, backupFileName)
+
+        // Checkpoint WAL via JDBC to flush all active transactions into lojinha_room.db
+        try {
+            val conn = java.sql.DriverManager.getConnection("jdbc:sqlite:${dbFile.absolutePath}")
+            val stmt = conn.createStatement()
+            stmt.execute("PRAGMA wal_checkpoint(FULL)")
+            stmt.close()
+            conn.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         if (dbFile.exists()) {
             dbFile.copyTo(targetFile, overwrite = true)
@@ -177,36 +191,158 @@ class BackupRestoreService(
     suspend fun restoreDbFromBackup(backupFile: File) = withContext(Dispatchers.IO) {
         require(backupFile.exists() && backupFile.isFile) { "Backup file does not exist: ${backupFile.absolutePath}" }
 
-        val backupBuilder = Room.databaseBuilder<AppDatabase>(
-            name = backupFile.absolutePath,
-            factory = { AppDatabaseConstructor.initialize() }
-        )
-        backupBuilder.setDriver(BundledSQLiteDriver())
-        backupBuilder.setQueryCoroutineContext(Dispatchers.IO)
-        backupBuilder.fallbackToDestructiveMigration(true)
-        val backupDb = backupBuilder.build()
+        val converters = Converters()
+        val backupUsers = mutableListOf<UserEntity>()
+        val backupProducts = mutableListOf<ProductEntity>()
+        val backupTransactions = mutableListOf<TransactionEntity>()
+        var backupSettings: SettingsEntity? = null
+        val backupRoutines = mutableListOf<BackupEntity>()
 
+        // 1. Read tables from backupFile using JDBC (read-only connection, safe across any version)
+        val conn = java.sql.DriverManager.getConnection("jdbc:sqlite:${backupFile.absolutePath}")
         try {
-            val backupUsers = backupDb.userDao().getAllUsers()
-            val backupProducts = backupDb.productDao().getAllProducts()
-            val backupTransactions = backupDb.transactionDao().getAllTransactions()
-            val backupSettings = backupDb.settingsDao().getSettings()
-            val backupRoutines = backupDb.backupDao().getAllBackups()
-
-            db.userDao().deleteAllUsers()
-            db.productDao().deleteAllProducts()
-            db.transactionDao().deleteAllTransactions()
-            db.backupDao().deleteAllBackups()
-
-            backupUsers.forEach { db.userDao().insertOrUpdateUser(it) }
-            backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
-            backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
-            backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
-            if (backupSettings != null) {
-                db.settingsDao().insertOrUpdateSettings(backupSettings)
+            val stmt = conn.createStatement()
+            val rsTables = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='table'")
+            val tableNames = mutableSetOf<String>()
+            while (rsTables.next()) {
+                tableNames.add(rsTables.getString("name").lowercase())
             }
+            rsTables.close()
+
+            // Read users
+            if (tableNames.contains("users")) {
+                val rs = stmt.executeQuery("SELECT * FROM users")
+                while (rs.next()) {
+                    val u = UserEntity(
+                        id = rs.getString("id"),
+                        name = rs.getString("name"),
+                        balance = rs.getLong("balance"),
+                        language = rs.getString("language"),
+                        secondaryCurrency = rs.getString("secondaryCurrency"),
+                        pin = try { rs.getString("pin") } catch (e: Exception) { null },
+                        userBarcode = try { rs.getString("userBarcode") } catch (e: Exception) { null },
+                        userBarcodeNumber = try { rs.getString("userBarcodeNumber") } catch (e: Exception) { null },
+                        isActive = rs.getInt("isActive") != 0,
+                        isDeleted = try { rs.getInt("isDeleted") != 0 } catch (e: Exception) { false }
+                    )
+                    backupUsers.add(u)
+                }
+                rs.close()
+            }
+
+            // Read products
+            if (tableNames.contains("products")) {
+                val rs = stmt.executeQuery("SELECT * FROM products")
+                while (rs.next()) {
+                    val barcodesStr = try { rs.getString("barcodes") } catch (e: Exception) { "" }
+                    val customMarkup = try {
+                        val d = rs.getDouble("customMarkupPercent")
+                        if (rs.wasNull()) null else d
+                    } catch (e: Exception) { null }
+
+                    val p = ProductEntity(
+                        id = rs.getString("id"),
+                        name = rs.getString("name"),
+                        barcodes = converters.toBarcodeList(barcodesStr),
+                        basePrice = rs.getLong("basePrice"),
+                        unitType = rs.getString("unitType"),
+                        stockQuantity = rs.getLong("stockQuantity"),
+                        customMarkupPercent = customMarkup,
+                        isActive = rs.getInt("isActive") != 0
+                    )
+                    backupProducts.add(p)
+                }
+                rs.close()
+            }
+
+            // Read transactions
+            if (tableNames.contains("transactions")) {
+                val rs = stmt.executeQuery("SELECT * FROM transactions")
+                while (rs.next()) {
+                    val itemsStr = try { rs.getString("items") } catch (e: Exception) { "" }
+                    val t = TransactionEntity(
+                        id = rs.getString("id"),
+                        userId = rs.getString("userId"),
+                        userNameSnapshot = rs.getString("userNameSnapshot"),
+                        timestamp = rs.getLong("timestamp"),
+                        type = rs.getString("type"),
+                        referenceTransactionId = try { rs.getString("referenceTransactionId") } catch (e: Exception) { null },
+                        note = try { rs.getString("note") } catch (e: Exception) { null },
+                        totalAmount = rs.getLong("totalAmount"),
+                        items = converters.toTransactionItemList(itemsStr)
+                    )
+                    backupTransactions.add(t)
+                }
+                rs.close()
+            }
+
+            // Read settings
+            if (tableNames.contains("settings")) {
+                val rs = stmt.executeQuery("SELECT * FROM settings LIMIT 1")
+                if (rs.next()) {
+                    backupSettings = SettingsEntity(
+                        id = rs.getInt("id"),
+                        adminPasswordHash = rs.getString("adminPasswordHash"),
+                        globalMarkupPercent = rs.getDouble("globalMarkupPercent"),
+                        usdExchangeRate = rs.getDouble("usdExchangeRate"),
+                        eurExchangeRate = rs.getDouble("eurExchangeRate"),
+                        inactivityTimeoutMinutes = rs.getInt("inactivityTimeoutMinutes"),
+                        backupLocationPath = try { rs.getString("backupLocationPath") } catch (e: Exception) { "" },
+                        autoBackupEnabled = try { rs.getInt("autoBackupEnabled") != 0 } catch (e: Exception) { false },
+                        autoBackupFormat = try { rs.getString("autoBackupFormat") } catch (e: Exception) { "DB" },
+                        autoBackupScheduleType = try { rs.getString("autoBackupScheduleType") } catch (e: Exception) { "DAILY" },
+                        autoBackupTime = try { rs.getString("autoBackupTime") } catch (e: Exception) { "02:00" },
+                        autoBackupIntervalHours = try { rs.getInt("autoBackupIntervalHours") } catch (e: Exception) { 24 },
+                        lastBackupTimestamp = try {
+                            val ts = rs.getLong("lastBackupTimestamp")
+                            if (rs.wasNull()) null else ts
+                        } catch (e: Exception) { null }
+                    )
+                }
+                rs.close()
+            }
+
+            // Read backup_routines
+            if (tableNames.contains("backup_routines")) {
+                val rs = stmt.executeQuery("SELECT * FROM backup_routines")
+                while (rs.next()) {
+                    val cfgStr = try { rs.getString("scheduleConfig") } catch (e: Exception) { "" }
+                    val b = BackupEntity(
+                        id = rs.getString("id"),
+                        name = rs.getString("name"),
+                        isEnabled = rs.getInt("isEnabled") != 0,
+                        type = rs.getString("type"),
+                        fileType = rs.getString("fileType"),
+                        scheduleConfig = converters.toBackupScheduleConfig(cfgStr),
+                        backupLocationPath = rs.getString("backupLocationPath"),
+                        lastBackupTimestamp = try {
+                            val ts = rs.getLong("lastBackupTimestamp")
+                            if (rs.wasNull()) null else ts
+                        } catch (e: Exception) { null }
+                    )
+                    backupRoutines.add(b)
+                }
+                rs.close()
+            }
+
+            stmt.close()
         } finally {
-            backupDb.close()
+            conn.close()
+        }
+
+        // 2. Clear current database tables
+        db.userDao().deleteAllUsers()
+        db.productDao().deleteAllProducts()
+        db.transactionDao().deleteAllTransactions()
+        db.backupDao().deleteAllBackups()
+
+        // 3. Insert extracted backup records into active database
+        backupUsers.forEach { db.userDao().insertOrUpdateUser(it) }
+        backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
+        backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
+        backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
+        if (backupSettings != null) {
+            db.settingsDao().insertOrUpdateSettings(backupSettings)
         }
     }
 
