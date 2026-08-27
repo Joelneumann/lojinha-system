@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,8 +34,14 @@ fun DbRestoreMultiApprovalDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    imageVector = if (step == 1) Icons.Default.Warning else Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = ColorDangerCrimson,
+                    modifier = Modifier.size(20.dp)
+                )
                 Text(
-                    text = if (step == 1) "⚠️ Step 1 of 2: Confirm Database Restore" else "🔐 Step 2 of 2: Security Authorization",
+                    text = if (step == 1) "Step 1 of 2: Confirm Database Restore" else "Step 2 of 2: Security Authorization",
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = ColorDangerCrimson
@@ -52,7 +60,18 @@ fun DbRestoreMultiApprovalDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("🚨 CRITICAL WARNING:", fontWeight = FontWeight.Bold, color = ColorDangerCrimson, fontSize = 14.sp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = ColorDangerCrimson,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text("CRITICAL WARNING:", fontWeight = FontWeight.Bold, color = ColorDangerCrimson, fontSize = 14.sp)
+                            }
                             Text(
                                 "Restoring this .db file will COMPLETE OVERWRITE all current data in the application database.",
                                 fontSize = 13.sp,
@@ -135,7 +154,18 @@ fun DbRestoreMultiApprovalDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("🔥 RESTORE DATABASE NOW", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RestoreFromTrash,
+                            contentDescription = null,
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text("RESTORE DATABASE NOW", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         },
@@ -167,8 +197,14 @@ fun WipeDataMultiApprovalDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    imageVector = if (step == 1) Icons.Default.DeleteForever else Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = ColorDangerCrimson,
+                    modifier = Modifier.size(20.dp)
+                )
                 Text(
-                    text = if (step == 1) "🚨 Step 1 of 2: Factory Reset / Wipe All Data" else "🔐 Step 2 of 2: Security Authorization",
+                    text = if (step == 1) "Step 1 of 2: Factory Reset / Wipe All Data" else "Step 2 of 2: Security Authorization",
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = ColorDangerCrimson
@@ -187,7 +223,18 @@ fun WipeDataMultiApprovalDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("🚨 PERMANENT DATA WIPE WARNING:", fontWeight = FontWeight.Bold, color = ColorDangerCrimson, fontSize = 14.sp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = ColorDangerCrimson,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text("PERMANENT DATA WIPE WARNING:", fontWeight = FontWeight.Bold, color = ColorDangerCrimson, fontSize = 14.sp)
+                            }
                             Text(
                                 "This action will completely wipe all database tables:",
                                 fontSize = 13.sp,
@@ -254,7 +301,18 @@ fun WipeDataMultiApprovalDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("🚨 WIPE ALL SYSTEM DATA", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteForever,
+                            contentDescription = null,
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text("WIPE ALL SYSTEM DATA", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         },
@@ -287,12 +345,20 @@ fun CsvImportMultiApprovalDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = if (step == 1) "📥 Step 1 of 2: CSV Import Preview ($importType)" else "🔐 Step 2 of 2: Admin Approval",
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp,
-                color = PrimaryNavy
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    imageVector = if (step == 1) Icons.Default.FileUpload else Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = PrimaryNavy,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = if (step == 1) "Step 1 of 2: CSV Import Preview ($importType)" else "Step 2 of 2: Admin Approval",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = PrimaryNavy
+                )
+            }
         },
         text = {
             Column(
@@ -319,13 +385,24 @@ fun CsvImportMultiApprovalDialog(
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "🛡️ Security Note: Any user barcodes in the CSV will be stripped/cleared to prevent barcode collisions in the kiosk.",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = PrimaryNavy,
-                                modifier = Modifier.padding(10.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Security Note: Any user barcodes in the CSV will be stripped/cleared to prevent barcode collisions in the kiosk.",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryNavy
+                                )
+                            }
                         }
                     }
 
@@ -335,13 +412,24 @@ fun CsvImportMultiApprovalDialog(
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "⚠️ Notice: ${importResultPreview.strippedBarcodesCount} product barcode(s) were stripped because they are already assigned to other existing products.",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = ColorDangerCrimson,
-                                modifier = Modifier.padding(10.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = ColorDangerCrimson,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Notice: ${importResultPreview.strippedBarcodesCount} product barcode(s) were stripped because they are already assigned to other existing products.",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ColorDangerCrimson
+                                )
+                            }
                         }
                     }
 
@@ -397,7 +485,18 @@ fun CsvImportMultiApprovalDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("📥 Execute CSV Import", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileUpload,
+                            contentDescription = null,
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text("Execute CSV Import", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         },

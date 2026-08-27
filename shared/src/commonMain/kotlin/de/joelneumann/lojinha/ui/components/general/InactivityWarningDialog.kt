@@ -14,6 +14,9 @@ import androidx.compose.ui.window.Dialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+
 @Composable
 fun InactivityWarningDialog(
     secondsRemaining: Int,
@@ -61,7 +64,7 @@ fun InactivityWarningDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "⏰ $formattedTime",
+                        text = formattedTime,
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
                         color = ColorWarningAmber
@@ -80,7 +83,17 @@ fun InactivityWarningDialog(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson)
                     ) {
-                        Text(text = "🚪 ${strings.logout}", fontWeight = FontWeight.Bold)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Logout,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(text = strings.logout, fontWeight = FontWeight.Bold)
+                        }
                     }
 
                     Button(

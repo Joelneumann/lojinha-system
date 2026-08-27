@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -154,12 +156,23 @@ fun TransactionHistoryContent(
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    Text(
-                        text = "🛒 ${strings.continueShopping}",
-                        color = SurfaceWhite,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ShoppingCart,
+                            contentDescription = null,
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = strings.continueShopping,
+                            color = SurfaceWhite,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
 
                 LogoutButton(
@@ -192,12 +205,23 @@ fun TransactionHistoryContent(
                     border = BorderStroke(1.dp, DividerBorder),
                     modifier = Modifier.height(52.dp)
                 ) {
-                    Text(
-                        text = "⚙️ ${strings.userSettings}",
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryNavy,
-                        fontSize = 14.sp
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = PrimaryNavy,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = strings.userSettings,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryNavy,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
 

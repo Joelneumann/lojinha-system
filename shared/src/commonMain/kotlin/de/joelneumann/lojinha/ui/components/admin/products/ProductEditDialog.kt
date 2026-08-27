@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -143,7 +145,13 @@ fun ProductEditDialog(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Text("🏷️ ${b.code}${if (b.description != null) " (${b.description})" else ""}", fontSize = 12.sp, color = PrimaryNavy)
+                                        Icon(
+                                            imageVector = Icons.Default.Sell,
+                                            contentDescription = null,
+                                            tint = PrimaryNavy,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text("${b.code}${if (b.description != null) " (${b.description})" else ""}", fontSize = 12.sp, color = PrimaryNavy)
                                         Text(
                                             text = "✕",
                                             fontSize = 12.sp,
@@ -206,26 +214,48 @@ fun ProductEditDialog(
                     }
 
                     if (newBarcodeConflictProduct != null) {
-                        Text(
-                            text = "❌ Barcode '${barcodeCode.trim()}' is already assigned to product '${newBarcodeConflictProduct.name}'!",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ColorDangerCrimson,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 4.dp)
-                        )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = null,
+                                tint = ColorDangerCrimson,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Barcode '${barcodeCode.trim()}' is already assigned to product '${newBarcodeConflictProduct.name}'!",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorDangerCrimson
+                            )
+                        }
                     }
                 }
 
                 HorizontalDivider(color = DividerBorder)
 
                 if (assignedBarcodeConflictProduct != null) {
-                    Text(
-                        text = "❌ Contains barcode assigned to product '${assignedBarcodeConflictProduct.name}'!",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorDangerCrimson,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(bottom = 6.dp)
-                    )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = null,
+                            tint = ColorDangerCrimson,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Contains barcode assigned to product '${assignedBarcodeConflictProduct.name}'!",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorDangerCrimson
+                        )
+                    }
                 }
 
                 val initialPriceBrl = Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()
@@ -264,7 +294,18 @@ fun ProductEditDialog(
                             modifier = Modifier.weight(1f).height(44.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("↩️ Revert", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Undo,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text("Revert", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                            }
                         }
                     }
 

@@ -1,14 +1,10 @@
 package de.joelneumann.lojinha.ui.components.admin
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,11 +44,21 @@ fun AdminCardActionsRow(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.height(42.dp)
             ) {
-                Text(
-                    text = if (hasUnsaved) "💾 Save Changes" else "✓ Saved",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = if (hasUnsaved) Icons.Default.Save else Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = if (hasUnsaved) "Save Changes" else "Saved",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             if (hasUnsaved) {
@@ -61,7 +67,18 @@ fun AdminCardActionsRow(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(42.dp)
                 ) {
-                    Text("↩️ Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Undo,
+                            contentDescription = null,
+                            tint = PrimaryNavy,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text("Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                    }
                 }
             }
         }
@@ -75,12 +92,23 @@ fun AdminCardActionsRow(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.height(42.dp)
             ) {
-                Text(
-                    text = toggleStatusText,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isStatusActive) ColorWarningAmber else ColorSuccessEmerald
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isStatusActive) Icons.Default.Warning else Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = if (isStatusActive) ColorWarningAmber else ColorSuccessEmerald,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = toggleStatusText.trim(),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isStatusActive) ColorWarningAmber else ColorSuccessEmerald
+                    )
+                }
             }
 
             Button(
@@ -89,12 +117,23 @@ fun AdminCardActionsRow(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.height(42.dp)
             ) {
-                Text(
-                    text = "🗑️ Delete",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SurfaceWhite
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = SurfaceWhite,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Delete",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SurfaceWhite
+                    )
+                }
             }
         }
     }

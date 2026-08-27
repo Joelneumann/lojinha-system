@@ -3,6 +3,8 @@ package de.joelneumann.lojinha.ui.components.admin.transactions
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,12 +36,25 @@ fun TransactionItemsTable(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = if (isStornoMode) "✏️ Adjust Item Quantities below:" else "Purchased Items (${transaction.items.size})",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryNavy
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (isStornoMode) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = PrimaryNavy,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Text(
+                    text = if (isStornoMode) "Adjust Item Quantities below:" else "Purchased Items (${transaction.items.size})",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy
+                )
+            }
 
             if (!isCanceled && !isStornoMode) {
                 Button(
@@ -48,7 +63,18 @@ fun TransactionItemsTable(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(36.dp)
                 ) {
-                    Text("✏️ Edit / Storno Items", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text("Edit / Storno Items", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

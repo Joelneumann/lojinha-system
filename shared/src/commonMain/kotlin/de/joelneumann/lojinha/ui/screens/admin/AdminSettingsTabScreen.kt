@@ -3,6 +3,8 @@ package de.joelneumann.lojinha.ui.screens.admin
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -96,11 +98,17 @@ fun AdminSettingsTabScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = null,
+                    tint = PrimaryNavy,
+                    modifier = Modifier.size(22.dp)
+                )
                 Text(
-                    text = "⚙️ System & Admin Settings",
+                    text = "System & Admin Settings",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -139,7 +147,18 @@ fun AdminSettingsTabScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxHeight()
                     ) {
-                        Text("↩️ Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Undo,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text("Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        }
                     }
                 }
 
@@ -173,12 +192,23 @@ fun AdminSettingsTabScreen(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxHeight()
                 ) {
-                    Text(
-                        text = if (hasFieldChanges) "💾 Save Settings" else "✓ Saved",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SurfaceWhite
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (hasFieldChanges) Icons.Default.Save else Icons.Default.Check,
+                            contentDescription = null,
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (hasFieldChanges) "Save Settings" else "Saved",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SurfaceWhite
+                        )
+                    }
                 }
             }
         }
@@ -241,7 +271,18 @@ fun AdminSettingsTabScreen(
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text("🔐 Admin Master Password", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text("Admin Master Password", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -254,7 +295,11 @@ fun AdminSettingsTabScreen(
                                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
                                     IconButton(onClick = { showPassword = !showPassword }) {
-                                        Text(if (showPassword) "🙈" else "👁️", fontSize = 14.sp)
+                                        Icon(
+                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = "Toggle Visibility",
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
                                 },
                                 modifier = Modifier.weight(1f)
@@ -268,7 +313,11 @@ fun AdminSettingsTabScreen(
                                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
                                     IconButton(onClick = { showPassword = !showPassword }) {
-                                        Text(if (showPassword) "🙈" else "👁️", fontSize = 14.sp)
+                                        Icon(
+                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = "Toggle Visibility",
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
                                 },
                                 modifier = Modifier.weight(1f)
@@ -277,9 +326,31 @@ fun AdminSettingsTabScreen(
 
                         if (isPasswordEntered) {
                             if (!doPasswordsMatch) {
-                                Text("❌ Passwords do not match", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = ColorDangerCrimson,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text("Passwords do not match", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                                }
                             } else if (newPassword.isNotBlank()) {
-                                Text("✓ Passwords match", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = ColorSuccessEmerald,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text("Passwords match", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
+                                }
                             }
                         }
                     }
@@ -299,7 +370,18 @@ fun AdminSettingsTabScreen(
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text("🏷️ Product Pricing Rules", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Sell,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text("Product Pricing Rules", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
                         AdminLabeledField(
                             label = "Global Product Markup (%):",
                             value = globalMarkup,
@@ -324,7 +406,18 @@ fun AdminSettingsTabScreen(
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text("🔱 Currency Exchange Rates", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CurrencyExchange,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text("Currency Exchange Rates", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -362,7 +455,18 @@ fun AdminSettingsTabScreen(
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text("⏱️ Kiosk System Timers", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Timer,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text("Kiosk System Timers", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
                         AdminLabeledField(
                             label = "Inactivity Timeout (Minutes):",
                             value = inactivityTimeout,
@@ -395,7 +499,13 @@ fun AdminSettingsTabScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("📦 Configured Backup Routines", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Icon(
+                                    imageVector = Icons.Default.Inventory,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text("Configured Backup Routines", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 Surface(
                                     color = PrimaryNavy.copy(alpha = 0.1f),
                                     shape = RoundedCornerShape(12.dp)
@@ -409,7 +519,18 @@ fun AdminSettingsTabScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                             ) {
-                                Text("➕ Create Routine", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        tint = SurfaceWhite,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text("Create Routine", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 
@@ -484,7 +605,7 @@ fun AdminSettingsTabScreen(
                                                 )
                                             }
 
-                                            Text("📁 Target Path: ${routine.backupLocationPath}", fontSize = 11.sp, color = AccentNavy)
+                                            Text("Target Path: ${routine.backupLocationPath}", fontSize = 11.sp, color = AccentNavy)
                                             Text("Last Backup: $lastBackupStr  •  Next Due: $nextDueStr", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
 
                                             Row(
@@ -497,7 +618,18 @@ fun AdminSettingsTabScreen(
                                                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                                 ) {
-                                                    Text("💾 Run Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.PlayArrow,
+                                                            contentDescription = null,
+                                                            tint = SurfaceWhite,
+                                                            modifier = Modifier.size(13.dp)
+                                                        )
+                                                        Text("Run Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
                                                 }
 
                                                 OutlinedButton(
@@ -505,7 +637,18 @@ fun AdminSettingsTabScreen(
                                                     shape = RoundedCornerShape(6.dp),
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                                 ) {
-                                                    Text("✏️ Edit", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Edit,
+                                                            contentDescription = null,
+                                                            tint = PrimaryNavy,
+                                                            modifier = Modifier.size(13.dp)
+                                                        )
+                                                        Text("Edit", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                                    }
                                                 }
 
                                                 OutlinedButton(
@@ -514,7 +657,18 @@ fun AdminSettingsTabScreen(
                                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson),
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                                 ) {
-                                                    Text("🗑️ Delete", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Delete,
+                                                            contentDescription = null,
+                                                            tint = ColorDangerCrimson,
+                                                            modifier = Modifier.size(13.dp)
+                                                        )
+                                                        Text("Delete", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
                                                 }
                                             }
                                         }
@@ -539,7 +693,18 @@ fun AdminSettingsTabScreen(
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text("🔄 Database Restore (.db) & Reset", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Restore,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text("Database Restore (.db) & Reset", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -555,7 +720,18 @@ fun AdminSettingsTabScreen(
                                 colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("🔥 Restore Database (.db)...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.RestoreFromTrash,
+                                        contentDescription = null,
+                                        tint = SurfaceWhite,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text("Restore Database (.db)...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                }
                             }
 
                             Button(
@@ -566,7 +742,18 @@ fun AdminSettingsTabScreen(
                                 colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("🚨 Wipe All Data (Factory Reset)...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DeleteForever,
+                                        contentDescription = null,
+                                        tint = SurfaceWhite,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text("Wipe All Data (Factory Reset)...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                }
                             }
                         }
                     }
@@ -586,7 +773,18 @@ fun AdminSettingsTabScreen(
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text("📥 Import Data from CSV Files", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileUpload,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text("Import Data from CSV Files", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
                         Text("Import Products or Users into the database (Add / Update Mode). Existing matching IDs will be updated; user barcodes will be cleared to prevent collisions.", fontSize = 12.sp, color = AccentNavy)
 
                         Row(
@@ -602,7 +800,18 @@ fun AdminSettingsTabScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("🏷️ Import Products CSV...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Sell,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text("Import Products CSV...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
                             }
 
                             OutlinedButton(
@@ -614,7 +823,18 @@ fun AdminSettingsTabScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("👤 Import Users CSV...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text("Import Users CSV...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
                             }
                         }
                     }

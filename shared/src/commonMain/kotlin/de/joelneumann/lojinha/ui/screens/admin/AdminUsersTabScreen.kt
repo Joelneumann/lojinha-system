@@ -134,7 +134,7 @@ fun AdminUsersTabScreen(
                 item(key = "deactivated-users-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
-                        title = "⚠️ Deactivated Users",
+                        title = "Deactivated Users",
                         countText = "${filteredDeactivatedUsers.size} ${if (filteredDeactivatedUsers.size == 1) "User" else "Users"}",
                         accentColor = ColorWarningAmber,
                         showLabel = "Show Deactivated Users",
@@ -154,7 +154,7 @@ fun AdminUsersTabScreen(
                 item(key = "deleted-users-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
-                        title = "🗑️ Deleted Users",
+                        title = "Deleted Users",
                         countText = "${filteredDeletedUsers.size} ${if (filteredDeletedUsers.size == 1) "User" else "Users"}",
                         accentColor = ColorDangerCrimson,
                         showLabel = "Show Deleted Users",

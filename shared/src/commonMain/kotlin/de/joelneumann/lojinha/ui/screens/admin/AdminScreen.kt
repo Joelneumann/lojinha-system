@@ -6,6 +6,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -96,13 +98,16 @@ fun AdminScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val tabItems = listOf(
-                    AdminTab.PRODUCTS to "📦 ${strings.tabProducts}",
-                    AdminTab.USERS to "👥 ${strings.tabUsers}",
-                    AdminTab.TRANSACTIONS to "💳 ${strings.tabTransactions}",
-                    AdminTab.SETTINGS to "⚙️ ${strings.tabSettings}"
+                    Triple(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts),
+                    Triple(AdminTab.USERS, Icons.Default.People, strings.tabUsers),
+                    Triple(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions),
+                    Triple(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings)
                 )
 
-                tabItems.forEach { (tab, label) ->
+                tabItems.forEach { item ->
+                    val tab = item.first
+                    val icon = item.second
+                    val label = item.third
                     val isSelected = currentTab == tab
                     Box(
                         modifier = Modifier
@@ -117,6 +122,12 @@ fun AdminScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = if (isSelected) SurfaceWhite else PrimaryNavy,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Text(
                                 text = label,
                                 fontSize = 14.sp,
@@ -197,12 +208,23 @@ fun AdminScreen(
                 isExitAdminPending = false
             },
             title = {
-                Text(
-                    text = "⚠️ Unsaved Changes Warning",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorWarningAmber
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = ColorWarningAmber,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Unsaved Changes Warning",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorWarningAmber
+                    )
+                }
             },
             text = {
                 Text(

@@ -53,14 +53,14 @@ class LojinhaAdminServer(
                         val settings = settingsRepository.getSettings()
                         val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
                         val matches = (req.password == expectedPassword)
-                        println("🔑 Admin Login Attempt: received='${req.password}', expected='$expectedPassword', match=$matches")
+                        println("[AUTH] Admin Login Attempt: received='${req.password}', expected='$expectedPassword', match=$matches")
                         if (matches) {
                             call.respond(HttpStatusCode.OK, LoginResponse(true, "Authenticated"))
                         } else {
                             call.respond(HttpStatusCode.OK, LoginResponse(false, "Invalid admin password"))
                         }
                     } catch (e: Exception) {
-                        println("❌ Error processing login request: ${e.message}")
+                        println("[ERROR] Error processing login request: ${e.message}")
                         call.respond(HttpStatusCode.OK, LoginResponse(false, "Error processing login request"))
                     }
                 }
@@ -194,7 +194,7 @@ class LojinhaAdminServer(
                 }
             }
         }.start(wait = false)
-        println("🚀 Lojinha Embedded Admin Server active on http://0.0.0.0:$port")
+        println("[INFO] Lojinha Embedded Admin Server active on http://0.0.0.0:$port")
     }
 
     private suspend fun ApplicationCall.checkAdminAuth(settingsRepository: SettingsRepository): Boolean {

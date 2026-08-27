@@ -2,6 +2,8 @@ package de.joelneumann.lojinha.ui.components.history
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -57,13 +59,15 @@ fun TransactionItemCard(
         }
     }
 
-    val typeLabel = when (tx.type) {
-        TransactionType.PURCHASE -> "🛒 ${strings.historyTypePurchase}"
-        TransactionType.ADMIN_DEPOSIT -> "💵 ${strings.historyTypeDeposit}"
-        TransactionType.ADMIN_WITHDRAWAL -> "📤 ${strings.historyTypeWithdrawal}"
-        TransactionType.CANCELLATION -> "🔄 ${strings.historyTypeCancellation}"
-        TransactionType.CORRECTION -> "✏️ ${strings.historyTypeCorrection}"
+    val typePair = when (tx.type) {
+        TransactionType.PURCHASE -> Icons.Default.ShoppingCart to strings.historyTypePurchase
+        TransactionType.ADMIN_DEPOSIT -> Icons.Default.AccountBalanceWallet to strings.historyTypeDeposit
+        TransactionType.ADMIN_WITHDRAWAL -> Icons.Default.Payments to strings.historyTypeWithdrawal
+        TransactionType.CANCELLATION -> Icons.Default.Undo to strings.historyTypeCancellation
+        TransactionType.CORRECTION -> Icons.Default.Edit to strings.historyTypeCorrection
     }
+    val typeIcon = typePair.first
+    val typeText = typePair.second
 
     val isPositive = tx.totalAmount > 0
     val amountColor = if (isPositive) ColorSuccessEmerald else PrimaryNavy
@@ -81,9 +85,15 @@ fun TransactionItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(
+                        imageVector = typeIcon,
+                        contentDescription = null,
+                        tint = PrimaryNavy,
+                        modifier = Modifier.size(18.dp)
+                    )
                     Text(
-                        text = typeLabel,
+                        text = typeText,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy

@@ -111,7 +111,7 @@ fun AdminProductsTabScreen(
                 item(key = "disabled-products-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
-                        title = "⚠️ Disabled Products",
+                        title = "Disabled Products",
                         countText = "${filteredDisabledProducts.size} ${if (filteredDisabledProducts.size == 1) "Product" else "Products"}",
                         accentColor = ColorWarningAmber,
                         showLabel = "Show Disabled Products",

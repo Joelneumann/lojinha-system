@@ -144,9 +144,9 @@ class DomainAndRulesTest {
         val en = I18n.get(Language.EN)
         val br = I18n.get(Language.BR)
 
-        assertEquals("🛒 Lojinha POS", de.appTitle)
-        assertEquals("🛒 Lojinha POS", en.appTitle)
-        assertEquals("🛒 Lojinha POS", br.appTitle)
+        assertEquals("Lojinha POS", de.appTitle)
+        assertEquals("Lojinha POS", en.appTitle)
+        assertEquals("Lojinha POS", br.appTitle)
 
         assertEquals("Möchten Sie den Kauf über R$ 10,00 bestätigen?", de.confirmPurchaseMsg("R$ 10,00"))
         assertEquals("Confirm purchase for R$ 10,00?", en.confirmPurchaseMsg("R$ 10,00"))

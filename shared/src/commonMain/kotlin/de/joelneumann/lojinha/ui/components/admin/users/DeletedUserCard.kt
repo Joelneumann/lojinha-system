@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -91,7 +93,18 @@ fun DeletedUserCard(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.height(38.dp)
             ) {
-                Text("♻️ Restore User", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Restore,
+                        contentDescription = null,
+                        tint = SurfaceWhite,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text("Restore User", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                }
             }
         }
     }

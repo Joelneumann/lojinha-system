@@ -3,6 +3,8 @@ package de.joelneumann.lojinha.ui.components.admin.products
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -125,12 +127,23 @@ fun AdminProductAccordionCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (product.unitType == UnitType.PIECE) "📦 Stock Delta (+/- units):" else "📦 Stock Delta (+/- kg):",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Inventory,
+                        contentDescription = null,
+                        tint = PrimaryNavy,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = if (product.unitType == UnitType.PIECE) "Stock Delta (+/- units):" else "Stock Delta (+/- kg):",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
+                    )
+                }
 
                 OutlinedTextField(
                     value = stockDeltaInput,
@@ -159,7 +172,18 @@ fun AdminProductAccordionCard(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(44.dp)
                 ) {
-                    Text("📦 Adjust Stock", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Inventory,
+                            contentDescription = null,
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text("Adjust Stock", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                    }
                 }
             }
         }
@@ -231,7 +255,13 @@ fun AdminProductAccordionCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("🏷️ ${b.code}${if (b.description != null) " (${b.description})" else ""}", fontSize = 12.sp, color = PrimaryNavy)
+                                Icon(
+                                    imageVector = Icons.Default.Sell,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text("${b.code}${if (b.description != null) " (${b.description})" else ""}", fontSize = 12.sp, color = PrimaryNavy)
                                 Text(
                                     text = "✕",
                                     fontSize = 12.sp,
@@ -294,23 +324,45 @@ fun AdminProductAccordionCard(
             }
 
             if (newBarcodeConflictProduct != null) {
-                Text(
-                    text = "❌ Barcode '${newBarcodeCode.trim()}' is already assigned to product '${newBarcodeConflictProduct.name}'!",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorDangerCrimson,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(top = 4.dp)
-                )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = null,
+                        tint = ColorDangerCrimson,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Barcode '${newBarcodeCode.trim()}' is already assigned to product '${newBarcodeConflictProduct.name}'!",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorDangerCrimson
+                    )
+                }
             }
 
             if (assignedBarcodeConflictProduct != null) {
-                Text(
-                    text = "❌ Contains barcode assigned to product '${assignedBarcodeConflictProduct.name}'!",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorDangerCrimson,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(top = 4.dp)
-                )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = null,
+                        tint = ColorDangerCrimson,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Contains barcode assigned to product '${assignedBarcodeConflictProduct.name}'!",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorDangerCrimson
+                    )
+                }
             }
         }
 
@@ -345,7 +397,7 @@ fun AdminProductAccordionCard(
                 onUnsavedStateChanged(false)
             },
             saveEnabled = hasUnsaved && draftName.isNotBlank() && assignedBarcodeConflictProduct == null,
-            toggleStatusText = if (product.isActive) "⚠️ Disable" else "⚡ Enable",
+            toggleStatusText = if (product.isActive) "Disable" else "Enable",
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = product.isActive,
             onDelete = { showDeleteConfirm = true }

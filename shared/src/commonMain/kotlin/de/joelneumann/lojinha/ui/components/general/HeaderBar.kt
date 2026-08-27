@@ -78,14 +78,20 @@ fun HeaderBar(
                                         shape = RoundedCornerShape(6.dp)
                                     )
                                     .clickable { LanguageManager.setLanguage(lang) }
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text(
-                                    text = "${lang.flagEmoji} ${lang.code.uppercase()}",
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) SurfaceWhite else PrimaryNavy
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    LanguageFlagIcon(language = lang, width = 16.dp, height = 11.dp)
+                                    Text(
+                                        text = lang.code.uppercase(),
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) SurfaceWhite else PrimaryNavy
+                                    )
+                                }
                             }
                         }
                     }
@@ -112,14 +118,20 @@ fun HeaderBar(
                                         shape = RoundedCornerShape(8.dp)
                                     )
                                     .clickable { LanguageManager.setLanguage(lang) }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
-                                Text(
-                                    text = "${lang.flagEmoji} ${lang.code.uppercase()}",
-                                    fontSize = 14.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) SurfaceWhite else PrimaryNavy
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    LanguageFlagIcon(language = lang, width = 18.dp, height = 13.dp)
+                                    Text(
+                                        text = lang.code.uppercase(),
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) SurfaceWhite else PrimaryNavy
+                                    )
+                                }
                             }
                         }
                     }

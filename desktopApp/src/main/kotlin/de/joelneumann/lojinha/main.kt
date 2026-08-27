@@ -38,7 +38,7 @@ fun main() = application {
     val windowState = rememberWindowState(width = 1280.dp, height = 850.dp)
     Window(
         onCloseRequest = ::exitApplication,
-        title = "🛒 Lojinha POS & Self-Service Kiosk",
+        title = "Lojinha POS & Self-Service Kiosk",
         state = windowState
     ) {
         App()

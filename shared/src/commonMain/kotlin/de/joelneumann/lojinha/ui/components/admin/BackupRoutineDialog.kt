@@ -2,6 +2,8 @@ package de.joelneumann.lojinha.ui.components.admin
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,12 +58,23 @@ fun BackupRoutineDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = if (initialRoutine == null) "➕ Create New Backup Routine" else "✏️ Edit Routine: '${initialRoutine.name}'",
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = PrimaryNavy
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = if (initialRoutine == null) Icons.Default.Add else Icons.Default.Edit,
+                    contentDescription = null,
+                    tint = PrimaryNavy,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = if (initialRoutine == null) "Create New Backup Routine" else "Edit Routine: '${initialRoutine.name}'",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = PrimaryNavy
+                )
+            }
         },
         text = {
             Column(
@@ -74,13 +87,24 @@ fun BackupRoutineDialog(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "✏️ You are editing an existing backup routine. Changes will update the active routine schedule.",
+                        Row(
                             modifier = Modifier.padding(10.dp),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = PrimaryNavy
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "You are editing an existing backup routine. Changes will update the active routine schedule.",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            )
+                        }
                     }
                 }
 
@@ -113,7 +137,18 @@ fun BackupRoutineDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         modifier = Modifier.padding(top = 8.dp)
                     ) {
-                        Text("📁 Browse...")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                tint = SurfaceWhite,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text("Browse...")
+                        }
                     }
                 }
 
@@ -235,7 +270,18 @@ fun BackupRoutineDialog(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
             ) {
-                Text("💾 Save Routine", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Save,
+                        contentDescription = null,
+                        tint = SurfaceWhite,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text("Save Routine", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
             }
         },
         dismissButton = {
@@ -258,12 +304,23 @@ fun DeleteRoutineConfirmationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "🗑️ Delete Backup Routine?",
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = ColorDangerCrimson
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = ColorDangerCrimson,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "Delete Backup Routine?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = ColorDangerCrimson
+                )
+            }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -291,7 +348,18 @@ fun DeleteRoutineConfirmationDialog(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
             ) {
-                Text("🗑️ Delete Routine", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = SurfaceWhite,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text("Delete Routine", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
             }
         },
         dismissButton = {
@@ -313,17 +381,27 @@ fun ToggleRoutineConfirmationDialog(
     onDismiss: () -> Unit
 ) {
     val actionText = if (targetState) "Activate" else "Deactivate"
-    val icon = if (targetState) "▶️" else "⏸️"
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "$icon $actionText Backup Routine?",
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = PrimaryNavy
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = if (targetState) Icons.Default.PlayArrow else Icons.Default.Pause,
+                    contentDescription = null,
+                    tint = PrimaryNavy,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "$actionText Backup Routine?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = PrimaryNavy
+                )
+            }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -356,7 +434,18 @@ fun ToggleRoutineConfirmationDialog(
                     containerColor = if (targetState) ColorSuccessEmerald else AccentNavy
                 )
             ) {
-                Text("$icon Yes, $actionText", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = if (targetState) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        contentDescription = null,
+                        tint = SurfaceWhite,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text("Yes, $actionText", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
             }
         },
         dismissButton = {

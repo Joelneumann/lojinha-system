@@ -51,6 +51,27 @@ fun <T> AdminSegmentedOptionsRow(
     optionLabel: (T) -> String,
     modifier: Modifier = Modifier
 ) {
+    AdminSegmentedOptionsRow(
+        label = label,
+        options = options,
+        selected = selected,
+        onSelect = onSelect,
+        modifier = modifier,
+        optionContent = { option ->
+            Text(optionLabel(option), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        }
+    )
+}
+
+@Composable
+fun <T> AdminSegmentedOptionsRow(
+    label: String,
+    options: List<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    optionContent: @Composable (T) -> Unit
+) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
         Spacer(modifier = Modifier.height(6.dp))
@@ -67,7 +88,7 @@ fun <T> AdminSegmentedOptionsRow(
                     ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text(optionLabel(option), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    optionContent(option)
                 }
             }
         }

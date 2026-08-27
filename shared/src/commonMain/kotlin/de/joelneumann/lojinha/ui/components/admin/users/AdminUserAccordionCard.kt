@@ -2,6 +2,8 @@ package de.joelneumann.lojinha.ui.components.admin.users
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -203,7 +205,11 @@ fun AdminUserAccordionCard(
                         visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
                             IconButton(onClick = { isPinVisible = !isPinVisible }) {
-                                Text(if (isPinVisible) "👁️" else "🙈", fontSize = 14.sp)
+                                Icon(
+                                    imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = "Toggle PIN Visibility",
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         },
                         singleLine = true,
@@ -236,7 +242,10 @@ fun AdminUserAccordionCard(
             AdminLabeledField(
                 label = "Barcode Symbol",
                 value = draftUserBarcode,
-                onValueChange = { draftUserBarcode = it },
+                onValueChange = {
+                    draftUserBarcode = it
+                    if (draftUserBarcodeNumber.isBlank()) draftUserBarcodeNumber = it
+                },
                 placeholder = "e.g. USR-001",
                 modifier = Modifier.weight(1f)
             )
@@ -259,7 +268,15 @@ fun AdminUserAccordionCard(
                 options = Language.entries,
                 selected = draftLanguage,
                 onSelect = { draftLanguage = it },
-                optionLabel = { "${it.flagEmoji} ${it.code.uppercase()}" },
+                optionContent = { lang ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon(language = lang, width = 16.dp, height = 11.dp)
+                        Text(lang.code.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                },
                 modifier = Modifier.weight(1f)
             )
 
@@ -280,24 +297,46 @@ fun AdminUserAccordionCard(
         }
 
         if (isUserBarcodeIncomplete) {
-            val missingMsg = if (isBarcodeSymbolFilled) "⚠️ Barcode Number (ID) is missing!" else "⚠️ Barcode Symbol is missing!"
-            Text(
-                text = "$missingMsg Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty.",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = ColorWarningAmber,
+            val missingMsg = if (isBarcodeSymbolFilled) "Barcode Number (ID) is missing!" else "Barcode Symbol is missing!"
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 4.dp)
-            )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = ColorWarningAmber,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "$missingMsg Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty.",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorWarningAmber
+                )
+            }
         }
 
         if (duplicateUser != null) {
-            Text(
-                text = "❌ Barcode '${barcodeToCheck}' is already assigned to user '${duplicateUser.name}'!",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = ColorDangerCrimson,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 4.dp)
-            )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Error,
+                    contentDescription = null,
+                    tint = ColorDangerCrimson,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "Barcode '${barcodeToCheck}' is already assigned to user '${duplicateUser.name}'!",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorDangerCrimson
+                )
+            }
         }
 
         HorizontalDivider(color = DividerBorder)
@@ -333,7 +372,7 @@ fun AdminUserAccordionCard(
                 onUnsavedStateChanged(false)
             },
             saveEnabled = hasUnsaved && draftName.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
-            toggleStatusText = if (user.isActive) "⚠️ Deactivate" else "⚡ Activate",
+            toggleStatusText = if (user.isActive) "Deactivate" else "Activate",
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = user.isActive,
             onDelete = { showDeleteConfirm = true }
