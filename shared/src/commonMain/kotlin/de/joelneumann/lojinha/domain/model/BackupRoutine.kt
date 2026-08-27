@@ -21,6 +21,12 @@ enum class BackupFileType {
 }
 
 @Serializable
+enum class BackupWriteMode {
+    CREATE_NEW_FILE,
+    OVERWRITE_LATEST
+}
+
+@Serializable
 sealed interface BackupScheduleConfig {
     @Serializable
     data class Timed(
@@ -33,6 +39,11 @@ sealed interface BackupScheduleConfig {
         val intervalMinutes: Int = 0,
         val anchorStartTimestamp: Long = currentTimeMillis()
     ) : BackupScheduleConfig
+
+    @Serializable
+    data class OnDataChange(
+        val debounceMs: Long = 1000L
+    ) : BackupScheduleConfig
 }
 
 @Serializable
@@ -42,6 +53,7 @@ data class BackupRoutine(
     val isEnabled: Boolean = true,
     val type: BackupType = BackupType.LOCAL,
     val fileType: BackupFileType = BackupFileType.DB,
+    val writeMode: BackupWriteMode = BackupWriteMode.CREATE_NEW_FILE,
     val scheduleConfig: BackupScheduleConfig = BackupScheduleConfig.Timed("02:00"),
     val backupLocationPath: String = "",
     val lastBackupTimestamp: Long? = null
@@ -79,6 +91,9 @@ data class BackupRoutine(
                 if (intervalMs <= 0) return Long.MAX_VALUE
                 val last = lastBackupTimestamp ?: config.anchorStartTimestamp
                 last + intervalMs
+            }
+            is BackupScheduleConfig.OnDataChange -> {
+                Long.MAX_VALUE
             }
         }
     }

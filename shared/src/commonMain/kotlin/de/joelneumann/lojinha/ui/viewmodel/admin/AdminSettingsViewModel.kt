@@ -6,6 +6,7 @@ import de.joelneumann.lojinha.domain.model.BackupFileInfo
 import de.joelneumann.lojinha.domain.model.BackupRoutine
 import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.SystemSettings
+import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class AdminSettingsViewModel(
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val backupRepository: BackupRepository? = null,
+    private val onRunRoutineNow: (suspend (BackupRoutine) -> Unit)? = null
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(SystemSettings())
@@ -58,12 +61,22 @@ class AdminSettingsViewModel(
 
     init {
         loadSettings()
+        loadRoutines()
     }
 
     fun loadSettings() {
         viewModelScope.launch {
             settingsRepository.getSettingsFlow().collect {
                 _settings.value = it
+            }
+        }
+    }
+
+    fun loadRoutines() {
+        val repo = backupRepository ?: return
+        viewModelScope.launch {
+            repo.getBackupsFlow().collect {
+                _routines.value = it
             }
         }
     }
@@ -96,16 +109,22 @@ class AdminSettingsViewModel(
     }
 
     fun saveBackupRoutine(routine: BackupRoutine) {
-        val currentList = _routines.value.toMutableList()
-        val index = currentList.indexOfFirst { it.id == routine.id }
-        if (index >= 0) {
-            currentList[index] = routine
-        } else {
-            currentList.add(routine)
+        viewModelScope.launch {
+            if (backupRepository != null) {
+                backupRepository.saveBackupRoutine(routine)
+            } else {
+                val currentList = _routines.value.toMutableList()
+                val index = currentList.indexOfFirst { it.id == routine.id }
+                if (index >= 0) {
+                    currentList[index] = routine
+                } else {
+                    currentList.add(routine)
+                }
+                _routines.value = currentList
+            }
+            closeRoutineDialog()
+            _statusMessage.value = "✓ Backup routine saved: '${routine.name}'"
         }
-        _routines.value = currentList
-        closeRoutineDialog()
-        _statusMessage.value = "✓ Backup routine saved: '${routine.name}'"
     }
 
     fun requestDeleteRoutine(routine: BackupRoutine) {
@@ -114,9 +133,15 @@ class AdminSettingsViewModel(
 
     fun confirmDeleteRoutine() {
         val target = _routineToDelete.value ?: return
-        _routines.value = _routines.value.filter { it.id != target.id }
-        _routineToDelete.value = null
-        _statusMessage.value = "✓ Backup routine '${target.name}' removed."
+        viewModelScope.launch {
+            if (backupRepository != null) {
+                backupRepository.deleteBackupRoutine(target.id)
+            } else {
+                _routines.value = _routines.value.filter { it.id != target.id }
+            }
+            _routineToDelete.value = null
+            _statusMessage.value = "✓ Backup routine '${target.name}' removed."
+        }
     }
 
     fun cancelDeleteRoutine() {
@@ -131,12 +156,18 @@ class AdminSettingsViewModel(
         val pair = _routineToToggle.value ?: return
         val routine = pair.first
         val targetState = pair.second
-        val updated = _routines.value.map {
-            if (it.id == routine.id) it.copy(isEnabled = targetState) else it
+        viewModelScope.launch {
+            val updated = routine.copy(isEnabled = targetState)
+            if (backupRepository != null) {
+                backupRepository.saveBackupRoutine(updated)
+            } else {
+                _routines.value = _routines.value.map {
+                    if (it.id == routine.id) updated else it
+                }
+            }
+            _routineToToggle.value = null
+            _statusMessage.value = "✓ Backup routine '${routine.name}' ${if (targetState) "enabled" else "disabled"}."
         }
-        _routines.value = updated
-        _routineToToggle.value = null
-        _statusMessage.value = "✓ Backup routine '${routine.name}' ${if (targetState) "enabled" else "disabled"}."
     }
 
     fun cancelToggleRoutine() {
@@ -144,7 +175,14 @@ class AdminSettingsViewModel(
     }
 
     fun runRoutineNow(routine: BackupRoutine) {
-        _statusMessage.value = "✓ Triggered routine '${routine.name}'."
+        viewModelScope.launch {
+            try {
+                onRunRoutineNow?.invoke(routine)
+                _statusMessage.value = "✓ Triggered routine '${routine.name}'."
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to run routine '${routine.name}': ${e.message}"
+            }
+        }
     }
 
     fun setRestoreDbFile(file: PlatformFile?) {

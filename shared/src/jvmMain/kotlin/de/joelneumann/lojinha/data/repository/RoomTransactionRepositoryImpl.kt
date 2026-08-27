@@ -8,7 +8,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class RoomTransactionRepositoryImpl(
-    private val transactionDao: TransactionDao
+    private val transactionDao: TransactionDao,
+    private val onDataChanged: (() -> Unit)? = null
 ) : TransactionRepository {
 
     override fun getTransactionsFlow(): Flow<List<Transaction>> {
@@ -29,6 +30,7 @@ class RoomTransactionRepositoryImpl(
 
     override suspend fun recordTransaction(transaction: Transaction) {
         transactionDao.insertTransaction(TransactionEntity.fromDomain(transaction))
+        onDataChanged?.invoke()
     }
 
     override suspend fun getTransactionCountForUser(userId: String): Int {

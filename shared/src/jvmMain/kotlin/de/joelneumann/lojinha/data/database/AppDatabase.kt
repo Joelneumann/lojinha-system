@@ -8,7 +8,7 @@ import de.joelneumann.lojinha.data.entity.*
 
 @Database(
     entities = [UserEntity::class, ProductEntity::class, TransactionEntity::class, SettingsEntity::class, BackupEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

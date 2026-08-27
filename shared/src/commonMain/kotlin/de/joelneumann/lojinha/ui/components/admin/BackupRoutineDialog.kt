@@ -15,8 +15,9 @@ import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.pickFolder
 
-private enum class ScheduleMode { TIMED, INTERVAL }
+private enum class ScheduleMode { TIMED, INTERVAL, ON_DATA_CHANGE }
 
 @Composable
 fun BackupRoutineDialog(
@@ -27,9 +28,14 @@ fun BackupRoutineDialog(
     var name by remember { mutableStateOf(initialRoutine?.name ?: "") }
     var locationPath by remember { mutableStateOf(initialRoutine?.backupLocationPath ?: "") }
     var fileType by remember { mutableStateOf(initialRoutine?.fileType ?: BackupFileType.DB) }
+    var writeMode by remember { mutableStateOf(initialRoutine?.writeMode ?: BackupWriteMode.CREATE_NEW_FILE) }
     
     var scheduleMode by remember {
-        val mode = if (initialRoutine?.scheduleConfig is BackupScheduleConfig.Interval) ScheduleMode.INTERVAL else ScheduleMode.TIMED
+        val mode = when (initialRoutine?.scheduleConfig) {
+            is BackupScheduleConfig.Interval -> ScheduleMode.INTERVAL
+            is BackupScheduleConfig.OnDataChange -> ScheduleMode.ON_DATA_CHANGE
+            else -> ScheduleMode.TIMED
+        }
         mutableStateOf(mode)
     }
 
@@ -49,11 +55,6 @@ fun BackupRoutineDialog(
     }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    fun pickFolder(onSelect: (String) -> Unit) {
-        // Desktop file picker fallback
-        onSelect(locationPath.ifBlank { "/backups" })
-    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -174,6 +175,23 @@ fun BackupRoutineDialog(
                     }
                 }
 
+                // Write Mode FilterChips
+                Column {
+                    Text("File Overwrite Strategy:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = writeMode == BackupWriteMode.CREATE_NEW_FILE,
+                            onClick = { writeMode = BackupWriteMode.CREATE_NEW_FILE },
+                            label = { Text("Timestamped (New File)") }
+                        )
+                        FilterChip(
+                            selected = writeMode == BackupWriteMode.OVERWRITE_LATEST,
+                            onClick = { writeMode = BackupWriteMode.OVERWRITE_LATEST },
+                            label = { Text("Overwrite Single File") }
+                        )
+                    }
+                }
+
                 // Schedule Type FilterChips
                 Column {
                     Text("Schedule Type:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
@@ -188,6 +206,11 @@ fun BackupRoutineDialog(
                             onClick = { scheduleMode = ScheduleMode.INTERVAL },
                             label = { Text("Recurring Interval") }
                         )
+                        FilterChip(
+                            selected = scheduleMode == ScheduleMode.ON_DATA_CHANGE,
+                            onClick = { scheduleMode = ScheduleMode.ON_DATA_CHANGE },
+                            label = { Text("⚡ On Real-time Change") }
+                        )
                     }
                 }
 
@@ -200,7 +223,7 @@ fun BackupRoutineDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                } else {
+                } else if (scheduleMode == ScheduleMode.INTERVAL) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -222,6 +245,31 @@ fun BackupRoutineDialog(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                } else {
+                    Surface(
+                        color = ColorSuccessEmerald.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = null,
+                                tint = ColorSuccessEmerald,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Realtime Backup: A backup will automatically run in the background whenever a purchase, deposit, or data change occurs.",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            )
+                        }
+                    }
                 }
 
                 if (errorMessage != null) {
@@ -241,17 +289,19 @@ fun BackupRoutineDialog(
                         return@Button
                     }
 
-                    val scheduleConfig: BackupScheduleConfig = if (scheduleMode == ScheduleMode.TIMED) {
-                        BackupScheduleConfig.Timed(timedTime.ifBlank { "02:00" })
-                    } else {
-                        val h = intervalHours.toIntOrNull() ?: 1
-                        val m = intervalMinutes.toIntOrNull() ?: 0
-                        val existingAnchor = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Interval)?.anchorStartTimestamp
-                        BackupScheduleConfig.Interval(
-                            intervalHours = h,
-                            intervalMinutes = m,
-                            anchorStartTimestamp = existingAnchor ?: currentTimeMillis()
-                        )
+                    val scheduleConfig: BackupScheduleConfig = when (scheduleMode) {
+                        ScheduleMode.TIMED -> BackupScheduleConfig.Timed(timedTime.ifBlank { "02:00" })
+                        ScheduleMode.INTERVAL -> {
+                            val h = intervalHours.toIntOrNull() ?: 1
+                            val m = intervalMinutes.toIntOrNull() ?: 0
+                            val existingAnchor = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Interval)?.anchorStartTimestamp
+                            BackupScheduleConfig.Interval(
+                                intervalHours = h,
+                                intervalMinutes = m,
+                                anchorStartTimestamp = existingAnchor ?: currentTimeMillis()
+                            )
+                        }
+                        ScheduleMode.ON_DATA_CHANGE -> BackupScheduleConfig.OnDataChange()
                     }
 
                     val routine = BackupRoutine(
@@ -260,6 +310,7 @@ fun BackupRoutineDialog(
                         isEnabled = initialRoutine?.isEnabled ?: true,
                         type = BackupType.LOCAL,
                         fileType = fileType,
+                        writeMode = writeMode,
                         scheduleConfig = scheduleConfig,
                         backupLocationPath = locationPath,
                         lastBackupTimestamp = initialRoutine?.lastBackupTimestamp

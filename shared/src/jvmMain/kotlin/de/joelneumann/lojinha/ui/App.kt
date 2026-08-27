@@ -26,15 +26,17 @@ import de.joelneumann.lojinha.ui.viewmodel.*
 @Composable
 fun App() {
     val database = remember { DatabaseFactory.createDatabase() }
-    val productRepository = remember { RoomProductRepositoryImpl(database.productDao()) }
-    val userRepository = remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao()) }
-    val settingsRepository = remember { RoomSettingsRepositoryImpl(database.settingsDao()) }
-    val transactionRepository = remember { RoomTransactionRepositoryImpl(database.transactionDao()) }
-
     val backupRepository = remember { de.joelneumann.lojinha.data.repository.RoomBackupRepositoryImpl(database.backupDao()) }
     val backupRestoreService = remember { de.joelneumann.lojinha.data.service.BackupRestoreService(database) }
     val coroutineScope = rememberCoroutineScope()
     val autoBackupScheduler = remember { de.joelneumann.lojinha.data.service.AutoBackupScheduler(backupRestoreService, backupRepository, coroutineScope) }
+
+    val onDataChanged = remember { { autoBackupScheduler.triggerDataChangeBackup() } }
+
+    val productRepository = remember { RoomProductRepositoryImpl(database.productDao(), onDataChanged) }
+    val userRepository = remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
+    val settingsRepository = remember { RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged) }
+    val transactionRepository = remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
 
     LaunchedEffect(Unit) {
         autoBackupScheduler.startScheduler()
@@ -127,7 +129,15 @@ fun App() {
                     val adminProductsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel(productRepository, settingsRepository) }
                     val adminUsersViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel(userRepository, transactionRepository) }
                     val adminTransactionsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
-                    val adminSettingsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel(settingsRepository) }
+                    val adminSettingsViewModel = remember {
+                        de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel(
+                            settingsRepository = settingsRepository,
+                            backupRepository = backupRepository,
+                            onRunRoutineNow = { routine ->
+                                autoBackupScheduler.executeRoutine(routine)
+                            }
+                        )
+                    }
 
                     de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
                         productsViewModel = adminProductsViewModel,

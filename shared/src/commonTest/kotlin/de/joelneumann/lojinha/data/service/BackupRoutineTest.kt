@@ -4,6 +4,7 @@ import de.joelneumann.lojinha.domain.model.BackupFileType
 import de.joelneumann.lojinha.domain.model.BackupRoutine
 import de.joelneumann.lojinha.domain.model.BackupScheduleConfig
 import de.joelneumann.lojinha.domain.model.BackupType
+import de.joelneumann.lojinha.domain.model.BackupWriteMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -77,5 +78,38 @@ class BackupRoutineTest {
 
         val nextDue = routine.calculateNextDueTimestamp()
         assertTrue(nextDue > 0L)
+    }
+
+    @Test
+    fun testOnDataChangeScheduleNextDueCalculation() {
+        val routine = BackupRoutine(
+            id = "rt-test-4",
+            name = "Realtime Data Change Routine",
+            isEnabled = true,
+            type = BackupType.LOCAL,
+            fileType = BackupFileType.DB,
+            scheduleConfig = BackupScheduleConfig.OnDataChange(debounceMs = 1000L),
+            backupLocationPath = "/tmp/backups",
+            lastBackupTimestamp = null
+        )
+
+        val nextDue = routine.calculateNextDueTimestamp()
+        assertEquals(Long.MAX_VALUE, nextDue)
+    }
+
+    @Test
+    fun testBackupWriteModeDefaults() {
+        val routineDefault = BackupRoutine(
+            id = "rt-test-5",
+            name = "Default Write Mode Routine"
+        )
+        assertEquals(BackupWriteMode.CREATE_NEW_FILE, routineDefault.writeMode)
+
+        val routineOverwrite = BackupRoutine(
+            id = "rt-test-6",
+            name = "Overwrite Mode Routine",
+            writeMode = BackupWriteMode.OVERWRITE_LATEST
+        )
+        assertEquals(BackupWriteMode.OVERWRITE_LATEST, routineOverwrite.writeMode)
     }
 }

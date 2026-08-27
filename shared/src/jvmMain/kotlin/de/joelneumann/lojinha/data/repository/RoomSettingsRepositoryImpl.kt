@@ -8,7 +8,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class RoomSettingsRepositoryImpl(
-    private val settingsDao: SettingsDao
+    private val settingsDao: SettingsDao,
+    private val onDataChanged: (() -> Unit)? = null
 ) : SettingsRepository {
 
     override fun getSettingsFlow(): Flow<SystemSettings> {
@@ -23,5 +24,6 @@ class RoomSettingsRepositoryImpl(
 
     override suspend fun updateSettings(settings: SystemSettings) {
         settingsDao.insertOrUpdateSettings(SettingsEntity.fromDomain(settings))
+        onDataChanged?.invoke()
     }
 }

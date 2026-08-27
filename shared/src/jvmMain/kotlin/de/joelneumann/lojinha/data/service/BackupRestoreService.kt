@@ -80,9 +80,16 @@ class BackupRestoreService(
         return sdf.format(Date())
     }
 
-    suspend fun performDbBackup(destinationDir: File): File = withContext(Dispatchers.IO) {
+    suspend fun performDbBackup(
+        destinationDir: File,
+        writeMode: de.joelneumann.lojinha.domain.model.BackupWriteMode = de.joelneumann.lojinha.domain.model.BackupWriteMode.CREATE_NEW_FILE
+    ): File = withContext(Dispatchers.IO) {
         require(destinationDir.exists() && destinationDir.isDirectory) { "Destination directory does not exist or is not a directory: ${destinationDir.absolutePath}" }
-        val backupFileName = "lojinha_backup_${getTimestampString()}.db"
+        val backupFileName = if (writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) {
+            "lojinha_backup_latest.db"
+        } else {
+            "lojinha_backup_${getTimestampString()}.db"
+        }
         val targetFile = File(destinationDir, backupFileName)
 
         // Checkpoint WAL via BundledSQLiteDriver to flush all active transactions into lojinha_room.db
@@ -114,19 +121,30 @@ class BackupRestoreService(
         val dir = File(routine.backupLocationPath)
         require(dir.exists() && dir.isDirectory) { "Target directory does not exist: ${dir.absolutePath}" }
         when (routine.fileType) {
-            de.joelneumann.lojinha.domain.model.BackupFileType.DB -> performDbBackup(dir)
-            de.joelneumann.lojinha.domain.model.BackupFileType.CSV -> performCsvBackup(dir)
+            de.joelneumann.lojinha.domain.model.BackupFileType.DB -> performDbBackup(dir, routine.writeMode)
+            de.joelneumann.lojinha.domain.model.BackupFileType.CSV -> performCsvBackup(dir, routine.writeMode)
             de.joelneumann.lojinha.domain.model.BackupFileType.BOTH -> {
-                val dbResult = performDbBackup(dir)
-                performCsvBackup(dir)
+                val dbResult = performDbBackup(dir, routine.writeMode)
+                performCsvBackup(dir, routine.writeMode)
                 dbResult
             }
         }
     }
 
-    suspend fun performCsvBackup(destinationDir: File): File = withContext(Dispatchers.IO) {
+    suspend fun performCsvBackup(
+        destinationDir: File,
+        writeMode: de.joelneumann.lojinha.domain.model.BackupWriteMode = de.joelneumann.lojinha.domain.model.BackupWriteMode.CREATE_NEW_FILE
+    ): File = withContext(Dispatchers.IO) {
         require(destinationDir.exists() && destinationDir.isDirectory) { "Destination directory does not exist: ${destinationDir.absolutePath}" }
-        val exportFolder = File(destinationDir, "lojinha_csv_export_${getTimestampString()}")
+        val folderName = if (writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) {
+            "lojinha_csv_export_latest"
+        } else {
+            "lojinha_csv_export_${getTimestampString()}"
+        }
+        val exportFolder = File(destinationDir, folderName)
+        if (writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST && exportFolder.exists()) {
+            exportFolder.deleteRecursively()
+        }
         exportFolder.mkdirs()
 
         // 1. Export Products
@@ -310,17 +328,19 @@ class BackupRestoreService(
 
             // Read backup_routines
             if (tableNames.contains("backup_routines")) {
-                val stmt = connection.prepare("SELECT id, name, isEnabled, type, fileType, scheduleConfig, backupLocationPath, lastBackupTimestamp FROM backup_routines")
+                val stmt = connection.prepare("SELECT id, name, isEnabled, type, fileType, scheduleConfig, backupLocationPath, lastBackupTimestamp, writeMode FROM backup_routines")
                 try {
                     while (stmt.step()) {
                         val cfgStr = if (stmt.isNull(5)) "" else stmt.getText(5)
                         val lastTs = if (stmt.isNull(7)) null else stmt.getLong(7)
+                        val writeModeStr = try { if (stmt.isNull(8)) "CREATE_NEW_FILE" else stmt.getText(8) } catch (e: Exception) { "CREATE_NEW_FILE" }
                         val b = BackupEntity(
                             id = stmt.getText(0),
                             name = stmt.getText(1),
                             isEnabled = stmt.getLong(2) != 0L,
                             type = stmt.getText(3),
                             fileType = stmt.getText(4),
+                            writeMode = writeModeStr,
                             scheduleConfig = converters.toBackupScheduleConfig(cfgStr),
                             backupLocationPath = stmt.getText(6),
                             lastBackupTimestamp = lastTs

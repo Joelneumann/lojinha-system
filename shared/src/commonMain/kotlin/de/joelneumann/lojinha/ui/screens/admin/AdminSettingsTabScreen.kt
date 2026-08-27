@@ -556,11 +556,16 @@ fun AdminSettingsTabScreen(
                                         Formatting.formatTimestamp(it)
                                     } ?: "Never"
 
-                                    val nextDueStr = Formatting.formatTimestamp(routine.calculateNextDueTimestamp())
+                                    val nextDueStr = if (routine.scheduleConfig is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange) {
+                                        "On Real-time Event"
+                                    } else {
+                                        Formatting.formatTimestamp(routine.calculateNextDueTimestamp())
+                                    }
 
                                     val scheduleBadgeText = when (val cfg = routine.scheduleConfig) {
                                         is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed -> "TIMED ${cfg.timeOfDay}"
                                         is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Interval -> "EVERY ${cfg.intervalHours}h ${cfg.intervalMinutes}m"
+                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange -> "⚡ REALTIME CHANGE"
                                     }
 
                                     Card(
@@ -585,18 +590,26 @@ fun AdminSettingsTabScreen(
                                                     }
 
                                                     Surface(
-                                                        color = ColorSuccessEmerald.copy(alpha = 0.12f),
-                                                        shape = RoundedCornerShape(4.dp)
-                                                    ) {
-                                                        Text(".${routine.fileType.name.lowercase()}", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
-                                                    }
+                                                         color = ColorSuccessEmerald.copy(alpha = 0.12f),
+                                                         shape = RoundedCornerShape(4.dp)
+                                                     ) {
+                                                         Text(".${routine.fileType.name.lowercase()}", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
+                                                     }
 
-                                                    Surface(
-                                                        color = AccentNavy.copy(alpha = 0.12f),
-                                                        shape = RoundedCornerShape(4.dp)
-                                                    ) {
-                                                        Text(scheduleBadgeText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AccentNavy)
-                                                    }
+                                                     Surface(
+                                                         color = PrimaryNavy.copy(alpha = 0.08f),
+                                                         shape = RoundedCornerShape(4.dp)
+                                                     ) {
+                                                         val writeModeText = if (routine.writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) "OVERWRITE" else "NEW FILE"
+                                                         Text(writeModeText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                                     }
+
+                                                     Surface(
+                                                         color = AccentNavy.copy(alpha = 0.12f),
+                                                         shape = RoundedCornerShape(4.dp)
+                                                     ) {
+                                                         Text(scheduleBadgeText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AccentNavy)
+                                                     }
                                                 }
 
                                                 Switch(

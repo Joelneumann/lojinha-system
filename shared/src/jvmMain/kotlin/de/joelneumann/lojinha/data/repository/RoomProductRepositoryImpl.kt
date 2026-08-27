@@ -8,7 +8,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class RoomProductRepositoryImpl(
-    private val productDao: ProductDao
+    private val productDao: ProductDao,
+    private val onDataChanged: (() -> Unit)? = null
 ) : ProductRepository {
 
     override fun getProductsFlow(): Flow<List<Product>> {
@@ -32,17 +33,21 @@ class RoomProductRepositoryImpl(
 
     override suspend fun saveProduct(product: Product) {
         productDao.insertOrUpdateProduct(ProductEntity.fromDomain(product))
+        onDataChanged?.invoke()
     }
 
     override suspend fun deactivateProduct(id: String) {
         productDao.deactivateProduct(id)
+        onDataChanged?.invoke()
     }
 
     override suspend fun hardDeleteProduct(id: String) {
         productDao.deleteProduct(id)
+        onDataChanged?.invoke()
     }
 
     override suspend fun updateStock(productId: String, delta: Long) {
         productDao.updateStock(productId, delta)
+        onDataChanged?.invoke()
     }
 }

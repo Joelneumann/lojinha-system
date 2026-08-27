@@ -36,8 +36,36 @@ class AutoBackupScheduler(
         schedulerJob = null
     }
 
+    private var dataChangeDebounceJob: Job? = null
+
+    fun triggerDataChangeBackup(debounceMs: Long = 1000L) {
+        dataChangeDebounceJob?.cancel()
+        dataChangeDebounceJob = externalScope.launch(Dispatchers.IO) {
+            if (debounceMs > 0) {
+                delay(debounceMs)
+            }
+            evaluateAndRunDataChangeRoutines()
+        }
+    }
+
+    private suspend fun evaluateAndRunDataChangeRoutines() {
+        val activeRoutines = backupRepository.getAllBackups().filter {
+            it.isEnabled && it.scheduleConfig is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange
+        }
+
+        for (routine in activeRoutines) {
+            if (routine.backupLocationPath.isBlank()) continue
+            val dir = File(routine.backupLocationPath)
+            if (!dir.exists() || !dir.isDirectory) continue
+
+            executeRoutine(routine)
+        }
+    }
+
     private suspend fun evaluateAndRunRoutines() {
-        val activeRoutines = backupRepository.getAllBackups().filter { it.isEnabled }
+        val activeRoutines = backupRepository.getAllBackups().filter {
+            it.isEnabled && it.scheduleConfig !is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange
+        }
         val now = System.currentTimeMillis()
 
         for (routine in activeRoutines) {

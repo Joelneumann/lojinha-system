@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.map
 
 class RoomUserRepositoryImpl(
     private val userDao: UserDao,
-    private val transactionDao: TransactionDao
+    private val transactionDao: TransactionDao,
+    private val onDataChanged: (() -> Unit)? = null
 ) : UserRepository {
 
     override fun getUsersFlow(): Flow<List<User>> {
@@ -31,18 +32,22 @@ class RoomUserRepositoryImpl(
 
     override suspend fun saveUser(user: User) {
         userDao.insertOrUpdateUser(UserEntity.fromDomain(user))
+        onDataChanged?.invoke()
     }
 
     override suspend fun deactivateUser(id: String) {
         userDao.deactivateUser(id)
+        onDataChanged?.invoke()
     }
 
     override suspend fun softDeleteUser(id: String) {
         userDao.softDeleteUser(id)
+        onDataChanged?.invoke()
     }
 
     override suspend fun restoreUser(id: String) {
         userDao.restoreUser(id)
+        onDataChanged?.invoke()
     }
 
     override suspend fun canHardDeleteUser(id: String): Boolean {
@@ -51,16 +56,19 @@ class RoomUserRepositoryImpl(
     }
 
     override suspend fun hardDeleteUser(id: String): Boolean {
-        return if (canHardDeleteUser(id)) {
+        val res = if (canHardDeleteUser(id)) {
             userDao.deleteUser(id)
             true
         } else {
             userDao.softDeleteUser(id)
             false
         }
+        onDataChanged?.invoke()
+        return res
     }
 
     override suspend fun updateBalance(userId: String, amountDelta: Long) {
         userDao.updateBalance(userId, amountDelta)
+        onDataChanged?.invoke()
     }
 }
