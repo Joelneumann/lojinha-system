@@ -142,7 +142,24 @@ class LojinhaAdminServer(
                     // Transactions
                     get("/transactions") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
-                        call.respond(transactionRepository.getAllTransactions())
+                        val pageParam = call.request.queryParameters["page"]?.toIntOrNull()
+                        val pageSizeParam = call.request.queryParameters["pageSize"]?.toIntOrNull()
+                        val searchParam = call.request.queryParameters["search"]
+                        val typeParam = call.request.queryParameters["type"]?.let {
+                            try { TransactionType.valueOf(it) } catch (e: Exception) { null }
+                        }
+                        val userIdParam = call.request.queryParameters["userId"]
+
+                        if (pageParam != null && pageSizeParam != null) {
+                            val result = if (userIdParam != null) {
+                                transactionRepository.getTransactionsByUserIdPaged(userIdParam, pageParam, pageSizeParam, searchParam, typeParam)
+                            } else {
+                                transactionRepository.getTransactionsPaged(pageParam, pageSizeParam, searchParam, typeParam)
+                            }
+                            call.respond(result)
+                        } else {
+                            call.respond(transactionRepository.getAllTransactions())
+                        }
                     }
                     post("/transactions") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post

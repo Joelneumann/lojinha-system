@@ -209,6 +209,46 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
     override suspend fun getTransactionCountForUser(userId: String): Int {
         return getTransactionsByUserId(userId).size
     }
+
+    override suspend fun getTransactionsPaged(
+        page: Int,
+        pageSize: Int,
+        searchQuery: String?,
+        typeFilter: TransactionType?
+    ): PagedResult<Transaction> {
+        return try {
+            client.httpClient.get("/api/admin/transactions") {
+                client.run { appendAdminAuth() }
+                parameter("page", page)
+                parameter("pageSize", pageSize)
+                if (!searchQuery.isNullOrBlank()) parameter("search", searchQuery)
+                if (typeFilter != null) parameter("type", typeFilter.name)
+            }.body()
+        } catch (e: Exception) {
+            PagedResult(emptyList(), 0, page, pageSize, 1)
+        }
+    }
+
+    override suspend fun getTransactionsByUserIdPaged(
+        userId: String,
+        page: Int,
+        pageSize: Int,
+        searchQuery: String?,
+        typeFilter: TransactionType?
+    ): PagedResult<Transaction> {
+        return try {
+            client.httpClient.get("/api/admin/transactions") {
+                client.run { appendAdminAuth() }
+                parameter("userId", userId)
+                parameter("page", page)
+                parameter("pageSize", pageSize)
+                if (!searchQuery.isNullOrBlank()) parameter("search", searchQuery)
+                if (typeFilter != null) parameter("type", typeFilter.name)
+            }.body()
+        } catch (e: Exception) {
+            PagedResult(emptyList(), 0, page, pageSize, 1)
+        }
+    }
 }
 
 class HttpSettingsRepository(private val client: AdminNetworkClient) : SettingsRepository {

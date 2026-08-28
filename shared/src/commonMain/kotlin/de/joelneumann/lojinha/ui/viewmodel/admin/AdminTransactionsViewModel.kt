@@ -7,6 +7,7 @@ import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.Formatting
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,26 +29,75 @@ class AdminTransactionsViewModel(
     private val _selectedTypeFilter = MutableStateFlow<TransactionType?>(null)
     val selectedTypeFilter: StateFlow<TransactionType?> = _selectedTypeFilter.asStateFlow()
 
+    private val _currentPage = MutableStateFlow(0)
+    val currentPage: StateFlow<Int> = _currentPage.asStateFlow()
+
+    private val _pageSize = MutableStateFlow(25)
+    val pageSize: StateFlow<Int> = _pageSize.asStateFlow()
+
+    private val _totalCount = MutableStateFlow(0)
+    val totalCount: StateFlow<Int> = _totalCount.asStateFlow()
+
+    private val _totalPages = MutableStateFlow(1)
+    val totalPages: StateFlow<Int> = _totalPages.asStateFlow()
+
     init {
         loadData()
     }
 
     fun loadData() {
-        viewModelScope.launch {
-            transactionRepository.getTransactionsFlow().collect { _transactions.value = it }
-        }
+        fetchPagedTransactions()
     }
 
     fun updateSearchFilter(query: String) {
         _searchFilter.value = query
+        _currentPage.value = 0
+        fetchPagedTransactions()
     }
 
     fun updateTypeFilter(type: TransactionType?) {
         _selectedTypeFilter.value = type
+        _currentPage.value = 0
+        fetchPagedTransactions()
     }
 
-    private suspend fun refreshTransactions() {
-        _transactions.value = transactionRepository.getAllTransactions()
+    fun setPage(page: Int) {
+        if (page >= 0 && page < _totalPages.value) {
+            _currentPage.value = page
+            fetchPagedTransactions()
+        }
+    }
+
+    fun setPageSize(size: Int) {
+        _pageSize.value = size
+        _currentPage.value = 0
+        fetchPagedTransactions()
+    }
+
+    private var fetchJob: Job? = null
+
+    private fun fetchPagedTransactions() {
+        fetchJob?.cancel()
+        fetchJob = viewModelScope.launch {
+            try {
+                val paged = transactionRepository.getTransactionsPaged(
+                    page = _currentPage.value,
+                    pageSize = _pageSize.value,
+                    searchQuery = _searchFilter.value,
+                    typeFilter = _selectedTypeFilter.value
+                )
+                _transactions.value = paged.items
+                _totalCount.value = paged.totalCount
+                _totalPages.value = paged.totalPages
+                _currentPage.value = paged.page
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Normal cancellation when filter or page changes rapidly
+            }
+        }
+    }
+
+    private fun refreshTransactions() {
+        fetchPagedTransactions()
     }
 
     fun stornoPurchaseWithUpdatedItems(originalTx: Transaction, updatedItems: List<TransactionItem>) {

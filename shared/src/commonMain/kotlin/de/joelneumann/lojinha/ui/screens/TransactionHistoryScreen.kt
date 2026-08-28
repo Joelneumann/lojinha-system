@@ -47,6 +47,11 @@ fun TransactionHistoryScreen(
     val selectedTypeFilter by viewModel.selectedTypeFilter.collectAsState()
     val showSettingsModal by viewModel.showSettingsModal.collectAsState()
 
+    val currentPage by viewModel.currentPage.collectAsState()
+    val totalPages by viewModel.totalPages.collectAsState()
+    val pageSize by viewModel.pageSize.collectAsState()
+    val totalCount by viewModel.totalCount.collectAsState()
+
     val pinInput by viewModel.pinInput.collectAsState()
     val selectedLanguage by viewModel.selectedLanguage.collectAsState()
     val selectedSecondaryCurrency by viewModel.selectedSecondaryCurrency.collectAsState()
@@ -62,6 +67,10 @@ fun TransactionHistoryScreen(
         searchFilter = searchFilter,
         selectedTypeFilter = selectedTypeFilter,
         showSettingsModal = showSettingsModal,
+        currentPage = currentPage,
+        totalPages = totalPages,
+        pageSize = pageSize,
+        totalCount = totalCount,
         pinInput = pinInput,
         selectedLanguage = selectedLanguage,
         selectedSecondaryCurrency = selectedSecondaryCurrency,
@@ -70,6 +79,8 @@ fun TransactionHistoryScreen(
         onUserUpdated = onUserUpdated,
         onSearchFilterChange = viewModel::updateSearchFilter,
         onTypeFilterSelect = viewModel::selectTypeFilter,
+        onPageChange = viewModel::setPage,
+        onPageSizeChange = viewModel::setPageSize,
         onOpenSettingsModal = { viewModel.openSettingsModal(user) },
         onCloseSettingsModal = viewModel::closeSettingsModal,
         onUpdatePinInput = viewModel::updatePinInput,
@@ -87,6 +98,10 @@ fun TransactionHistoryContent(
     searchFilter: String,
     selectedTypeFilter: TransactionType?,
     showSettingsModal: Boolean,
+    currentPage: Int,
+    totalPages: Int,
+    pageSize: Int,
+    totalCount: Int,
     pinInput: String,
     selectedLanguage: Language,
     selectedSecondaryCurrency: SecondaryCurrency,
@@ -95,6 +110,8 @@ fun TransactionHistoryContent(
     onUserUpdated: (User) -> Unit,
     onSearchFilterChange: (String) -> Unit,
     onTypeFilterSelect: (TransactionType?) -> Unit,
+    onPageChange: (Int) -> Unit,
+    onPageSizeChange: (Int) -> Unit,
     onOpenSettingsModal: () -> Unit,
     onCloseSettingsModal: () -> Unit,
     onUpdatePinInput: (String) -> Unit,
@@ -104,37 +121,17 @@ fun TransactionHistoryContent(
 ) {
     val strings = I18n.current
 
-    val transactionsWithBalance = remember(transactions) {
-        val sortedAsc = transactions.sortedBy { it.timestamp }
-        var current = 0L
-        val list = ArrayList<TransactionWithBalance>(sortedAsc.size)
-        for (tx in sortedAsc) {
-            val before = current
-            val after = before + tx.totalAmount
-            current = after
+    val transactionsWithBalance = remember(transactions, user.balance) {
+        val sortedDesc = transactions.sortedByDescending { it.timestamp }
+        val list = ArrayList<TransactionWithBalance>(sortedDesc.size)
+        var current = user.balance
+        for (tx in sortedDesc) {
+            val after = current
+            val before = after - tx.totalAmount
             list.add(TransactionWithBalance(tx, before, after))
+            current = before
         }
-        list.sortedByDescending { it.transaction.timestamp }
-    }
-
-    val filteredTransactions = remember(transactionsWithBalance, searchFilter, selectedTypeFilter, LanguageManager.currentLanguage) {
-        transactionsWithBalance.filter { item ->
-            val tx = item.transaction
-            val matchesType = selectedTypeFilter == null || tx.type == selectedTypeFilter
-            val dateStr = Formatting.formatTimestamp(tx.timestamp)
-            val dateStrEn = Formatting.formatTimestamp(tx.timestamp, Language.EN)
-            val dateStrDe = Formatting.formatTimestamp(tx.timestamp, Language.DE)
-            val dateStrBr = Formatting.formatTimestamp(tx.timestamp, Language.BR)
-            val matchesText = searchFilter.isBlank() ||
-                    tx.userNameSnapshot.contains(searchFilter, ignoreCase = true) ||
-                    (tx.note != null && tx.note.contains(searchFilter, ignoreCase = true)) ||
-                    tx.items.any { it.productName.contains(searchFilter, ignoreCase = true) } ||
-                    dateStr.contains(searchFilter, ignoreCase = true) ||
-                    dateStrEn.contains(searchFilter, ignoreCase = true) ||
-                    dateStrDe.contains(searchFilter, ignoreCase = true) ||
-                    dateStrBr.contains(searchFilter, ignoreCase = true)
-            matchesType && matchesText
-        }
+        list
     }
 
     val rate = when (user.secondaryCurrency) {
@@ -237,17 +234,17 @@ fun TransactionHistoryContent(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Transaction Ledger List
-            if (filteredTransactions.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            // Transaction Ledger List & Pagination Bar
+            if (transactionsWithBalance.isEmpty()) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text("No transactions found.", color = TextSecondaryMuted)
                 }
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.weight(1f).fillMaxWidth()
                 ) {
-                    items(filteredTransactions, key = { it.transaction.id }) { txWithBalance ->
+                    items(transactionsWithBalance, key = { it.transaction.id }) { txWithBalance ->
                         TransactionItemCard(
                             txWithBalance = txWithBalance,
                             allTransactionsMap = allTransactionsMap,
@@ -257,6 +254,17 @@ fun TransactionHistoryContent(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            de.joelneumann.lojinha.ui.components.general.PaginationBar(
+                currentPage = currentPage,
+                totalPages = totalPages,
+                pageSize = pageSize,
+                totalCount = totalCount,
+                onPageChange = onPageChange,
+                onPageSizeChange = onPageSizeChange
+            )
         }
 
         // User Settings Modal Dialog

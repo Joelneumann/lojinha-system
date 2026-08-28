@@ -25,28 +25,15 @@ fun AdminTransactionsTabScreen(
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val searchQuery by viewModel.searchFilter.collectAsState()
-
-    val filteredTransactions = remember(transactions, searchQuery) {
-        if (searchQuery.isBlank()) transactions
-        else transactions.filter { tx ->
-            val dateStr = Formatting.formatTimestamp(tx.timestamp)
-            val dateStrEn = Formatting.formatTimestamp(tx.timestamp, Language.EN)
-            val dateStrDe = Formatting.formatTimestamp(tx.timestamp, Language.DE)
-            val dateStrBr = Formatting.formatTimestamp(tx.timestamp, Language.BR)
-            tx.userNameSnapshot.contains(searchQuery, ignoreCase = true) ||
-                    tx.type.name.contains(searchQuery, ignoreCase = true) ||
-                    dateStr.contains(searchQuery, ignoreCase = true) ||
-                    dateStrEn.contains(searchQuery, ignoreCase = true) ||
-                    dateStrDe.contains(searchQuery, ignoreCase = true) ||
-                    dateStrBr.contains(searchQuery, ignoreCase = true) ||
-                    tx.items.any { item -> item.productName.contains(searchQuery, ignoreCase = true) }
-        }
-    }
+    val currentPage by viewModel.currentPage.collectAsState()
+    val totalPages by viewModel.totalPages.collectAsState()
+    val pageSize by viewModel.pageSize.collectAsState()
+    val totalCount by viewModel.totalCount.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
         val openFirstResult = {
-            if (filteredTransactions.isNotEmpty()) {
-                onRequestExpandTransaction(filteredTransactions.first().id)
+            if (transactions.isNotEmpty()) {
+                onRequestExpandTransaction(transactions.first().id)
             }
         }
 
@@ -54,23 +41,23 @@ fun AdminTransactionsTabScreen(
             searchQuery = searchQuery,
             onQueryChange = viewModel::updateSearchFilter,
             placeholder = "🔍 Search transaction by user, type, product, or date...",
-            countText = if (searchQuery.isBlank()) "${transactions.size} Transactions" else "${filteredTransactions.size} / ${transactions.size} Transactions",
+            countText = if (searchQuery.isBlank()) "$totalCount Transactions" else "${transactions.size} of $totalCount Transactions",
             onSearchSubmitted = openFirstResult
         )
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        if (filteredTransactions.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (transactions.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text("No transactions found.", color = TextSecondaryMuted)
             }
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 32.dp),
+                contentPadding = PaddingValues(bottom = 16.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth()
             ) {
-                items(filteredTransactions, key = { it.id }) { tx ->
+                items(transactions, key = { it.id }) { tx ->
                     val isExpanded = expandedTransactionId == tx.id
 
                     val cancellationChild = transactions.firstOrNull { it.referenceTransactionId == tx.id && it.type == TransactionType.CANCELLATION }
@@ -96,5 +83,16 @@ fun AdminTransactionsTabScreen(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        de.joelneumann.lojinha.ui.components.general.PaginationBar(
+            currentPage = currentPage,
+            totalPages = totalPages,
+            pageSize = pageSize,
+            totalCount = totalCount,
+            onPageChange = viewModel::setPage,
+            onPageSizeChange = viewModel::setPageSize
+        )
     }
 }
