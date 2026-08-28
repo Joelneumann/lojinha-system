@@ -18,7 +18,13 @@ data class SettingsEntity(
     val autoBackupScheduleType: String = "DAILY",
     val autoBackupTime: String = "02:00",
     val autoBackupIntervalHours: Int = 24,
-    val lastBackupTimestamp: Long? = null
+    val lastBackupTimestamp: Long? = null,
+    val oneDriveClientId: String = "202e1c94-b152-4751-b0e6-a2a4b8eb4901",
+    val oneDriveRefreshToken: String? = null,
+    val oneDriveAccountEmail: String? = null,
+    val oneDriveAccountName: String? = null,
+    val oneDriveDefaultFolder: String = "/LojinhaBackups",
+    val oneDriveTenant: String = "common"
 ) {
     fun toDomain(): SystemSettings = SystemSettings(
         adminPasswordHash = adminPasswordHash,
@@ -32,7 +38,13 @@ data class SettingsEntity(
         autoBackupScheduleType = autoBackupScheduleType,
         autoBackupTime = autoBackupTime,
         autoBackupIntervalHours = autoBackupIntervalHours,
-        lastBackupTimestamp = lastBackupTimestamp
+        lastBackupTimestamp = lastBackupTimestamp,
+        oneDriveClientId = oneDriveClientId,
+        oneDriveRefreshToken = oneDriveRefreshToken,
+        oneDriveAccountEmail = oneDriveAccountEmail,
+        oneDriveAccountName = oneDriveAccountName,
+        oneDriveDefaultFolder = oneDriveDefaultFolder,
+        oneDriveTenant = oneDriveTenant
     )
 
     companion object {
@@ -49,7 +61,13 @@ data class SettingsEntity(
             autoBackupScheduleType = settings.autoBackupScheduleType,
             autoBackupTime = settings.autoBackupTime,
             autoBackupIntervalHours = settings.autoBackupIntervalHours,
-            lastBackupTimestamp = settings.lastBackupTimestamp
+            lastBackupTimestamp = settings.lastBackupTimestamp,
+            oneDriveClientId = settings.oneDriveClientId,
+            oneDriveRefreshToken = settings.oneDriveRefreshToken,
+            oneDriveAccountEmail = settings.oneDriveAccountEmail,
+            oneDriveAccountName = settings.oneDriveAccountName,
+            oneDriveDefaultFolder = settings.oneDriveDefaultFolder,
+            oneDriveTenant = settings.oneDriveTenant
         )
     }
 }

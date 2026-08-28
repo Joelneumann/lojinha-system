@@ -112,4 +112,21 @@ class BackupRoutineTest {
         )
         assertEquals(BackupWriteMode.OVERWRITE_LATEST, routineOverwrite.writeMode)
     }
+
+    @Test
+    fun testOneDriveBackupTypeRoutine() {
+        val oneDriveRoutine = BackupRoutine(
+            id = "rt-onedrive-1",
+            name = "Realtime OneDrive Sync",
+            type = BackupType.ONEDRIVE,
+            fileType = BackupFileType.DB,
+            writeMode = BackupWriteMode.OVERWRITE_LATEST,
+            scheduleConfig = BackupScheduleConfig.OnDataChange(debounceMs = 1000L),
+            backupLocationPath = "/LojinhaBackups"
+        )
+
+        assertEquals(BackupType.ONEDRIVE, oneDriveRoutine.type)
+        assertEquals("/LojinhaBackups", oneDriveRoutine.backupLocationPath)
+        assertEquals(Long.MAX_VALUE, oneDriveRoutine.calculateNextDueTimestamp())
+    }
 }

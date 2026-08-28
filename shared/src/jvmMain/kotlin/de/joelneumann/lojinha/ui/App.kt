@@ -28,14 +28,24 @@ fun App() {
     val database = remember { DatabaseFactory.createDatabase() }
     val backupRepository = remember { de.joelneumann.lojinha.data.repository.RoomBackupRepositoryImpl(database.backupDao()) }
     val backupRestoreService = remember { de.joelneumann.lojinha.data.service.BackupRestoreService(database) }
+    val oneDriveBackupService = remember { de.joelneumann.lojinha.data.service.OneDriveBackupService() }
     val coroutineScope = rememberCoroutineScope()
-    val autoBackupScheduler = remember { de.joelneumann.lojinha.data.service.AutoBackupScheduler(backupRestoreService, backupRepository, coroutineScope) }
+
+    val settingsRepository = remember { RoomSettingsRepositoryImpl(database.settingsDao()) }
+    val autoBackupScheduler = remember {
+        de.joelneumann.lojinha.data.service.AutoBackupScheduler(
+            backupRestoreService = backupRestoreService,
+            backupRepository = backupRepository,
+            externalScope = coroutineScope,
+            settingsRepository = settingsRepository,
+            oneDriveBackupService = oneDriveBackupService
+        )
+    }
 
     val onDataChanged = remember { { autoBackupScheduler.triggerDataChangeBackup() } }
 
     val productRepository = remember { RoomProductRepositoryImpl(database.productDao(), onDataChanged) }
     val userRepository = remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
-    val settingsRepository = remember { RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged) }
     val transactionRepository = remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
 
     LaunchedEffect(Unit) {
@@ -135,7 +145,8 @@ fun App() {
                             backupRepository = backupRepository,
                             onRunRoutineNow = { routine ->
                                 autoBackupScheduler.executeRoutine(routine)
-                            }
+                            },
+                            oneDriveBackupService = oneDriveBackupService
                         )
                     }
 

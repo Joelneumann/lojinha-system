@@ -29,7 +29,8 @@ fun BackupRoutineDialog(
     var locationPath by remember { mutableStateOf(initialRoutine?.backupLocationPath ?: "") }
     var fileType by remember { mutableStateOf(initialRoutine?.fileType ?: BackupFileType.DB) }
     var writeMode by remember { mutableStateOf(initialRoutine?.writeMode ?: BackupWriteMode.CREATE_NEW_FILE) }
-    
+    var destinationType by remember { mutableStateOf(initialRoutine?.type ?: BackupType.LOCAL) }
+
     var scheduleMode by remember {
         val mode = when (initialRoutine?.scheduleConfig) {
             is BackupScheduleConfig.Interval -> ScheduleMode.INTERVAL
@@ -118,6 +119,28 @@ fun BackupRoutineDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // Destination Target FilterChips
+                Column {
+                    Text("Destination Target:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = destinationType == BackupType.LOCAL,
+                            onClick = { destinationType = BackupType.LOCAL },
+                            label = { Text("Local Folder") }
+                        )
+                        FilterChip(
+                            selected = destinationType == BackupType.ONEDRIVE,
+                            onClick = {
+                                destinationType = BackupType.ONEDRIVE
+                                if (locationPath.isBlank() || !locationPath.startsWith("/")) {
+                                    locationPath = "/LojinhaBackups"
+                                }
+                            },
+                            label = { Text("☁️ OneDrive") }
+                        )
+                    }
+                }
+
                 // Location Picker
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -127,28 +150,30 @@ fun BackupRoutineDialog(
                     OutlinedTextField(
                         value = locationPath,
                         onValueChange = { locationPath = it; errorMessage = null },
-                        label = { Text("Host Save Location") },
-                        placeholder = { Text("Select folder path...") },
+                        label = { Text(if (destinationType == BackupType.ONEDRIVE) "OneDrive Remote Folder Path" else "Host Save Location") },
+                        placeholder = { Text(if (destinationType == BackupType.ONEDRIVE) "/LojinhaBackups" else "Select folder path...") },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
-                    Button(
-                        onClick = { pickFolder { path -> locationPath = path } },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                        modifier = Modifier.padding(top = 8.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    if (destinationType == BackupType.LOCAL) {
+                        Button(
+                            onClick = { pickFolder { path -> locationPath = path } },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                            modifier = Modifier.padding(top = 8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.FolderOpen,
-                                contentDescription = null,
-                                tint = SurfaceWhite,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text("Browse...")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    tint = SurfaceWhite,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text("Browse...")
+                            }
                         }
                     }
                 }
@@ -308,7 +333,7 @@ fun BackupRoutineDialog(
                         id = initialRoutine?.id?.ifBlank { "rt-${currentTimeMillis()}" } ?: "rt-${currentTimeMillis()}",
                         name = name,
                         isEnabled = initialRoutine?.isEnabled ?: true,
-                        type = BackupType.LOCAL,
+                        type = destinationType,
                         fileType = fileType,
                         writeMode = writeMode,
                         scheduleConfig = scheduleConfig,

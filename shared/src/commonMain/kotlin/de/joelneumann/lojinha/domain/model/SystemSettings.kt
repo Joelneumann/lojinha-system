@@ -15,5 +15,11 @@ data class SystemSettings(
     val autoBackupScheduleType: String = "DAILY",
     val autoBackupTime: String = "02:00",
     val autoBackupIntervalHours: Int = 24,
-    val lastBackupTimestamp: Long? = null
+    val lastBackupTimestamp: Long? = null,
+    val oneDriveClientId: String = "202e1c94-b152-4751-b0e6-a2a4b8eb4901",
+    val oneDriveRefreshToken: String? = null,
+    val oneDriveAccountEmail: String? = null,
+    val oneDriveAccountName: String? = null,
+    val oneDriveDefaultFolder: String = "/LojinhaBackups",
+    val oneDriveTenant: String = "common"
 )

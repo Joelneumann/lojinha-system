@@ -10,7 +10,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class BackupType {
-    LOCAL
+    LOCAL,
+    ONEDRIVE
 }
 
 @Serializable

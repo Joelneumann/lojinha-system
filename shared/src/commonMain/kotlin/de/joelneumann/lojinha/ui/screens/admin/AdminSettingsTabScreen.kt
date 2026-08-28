@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -478,6 +479,116 @@ fun AdminSettingsTabScreen(
                 }
             }
 
+            // CARD 4.5: MICROSOFT ONEDRIVE INTEGRATION
+            item(key = "onedrive-integration-card") {
+                val settingsState by viewModel.settings.collectAsState()
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("☁️ Microsoft OneDrive Integration", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+
+                            val isConnected = !settingsState.oneDriveRefreshToken.isNullOrBlank()
+                            Surface(
+                                color = if (isConnected) ColorSuccessEmerald.copy(alpha = 0.12f) else ColorDangerCrimson.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = if (isConnected) "Connected" else "Disconnected",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isConnected) ColorSuccessEmerald else ColorDangerCrimson
+                                )
+                            }
+                        }
+
+
+
+                        var clientIdInput by remember(settingsState.oneDriveClientId) { mutableStateOf(settingsState.oneDriveClientId) }
+                        OutlinedTextField(
+                            value = clientIdInput,
+                            onValueChange = {
+                                clientIdInput = it
+                                viewModel.updateOneDriveClientId(it)
+                            },
+                            label = { Text("Azure Application (Client) ID") },
+                            placeholder = { Text("Enter your Azure Client ID...") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (!settingsState.oneDriveRefreshToken.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Account: ${settingsState.oneDriveAccountEmail ?: "Microsoft Account"}",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = PrimaryNavy
+                                    )
+                                    if (!settingsState.oneDriveAccountName.isNullOrBlank()) {
+                                        Text(
+                                            text = settingsState.oneDriveAccountName ?: "",
+                                            fontSize = 11.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = { viewModel.requestDisconnectOneDrive() },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson)
+                                ) {
+                                    Text("Disconnect")
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Connect your Microsoft account to back up database & CSV files directly to OneDrive.",
+                                    fontSize = 12.sp,
+                                    color = Color.DarkGray,
+                                    modifier = Modifier.weight(1f).padding(end = 12.dp)
+                                )
+
+                                Button(
+                                    onClick = { viewModel.startOneDriveAuth() },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
+                                ) {
+                                    Text("Connect OneDrive")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // CARD 5: BACKUP ROUTINES MANAGEMENT
             item(key = "backup-routines-card") {
                 val routines by viewModel.routines.collectAsState()
@@ -937,6 +1048,33 @@ fun AdminSettingsTabScreen(
             onDismiss = {
                 viewModel.cancelToggleRoutine()
             }
+        )
+    }
+
+    val showOneDriveAuthDialog by viewModel.showOneDriveAuthDialog.collectAsState()
+    val oneDriveAuthStatus by viewModel.oneDriveAuthStatus.collectAsState()
+    val showOneDriveDisconnectDialog by viewModel.showOneDriveDisconnectDialog.collectAsState()
+    val showOneDriveSuccessDialog by viewModel.showOneDriveSuccessDialog.collectAsState()
+
+    if (showOneDriveAuthDialog) {
+        de.joelneumann.lojinha.ui.components.admin.OneDriveAuthDialog(
+            statusMessage = oneDriveAuthStatus,
+            onDismiss = { viewModel.cancelOneDriveAuth() }
+        )
+    }
+
+    if (showOneDriveDisconnectDialog) {
+        de.joelneumann.lojinha.ui.components.admin.OneDriveDisconnectDialog(
+            accountEmail = settings.oneDriveAccountEmail,
+            onConfirm = { viewModel.confirmDisconnectOneDrive() },
+            onDismiss = { viewModel.cancelDisconnectOneDrive() }
+        )
+    }
+
+    if (showOneDriveSuccessDialog != null) {
+        de.joelneumann.lojinha.ui.components.admin.OneDriveSuccessDialog(
+            accountEmail = showOneDriveSuccessDialog!!,
+            onDismiss = { viewModel.dismissOneDriveSuccessDialog() }
         )
     }
 }

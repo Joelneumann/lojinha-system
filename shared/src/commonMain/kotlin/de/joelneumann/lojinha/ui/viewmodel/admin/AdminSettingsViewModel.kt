@@ -2,6 +2,8 @@ package de.joelneumann.lojinha.ui.viewmodel.admin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import de.joelneumann.lojinha.data.service.OneDriveBackupService
+import de.joelneumann.lojinha.domain.model.DeviceCodeResponse
 import de.joelneumann.lojinha.domain.model.BackupFileInfo
 import de.joelneumann.lojinha.domain.model.BackupRoutine
 import de.joelneumann.lojinha.domain.model.CsvImportResult
@@ -9,6 +11,7 @@ import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.ui.utils.PlatformFile
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,11 +20,23 @@ import kotlinx.coroutines.launch
 class AdminSettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val backupRepository: BackupRepository? = null,
-    private val onRunRoutineNow: (suspend (BackupRoutine) -> Unit)? = null
+    private val onRunRoutineNow: (suspend (BackupRoutine) -> Unit)? = null,
+    private val oneDriveBackupService: OneDriveBackupService? = null
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(SystemSettings())
     val settings: StateFlow<SystemSettings> = _settings.asStateFlow()
+
+    private val _showOneDriveAuthDialog = MutableStateFlow(false)
+    val showOneDriveAuthDialog: StateFlow<Boolean> = _showOneDriveAuthDialog.asStateFlow()
+
+    private val _oneDriveDeviceCodeResponse = MutableStateFlow<DeviceCodeResponse?>(null)
+    val oneDriveDeviceCodeResponse: StateFlow<DeviceCodeResponse?> = _oneDriveDeviceCodeResponse.asStateFlow()
+
+    private val _oneDriveAuthStatus = MutableStateFlow("Waiting for authorization...")
+    val oneDriveAuthStatus: StateFlow<String> = _oneDriveAuthStatus.asStateFlow()
+
+    private var oneDriveAuthJob: Job? = null
 
     private val _routines = MutableStateFlow<List<BackupRoutine>>(emptyList())
     val routines: StateFlow<List<BackupRoutine>> = _routines.asStateFlow()
@@ -58,6 +73,12 @@ class AdminSettingsViewModel(
 
     private val _detectedBackups = MutableStateFlow<List<BackupFileInfo>>(emptyList())
     val detectedBackups: StateFlow<List<BackupFileInfo>> = _detectedBackups.asStateFlow()
+
+    private val _showOneDriveDisconnectDialog = MutableStateFlow(false)
+    val showOneDriveDisconnectDialog: StateFlow<Boolean> = _showOneDriveDisconnectDialog.asStateFlow()
+
+    private val _showOneDriveSuccessDialog = MutableStateFlow<String?>(null)
+    val showOneDriveSuccessDialog: StateFlow<String?> = _showOneDriveSuccessDialog.asStateFlow()
 
     init {
         loadSettings()
@@ -224,5 +245,100 @@ class AdminSettingsViewModel(
 
     fun clearCsvImportPreview() {
         _csvImportPreview.value = null
+    }
+
+    fun startOneDriveAuth() {
+        val service = oneDriveBackupService ?: run {
+            _errorMessage.value = "OneDrive backup service is unavailable."
+            return
+        }
+        val clientId = _settings.value.oneDriveClientId.ifBlank { "202e1c94-b152-4751-b0e6-a2a4b8eb4901" }
+
+        _showOneDriveAuthDialog.value = true
+        _oneDriveAuthStatus.value = "Initializing browser login..."
+
+        oneDriveAuthJob?.cancel()
+        oneDriveAuthJob = viewModelScope.launch {
+            val tokenRes = service.startPkceAuth(
+                clientId = clientId,
+                onStatusUpdate = { status -> _oneDriveAuthStatus.value = status }
+            )
+
+            val tokenData = tokenRes.getOrNull()
+            if (tokenData?.refreshToken != null && tokenData.accessToken != null) {
+                val profileRes = service.fetchUserProfile(tokenData.accessToken)
+                val profile = profileRes.getOrNull()
+                val email = profile?.mail ?: profile?.userPrincipalName
+                val name = profile?.displayName
+
+                val updatedSettings = _settings.value.copy(
+                    oneDriveRefreshToken = tokenData.refreshToken,
+                    oneDriveAccountEmail = email,
+                    oneDriveAccountName = name
+                )
+                settingsRepository.updateSettings(updatedSettings)
+                _settings.value = updatedSettings
+                _showOneDriveAuthDialog.value = false
+                _showOneDriveSuccessDialog.value = email ?: "User"
+                _statusMessage.value = "✓ Connected to OneDrive as ${email ?: "User"}."
+            } else {
+                val err = tokenRes.exceptionOrNull()?.message ?: "Authorization failed."
+                _oneDriveAuthStatus.value = err
+                _errorMessage.value = err
+            }
+        }
+    }
+
+    fun cancelOneDriveAuth() {
+        oneDriveAuthJob?.cancel()
+        oneDriveAuthJob = null
+        _showOneDriveAuthDialog.value = false
+        _oneDriveDeviceCodeResponse.value = null
+    }
+
+    fun requestDisconnectOneDrive() {
+        _showOneDriveDisconnectDialog.value = true
+    }
+
+    fun cancelDisconnectOneDrive() {
+        _showOneDriveDisconnectDialog.value = false
+    }
+
+    fun confirmDisconnectOneDrive() {
+        _showOneDriveDisconnectDialog.value = false
+        disconnectOneDrive()
+    }
+
+    fun dismissOneDriveSuccessDialog() {
+        _showOneDriveSuccessDialog.value = null
+    }
+
+    fun disconnectOneDrive() {
+        viewModelScope.launch {
+            val updatedSettings = _settings.value.copy(
+                oneDriveRefreshToken = null,
+                oneDriveAccountEmail = null,
+                oneDriveAccountName = null
+            )
+            settingsRepository.updateSettings(updatedSettings)
+            _settings.value = updatedSettings
+            _statusMessage.value = "Disconnected OneDrive account."
+        }
+    }
+
+    fun updateOneDriveClientId(clientId: String) {
+        viewModelScope.launch {
+            val updatedSettings = _settings.value.copy(oneDriveClientId = clientId)
+            settingsRepository.updateSettings(updatedSettings)
+            _settings.value = updatedSettings
+        }
+    }
+
+    fun updateOneDriveTenant(tenant: String) {
+        viewModelScope.launch {
+            val updatedSettings = _settings.value.copy(oneDriveTenant = tenant)
+            settingsRepository.updateSettings(updatedSettings)
+            _settings.value = updatedSettings
+        }
     }
 }
