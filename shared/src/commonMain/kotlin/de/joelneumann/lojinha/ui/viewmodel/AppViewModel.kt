@@ -36,14 +36,6 @@ class AppViewModel(
     private val _settings = MutableStateFlow(SystemSettings())
     val settings: StateFlow<SystemSettings> = _settings.asStateFlow()
 
-    private val _inactivitySecondsRemaining = MutableStateFlow(180)
-    val inactivitySecondsRemaining: StateFlow<Int> = _inactivitySecondsRemaining.asStateFlow()
-
-    private val _showInactivityWarning = MutableStateFlow(false)
-    val showInactivityWarning: StateFlow<Boolean> = _showInactivityWarning.asStateFlow()
-
-    private var inactivityJob: Job? = null
-
     init {
         viewModelScope.launch {
             settingsRepository.getSettingsFlow().collect { updatedSettings ->
@@ -68,15 +60,12 @@ class AppViewModel(
         _currentUser.value = user
         LanguageManager.setLanguage(user.language)
         _currentScreen.value = AppScreen.SHOPPING
-        resetInactivityTimer()
     }
 
     fun logout() {
         _currentUser.value = null
         LanguageManager.resetToDefault()
         _currentScreen.value = AppScreen.MAIN_USER_SELECT
-        stopInactivityTimer()
-        _showInactivityWarning.value = false
     }
 
     fun navigateTo(screen: AppScreen) {
@@ -85,11 +74,6 @@ class AppViewModel(
             return
         }
         _currentScreen.value = screen
-        if (screen == AppScreen.SHOPPING || screen == AppScreen.TRANSACTION_HISTORY) {
-            resetInactivityTimer()
-        } else {
-            stopInactivityTimer()
-        }
     }
 
     fun updateCurrentUser(user: User) {
@@ -109,41 +93,5 @@ class AppViewModel(
                 LanguageManager.setLanguage(updated.language)
             }
         }
-    }
-
-    fun onUserInteracted() {
-        if (_currentUser.value != null && (_currentScreen.value == AppScreen.SHOPPING || _currentScreen.value == AppScreen.TRANSACTION_HISTORY)) {
-            resetInactivityTimer()
-        }
-    }
-
-    fun resetInactivityTimer() {
-        _showInactivityWarning.value = false
-        val timeoutSecs = _settings.value.inactivityTimeoutMinutes * 60
-        _inactivitySecondsRemaining.value = timeoutSecs
-
-        inactivityJob?.cancel()
-        inactivityJob = viewModelScope.launch {
-            while (_inactivitySecondsRemaining.value > 0) {
-                delay(1000)
-                _inactivitySecondsRemaining.value -= 1
-                if (_inactivitySecondsRemaining.value <= 60) {
-                    _showInactivityWarning.value = true
-                }
-            }
-            // Auto logout on timeout
-            logout()
-        }
-    }
-
-    private fun stopInactivityTimer() {
-        inactivityJob?.cancel()
-        inactivityJob = null
-        _showInactivityWarning.value = false
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        stopInactivityTimer()
     }
 }

@@ -4,6 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,7 +25,9 @@ import de.joelneumann.lojinha.ui.screens.ShoppingScreen
 import de.joelneumann.lojinha.ui.screens.TransactionHistoryScreen
 import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.joelneumann.lojinha.ui.viewmodel.*
@@ -61,8 +69,6 @@ fun App() {
     val currentScreen by appViewModel.currentScreen.collectAsState()
     val settings by appViewModel.settings.collectAsState()
     val currentUser by appViewModel.currentUser.collectAsState()
-    val showInactivityWarning by appViewModel.showInactivityWarning.collectAsState()
-    val inactivitySecondsRemaining by appViewModel.inactivitySecondsRemaining.collectAsState()
 
     var showAbandonCartGuardDialog by remember { mutableStateOf(false) }
 
@@ -70,16 +76,7 @@ fun App() {
 
     LojinhaTheme {
         val strings = I18n.current
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null
-                ) {
-                    appViewModel.onUserInteracted()
-                }
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             when (currentScreen) {
                 AppScreen.MAIN_USER_SELECT -> {
                     val userSelectionViewModel: UserSelectionViewModel = viewModel(
@@ -100,54 +97,98 @@ fun App() {
                 AppScreen.SHOPPING, AppScreen.TRANSACTION_HISTORY -> {
                     if (currentUser != null) {
                         val sessionNonce = remember(currentUser!!.id) { generateUuid() }
+                        val userSessionViewModel: UserSessionViewModel = viewModel(
+                            key = "user_session_${currentUser!!.id}_$sessionNonce",
+                            factory = LojinhaViewModelFactory.createUserSessionViewModelFactory(
+                                user = currentUser!!,
+                                settingsRepository = settingsRepository,
+                                onLogoutRequest = { appViewModel.logout() }
+                            )
+                        )
 
-                        when (currentScreen) {
-                            AppScreen.SHOPPING -> {
-                                val shoppingViewModel: ShoppingViewModel = viewModel(
-                                    key = "shopping_${currentUser!!.id}_$sessionNonce",
-                                    factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
-                                )
-                                val cartItems by shoppingViewModel.cartItems.collectAsState()
+                        val showInactivityWarning by userSessionViewModel.showInactivityWarning.collectAsState()
+                        val inactivitySecondsRemaining by userSessionViewModel.inactivitySecondsRemaining.collectAsState()
 
-                                ShoppingScreen(
-                                    viewModel = shoppingViewModel,
-                                    user = currentUser!!,
-                                    settings = settings,
-                                    onLogout = {
-                                        if (cartItems.isNotEmpty()) {
-                                            showAbandonCartGuardDialog = true
-                                        } else {
-                                            appViewModel.logout()
-                                        }
-                                    },
-                                    onNavigateToHistory = {
-                                        appViewModel.refreshCurrentUser()
-                                        appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
-                                    }
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            when (currentScreen) {
+                                AppScreen.SHOPPING -> {
+                                    val shoppingViewModel: ShoppingViewModel = viewModel(
+                                        key = "shopping_${currentUser!!.id}_$sessionNonce",
+                                        factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
+                                    )
+                                    val cartItems by shoppingViewModel.cartItems.collectAsState()
+
+                                    ShoppingScreen(
+                                        viewModel = shoppingViewModel,
+                                        user = currentUser!!,
+                                        settings = settings,
+                                        onLogout = {
+                                            if (cartItems.isNotEmpty()) {
+                                                showAbandonCartGuardDialog = true
+                                            } else {
+                                                userSessionViewModel.requestLogout()
+                                            }
+                                        },
+                                        onNavigateToHistory = {
+                                            appViewModel.refreshCurrentUser()
+                                            appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
+                                        },
+                                        onUserInteracted = { userSessionViewModel.onUserInteracted() }
+                                    )
+                                }
+
+                                AppScreen.TRANSACTION_HISTORY -> {
+                                    val historyViewModel: TransactionHistoryViewModel = viewModel(
+                                        key = "history_${currentUser!!.id}_$sessionNonce",
+                                        factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(transactionRepository, userRepository)
+                                    )
+
+                                    TransactionHistoryScreen(
+                                        viewModel = historyViewModel,
+                                        user = currentUser!!,
+                                        settings = settings,
+                                        onContinueShopping = {
+                                            appViewModel.navigateTo(AppScreen.SHOPPING)
+                                        },
+                                        onLogout = { userSessionViewModel.requestLogout() },
+                                        onUserUpdated = { updated ->
+                                            appViewModel.updateCurrentUser(updated)
+                                        },
+                                        onUserInteracted = { userSessionViewModel.onUserInteracted() }
+                                    )
+                                }
+
+                                else -> {}
+                            }
+
+                            // DEBUG: Realtime Inactivity Timer Overlay Badge (easily removable)
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(12.dp),
+                                color = Color.Black.copy(alpha = 0.8f),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                val mins = inactivitySecondsRemaining / 60
+                                val secs = inactivitySecondsRemaining % 60
+                                val formattedTime = "${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}"
+                                Text(
+                                    text = "⏱️ Debug Timer: $formattedTime (${inactivitySecondsRemaining}s)",
+                                    color = Color(0xFFFFD700),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
 
-                            AppScreen.TRANSACTION_HISTORY -> {
-                                val historyViewModel: TransactionHistoryViewModel = viewModel(
-                                    key = "history_${currentUser!!.id}_$sessionNonce",
-                                    factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(transactionRepository, userRepository)
-                                )
-
-                                TransactionHistoryScreen(
-                                    viewModel = historyViewModel,
-                                    user = currentUser!!,
-                                    settings = settings,
-                                    onContinueShopping = {
-                                        appViewModel.navigateTo(AppScreen.SHOPPING)
-                                    },
-                                    onLogout = { appViewModel.logout() },
-                                    onUserUpdated = { updated ->
-                                        appViewModel.updateCurrentUser(updated)
-                                    }
+                            // Inactivity Warning Modal Dialog (scoped to active user session)
+                            if (showInactivityWarning) {
+                                InactivityWarningDialog(
+                                    secondsRemaining = inactivitySecondsRemaining,
+                                    onStayLoggedIn = { userSessionViewModel.onUserInteracted() },
+                                    onLogoutNow = { userSessionViewModel.requestLogout() }
                                 )
                             }
-
-                            else -> {}
                         }
                     }
                 }
@@ -185,15 +226,6 @@ fun App() {
                         }
                     )
                 }
-            }
-
-            // Inactivity Warning Modal Dialog
-            if (showInactivityWarning) {
-                InactivityWarningDialog(
-                    secondsRemaining = inactivitySecondsRemaining,
-                    onStayLoggedIn = { appViewModel.onUserInteracted() },
-                    onLogoutNow = { appViewModel.logout() }
-                )
             }
 
             // Abandon Cart Guard Dialog

@@ -26,6 +26,16 @@ object LojinhaViewModelFactory {
         }
     }
 
+    fun createUserSessionViewModelFactory(
+        user: de.joelneumann.lojinha.domain.model.User,
+        settingsRepository: SettingsRepository,
+        onLogoutRequest: () -> Unit
+    ): ViewModelProvider.Factory = viewModelFactory {
+        initializer {
+            UserSessionViewModel(user, settingsRepository, onLogoutRequest)
+        }
+    }
+
     fun createShoppingViewModelFactory(
         productRepository: ProductRepository,
         userRepository: UserRepository,

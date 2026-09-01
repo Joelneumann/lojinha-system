@@ -34,6 +34,8 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import androidx.compose.ui.input.pointer.pointerInput
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 
 @Composable
@@ -43,7 +45,8 @@ fun TransactionHistoryScreen(
     settings: SystemSettings,
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
-    onUserUpdated: (User) -> Unit
+    onUserUpdated: (User) -> Unit,
+    onUserInteracted: () -> Unit = {}
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val searchFilter by viewModel.searchFilter.collectAsState()
@@ -81,17 +84,33 @@ fun TransactionHistoryScreen(
         onContinueShopping = onContinueShopping,
         onLogout = onLogout,
         onUserUpdated = onUserUpdated,
-        onSearchFilterChange = viewModel::updateSearchFilter,
-        onTypeFilterSelect = viewModel::selectTypeFilter,
-        onPageChange = viewModel::setPage,
-        onPageSizeChange = viewModel::setPageSize,
-        onOpenSettingsModal = { viewModel.openSettingsModal(user) },
+        onSearchFilterChange = { query ->
+            onUserInteracted()
+            viewModel.updateSearchFilter(query)
+        },
+        onTypeFilterSelect = { type ->
+            onUserInteracted()
+            viewModel.selectTypeFilter(type)
+        },
+        onPageChange = { page ->
+            onUserInteracted()
+            viewModel.setPage(page)
+        },
+        onPageSizeChange = { size ->
+            onUserInteracted()
+            viewModel.setPageSize(size)
+        },
+        onOpenSettingsModal = {
+            onUserInteracted()
+            viewModel.openSettingsModal(user)
+        },
         onCloseSettingsModal = viewModel::closeSettingsModal,
         onUpdatePinInput = viewModel::updatePinInput,
         onUpdateLanguage = viewModel::updateLanguage,
         onUpdateSecondaryCurrency = viewModel::updateSecondaryCurrency,
         onUpdateAvatar = viewModel::updateAvatar,
-        onSaveUserSettings = { viewModel.saveUserSettings(user, onUserUpdated) }
+        onSaveUserSettings = { viewModel.saveUserSettings(user, onUserUpdated) },
+        onUserInteracted = onUserInteracted
     )
 }
 
@@ -124,7 +143,8 @@ fun TransactionHistoryContent(
     onUpdateLanguage: (Language) -> Unit,
     onUpdateSecondaryCurrency: (SecondaryCurrency) -> Unit,
     onUpdateAvatar: (UserAvatarConfig) -> Unit,
-    onSaveUserSettings: () -> Unit
+    onSaveUserSettings: () -> Unit,
+    onUserInteracted: () -> Unit = {}
 ) {
     val strings = I18n.current
 
@@ -149,7 +169,23 @@ fun TransactionHistoryContent(
 
     val allTransactionsMap = remember(transactions) { transactions.associateBy { it.id } }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                var lastInteractionTime = 0L
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent()
+                        val now = currentTimeMillis()
+                        if (now - lastInteractionTime >= 1000L) {
+                            lastInteractionTime = now
+                            onUserInteracted()
+                        }
+                    }
+                }
+            }
+    ) {
         // Header Bar with "Continue Shopping" button on the left of Logout
         HeaderBar(
             title = strings.history,

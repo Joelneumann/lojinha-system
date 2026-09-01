@@ -25,6 +25,8 @@ import de.joelneumann.lojinha.ui.components.shopping.*
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import androidx.compose.ui.input.pointer.pointerInput
 import de.joelneumann.lojinha.ui.viewmodel.CartItem
 import de.joelneumann.lojinha.ui.viewmodel.ShoppingViewModel
 
@@ -34,7 +36,8 @@ fun ShoppingScreen(
     user: User,
     settings: SystemSettings,
     onLogout: () -> Unit,
-    onNavigateToHistory: () -> Unit
+    onNavigateToHistory: () -> Unit,
+    onUserInteracted: () -> Unit = {}
 ) {
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -56,17 +59,36 @@ fun ShoppingScreen(
         showCheckoutConfirmation = showCheckoutConfirmation,
         onLogout = onLogout,
         onSearchQueryChange = viewModel::updateSearchQuery,
-        onSearchSubmitted = { viewModel.onSearchSubmitted(settings.globalMarkupPercent) },
-        onProductSelected = { product -> viewModel.onProductSelected(product, settings.globalMarkupPercent) },
-        onUpdateCartQty = viewModel::updateCartItemQuantity,
-        onRemoveCartItem = viewModel::removeCartItem,
-        onOpenCheckout = viewModel::openCheckoutConfirmation,
+        onSearchSubmitted = {
+            onUserInteracted()
+            viewModel.onSearchSubmitted(settings.globalMarkupPercent)
+        },
+        onProductSelected = { product ->
+            onUserInteracted()
+            viewModel.onProductSelected(product, settings.globalMarkupPercent)
+        },
+        onUpdateCartQty = { id, qty ->
+            onUserInteracted()
+            viewModel.updateCartItemQuantity(id, qty)
+        },
+        onRemoveCartItem = { id ->
+            onUserInteracted()
+            viewModel.removeCartItem(id)
+        },
+        onOpenCheckout = {
+            onUserInteracted()
+            viewModel.openCheckoutConfirmation()
+        },
         onCloseCheckout = viewModel::closeCheckoutConfirmation,
         onCompletePurchase = { viewModel.completePurchase(user, onNavigateToHistory) },
         onWeightInputChange = viewModel::updateWeightInput,
         onCloseWeightDialog = viewModel::closeWeightDialog,
-        onSubmitWeightDialog = { viewModel.submitWeightDialog(settings.globalMarkupPercent) },
-        onNavigateToHistory = onNavigateToHistory
+        onSubmitWeightDialog = {
+            onUserInteracted()
+            viewModel.submitWeightDialog(settings.globalMarkupPercent)
+        },
+        onNavigateToHistory = onNavigateToHistory,
+        onUserInteracted = onUserInteracted
     )
 }
 
@@ -93,7 +115,8 @@ fun ShoppingContent(
     onWeightInputChange: (String) -> Unit,
     onCloseWeightDialog: () -> Unit,
     onSubmitWeightDialog: () -> Unit,
-    onNavigateToHistory: () -> Unit
+    onNavigateToHistory: () -> Unit,
+    onUserInteracted: () -> Unit = {}
 ) {
     val strings = I18n.current
     val searchFocusRequester = remember { FocusRequester() }
@@ -125,7 +148,23 @@ fun ShoppingContent(
         else -> 0.0
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                var lastInteractionTime = 0L
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent()
+                        val now = currentTimeMillis()
+                        if (now - lastInteractionTime >= 1000L) {
+                            lastInteractionTime = now
+                            onUserInteracted()
+                        }
+                    }
+                }
+            }
+    ) {
         HeaderBar(
             title = strings.shopping,
             actions = {
