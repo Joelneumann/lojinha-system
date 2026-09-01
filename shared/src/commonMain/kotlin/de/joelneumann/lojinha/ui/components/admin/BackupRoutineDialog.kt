@@ -15,6 +15,7 @@ import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.pickFolder
 
 private enum class ScheduleMode { TIMED, INTERVAL, ON_DATA_CHANGE }
@@ -330,7 +331,7 @@ fun BackupRoutineDialog(
                     }
 
                     val routine = BackupRoutine(
-                        id = initialRoutine?.id?.ifBlank { "rt-${currentTimeMillis()}" } ?: "rt-${currentTimeMillis()}",
+                        id = initialRoutine?.id?.ifBlank { generateUuid() } ?: generateUuid(),
                         name = name,
                         isEnabled = initialRoutine?.isEnabled ?: true,
                         type = destinationType,

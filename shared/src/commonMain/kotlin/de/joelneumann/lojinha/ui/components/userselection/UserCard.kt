@@ -39,20 +39,11 @@ fun UserCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(AccentNavy),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.initials,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SurfaceWhite
-                )
-            }
+            UserAvatar(
+                user = user,
+                modifier = Modifier.size(56.dp),
+                fontSize = 22.sp
+            )
 
             Spacer(modifier = Modifier.height(10.dp))
 

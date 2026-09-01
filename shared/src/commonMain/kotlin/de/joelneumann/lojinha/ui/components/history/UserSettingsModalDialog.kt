@@ -1,26 +1,40 @@
 package de.joelneumann.lojinha.ui.components.history
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import de.joelneumann.lojinha.domain.model.AvatarType
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.model.UserAvatarConfig
+import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_COLORS
+import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_EMOJIS
+import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
+import de.joelneumann.lojinha.ui.components.userselection.parseHexColor
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.horizontalScroll
 
 @Composable
 fun UserSettingsModalDialog(
@@ -28,24 +42,29 @@ fun UserSettingsModalDialog(
     pinInput: String,
     selectedLanguage: Language,
     selectedSecondaryCurrency: SecondaryCurrency,
+    selectedAvatar: UserAvatarConfig,
     onPinInputChange: (String) -> Unit,
     onLanguageSelect: (Language) -> Unit,
     onSecondaryCurrencySelect: (SecondaryCurrency) -> Unit,
+    onAvatarSelect: (UserAvatarConfig) -> Unit,
     onDismiss: () -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
     var isPinVisible by remember { mutableStateOf(false) }
+    var isAvatarExpanded by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
-            modifier = modifier.width(460.dp).wrapContentHeight()
+            modifier = modifier.width(480.dp).wrapContentHeight()
         ) {
             Column(
-                modifier = Modifier.padding(24.dp)
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
                 Text(
                     text = strings.userSettingsTitle,
@@ -53,6 +72,184 @@ fun UserSettingsModalDialog(
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Profile Avatar & Color Customization Section (Collapsible - Standard Collapsed)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceContainerHighLight,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Collapsible Header Row
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isAvatarExpanded = !isAvatarExpanded }
+                                .padding(14.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                UserAvatar(
+                                    user = user,
+                                    customAvatar = selectedAvatar,
+                                    modifier = Modifier.size(38.dp),
+                                    fontSize = 18.sp
+                                )
+
+                                Column {
+                                    Text(
+                                        text = "Profile Avatar & Color",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = PrimaryNavy
+                                    )
+                                    Text(
+                                        text = if (selectedAvatar.type == AvatarType.EMOJI) "Emoji: ${selectedAvatar.emoji}" else "Initials (${user.initials})",
+                                        fontSize = 12.sp,
+                                        color = TextSecondaryMuted
+                                    )
+                                }
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = if (isAvatarExpanded) "Hide" else "Edit",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AccentNavy
+                                )
+                                Icon(
+                                    imageVector = if (isAvatarExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = null,
+                                    tint = AccentNavy,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Expanded Customization Panel
+                        AnimatedVisibility(visible = isAvatarExpanded) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                HorizontalDivider(color = DividerBorder)
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Avatar Type Toggle (Initials vs Emoji)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { onAvatarSelect(selectedAvatar.copy(type = AvatarType.INITIALS)) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (selectedAvatar.type == AvatarType.INITIALS) AccentNavy else SurfaceWhite,
+                                            contentColor = if (selectedAvatar.type == AvatarType.INITIALS) SurfaceWhite else PrimaryNavy
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Initials (${user.initials})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { onAvatarSelect(selectedAvatar.copy(type = AvatarType.EMOJI)) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (selectedAvatar.type == AvatarType.EMOJI) AccentNavy else SurfaceWhite,
+                                            contentColor = if (selectedAvatar.type == AvatarType.EMOJI) SurfaceWhite else PrimaryNavy
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Emoji (${selectedAvatar.emoji})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                // Horizontally Scrollable Preset Emoji Selection Bar
+                                if (selectedAvatar.type == AvatarType.EMOJI) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        PRESET_AVATAR_EMOJIS.forEach { emoji ->
+                                            val isSelected = selectedAvatar.emoji == emoji
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .clip(CircleShape)
+                                                    .background(if (isSelected) AccentNavy.copy(alpha = 0.2f) else SurfaceWhite)
+                                                    .border(
+                                                        width = if (isSelected) 2.dp else 1.dp,
+                                                        color = if (isSelected) AccentNavy else DividerBorder,
+                                                        shape = CircleShape
+                                                    )
+                                                    .clickable { onAvatarSelect(selectedAvatar.copy(emoji = emoji)) },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(text = emoji, fontSize = 18.sp)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Background Color Chips Picker
+                                Text("Avatar Background Color", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondaryMuted)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    PRESET_AVATAR_COLORS.forEach { colorHex ->
+                                        val isSelected = selectedAvatar.colorHex.equals(colorHex, ignoreCase = true)
+                                        val chipColor = parseHexColor(colorHex)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(CircleShape)
+                                                .background(chipColor)
+                                                .border(
+                                                    width = if (isSelected) 3.dp else 1.dp,
+                                                    color = if (isSelected) PrimaryNavy else SurfaceWhite.copy(alpha = 0.5f),
+                                                    shape = CircleShape
+                                                )
+                                                .clickable { onAvatarSelect(selectedAvatar.copy(colorHex = colorHex)) },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (isSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = SurfaceWhite,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 

@@ -2,11 +2,13 @@ package de.joelneumann.lojinha.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import de.joelneumann.lojinha.domain.model.AvatarType
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import kotlinx.coroutines.Job
@@ -41,6 +43,9 @@ class TransactionHistoryViewModel(
     private val _selectedSecondaryCurrency = MutableStateFlow(SecondaryCurrency.NONE)
     val selectedSecondaryCurrency: StateFlow<SecondaryCurrency> = _selectedSecondaryCurrency.asStateFlow()
 
+    private val _selectedAvatar = MutableStateFlow(UserAvatarConfig())
+    val selectedAvatar: StateFlow<UserAvatarConfig> = _selectedAvatar.asStateFlow()
+
     private var currentUserId: String? = null
 
     private val _currentPage = MutableStateFlow(0)
@@ -57,37 +62,38 @@ class TransactionHistoryViewModel(
 
     fun loadUserTransactions(userId: String) {
         currentUserId = userId
-        fetchPagedTransactions()
+        _currentPage.value = 0
+        fetchPage()
     }
 
     fun updateSearchFilter(query: String) {
         _searchFilter.value = query
         _currentPage.value = 0
-        fetchPagedTransactions()
+        fetchPage()
     }
 
     fun selectTypeFilter(type: TransactionType?) {
         _selectedTypeFilter.value = type
         _currentPage.value = 0
-        fetchPagedTransactions()
+        fetchPage()
     }
 
     fun setPage(page: Int) {
-        if (page >= 0 && page < _totalPages.value) {
+        if (page in 0 until _totalPages.value) {
             _currentPage.value = page
-            fetchPagedTransactions()
+            fetchPage()
         }
     }
 
     fun setPageSize(size: Int) {
         _pageSize.value = size
         _currentPage.value = 0
-        fetchPagedTransactions()
+        fetchPage()
     }
 
     private var fetchJob: Job? = null
 
-    private fun fetchPagedTransactions() {
+    private fun fetchPage() {
         val userId = currentUserId ?: return
         fetchJob?.cancel()
         fetchJob = viewModelScope.launch {
@@ -113,6 +119,7 @@ class TransactionHistoryViewModel(
         _pinInput.value = user.pin ?: ""
         _selectedLanguage.value = user.language
         _selectedSecondaryCurrency.value = user.secondaryCurrency
+        _selectedAvatar.value = user.avatar
         _showSettingsModal.value = true
     }
 
@@ -132,11 +139,16 @@ class TransactionHistoryViewModel(
         _selectedSecondaryCurrency.value = currency
     }
 
+    fun updateAvatar(avatar: UserAvatarConfig) {
+        _selectedAvatar.value = avatar
+    }
+
     fun saveUserSettings(user: User, onSaved: (User) -> Unit) {
         val updated = user.copy(
             pin = if (_pinInput.value.isBlank()) null else _pinInput.value.trim(),
             language = _selectedLanguage.value,
-            secondaryCurrency = _selectedSecondaryCurrency.value
+            secondaryCurrency = _selectedSecondaryCurrency.value,
+            avatar = _selectedAvatar.value
         )
         viewModelScope.launch {
             userRepository.saveUser(updated)

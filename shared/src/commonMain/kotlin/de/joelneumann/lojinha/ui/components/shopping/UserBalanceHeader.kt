@@ -33,12 +33,22 @@ fun UserBalanceHeader(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = user.name,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryNavy
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                de.joelneumann.lojinha.ui.components.userselection.UserAvatar(
+                    user = user,
+                    modifier = Modifier.size(36.dp),
+                    fontSize = 15.sp
+                )
+                Text(
+                    text = user.name,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy
+                )
+            }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(

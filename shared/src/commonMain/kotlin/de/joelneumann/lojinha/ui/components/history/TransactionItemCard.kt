@@ -186,7 +186,7 @@ fun TransactionItemCard(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "• ${Formatting.formatQuantity(item.quantity, item.unitType)} ${item.productName} @ ${Formatting.formatBrl(item.unitPriceAtPurchase)}",
+                                text = "• ${Formatting.formatQuantity(item.quantity, item.unitType)} ${item.productName} x ${Formatting.formatBrl(item.unitPriceAtPurchase)}",
                                 fontSize = 13.sp,
                                 color = TextSecondarySubtle
                             )

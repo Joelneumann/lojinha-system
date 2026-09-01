@@ -3,6 +3,7 @@ package de.joelneumann.lojinha
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.window.application
 import de.joelneumann.lojinha.data.database.DatabaseFactory
@@ -35,7 +36,7 @@ fun main() = application {
         }
     }
 
-    val windowState = rememberWindowState(width = 1280.dp, height = 850.dp)
+    val windowState = rememberWindowState(placement = WindowPlacement.Fullscreen)
     Window(
         onCloseRequest = ::exitApplication,
         title = "Lojinha POS & Self-Service Kiosk",

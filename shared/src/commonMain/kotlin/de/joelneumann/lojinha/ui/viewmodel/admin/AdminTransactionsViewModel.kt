@@ -7,6 +7,7 @@ import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.generateUuid
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -122,7 +123,7 @@ class AdminTransactionsViewModel(
             "Item quantity correction for Purchase ($dateStr - Original $origAmountStr)"
         }
 
-        val stornoId = "tx-storno-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+        val stornoId = generateUuid()
         val stornoTx = Transaction(
             id = stornoId,
             userId = originalTx.userId,
@@ -158,7 +159,7 @@ class AdminTransactionsViewModel(
     fun stornoNonPurchaseTransaction(tx: Transaction) {
         if (tx.type == TransactionType.CANCELLATION) return
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val cancellationId = "tx-storno-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+        val cancellationId = generateUuid()
 
         val refundAmount = -tx.totalAmount
         val dateStr = Formatting.formatTimestamp(tx.timestamp, Language.EN)

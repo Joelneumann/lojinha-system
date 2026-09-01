@@ -10,17 +10,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.domain.model.AvatarType
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
 import de.joelneumann.lojinha.ui.components.general.LogoutButton
 import de.joelneumann.lojinha.ui.components.history.TransactionFilterBar
@@ -51,10 +54,10 @@ fun TransactionHistoryScreen(
     val totalPages by viewModel.totalPages.collectAsState()
     val pageSize by viewModel.pageSize.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
-
     val pinInput by viewModel.pinInput.collectAsState()
     val selectedLanguage by viewModel.selectedLanguage.collectAsState()
     val selectedSecondaryCurrency by viewModel.selectedSecondaryCurrency.collectAsState()
+    val selectedAvatar by viewModel.selectedAvatar.collectAsState()
 
     LaunchedEffect(user.id) {
         viewModel.loadUserTransactions(user.id)
@@ -74,6 +77,7 @@ fun TransactionHistoryScreen(
         pinInput = pinInput,
         selectedLanguage = selectedLanguage,
         selectedSecondaryCurrency = selectedSecondaryCurrency,
+        selectedAvatar = selectedAvatar,
         onContinueShopping = onContinueShopping,
         onLogout = onLogout,
         onUserUpdated = onUserUpdated,
@@ -86,6 +90,7 @@ fun TransactionHistoryScreen(
         onUpdatePinInput = viewModel::updatePinInput,
         onUpdateLanguage = viewModel::updateLanguage,
         onUpdateSecondaryCurrency = viewModel::updateSecondaryCurrency,
+        onUpdateAvatar = viewModel::updateAvatar,
         onSaveUserSettings = { viewModel.saveUserSettings(user, onUserUpdated) }
     )
 }
@@ -105,6 +110,7 @@ fun TransactionHistoryContent(
     pinInput: String,
     selectedLanguage: Language,
     selectedSecondaryCurrency: SecondaryCurrency,
+    selectedAvatar: UserAvatarConfig,
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit,
@@ -117,6 +123,7 @@ fun TransactionHistoryContent(
     onUpdatePinInput: (String) -> Unit,
     onUpdateLanguage: (Language) -> Unit,
     onUpdateSecondaryCurrency: (SecondaryCurrency) -> Unit,
+    onUpdateAvatar: (UserAvatarConfig) -> Unit,
     onSaveUserSettings: () -> Unit
 ) {
     val strings = I18n.current
@@ -274,9 +281,11 @@ fun TransactionHistoryContent(
                 pinInput = pinInput,
                 selectedLanguage = selectedLanguage,
                 selectedSecondaryCurrency = selectedSecondaryCurrency,
+                selectedAvatar = selectedAvatar,
                 onPinInputChange = onUpdatePinInput,
                 onLanguageSelect = onUpdateLanguage,
                 onSecondaryCurrencySelect = onUpdateSecondaryCurrency,
+                onAvatarSelect = onUpdateAvatar,
                 onDismiss = onCloseSettingsModal,
                 onSave = onSaveUserSettings
             )

@@ -164,4 +164,29 @@ class DomainAndRulesTest {
         assertFalse(deStr.contains("AM") || deStr.contains("PM"))
         assertFalse(brStr.contains("AM") || brStr.contains("PM"))
     }
+
+    @Test
+    fun testUserAvatarDefaultsAndCustomization() {
+        val user = User(id = "1", name = "Test User")
+        assertEquals(AvatarType.INITIALS, user.avatar.type)
+        assertEquals("😀", user.avatar.emoji)
+        assertEquals("#1E293B", user.avatar.colorHex)
+
+        val customAvatar = UserAvatarConfig(type = AvatarType.EMOJI, emoji = "🦊", colorHex = "#2563EB")
+        val customUser = user.copy(avatar = customAvatar)
+        assertEquals(AvatarType.EMOJI, customUser.avatar.type)
+        assertEquals("🦊", customUser.avatar.emoji)
+        assertEquals("#2563EB", customUser.avatar.colorHex)
+    }
+
+    @Test
+    fun testUuidGeneration() {
+        val uuid1 = de.joelneumann.lojinha.ui.utils.generateUuid()
+        val uuid2 = de.joelneumann.lojinha.ui.utils.generateUuid()
+
+        assertTrue(uuid1.isNotBlank())
+        assertTrue(uuid2.isNotBlank())
+        assertTrue(uuid1 != uuid2)
+        assertEquals(36, uuid1.length) // Standard 8-4-4-4-12 UUID format length
+    }
 }

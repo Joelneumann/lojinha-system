@@ -7,6 +7,7 @@ import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.generateUuid
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -183,7 +184,7 @@ class ShoppingViewModel(
 
         val totalCents = cart.sumOf { it.lineTotal }
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val txId = "tx-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+        val txId = generateUuid()
 
         val txItems = cart.map { item ->
             TransactionItem(

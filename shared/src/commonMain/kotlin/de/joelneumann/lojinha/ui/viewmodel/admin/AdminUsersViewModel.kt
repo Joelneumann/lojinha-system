@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import de.joelneumann.lojinha.ui.utils.generateUuid
 import kotlin.random.Random
 
 class AdminUsersViewModel(
@@ -59,7 +60,7 @@ class AdminUsersViewModel(
 
     fun openNewUserModal() {
         _editUser.value = User(
-            id = "u-" + de.joelneumann.lojinha.ui.utils.currentTimeMillis(),
+            id = generateUuid(),
             name = "",
             balance = 0L,
             language = Language.DE
@@ -145,7 +146,7 @@ class AdminUsersViewModel(
         val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
 
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val txId = "tx-admin-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+        val txId = generateUuid()
 
         val tx = Transaction(
             id = txId,
@@ -170,7 +171,7 @@ class AdminUsersViewModel(
         val isDeposit = centsDelta > 0
         val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val txId = "tx-admin-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+        val txId = generateUuid()
 
         val tx = Transaction(
             id = txId,

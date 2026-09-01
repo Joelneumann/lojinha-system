@@ -59,32 +59,44 @@ fun LanguageFlagIcon(
                 }
 
                 Language.EN -> {
-                    // UK / Great Britain Flag: Blue background, St George cross & saltire
-                    val navy = Color(0xFF012169)
+                    // USA / American Flag: 13 red and white stripes, blue canton on top-left, white stars
+                    val red = Color(0xFFB22234)
                     val white = Color(0xFFFFFFFF)
-                    val red = Color(0xFFC8102E)
+                    val navy = Color(0xFF3C3B6E)
 
-                    drawRect(color = navy, size = Size(w, h))
+                    val stripeH = h / 13f
+                    for (i in 0..12) {
+                        drawRect(
+                            color = if (i % 2 == 0) red else white,
+                            topLeft = Offset(0f, i * stripeH),
+                            size = Size(w, stripeH)
+                        )
+                    }
 
-                    // White saltire (diagonals)
-                    val strokeW = h * 0.28f
-                    drawLine(color = white, start = Offset(0f, 0f), end = Offset(w, h), strokeWidth = strokeW)
-                    drawLine(color = white, start = Offset(0f, h), end = Offset(w, 0f), strokeWidth = strokeW)
+                    // Canton (Top-left blue rectangle covering 7 stripes height)
+                    val cantonW = w * 0.42f
+                    val cantonH = stripeH * 7f
+                    drawRect(
+                        color = navy,
+                        topLeft = Offset(0f, 0f),
+                        size = Size(cantonW, cantonH)
+                    )
 
-                    // Red saltire
-                    val redStrokeW = h * 0.14f
-                    drawLine(color = red, start = Offset(0f, 0f), end = Offset(w, h), strokeWidth = redStrokeW)
-                    drawLine(color = red, start = Offset(0f, h), end = Offset(w, 0f), strokeWidth = redStrokeW)
-
-                    // White cross
-                    val crossWhiteW = h * 0.36f
-                    drawRect(color = white, topLeft = Offset(w * 0.5f - crossWhiteW * 0.5f, 0f), size = Size(crossWhiteW, h))
-                    drawRect(color = white, topLeft = Offset(0f, h * 0.5f - crossWhiteW * 0.5f), size = Size(w, crossWhiteW))
-
-                    // Red cross
-                    val crossRedW = h * 0.22f
-                    drawRect(color = red, topLeft = Offset(w * 0.5f - crossRedW * 0.5f, 0f), size = Size(crossRedW, h))
-                    drawRect(color = red, topLeft = Offset(0f, h * 0.5f - crossRedW * 0.5f), size = Size(w, crossRedW))
+                    // White stars inside canton (Simplified grid of dots for crisp icon rendering)
+                    val starRadius = h * 0.035f
+                    val rows = 3
+                    val cols = 3
+                    for (r in 0 until rows) {
+                        for (c in 0 until cols) {
+                            val cx = cantonW * (0.25f + c * 0.25f)
+                            val cy = cantonH * (0.25f + r * 0.25f)
+                            drawCircle(
+                                color = white,
+                                radius = starRadius,
+                                center = Offset(cx, cy)
+                            )
+                        }
+                    }
                 }
 
                 Language.DE -> {

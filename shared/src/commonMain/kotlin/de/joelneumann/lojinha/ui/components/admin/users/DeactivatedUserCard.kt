@@ -16,6 +16,7 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.utils.Formatting
 
 @Composable
@@ -45,20 +46,11 @@ fun DeactivatedUserCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(ColorWarningAmber.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = user.initials,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorWarningAmber
-                    )
-                }
+                UserAvatar(
+                    user = user,
+                    modifier = Modifier.size(40.dp),
+                    fontSize = 15.sp
+                )
 
                 Column {
                     Row(

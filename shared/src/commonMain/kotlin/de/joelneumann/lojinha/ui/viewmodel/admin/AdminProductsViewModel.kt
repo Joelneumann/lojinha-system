@@ -7,6 +7,7 @@ import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
+import de.joelneumann.lojinha.ui.utils.generateUuid
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,7 +52,7 @@ class AdminProductsViewModel(
 
     fun openNewProductModal() {
         _editProduct.value = Product(
-            id = "p-" + de.joelneumann.lojinha.ui.utils.currentTimeMillis(),
+            id = generateUuid(),
             name = "",
             barcodes = emptyList(),
             basePrice = 0L,

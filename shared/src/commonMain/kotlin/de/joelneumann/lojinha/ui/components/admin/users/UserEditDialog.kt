@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.ui.components.admin.users
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -9,6 +10,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -16,6 +18,7 @@ import androidx.compose.ui.window.Dialog
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
 import de.joelneumann.lojinha.ui.components.admin.AdminSegmentedOptionsRow
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -25,6 +28,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import de.joelneumann.lojinha.domain.model.AvatarType
+import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_COLORS
+import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_EMOJIS
+import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
+import de.joelneumann.lojinha.ui.components.userselection.parseHexColor
 
 @Composable
 fun UserEditDialog(
@@ -45,6 +57,7 @@ fun UserEditDialog(
     var barcodeNumber by remember { mutableStateOf(user.userBarcodeNumber ?: "") }
     var selectedLang by remember { mutableStateOf(user.language) }
     var selectedSecondaryCurrency by remember { mutableStateOf(user.secondaryCurrency) }
+    var selectedAvatar by remember(user.id, user.avatar) { mutableStateOf(user.avatar) }
 
     val barcodeToCheck = remember(barcode, barcodeNumber) {
         val b1 = barcode.trim()
@@ -206,6 +219,121 @@ fun UserEditDialog(
                     )
                 }
 
+                // Profile Avatar & Color Customization
+                Text("Profile Avatar & Color", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = SurfaceContainerHighLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        UserAvatar(
+                            user = user,
+                            customAvatar = selectedAvatar,
+                            modifier = Modifier.size(52.dp),
+                            fontSize = 22.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedButton(
+                                onClick = { selectedAvatar = selectedAvatar.copy(type = AvatarType.INITIALS) },
+                                modifier = Modifier.weight(1f).height(36.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selectedAvatar.type == AvatarType.INITIALS) AccentNavy else SurfaceWhite,
+                                    contentColor = if (selectedAvatar.type == AvatarType.INITIALS) SurfaceWhite else PrimaryNavy
+                                ),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("Initials", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = { selectedAvatar = selectedAvatar.copy(type = AvatarType.EMOJI) },
+                                modifier = Modifier.weight(1f).height(36.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selectedAvatar.type == AvatarType.EMOJI) AccentNavy else SurfaceWhite,
+                                    contentColor = if (selectedAvatar.type == AvatarType.EMOJI) SurfaceWhite else PrimaryNavy
+                                ),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("Emoji", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (selectedAvatar.type == AvatarType.EMOJI) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                PRESET_AVATAR_EMOJIS.forEach { emoji ->
+                                    val isSelected = selectedAvatar.emoji == emoji
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isSelected) AccentNavy.copy(alpha = 0.2f) else SurfaceWhite)
+                                            .border(
+                                                width = if (isSelected) 2.dp else 1.dp,
+                                                color = if (isSelected) AccentNavy else DividerBorder,
+                                                shape = CircleShape
+                                            )
+                                            .clickable { selectedAvatar = selectedAvatar.copy(emoji = emoji) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(text = emoji, fontSize = 16.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            PRESET_AVATAR_COLORS.forEach { colorHex ->
+                                val isSelected = selectedAvatar.colorHex.equals(colorHex, ignoreCase = true)
+                                val chipColor = parseHexColor(colorHex)
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(chipColor)
+                                        .border(
+                                            width = if (isSelected) 2.5.dp else 1.dp,
+                                            color = if (isSelected) PrimaryNavy else SurfaceWhite.copy(alpha = 0.5f),
+                                            shape = CircleShape
+                                        )
+                                        .clickable { selectedAvatar = selectedAvatar.copy(colorHex = colorHex) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = SurfaceWhite,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 AdminSegmentedOptionsRow(
                     label = strings.preferredLanguage,
                     options = Language.entries,
@@ -287,7 +415,8 @@ fun UserEditDialog(
                         barcode != (user.userBarcode ?: "") ||
                         barcodeNumber != (user.userBarcodeNumber ?: "") ||
                         selectedLang != user.language ||
-                        selectedSecondaryCurrency != user.secondaryCurrency
+                        selectedSecondaryCurrency != user.secondaryCurrency ||
+                        selectedAvatar != user.avatar
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -311,6 +440,7 @@ fun UserEditDialog(
                                 barcodeNumber = user.userBarcodeNumber ?: ""
                                 selectedLang = user.language
                                 selectedSecondaryCurrency = user.secondaryCurrency
+                                selectedAvatar = user.avatar
                             },
                             modifier = Modifier.weight(1f).height(44.dp),
                             shape = RoundedCornerShape(8.dp)
@@ -344,6 +474,7 @@ fun UserEditDialog(
                                 userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
                                 language = selectedLang,
                                 secondaryCurrency = selectedSecondaryCurrency,
+                                avatar = selectedAvatar,
                                 balance = userBalance
                             )
                             onSave(updated)
