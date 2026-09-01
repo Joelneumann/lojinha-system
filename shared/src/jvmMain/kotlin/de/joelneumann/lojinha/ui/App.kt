@@ -106,29 +106,31 @@ fun App() {
                             )
                         )
 
+                        val shoppingViewModel: ShoppingViewModel = viewModel(
+                            key = "shopping_${currentUser!!.id}_$sessionNonce",
+                            factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
+                        )
+                        val cartItems by shoppingViewModel.cartItems.collectAsState()
+
                         val showInactivityWarning by userSessionViewModel.showInactivityWarning.collectAsState()
                         val inactivitySecondsRemaining by userSessionViewModel.inactivitySecondsRemaining.collectAsState()
+
+                        val handleLogoutRequest = {
+                            if (cartItems.isNotEmpty()) {
+                                showAbandonCartGuardDialog = true
+                            } else {
+                                userSessionViewModel.requestLogout()
+                            }
+                        }
 
                         Box(modifier = Modifier.fillMaxSize()) {
                             when (currentScreen) {
                                 AppScreen.SHOPPING -> {
-                                    val shoppingViewModel: ShoppingViewModel = viewModel(
-                                        key = "shopping_${currentUser!!.id}_$sessionNonce",
-                                        factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
-                                    )
-                                    val cartItems by shoppingViewModel.cartItems.collectAsState()
-
                                     ShoppingScreen(
                                         viewModel = shoppingViewModel,
                                         user = currentUser!!,
                                         settings = settings,
-                                        onLogout = {
-                                            if (cartItems.isNotEmpty()) {
-                                                showAbandonCartGuardDialog = true
-                                            } else {
-                                                userSessionViewModel.requestLogout()
-                                            }
-                                        },
+                                        onLogout = handleLogoutRequest,
                                         onNavigateToHistory = {
                                             appViewModel.refreshCurrentUser()
                                             appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
@@ -150,7 +152,7 @@ fun App() {
                                         onContinueShopping = {
                                             appViewModel.navigateTo(AppScreen.SHOPPING)
                                         },
-                                        onLogout = { userSessionViewModel.requestLogout() },
+                                        onLogout = handleLogoutRequest,
                                         onUserUpdated = { updated ->
                                             appViewModel.updateCurrentUser(updated)
                                         },
@@ -159,26 +161,6 @@ fun App() {
                                 }
 
                                 else -> {}
-                            }
-
-                            // DEBUG: Realtime Inactivity Timer Overlay Badge (easily removable)
-                            Surface(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(12.dp),
-                                color = Color.Black.copy(alpha = 0.8f),
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                val mins = inactivitySecondsRemaining / 60
-                                val secs = inactivitySecondsRemaining % 60
-                                val formattedTime = "${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}"
-                                Text(
-                                    text = "⏱️ Debug Timer: $formattedTime (${inactivitySecondsRemaining}s)",
-                                    color = Color(0xFFFFD700),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
                             }
 
                             // Inactivity Warning Modal Dialog (scoped to active user session)
