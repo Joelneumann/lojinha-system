@@ -166,6 +166,9 @@ class ShoppingViewModel(
 
     fun clearCart() {
         _cartItems.value = emptyList()
+        _searchQuery.value = ""
+        closeWeightDialog()
+        closeCheckoutConfirmation()
     }
 
     fun openCheckoutConfirmation() {
@@ -220,5 +223,10 @@ class ShoppingViewModel(
             closeCheckoutConfirmation()
             onPurchaseComplete()
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        clearCart()
     }
 }

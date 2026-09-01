@@ -156,4 +156,17 @@ class TransactionHistoryViewModel(
             onSaved(updated)
         }
     }
+
+    fun resetFilters() {
+        _searchFilter.value = ""
+        _selectedTypeFilter.value = null
+        _currentPage.value = 0
+        _showSettingsModal.value = false
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _transactions.value = emptyList()
+        resetFilters()
+    }
 }

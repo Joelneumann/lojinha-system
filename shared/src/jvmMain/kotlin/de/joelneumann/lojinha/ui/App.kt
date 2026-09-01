@@ -8,7 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.window.Dialog
 import de.joelneumann.lojinha.data.database.DatabaseFactory
 import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
@@ -16,12 +15,15 @@ import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
 import de.joelneumann.lojinha.ui.components.general.InactivityWarningDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
-import de.joelneumann.lojinha.ui.screens.admin.AdminScreen
 import de.joelneumann.lojinha.ui.screens.ShoppingScreen
 import de.joelneumann.lojinha.ui.screens.TransactionHistoryScreen
 import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.generateUuid
+import kotlinx.coroutines.launch
+import androidx.lifecycle.viewmodel.compose.viewModel
 import de.joelneumann.lojinha.ui.viewmodel.*
+import de.joelneumann.lojinha.ui.viewmodel.admin.*
 
 @Composable
 fun App() {
@@ -52,10 +54,9 @@ fun App() {
         autoBackupScheduler.startScheduler()
     }
 
-    val appViewModel = remember { AppViewModel(userRepository, settingsRepository) }
-    val userSelectionViewModel = remember { UserSelectionViewModel(userRepository) }
-    val shoppingViewModel = remember { ShoppingViewModel(productRepository, userRepository, transactionRepository) }
-    val historyViewModel = remember { TransactionHistoryViewModel(transactionRepository, userRepository) }
+    val appViewModel: AppViewModel = viewModel(
+        factory = LojinhaViewModelFactory.createAppViewModelFactory(userRepository, settingsRepository)
+    )
 
     val currentScreen by appViewModel.currentScreen.collectAsState()
     val settings by appViewModel.settings.collectAsState()
@@ -63,17 +64,7 @@ fun App() {
     val showInactivityWarning by appViewModel.showInactivityWarning.collectAsState()
     val inactivitySecondsRemaining by appViewModel.inactivitySecondsRemaining.collectAsState()
 
-    val cartItems by shoppingViewModel.cartItems.collectAsState()
     var showAbandonCartGuardDialog by remember { mutableStateOf(false) }
-
-    val handleLogoutRequest = {
-        val hasCartItems = (currentScreen == AppScreen.SHOPPING || currentScreen == AppScreen.TRANSACTION_HISTORY) && cartItems.isNotEmpty()
-        if (hasCartItems) {
-            showAbandonCartGuardDialog = true
-        } else {
-            appViewModel.logout()
-        }
-    }
 
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -91,6 +82,9 @@ fun App() {
         ) {
             when (currentScreen) {
                 AppScreen.MAIN_USER_SELECT -> {
+                    val userSelectionViewModel: UserSelectionViewModel = viewModel(
+                        factory = LojinhaViewModelFactory.createUserSelectionViewModelFactory(userRepository)
+                    )
                     UserSelectionScreen(
                         viewModel = userSelectionViewModel,
                         settings = settings,
@@ -103,52 +97,83 @@ fun App() {
                     )
                 }
 
-                AppScreen.SHOPPING -> {
+                AppScreen.SHOPPING, AppScreen.TRANSACTION_HISTORY -> {
                     if (currentUser != null) {
-                        ShoppingScreen(
-                            viewModel = shoppingViewModel,
-                            user = currentUser!!,
-                            settings = settings,
-                            onLogout = handleLogoutRequest,
-                            onNavigateToHistory = {
-                                appViewModel.refreshCurrentUser()
-                                appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
-                            }
-                        )
-                    }
-                }
+                        val sessionNonce = remember(currentUser!!.id) { generateUuid() }
 
-                AppScreen.TRANSACTION_HISTORY -> {
-                    if (currentUser != null) {
-                        TransactionHistoryScreen(
-                            viewModel = historyViewModel,
-                            user = currentUser!!,
-                            settings = settings,
-                            onContinueShopping = {
-                                appViewModel.navigateTo(AppScreen.SHOPPING)
-                            },
-                            onLogout = handleLogoutRequest,
-                            onUserUpdated = { updated ->
-                                appViewModel.updateCurrentUser(updated)
+                        when (currentScreen) {
+                            AppScreen.SHOPPING -> {
+                                val shoppingViewModel: ShoppingViewModel = viewModel(
+                                    key = "shopping_${currentUser!!.id}_$sessionNonce",
+                                    factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
+                                )
+                                val cartItems by shoppingViewModel.cartItems.collectAsState()
+
+                                ShoppingScreen(
+                                    viewModel = shoppingViewModel,
+                                    user = currentUser!!,
+                                    settings = settings,
+                                    onLogout = {
+                                        if (cartItems.isNotEmpty()) {
+                                            showAbandonCartGuardDialog = true
+                                        } else {
+                                            appViewModel.logout()
+                                        }
+                                    },
+                                    onNavigateToHistory = {
+                                        appViewModel.refreshCurrentUser()
+                                        appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
+                                    }
+                                )
                             }
-                        )
+
+                            AppScreen.TRANSACTION_HISTORY -> {
+                                val historyViewModel: TransactionHistoryViewModel = viewModel(
+                                    key = "history_${currentUser!!.id}_$sessionNonce",
+                                    factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(transactionRepository, userRepository)
+                                )
+
+                                TransactionHistoryScreen(
+                                    viewModel = historyViewModel,
+                                    user = currentUser!!,
+                                    settings = settings,
+                                    onContinueShopping = {
+                                        appViewModel.navigateTo(AppScreen.SHOPPING)
+                                    },
+                                    onLogout = { appViewModel.logout() },
+                                    onUserUpdated = { updated ->
+                                        appViewModel.updateCurrentUser(updated)
+                                    }
+                                )
+                            }
+
+                            else -> {}
+                        }
                     }
                 }
 
                 AppScreen.ADMIN_PANEL -> {
-                    val adminProductsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel(productRepository, settingsRepository) }
-                    val adminUsersViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel(userRepository, transactionRepository) }
-                    val adminTransactionsViewModel = remember { de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
-                    val adminSettingsViewModel = remember {
-                        de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel(
+                    val adminProductsViewModel: AdminProductsViewModel = viewModel(
+                        factory = LojinhaViewModelFactory.createAdminProductsViewModelFactory(productRepository, settingsRepository)
+                    )
+                    val adminUsersViewModel: AdminUsersViewModel = viewModel(
+                        factory = LojinhaViewModelFactory.createAdminUsersViewModelFactory(userRepository, transactionRepository)
+                    )
+                    val adminTransactionsViewModel: AdminTransactionsViewModel = viewModel(
+                        factory = LojinhaViewModelFactory.createAdminTransactionsViewModelFactory(transactionRepository, userRepository, productRepository)
+                    )
+                    val adminSettingsViewModel: AdminSettingsViewModel = viewModel(
+                        factory = LojinhaViewModelFactory.createAdminSettingsViewModelFactory(
                             settingsRepository = settingsRepository,
                             backupRepository = backupRepository,
                             onRunRoutineNow = { routine ->
-                                autoBackupScheduler.executeRoutine(routine)
+                                coroutineScope.launch {
+                                    autoBackupScheduler.executeRoutine(routine)
+                                }
                             },
                             oneDriveBackupService = oneDriveBackupService
                         )
-                    }
+                    )
 
                     de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
                         productsViewModel = adminProductsViewModel,
@@ -156,7 +181,6 @@ fun App() {
                         transactionsViewModel = adminTransactionsViewModel,
                         settingsViewModel = adminSettingsViewModel,
                         onExitAdmin = {
-                            userSelectionViewModel.loadUsers()
                             appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
                         }
                     )
@@ -182,7 +206,6 @@ fun App() {
                         Button(
                             onClick = {
                                 showAbandonCartGuardDialog = false
-                                shoppingViewModel.clearCart()
                                 appViewModel.logout()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)

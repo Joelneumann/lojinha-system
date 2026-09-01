@@ -141,4 +141,9 @@ class AppViewModel(
         inactivityJob = null
         _showInactivityWarning.value = false
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopInactivityTimer()
+    }
 }

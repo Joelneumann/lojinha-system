@@ -114,4 +114,10 @@ class AdminProductsViewModel(
             _settings.value = settingsRepository.getSettings()
         }
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        _products.value = emptyList()
+        _searchQuery.value = ""
+    }
 }

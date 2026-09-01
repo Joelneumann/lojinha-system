@@ -341,4 +341,10 @@ class AdminSettingsViewModel(
             _settings.value = updatedSettings
         }
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        _statusMessage.value = null
+        _showRoutineDialog.value = false
+    }
 }

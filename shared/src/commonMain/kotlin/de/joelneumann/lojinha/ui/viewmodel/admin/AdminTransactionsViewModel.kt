@@ -183,4 +183,11 @@ class AdminTransactionsViewModel(
             refreshTransactions()
         }
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        _transactions.value = emptyList()
+        _searchFilter.value = ""
+        _selectedTypeFilter.value = null
+    }
 }

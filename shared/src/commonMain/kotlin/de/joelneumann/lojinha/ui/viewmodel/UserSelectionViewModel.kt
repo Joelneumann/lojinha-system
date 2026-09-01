@@ -134,4 +134,11 @@ class UserSelectionViewModel(
     }
 
     private fun String?.isNull_or_blank(): Boolean = this == null || this.trim().isEmpty()
+
+    override fun onCleared() {
+        super.onCleared()
+        _searchQuery.value = ""
+        cancelPinDialog()
+        closeAdminAuthDialog()
+    }
 }

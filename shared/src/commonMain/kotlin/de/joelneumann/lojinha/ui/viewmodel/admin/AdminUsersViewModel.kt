@@ -190,4 +190,11 @@ class AdminUsersViewModel(
             refreshUsers()
         }
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        _users.value = emptyList()
+        _searchQuery.value = ""
+        closeDepositModal()
+    }
 }
