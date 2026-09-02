@@ -33,16 +33,18 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "de.joelneumann.lojinha"
+            packageName = "Lojinha System"
             packageVersion = "1.0.0"
 
             macOS {
+                bundleID = "de.joelneumann.lojinha"
                 iconFile.set(project.file("src/main/resources/icon.icns"))
             }
             windows {
                 iconFile.set(project.file("src/main/resources/icon.ico"))
             }
             linux {
+                packageName = "lojinha-system"
                 iconFile.set(project.file("src/main/resources/icon.png"))
             }
         }
