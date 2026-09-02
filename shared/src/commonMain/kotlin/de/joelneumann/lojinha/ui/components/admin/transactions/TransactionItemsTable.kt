@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.UnitType
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 
@@ -25,11 +26,12 @@ fun TransactionItemsTable(
     isStornoMode: Boolean,
     isCanceled: Boolean,
     weightInputStrings: Map<Int, String>,
-    onWeightInputChanged: (Int, String, Long) -> Unit,
-    onQuantityChanged: (Int, Long) -> Unit,
+    onItemQuantityChanged: (Int, Long) -> Unit,
+    onWeightInputChanged: (Int, String) -> Unit,
     onToggleStornoMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = I18n.current
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -49,7 +51,7 @@ fun TransactionItemsTable(
                     )
                 }
                 Text(
-                    text = if (isStornoMode) "Adjust Item Quantities below:" else "Purchased Items (${transaction.items.size})",
+                    text = if (isStornoMode) strings.adjustItemQuantitiesHeader else strings.purchasedItemsHeader(transaction.items.size),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -73,7 +75,7 @@ fun TransactionItemsTable(
                             tint = SurfaceWhite,
                             modifier = Modifier.size(14.dp)
                         )
-                        Text("Edit / Storno Items", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(strings.editStornoItemsHeader, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -96,15 +98,15 @@ fun TransactionItemsTable(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Product", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1.8f))
-                    Text("Unit Price", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1f))
+                    Text(strings.headerProduct, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1.8f))
+                    Text(strings.headerUnitPrice, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1f))
                     if (isStornoMode && !isCanceled) {
-                        Text("Original", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                        Text("Adjusted Qty/Weight", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy, modifier = Modifier.weight(2.2f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(strings.headerOriginal, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(strings.headerAdjustedQtyWeight, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy, modifier = Modifier.weight(2.2f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     } else {
-                        Text("Qty / Weight", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1.5f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(strings.headerQtyWeight, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1.5f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
-                    Text("Line Total", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1.2f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    Text(strings.headerLineTotal, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondaryMuted, modifier = Modifier.weight(1.2f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
                 }
 
                 HorizontalDivider(color = DividerBorder)
@@ -159,8 +161,7 @@ fun TransactionItemsTable(
                                             androidx.compose.foundation.text.BasicTextField(
                                                 value = weightInputStrings[index] ?: item.quantity.toString(),
                                                 onValueChange = { input ->
-                                                    val parsedGrams = input.toLongOrNull() ?: 0L
-                                                    onWeightInputChanged(index, input, parsedGrams)
+                                                    onWeightInputChanged(index, input)
                                                 },
                                                 textStyle = androidx.compose.ui.text.TextStyle(
                                                     fontSize = 14.sp,
@@ -183,7 +184,7 @@ fun TransactionItemsTable(
                                         OutlinedButton(
                                             onClick = {
                                                 if (item.quantity > 0) {
-                                                    onQuantityChanged(index, item.quantity - 1)
+                                                    onItemQuantityChanged(index, item.quantity - 1)
                                                 }
                                             },
                                             shape = RoundedCornerShape(6.dp),
@@ -203,7 +204,7 @@ fun TransactionItemsTable(
 
                                         OutlinedButton(
                                             onClick = {
-                                                onQuantityChanged(index, item.quantity + 1)
+                                                onItemQuantityChanged(index, item.quantity + 1)
                                             },
                                             shape = RoundedCornerShape(6.dp),
                                             modifier = Modifier.size(32.dp),

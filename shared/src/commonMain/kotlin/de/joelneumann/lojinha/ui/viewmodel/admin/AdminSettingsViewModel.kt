@@ -105,7 +105,7 @@ class AdminSettingsViewModel(
     fun updateSystemSettings(newSettings: SystemSettings) {
         viewModelScope.launch {
             settingsRepository.updateSettings(newSettings)
-            _statusMessage.value = "✓ System settings updated successfully."
+            _statusMessage.value = "System settings updated successfully."
         }
     }
 
@@ -144,7 +144,7 @@ class AdminSettingsViewModel(
                 _routines.value = currentList
             }
             closeRoutineDialog()
-            _statusMessage.value = "✓ Backup routine saved: '${routine.name}'"
+            _statusMessage.value = "Backup routine saved: '${routine.name}'"
         }
     }
 
@@ -161,7 +161,7 @@ class AdminSettingsViewModel(
                 _routines.value = _routines.value.filter { it.id != target.id }
             }
             _routineToDelete.value = null
-            _statusMessage.value = "✓ Backup routine '${target.name}' removed."
+            _statusMessage.value = "Backup routine '${target.name}' removed."
         }
     }
 
@@ -187,7 +187,7 @@ class AdminSettingsViewModel(
                 }
             }
             _routineToToggle.value = null
-            _statusMessage.value = "✓ Backup routine '${routine.name}' ${if (targetState) "enabled" else "disabled"}."
+            _statusMessage.value = "Backup routine '${routine.name}' ${if (targetState) "enabled" else "disabled"}."
         }
     }
 
@@ -199,7 +199,7 @@ class AdminSettingsViewModel(
         viewModelScope.launch {
             try {
                 onRunRoutineNow?.invoke(routine)
-                _statusMessage.value = "✓ Triggered routine '${routine.name}'."
+                _statusMessage.value = "Triggered routine '${routine.name}'."
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to run routine '${routine.name}': ${e.message}"
             }
@@ -230,17 +230,17 @@ class AdminSettingsViewModel(
     fun executeCsvImport() {
         val preview = _csvImportPreview.value ?: return
         _csvImportPreview.value = null
-        _statusMessage.value = "✓ Import executed for ${preview.first.name}."
+        _statusMessage.value = "Import executed for ${preview.first.name}."
     }
 
     fun executeDbRestore(file: PlatformFile) {
         _activeRestoreDbFile.value = null
-        _statusMessage.value = "✓ Database restore requested for ${file.name}."
+        _statusMessage.value = "Database restore requested for ${file.name}."
     }
 
     fun executeWipeData() {
         _showWipeDataDialog.value = false
-        _statusMessage.value = "✓ Factory Reset completed."
+        _statusMessage.value = "Factory Reset completed."
     }
 
     fun clearCsvImportPreview() {

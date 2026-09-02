@@ -87,8 +87,8 @@ fun AdminUsersTabScreen(
         AdminTopBar(
             searchQuery = searchQuery,
             onQueryChange = viewModel::updateSearchQuery,
-            placeholder = "🔍 Search account by name or barcode...",
-            countText = if (searchQuery.isBlank()) "${activeUsers.size} Accounts" else "${filteredActiveUsers.size} / ${activeUsers.size} Accounts",
+            placeholder = strings.searchAccountAdminPlaceholder,
+            countText = if (searchQuery.isBlank()) strings.accountsCountText(activeUsers.size) else strings.accountsCountText(filteredActiveUsers.size, activeUsers.size),
             onSearchSubmitted = openFirstResult,
             actionButtonText = strings.addUser,
             onActionButtonClick = viewModel::openNewUserModal
@@ -107,7 +107,7 @@ fun AdminUsersTabScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No matching user accounts found.", color = TextSecondaryMuted)
+                        Text(strings.noMatchingAccounts, color = TextSecondaryMuted)
                     }
                 }
             } else {
@@ -134,11 +134,11 @@ fun AdminUsersTabScreen(
                 item(key = "deactivated-users-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
-                        title = "Deactivated Users",
-                        countText = "${filteredDeactivatedUsers.size} ${if (filteredDeactivatedUsers.size == 1) "User" else "Users"}",
+                        title = strings.deactivatedUsers,
+                        countText = strings.accountsCountText(filteredDeactivatedUsers.size),
                         accentColor = ColorWarningAmber,
-                        showLabel = "Show Deactivated Users",
-                        hideLabel = "Hide Deactivated Users"
+                        showLabel = strings.showDeactivatedUsers,
+                        hideLabel = strings.hideDeactivatedUsers
                     ) {
                         filteredDeactivatedUsers.forEach { user ->
                             DeactivatedUserCard(
@@ -154,11 +154,11 @@ fun AdminUsersTabScreen(
                 item(key = "deleted-users-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
-                        title = "Deleted Users",
-                        countText = "${filteredDeletedUsers.size} ${if (filteredDeletedUsers.size == 1) "User" else "Users"}",
+                        title = strings.deletedUsers,
+                        countText = strings.accountsCountText(filteredDeletedUsers.size),
                         accentColor = ColorDangerCrimson,
-                        showLabel = "Show Deleted Users",
-                        hideLabel = "Hide Deleted Users"
+                        showLabel = strings.showDeletedUsers,
+                        hideLabel = strings.hideDeletedUsers
                     ) {
                         filteredDeletedUsers.forEach { user ->
                             DeletedUserCard(
@@ -196,11 +196,11 @@ fun AdminUsersTabScreen(
     if (userDeleteError != null) {
         AlertDialog(
             onDismissRequest = { viewModel.clearUserDeleteError() },
-            title = { Text("Audit Ledger Enforcement", fontWeight = FontWeight.Bold) },
+            title = { Text(strings.auditLedgerTitle, fontWeight = FontWeight.Bold) },
             text = { Text(userDeleteError!!) },
             confirmButton = {
                 Button(onClick = { viewModel.clearUserDeleteError() }) {
-                    Text("OK")
+                    Text(strings.ok)
                 }
             }
         )

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -229,18 +230,29 @@ fun ShoppingContent(
                 // Product Display Area
                 if (searchQuery.isBlank()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "🔍 Scan product barcode or type to search",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextSecondaryMuted,
-                            textAlign = TextAlign.Center
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = TextSecondaryMuted,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = strings.scanOrTypeSearch,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextSecondaryMuted,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 } else if (filteredProducts.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "No products found matching \"$searchQuery\"",
+                            text = strings.noProductsFoundMatching(searchQuery),
                             fontSize = 14.sp,
                             color = TextSecondaryMuted,
                             textAlign = TextAlign.Center

@@ -106,21 +106,21 @@ fun UserEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AdminLabeledField(
-                        label = "User Name",
+                        label = strings.userNameLabel,
                         value = name,
                         onValueChange = { name = it },
-                        placeholder = "Full Name",
+                        placeholder = strings.userNamePlaceholder,
                         modifier = Modifier.weight(1f)
                     )
 
                     Column(modifier = Modifier.weight(1f)) {
                         if (isNewUser) {
-                            Text("Initial PIN (Optional)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                            Text(strings.initialPinOptional, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                             Spacer(modifier = Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = pin,
                                 onValueChange = { pin = it },
-                                placeholder = { Text("No PIN", fontSize = 13.sp, color = TextSecondaryMuted) },
+                                placeholder = { Text(strings.noPinPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
                                 textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                 visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
@@ -147,7 +147,7 @@ fun UserEditDialog(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Reset PIN",
+                                    text = strings.resetPin,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = PrimaryNavy
@@ -159,7 +159,7 @@ fun UserEditDialog(
                                 OutlinedTextField(
                                     value = pin,
                                     onValueChange = { pin = it },
-                                    placeholder = { Text("New PIN (or blank for none)", fontSize = 13.sp, color = TextSecondaryMuted) },
+                                    placeholder = { Text(strings.newPinOptionalPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
                                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                                     visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                     trailingIcon = {
@@ -177,7 +177,7 @@ fun UserEditDialog(
                                 )
                             } else {
                                 OutlinedTextField(
-                                    value = if (user.pin != null) "••••••••" else "No PIN set",
+                                    value = if (user.pin != null) "••••••••" else strings.noPinSet,
                                     onValueChange = {},
                                     enabled = false,
                                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
@@ -200,27 +200,27 @@ fun UserEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AdminLabeledField(
-                        label = "Barcode Symbol",
+                        label = strings.barcodeSymbolLabel,
                         value = barcode,
                         onValueChange = {
                             barcode = it
                             if (barcodeNumber.isBlank()) barcodeNumber = it
                         },
-                        placeholder = "e.g. USR-001",
+                        placeholder = strings.barcodeSymbolPlaceholder,
                         modifier = Modifier.weight(1f)
                     )
 
                     AdminLabeledField(
-                        label = "Barcode Number (ID)",
+                        label = strings.barcodeNumberIdLabel,
                         value = barcodeNumber,
                         onValueChange = { barcodeNumber = it },
-                        placeholder = "e.g. 100000000001",
+                        placeholder = strings.barcodeNumberIdPlaceholder,
                         modifier = Modifier.weight(1f)
                     )
                 }
 
                 // Profile Avatar & Color Customization
-                Text("Profile Avatar & Color", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                Text(strings.profileAvatarColorTitle, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = SurfaceContainerHighLight,
@@ -252,7 +252,7 @@ fun UserEditDialog(
                                 ),
                                 contentPadding = PaddingValues(0.dp)
                             ) {
-                                Text("Initials", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(strings.initialsLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
 
                             OutlinedButton(
@@ -264,7 +264,7 @@ fun UserEditDialog(
                                 ),
                                 contentPadding = PaddingValues(0.dp)
                             ) {
-                                Text("Emoji", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(strings.emojiLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
 

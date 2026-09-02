@@ -15,6 +15,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.CsvImportResult
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 
@@ -25,6 +26,7 @@ fun DbRestoreMultiApprovalDialog(
     onConfirmRestore: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val strings = I18n.current
     var step by remember { mutableStateOf(1) }
     var inputPassword by remember { mutableStateOf("") }
     var inputPhrase by remember { mutableStateOf("") }
@@ -41,7 +43,7 @@ fun DbRestoreMultiApprovalDialog(
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    text = if (step == 1) "Step 1 of 2: Confirm Database Restore" else "Step 2 of 2: Security Authorization",
+                    text = if (step == 1) strings.step1DbRestoreTitle else strings.step2SecurityTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = ColorDangerCrimson
@@ -70,15 +72,15 @@ fun DbRestoreMultiApprovalDialog(
                                     tint = ColorDangerCrimson,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Text("CRITICAL WARNING:", fontWeight = FontWeight.Bold, color = ColorDangerCrimson, fontSize = 14.sp)
+                                Text(strings.criticalWarningHeader, fontWeight = FontWeight.Bold, color = ColorDangerCrimson, fontSize = 14.sp)
                             }
                             Text(
-                                "Restoring this .db file will COMPLETE OVERWRITE all current data in the application database.",
+                                strings.dbRestoreWarning1,
                                 fontSize = 13.sp,
                                 color = PrimaryNavy
                             )
                             Text(
-                                "All existing products, users, balances, transactions, and settings will be PERMANENTLY ERASED and replaced with the backup file.",
+                                strings.dbRestoreWarning2,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ColorDangerCrimson
@@ -92,14 +94,14 @@ fun DbRestoreMultiApprovalDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Backup File Details:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
+                            Text(strings.backupFileDetailsHeader, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
                             Text("Filename: ${file.name}", fontSize = 12.sp, color = AccentNavy)
                             Text("File Path: ${file.absolutePath}", fontSize = 11.sp, color = PrimaryNavy.copy(alpha = 0.7f))
                         }
                     }
                 } else {
                     Text(
-                        "To complete the database restore, enter the Admin Master Password and type the keyword 'RESTORE':",
+                        strings.dbRestoreAuthMsg,
                         fontSize = 13.sp,
                         color = PrimaryNavy
                     )
@@ -107,7 +109,7 @@ fun DbRestoreMultiApprovalDialog(
                     OutlinedTextField(
                         value = inputPassword,
                         onValueChange = { inputPassword = it; errorMessage = null },
-                        label = { Text("Admin Master Password") },
+                        label = { Text(strings.adminMasterPasswordLabel) },
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -116,7 +118,7 @@ fun DbRestoreMultiApprovalDialog(
                     OutlinedTextField(
                         value = inputPhrase,
                         onValueChange = { inputPhrase = it; errorMessage = null },
-                        label = { Text("Type 'RESTORE' to confirm") },
+                        label = { Text(strings.typeRestoreConfirmLabel) },
                         placeholder = { Text("RESTORE") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -135,7 +137,7 @@ fun DbRestoreMultiApprovalDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Proceed to Authorization ➔", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.proceedToAuthBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Button(
@@ -144,9 +146,9 @@ fun DbRestoreMultiApprovalDialog(
                         val isPhraseCorrect = inputPhrase.trim() == "RESTORE"
 
                         if (!isPasswordCorrect) {
-                            errorMessage = "Incorrect Admin Password."
+                            errorMessage = strings.incorrectAdminPassword
                         } else if (!isPhraseCorrect) {
-                            errorMessage = "Please type 'RESTORE' exactly to confirm."
+                            errorMessage = strings.typeRestoreExactly
                         } else {
                             onConfirmRestore()
                         }
@@ -164,7 +166,7 @@ fun DbRestoreMultiApprovalDialog(
                             tint = SurfaceWhite,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text("RESTORE DATABASE NOW", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                        Text(strings.restoreDatabaseNowBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -176,7 +178,7 @@ fun DbRestoreMultiApprovalDialog(
                 },
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text(if (step == 2) "⬅ Back" else "Cancel")
+                Text(if (step == 2) strings.backBtn else strings.cancel)
             }
         }
     )
@@ -188,6 +190,7 @@ fun WipeDataMultiApprovalDialog(
     onConfirmWipe: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val strings = I18n.current
     var step by remember { mutableStateOf(1) }
     var inputPassword by remember { mutableStateOf("") }
     var inputPhrase by remember { mutableStateOf("") }
@@ -204,7 +207,7 @@ fun WipeDataMultiApprovalDialog(
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    text = if (step == 1) "Step 1 of 2: Factory Reset / Wipe All Data" else "Step 2 of 2: Security Authorization",
+                    text = if (step == 1) strings.step1WipeDataTitle else strings.step2SecurityTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = ColorDangerCrimson
@@ -233,20 +236,20 @@ fun WipeDataMultiApprovalDialog(
                                     tint = ColorDangerCrimson,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Text("PERMANENT DATA WIPE WARNING:", fontWeight = FontWeight.Bold, color = ColorDangerCrimson, fontSize = 14.sp)
+                                Text(strings.permanentWipeWarningHeader, fontWeight = FontWeight.Bold, color = ColorDangerCrimson, fontSize = 14.sp)
                             }
                             Text(
-                                "This action will completely wipe all database tables:",
+                                strings.wipeWarning1,
                                 fontSize = 13.sp,
                                 color = PrimaryNavy
                             )
-                            Text("• All User accounts & balances will be erased.\n• All Products & stock quantities will be erased.\n• All Transaction history will be erased.\n• System settings will reset to default.", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ColorDangerCrimson)
-                            Text("This action CANNOT BE UNDONE!", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                            Text(strings.wipeWarningDetails, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ColorDangerCrimson)
+                            Text(strings.actionCannotBeUndone, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
                         }
                     }
                 } else {
                     Text(
-                        "To complete the Factory Reset, enter the Admin Master Password and type 'WIPE':",
+                        strings.wipeAuthMsg,
                         fontSize = 13.sp,
                         color = PrimaryNavy
                     )
@@ -254,7 +257,7 @@ fun WipeDataMultiApprovalDialog(
                     OutlinedTextField(
                         value = inputPassword,
                         onValueChange = { inputPassword = it; errorMessage = null },
-                        label = { Text("Admin Master Password") },
+                        label = { Text(strings.adminMasterPasswordLabel) },
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -263,7 +266,7 @@ fun WipeDataMultiApprovalDialog(
                     OutlinedTextField(
                         value = inputPhrase,
                         onValueChange = { inputPhrase = it; errorMessage = null },
-                        label = { Text("Type 'WIPE' to confirm") },
+                        label = { Text(strings.typeWipeConfirmLabel) },
                         placeholder = { Text("WIPE") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -282,7 +285,7 @@ fun WipeDataMultiApprovalDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Proceed to Authorization ➔", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.proceedToAuthBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Button(
@@ -291,9 +294,9 @@ fun WipeDataMultiApprovalDialog(
                         val isPhraseCorrect = inputPhrase.trim() == "WIPE"
 
                         if (!isPasswordCorrect) {
-                            errorMessage = "Incorrect Admin Password."
+                            errorMessage = strings.incorrectAdminPassword
                         } else if (!isPhraseCorrect) {
-                            errorMessage = "Please type 'WIPE' exactly to confirm."
+                            errorMessage = strings.typeWipeExactly
                         } else {
                             onConfirmWipe()
                         }
@@ -311,7 +314,7 @@ fun WipeDataMultiApprovalDialog(
                             tint = SurfaceWhite,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text("WIPE ALL SYSTEM DATA", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                        Text(strings.wipeAllSystemDataBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -323,7 +326,7 @@ fun WipeDataMultiApprovalDialog(
                 },
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text(if (step == 2) "⬅ Back" else "Cancel")
+                Text(if (step == 2) strings.backBtn else strings.cancel)
             }
         }
     )
@@ -338,6 +341,7 @@ fun CsvImportMultiApprovalDialog(
     onConfirmImport: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val strings = I18n.current
     var step by remember { mutableStateOf(1) }
     var inputPassword by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -353,7 +357,7 @@ fun CsvImportMultiApprovalDialog(
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    text = if (step == 1) "Step 1 of 2: CSV Import Preview ($importType)" else "Step 2 of 2: Admin Approval",
+                    text = if (step == 1) strings.step1CsvImportTitle(importType) else strings.step2AdminApprovalTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp,
                     color = PrimaryNavy
@@ -397,7 +401,7 @@ fun CsvImportMultiApprovalDialog(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
-                                    text = "Security Note: Any user barcodes in the CSV will be stripped/cleared to prevent barcode collisions in the kiosk.",
+                                    text = strings.csvUserSecurityNote,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = PrimaryNavy
@@ -424,7 +428,7 @@ fun CsvImportMultiApprovalDialog(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
-                                    text = "Notice: ${importResultPreview.strippedBarcodesCount} product barcode(s) were stripped because they are already assigned to other existing products.",
+                                    text = strings.strippedBarcodesNotice(importResultPreview.strippedBarcodesCount),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = ColorDangerCrimson
@@ -434,7 +438,7 @@ fun CsvImportMultiApprovalDialog(
                     }
 
                     if (importResultPreview.warnings.isNotEmpty()) {
-                        Text("Warnings/Notes:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = PrimaryNavy)
+                        Text(strings.warningsNotesHeader, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = PrimaryNavy)
                         LazyColumn(modifier = Modifier.heightIn(max = 120.dp).fillMaxWidth()) {
                             items(importResultPreview.warnings.size) { idx ->
                                 Text("• ${importResultPreview.warnings[idx]}", fontSize = 11.sp, color = AccentNavy)
@@ -443,7 +447,7 @@ fun CsvImportMultiApprovalDialog(
                     }
                 } else {
                     Text(
-                        "Please enter the Admin Master Password to execute the CSV import:",
+                        strings.csvImportAuthMsg,
                         fontSize = 13.sp,
                         color = PrimaryNavy
                     )
@@ -451,7 +455,7 @@ fun CsvImportMultiApprovalDialog(
                     OutlinedTextField(
                         value = inputPassword,
                         onValueChange = { inputPassword = it; errorMessage = null },
-                        label = { Text("Admin Master Password") },
+                        label = { Text(strings.adminMasterPasswordLabel) },
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -470,14 +474,14 @@ fun CsvImportMultiApprovalDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Proceed to Approval ➔", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.proceedToApprovalBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Button(
                     onClick = {
                         val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
                         if (!isPasswordCorrect) {
-                            errorMessage = "Incorrect Admin Password."
+                            errorMessage = strings.incorrectAdminPassword
                         } else {
                             onConfirmImport()
                         }
@@ -495,7 +499,7 @@ fun CsvImportMultiApprovalDialog(
                             tint = SurfaceWhite,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text("Execute CSV Import", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                        Text(strings.executeCsvImportBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -507,7 +511,7 @@ fun CsvImportMultiApprovalDialog(
                 },
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text(if (step == 2) "⬅ Back" else "Cancel")
+                Text(if (step == 2) strings.backBtn else strings.cancel)
             }
         }
     )

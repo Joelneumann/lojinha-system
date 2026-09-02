@@ -80,24 +80,24 @@ fun ProductEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AdminLabeledField(
-                        label = "Product Name",
+                        label = strings.productNameLabel,
                         value = name,
                         onValueChange = { name = it },
-                        placeholder = "Product Name",
+                        placeholder = strings.productNamePlaceholder,
                         modifier = Modifier.weight(1.5f)
                     )
 
                     AdminLabeledField(
-                        label = "Base Price (R$)",
+                        label = strings.basePriceBrlLabel,
                         value = basePriceBrl,
                         onValueChange = { basePriceBrl = it },
-                        placeholder = "0,00",
+                        placeholder = strings.zeroPricePlaceholder,
                         modifier = Modifier.weight(1f)
                     )
                 }
 
                 AdminSegmentedOptionsRow(
-                    label = "Unit Type",
+                    label = strings.unitTypeLabel,
                     options = UnitType.entries,
                     selected = unitType,
                     onSelect = { unitType = it },
@@ -109,24 +109,24 @@ fun ProductEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AdminLabeledField(
-                        label = if (unitType == UnitType.PIECE) "Stock Quantity (Units):" else "Stock Quantity (kg):",
+                        label = if (unitType == UnitType.PIECE) strings.stockQtyUnitsLabel else strings.stockQtyKgLabel,
                         value = stockQuantity,
                         onValueChange = { stockQuantity = it },
-                        placeholder = if (unitType == UnitType.PIECE) "e.g. 25 (Full numbers)" else "e.g. 2.500 (Decimal in kg)",
+                        placeholder = if (unitType == UnitType.PIECE) strings.stockUnitsPlaceholder else strings.stockKgPlaceholder,
                         modifier = Modifier.weight(1f)
                     )
 
                     AdminLabeledField(
-                        label = "Custom Markup % (Optional)",
+                        label = strings.customMarkupOptionalLabel,
                         value = customMarkup,
                         onValueChange = { customMarkup = it },
-                        placeholder = "Standard",
+                        placeholder = strings.standardPlaceholder,
                         modifier = Modifier.weight(1f)
                     )
                 }
 
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("Associated Barcodes (${barcodeList.size})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                    Text(strings.associatedBarcodesTitle(barcodeList.size), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                     Spacer(modifier = Modifier.height(6.dp))
 
                     if (barcodeList.isNotEmpty()) {
@@ -152,15 +152,17 @@ fun ProductEditDialog(
                                             modifier = Modifier.size(14.dp)
                                         )
                                         Text("${b.code}${if (b.description != null) " (${b.description})" else ""}", fontSize = 12.sp, color = PrimaryNavy)
-                                        Text(
-                                            text = "✕",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = ColorDangerCrimson,
-                                            modifier = Modifier.clickable {
-                                                barcodeList = barcodeList.filter { it.code != b.code }
-                                            }
-                                        )
+                                        IconButton(
+                                            onClick = { barcodeList = barcodeList.filter { it.code != b.code } },
+                                            modifier = Modifier.size(16.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = null,
+                                                tint = ColorDangerCrimson,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -176,7 +178,7 @@ fun ProductEditDialog(
                         OutlinedTextField(
                             value = barcodeCode,
                             onValueChange = { barcodeCode = it },
-                            placeholder = { Text("Barcode Code", fontSize = 12.sp) },
+                            placeholder = { Text(strings.barcodeCodePlaceholder, fontSize = 12.sp) },
                             textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             modifier = Modifier.weight(1f).height(56.dp),
                             shape = RoundedCornerShape(8.dp),
@@ -186,7 +188,7 @@ fun ProductEditDialog(
                         OutlinedTextField(
                             value = barcodeDesc,
                             onValueChange = { barcodeDesc = it },
-                            placeholder = { Text("Description (Optional)", fontSize = 12.sp) },
+                            placeholder = { Text(strings.descriptionOptionalPlaceholder, fontSize = 12.sp) },
                             textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                             modifier = Modifier.weight(1f).height(56.dp),
                             shape = RoundedCornerShape(8.dp),
@@ -209,7 +211,7 @@ fun ProductEditDialog(
                             colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                             modifier = Modifier.height(52.dp)
                         ) {
-                            Text("+ Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(strings.addBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 

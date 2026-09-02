@@ -280,7 +280,7 @@ fun TransactionHistoryContent(
             // Transaction Ledger List & Pagination Bar
             if (transactionsWithBalance.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text("No transactions found.", color = TextSecondaryMuted)
+                    Text(strings.noTransactionsFound, color = TextSecondaryMuted)
                 }
             } else {
                 LazyColumn(

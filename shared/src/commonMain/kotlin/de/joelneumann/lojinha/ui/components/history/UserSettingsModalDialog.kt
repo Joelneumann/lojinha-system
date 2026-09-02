@@ -105,7 +105,7 @@ fun UserSettingsModalDialog(
 
                                 Column {
                                     Text(
-                                        text = "Profile Avatar & Color",
+                                        text = strings.profileAvatarColorTitle,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = PrimaryNavy
@@ -123,7 +123,7 @@ fun UserSettingsModalDialog(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = if (isAvatarExpanded) "Hide" else "Edit",
+                                    text = if (isAvatarExpanded) strings.hide else strings.edit,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = AccentNavy
@@ -212,7 +212,7 @@ fun UserSettingsModalDialog(
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 // Background Color Chips Picker
-                                Text("Avatar Background Color", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondaryMuted)
+                                Text(strings.avatarBackgroundColorTitle, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondaryMuted)
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -259,7 +259,7 @@ fun UserSettingsModalDialog(
                 OutlinedTextField(
                     value = pinInput,
                     onValueChange = onPinInputChange,
-                    placeholder = { Text("e.g. 1234 (leave blank for none)", fontSize = 13.sp, color = TextSecondaryMuted) },
+                    placeholder = { Text(strings.pinPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp),
                     visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
@@ -342,7 +342,7 @@ fun UserSettingsModalDialog(
                         .padding(12.dp)
                 ) {
                     Text(
-                        text = user.userBarcodeNumber ?: "No barcode assigned",
+                        text = user.userBarcodeNumber ?: strings.noBarcodeAssigned,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextSecondarySubtle

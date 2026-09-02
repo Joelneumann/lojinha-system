@@ -57,7 +57,7 @@ fun CartPanel(
                 if (cartItems.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "Cart is empty.\nScan product or click to add.",
+                            text = strings.cartIsEmpty,
                             color = TextSecondaryMuted,
                             textAlign = TextAlign.Center
                         )

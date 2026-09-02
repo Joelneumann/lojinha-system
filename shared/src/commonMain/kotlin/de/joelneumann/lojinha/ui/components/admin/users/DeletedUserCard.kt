@@ -18,6 +18,7 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 
@@ -27,6 +28,7 @@ fun DeletedUserCard(
     onRestoreUser: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = I18n.current
     var showRestoreConfirm by remember { mutableStateOf(false) }
 
     Surface(
@@ -66,7 +68,7 @@ fun DeletedUserCard(
                             color = PrimaryNavy
                         )
                         AdminStatusBadge(
-                            text = "Deleted",
+                            text = strings.deleted,
                             type = AdminBadgeType.DANGER
                         )
                     }
@@ -95,7 +97,7 @@ fun DeletedUserCard(
                         tint = SurfaceWhite,
                         modifier = Modifier.size(16.dp)
                     )
-                    Text("Restore User", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                    Text(strings.restoreUserBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                 }
             }
         }
@@ -104,8 +106,8 @@ fun DeletedUserCard(
     if (showRestoreConfirm) {
         AlertDialog(
             onDismissRequest = { showRestoreConfirm = false },
-            title = { Text("Confirm Account Restoration", fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
-            text = { Text("Are you sure you want to restore user account '${user.name}'?\n\nThis will reactivate the account and move it back into the active users list.") },
+            title = { Text(strings.confirmUserRestorationTitle, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
+            text = { Text(strings.confirmUserRestorationMsg(user.name)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -114,12 +116,12 @@ fun DeletedUserCard(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                 ) {
-                    Text("Yes, Restore User", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.yesRestoreUser, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showRestoreConfirm = false }) {
-                    Text("Cancel")
+                    Text(strings.cancel)
                 }
             }
         )

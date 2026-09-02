@@ -254,21 +254,21 @@ fun AdminUserAccordionCard(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             AdminLabeledField(
-                label = "Barcode Symbol",
+                label = strings.barcodeSymbolLabel,
                 value = draftUserBarcode,
                 onValueChange = {
                     draftUserBarcode = it
                     if (draftUserBarcodeNumber.isBlank()) draftUserBarcodeNumber = it
                 },
-                placeholder = "e.g. USR-001",
+                placeholder = strings.barcodeSymbolPlaceholder,
                 modifier = Modifier.weight(1f)
             )
 
             AdminLabeledField(
-                label = "Barcode Number (ID)",
+                label = strings.barcodeNumberIdLabel,
                 value = draftUserBarcodeNumber,
                 onValueChange = { draftUserBarcodeNumber = it },
-                placeholder = "e.g. 100000000001",
+                placeholder = strings.barcodeNumberIdPlaceholder,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -279,7 +279,7 @@ fun AdminUserAccordionCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Profile Avatar & Color", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                Text(strings.profileAvatarColorTitle, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -296,12 +296,12 @@ fun AdminUserAccordionCard(
                         FilterChip(
                             selected = draftAvatar.type == AvatarType.INITIALS,
                             onClick = { draftAvatar = draftAvatar.copy(type = AvatarType.INITIALS) },
-                            label = { Text("Initials", fontSize = 12.sp) }
+                            label = { Text(strings.initialsLabel, fontSize = 12.sp) }
                         )
                         FilterChip(
                             selected = draftAvatar.type == AvatarType.EMOJI,
                             onClick = { draftAvatar = draftAvatar.copy(type = AvatarType.EMOJI) },
-                            label = { Text("Emoji", fontSize = 12.sp) }
+                            label = { Text(strings.emojiLabel, fontSize = 12.sp) }
                         )
                     }
                 }
@@ -338,7 +338,7 @@ fun AdminUserAccordionCard(
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                Text("Avatar Color", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                Text(strings.avatarColorTitle, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -505,8 +505,8 @@ fun AdminUserAccordionCard(
 
         AlertDialog(
             onDismissRequest = { pendingBalanceAdjustment = null },
-            title = { Text("Confirm Balance Adjustment", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to $actionText ${user.name}'s account balance?") },
+            title = { Text(strings.confirmBalanceAdjustmentTitle, fontWeight = FontWeight.Bold) },
+            text = { Text(strings.confirmBalanceAdjustmentMsg(actionText, user.name)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -519,7 +519,7 @@ fun AdminUserAccordionCard(
                         containerColor = if (isDeposit) ColorSuccessEmerald else ColorDangerCrimson
                     )
                 ) {
-                    Text("Confirm", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.confirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -534,8 +534,8 @@ fun AdminUserAccordionCard(
         val actionText = if (user.isActive) "deactivate" else "activate"
         AlertDialog(
             onDismissRequest = { showToggleActiveConfirm = false },
-            title = { Text("Confirm Account Status Change", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to $actionText account '${user.name}'?") },
+            title = { Text(strings.confirmUserStatusChangeTitle, fontWeight = FontWeight.Bold) },
+            text = { Text(strings.confirmUserStatusChangeMsg(actionText, user.name)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -546,7 +546,7 @@ fun AdminUserAccordionCard(
                         containerColor = if (user.isActive) ColorWarningAmber else ColorSuccessEmerald
                     )
                 ) {
-                    Text("Confirm", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.confirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -560,8 +560,8 @@ fun AdminUserAccordionCard(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Confirm Delete Account", fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
-            text = { Text("Are you sure you want to delete user account '${user.name}'?\n\nThe user account will be soft-deleted and moved to the 'Deleted Users' section at the bottom of the page.") },
+            title = { Text(strings.confirmDeleteUserTitle, fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
+            text = { Text(strings.confirmDeleteUserMsg(user.name)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -570,7 +570,7 @@ fun AdminUserAccordionCard(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
-                    Text("Yes, Delete User", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.yesDeleteUser, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {

@@ -14,6 +14,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.theme.*
@@ -132,7 +134,12 @@ fun CartLineItemRow(
                                     .clickable { onRemove() },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("✕", color = ColorDangerCrimson, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = null,
+                                    tint = ColorDangerCrimson,
+                                    modifier = Modifier.size(14.dp)
+                                )
                             }
                         }
                     }

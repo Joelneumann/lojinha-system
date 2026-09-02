@@ -9,9 +9,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FlashOn
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorSuccessEmerald
 import de.joelneumann.lojinha.ui.theme.DividerBorder
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
@@ -25,6 +28,7 @@ fun DisabledProductCard(
     onEnableProduct: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = I18n.current
     var showEnableConfirm by remember { mutableStateOf(false) }
 
     Surface(
@@ -54,7 +58,7 @@ fun DisabledProductCard(
                         color = PrimaryNavy
                     )
                     AdminStatusBadge(
-                        text = "Disabled",
+                        text = strings.disabled,
                         type = AdminBadgeType.WARNING
                     )
                 }
@@ -71,7 +75,18 @@ fun DisabledProductCard(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.height(38.dp)
             ) {
-                Text("⚡ Enable Product", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FlashOn,
+                        contentDescription = null,
+                        tint = SurfaceWhite,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(strings.enableProduct, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                }
             }
         }
     }
@@ -79,8 +94,8 @@ fun DisabledProductCard(
     if (showEnableConfirm) {
         AlertDialog(
             onDismissRequest = { showEnableConfirm = false },
-            title = { Text("Confirm Product Activation", fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
-            text = { Text("Are you sure you want to enable product '${product.name}'?\n\nThis will move the product back into the active products list.") },
+            title = { Text(strings.confirmProductActivationTitle, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
+            text = { Text(strings.confirmProductActivationMsg(product.name)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -89,12 +104,12 @@ fun DisabledProductCard(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                 ) {
-                    Text("Yes, Enable Product", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.yesEnableProduct, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showEnableConfirm = false }) {
-                    Text("Cancel")
+                    Text(strings.cancel)
                 }
             }
         )

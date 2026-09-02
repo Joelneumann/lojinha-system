@@ -95,7 +95,7 @@ fun UserSelectionContent(
 
     Column(modifier = Modifier.fillMaxSize()) {
         HeaderBar(
-            title = "Lojinha",
+            title = strings.appTitle,
             actions = {
                 Button(
                     onClick = onOpenAdminAuthDialog,

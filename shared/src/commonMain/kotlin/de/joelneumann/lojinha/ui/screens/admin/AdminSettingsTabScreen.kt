@@ -21,6 +21,7 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.pickFile
 import de.joelneumann.lojinha.ui.utils.pickFolder
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 
 @Composable
@@ -28,6 +29,7 @@ fun AdminSettingsTabScreen(
     viewModel: AdminSettingsViewModel,
     onUnsavedStateChanged: (Boolean) -> Unit
 ) {
+    val strings = I18n.current
     val settings by viewModel.settings.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -109,7 +111,7 @@ fun AdminSettingsTabScreen(
                     modifier = Modifier.size(22.dp)
                 )
                 Text(
-                    text = "System & Admin Settings",
+                    text = strings.systemAdminSettingsTitle,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -117,7 +119,7 @@ fun AdminSettingsTabScreen(
 
                 if (hasFieldChanges) {
                     AdminStatusBadge(
-                        text = "● Unsaved Edits",
+                        text = strings.unsavedEditsBadge,
                         type = AdminBadgeType.WARNING
                     )
                 }
@@ -158,7 +160,7 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Text("Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                            Text(strings.revertChanges, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                         }
                     }
                 }
@@ -204,7 +206,7 @@ fun AdminSettingsTabScreen(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = if (hasFieldChanges) "Save Settings" else "Saved",
+                            text = if (hasFieldChanges) strings.saveSettings else strings.saved,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = SurfaceWhite
@@ -227,7 +229,7 @@ fun AdminSettingsTabScreen(
                 ) {
                     Text(statusMessage!!, color = ColorSuccessEmerald, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     IconButton(onClick = { viewModel.clearStatusMessages() }) {
-                        Text("✕", fontSize = 12.sp, color = ColorSuccessEmerald)
+                        Icon(Icons.Default.Close, contentDescription = null, tint = ColorSuccessEmerald, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -246,7 +248,7 @@ fun AdminSettingsTabScreen(
                 ) {
                     Text(errorMessage!!, color = ColorDangerCrimson, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     IconButton(onClick = { viewModel.clearStatusMessages() }) {
-                        Text("✕", fontSize = 12.sp, color = ColorDangerCrimson)
+                        Icon(Icons.Default.Close, contentDescription = null, tint = ColorDangerCrimson, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -282,17 +284,17 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Admin Master Password", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.adminMasterPasswordTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             AdminLabeledField(
-                                label = "New Password:",
+                                label = strings.newPasswordLabel,
                                 value = newPassword,
                                 onValueChange = { newPassword = it },
-                                placeholder = "Enter new password",
+                                placeholder = strings.newPasswordPlaceholder,
                                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
                                     IconButton(onClick = { showPassword = !showPassword }) {
@@ -307,10 +309,10 @@ fun AdminSettingsTabScreen(
                             )
 
                             AdminLabeledField(
-                                label = "Confirm New Password:",
+                                label = strings.confirmNewPasswordLabel,
                                 value = confirmPassword,
                                 onValueChange = { confirmPassword = it },
-                                placeholder = "Confirm new password",
+                                placeholder = strings.confirmNewPasswordPlaceholder,
                                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
                                     IconButton(onClick = { showPassword = !showPassword }) {
@@ -337,7 +339,7 @@ fun AdminSettingsTabScreen(
                                         tint = ColorDangerCrimson,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Text("Passwords do not match", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                                    Text(strings.passwordsDoNotMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
                                 }
                             } else if (newPassword.isNotBlank()) {
                                 Row(
@@ -350,7 +352,7 @@ fun AdminSettingsTabScreen(
                                         tint = ColorSuccessEmerald,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Text("Passwords match", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
+                                    Text(strings.passwordsMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
                                 }
                             }
                         }
@@ -381,13 +383,13 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Product Pricing Rules", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.productPricingRulesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
                         AdminLabeledField(
-                            label = "Global Product Markup (%):",
+                            label = strings.globalProductMarkupLabel,
                             value = globalMarkup,
                             onValueChange = { globalMarkup = it },
-                            placeholder = "e.g. 10.0",
+                            placeholder = strings.globalProductMarkupPlaceholder,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -417,25 +419,25 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Currency Exchange Rates", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.currencyExchangeRatesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             AdminLabeledField(
-                                label = "USD Rate (1 BRL = X USD):",
+                                label = strings.usdRateLabel,
                                 value = usdRate,
                                 onValueChange = { usdRate = it },
-                                placeholder = "e.g. 0.18",
+                                placeholder = strings.usdRatePlaceholder,
                                 modifier = Modifier.weight(1f)
                             )
 
                             AdminLabeledField(
-                                label = "EUR Rate (1 BRL = X EUR):",
+                                label = strings.eurRateLabel,
                                 value = eurRate,
                                 onValueChange = { eurRate = it },
-                                placeholder = "e.g. 0.16",
+                                placeholder = strings.eurRatePlaceholder,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -466,13 +468,13 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Kiosk System Timers", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.kioskSystemTimersTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
                         AdminLabeledField(
-                            label = "Inactivity Timeout (Minutes):",
+                            label = strings.inactivityTimeoutLabel,
                             value = inactivityTimeout,
                             onValueChange = { inactivityTimeout = it },
-                            placeholder = "e.g. 3",
+                            placeholder = strings.inactivityTimeoutPlaceholder,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -500,7 +502,13 @@ fun AdminSettingsTabScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("☁️ Microsoft OneDrive Integration", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Icon(
+                                    imageVector = Icons.Default.Cloud,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.oneDriveIntegrationTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                             }
 
                             val isConnected = !settingsState.oneDriveRefreshToken.isNullOrBlank()
@@ -509,7 +517,7 @@ fun AdminSettingsTabScreen(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text(
-                                    text = if (isConnected) "Connected" else "Disconnected",
+                                    text = if (isConnected) strings.connected else strings.disconnected,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -518,8 +526,6 @@ fun AdminSettingsTabScreen(
                             }
                         }
 
-
-
                         var clientIdInput by remember(settingsState.oneDriveClientId) { mutableStateOf(settingsState.oneDriveClientId) }
                         OutlinedTextField(
                             value = clientIdInput,
@@ -527,8 +533,8 @@ fun AdminSettingsTabScreen(
                                 clientIdInput = it
                                 viewModel.updateOneDriveClientId(it)
                             },
-                            label = { Text("Azure Application (Client) ID") },
-                            placeholder = { Text("Enter your Azure Client ID...") },
+                            label = { Text(strings.azureClientIdLabel) },
+                            placeholder = { Text(strings.azureClientIdPlaceholder) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -560,7 +566,7 @@ fun AdminSettingsTabScreen(
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson)
                                 ) {
-                                    Text("Disconnect")
+                                    Text(strings.disconnectOneDrive)
                                 }
                             }
                         } else {
@@ -570,7 +576,7 @@ fun AdminSettingsTabScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Connect your Microsoft account to back up database & CSV files directly to OneDrive.",
+                                    text = strings.connectOneDriveDesc,
                                     fontSize = 12.sp,
                                     color = Color.DarkGray,
                                     modifier = Modifier.weight(1f).padding(end = 12.dp)
@@ -581,7 +587,7 @@ fun AdminSettingsTabScreen(
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                                 ) {
-                                    Text("Connect OneDrive")
+                                    Text(strings.connectOneDrive)
                                 }
                             }
                         }
@@ -616,12 +622,12 @@ fun AdminSettingsTabScreen(
                                     tint = PrimaryNavy,
                                     modifier = Modifier.size(18.dp)
                                 )
-                                Text("Configured Backup Routines", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Text(strings.configuredBackupRoutinesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 Surface(
                                     color = PrimaryNavy.copy(alpha = 0.1f),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text("${routines.size} Routines", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.routinesCountBadge(routines.size), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
                             }
 
@@ -640,7 +646,7 @@ fun AdminSettingsTabScreen(
                                         tint = SurfaceWhite,
                                         modifier = Modifier.size(14.dp)
                                     )
-                                    Text("Create Routine", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(strings.createRoutine, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -656,8 +662,8 @@ fun AdminSettingsTabScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Text("No backup routines created yet.", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                                    Text("Click '+ Create Routine' above to add automated or manual backup schedules.", fontSize = 12.sp, color = AccentNavy)
+                                    Text(strings.noRoutinesYet, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.noRoutinesYetSub, fontSize = 12.sp, color = AccentNavy)
                                 }
                             }
                         } else {
@@ -665,10 +671,10 @@ fun AdminSettingsTabScreen(
                                 routines.forEach { routine ->
                                     val lastBackupStr = routine.lastBackupTimestamp?.let {
                                         Formatting.formatTimestamp(it)
-                                    } ?: "Never"
+                                    } ?: strings.never
 
                                     val nextDueStr = if (routine.scheduleConfig is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange) {
-                                        "On Real-time Event"
+                                        strings.onRealtimeEvent
                                     } else {
                                         Formatting.formatTimestamp(routine.calculateNextDueTimestamp())
                                     }
@@ -676,7 +682,7 @@ fun AdminSettingsTabScreen(
                                     val scheduleBadgeText = when (val cfg = routine.scheduleConfig) {
                                         is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed -> "TIMED ${cfg.timeOfDay}"
                                         is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Interval -> "EVERY ${cfg.intervalHours}h ${cfg.intervalMinutes}m"
-                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange -> "⚡ REALTIME CHANGE"
+                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange -> "REALTIME CHANGE"
                                     }
 
                                     Card(
@@ -729,8 +735,8 @@ fun AdminSettingsTabScreen(
                                                 )
                                             }
 
-                                            Text("Target Path: ${routine.backupLocationPath}", fontSize = 11.sp, color = AccentNavy)
-                                            Text("Last Backup: $lastBackupStr  •  Next Due: $nextDueStr", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                                            Text(strings.targetPathLabel(routine.backupLocationPath), fontSize = 11.sp, color = AccentNavy)
+                                            Text(strings.lastBackupNextDueLabel(lastBackupStr, nextDueStr), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
 
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -752,7 +758,7 @@ fun AdminSettingsTabScreen(
                                                             tint = SurfaceWhite,
                                                             modifier = Modifier.size(13.dp)
                                                         )
-                                                        Text("Run Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        Text(strings.runNow, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     }
                                                 }
 
@@ -771,7 +777,7 @@ fun AdminSettingsTabScreen(
                                                             tint = PrimaryNavy,
                                                             modifier = Modifier.size(13.dp)
                                                         )
-                                                        Text("Edit", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                                        Text(strings.edit, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                                     }
                                                 }
 
@@ -791,7 +797,7 @@ fun AdminSettingsTabScreen(
                                                             tint = ColorDangerCrimson,
                                                             modifier = Modifier.size(13.dp)
                                                         )
-                                                        Text("Delete", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        Text(strings.delete, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     }
                                                 }
                                             }
@@ -827,7 +833,7 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Database Restore (.db) & Reset", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.databaseRestoreResetTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
 
                         Row(
@@ -836,7 +842,7 @@ fun AdminSettingsTabScreen(
                         ) {
                             Button(
                                 onClick = {
-                                    pickFile("Select .db Database Backup File", ".db") { selectedFile ->
+                                    pickFile(strings.selectDbBackupFile, ".db") { selectedFile ->
                                         viewModel.setRestoreDbFile(selectedFile)
                                     }
                                 },
@@ -854,7 +860,7 @@ fun AdminSettingsTabScreen(
                                         tint = SurfaceWhite,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Text("Restore Database (.db)...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                    Text(strings.restoreDatabaseBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                                 }
                             }
 
@@ -876,7 +882,7 @@ fun AdminSettingsTabScreen(
                                         tint = SurfaceWhite,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Text("Wipe All Data (Factory Reset)...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                    Text(strings.factoryResetBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                                 }
                             }
                         }
@@ -907,9 +913,9 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Import Data from CSV Files", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.importCsvDataTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
-                        Text("Import Products or Users into the database (Add / Update Mode). Existing matching IDs will be updated; user barcodes will be cleared to prevent collisions.", fontSize = 12.sp, color = AccentNavy)
+                        Text(strings.importCsvDataDesc, fontSize = 12.sp, color = AccentNavy)
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -917,7 +923,7 @@ fun AdminSettingsTabScreen(
                         ) {
                             OutlinedButton(
                                 onClick = {
-                                    pickFile("Select Products CSV File", ".csv") { selectedFile ->
+                                    pickFile(strings.selectProductsCsvFile, ".csv") { selectedFile ->
                                         viewModel.prepareCsvImport(selectedFile, "Products")
                                     }
                                 },
@@ -934,13 +940,13 @@ fun AdminSettingsTabScreen(
                                         tint = PrimaryNavy,
                                         modifier = Modifier.size(15.dp)
                                     )
-                                    Text("Import Products CSV...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.importProductsCsvBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
                             }
 
                             OutlinedButton(
                                 onClick = {
-                                    pickFile("Select Users CSV File", ".csv") { selectedFile ->
+                                    pickFile(strings.selectUsersCsvFile, ".csv") { selectedFile ->
                                         viewModel.prepareCsvImport(selectedFile, "Users")
                                     }
                                 },
@@ -957,7 +963,7 @@ fun AdminSettingsTabScreen(
                                         tint = PrimaryNavy,
                                         modifier = Modifier.size(15.dp)
                                     )
-                                    Text("Import Users CSV...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.importUsersCsvBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
                             }
                         }
@@ -965,7 +971,6 @@ fun AdminSettingsTabScreen(
                 }
             }
         }
-    }
 
     // MULTI-APPROVAL DIALOG TRIGGERS
     if (activeRestoreDbFile != null) {
@@ -1077,4 +1082,5 @@ fun AdminSettingsTabScreen(
             onDismiss = { viewModel.dismissOneDriveSuccessDialog() }
         )
     }
+}
 }

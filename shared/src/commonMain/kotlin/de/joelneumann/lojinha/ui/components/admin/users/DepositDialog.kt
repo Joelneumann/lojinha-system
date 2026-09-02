@@ -43,12 +43,12 @@ fun DepositDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text(text = "Amount (BRL):", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(text = strings.amountBrlLabel, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(4.dp))
                 OutlinedTextField(
                     value = amountInput,
                     onValueChange = onAmountChange,
-                    placeholder = { Text("e.g. 50,00 or 10.50", fontSize = 14.sp) },
+                    placeholder = { Text(strings.amountPlaceholder, fontSize = 14.sp) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().height(52.dp)
@@ -56,12 +56,12 @@ fun DepositDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text(text = "Note / Reason:", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(text = strings.noteReasonLabel, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(4.dp))
                 OutlinedTextField(
                     value = noteInput,
                     onValueChange = onNoteChange,
-                    placeholder = { Text("e.g. Cash deposit via Admin", fontSize = 14.sp) },
+                    placeholder = { Text(strings.noteReasonPlaceholder, fontSize = 14.sp) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().height(52.dp)
@@ -79,7 +79,7 @@ fun DepositDialog(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                     ) {
-                        Text("+ Deposit", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                        Text(strings.depositActionBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
 
                     Button(
@@ -88,7 +88,7 @@ fun DepositDialog(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                     ) {
-                        Text("- Withdraw", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                        Text(strings.withdrawActionBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
                 }
             }

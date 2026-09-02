@@ -219,7 +219,7 @@ fun AdminScreen(
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
-                        text = "Unsaved Changes Warning",
+                        text = strings.unsavedChangesTitle,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = ColorWarningAmber
@@ -228,7 +228,7 @@ fun AdminScreen(
             },
             text = {
                 Text(
-                    text = "You have unsaved changes on this page. If you leave to $targetName, your unsaved changes will be discarded.\n\nAre you sure you want to discard changes and continue?",
+                    text = strings.unsavedChangesMsg(targetName),
                     fontSize = 14.sp,
                     color = TextSecondarySubtle
                 )
@@ -250,7 +250,7 @@ fun AdminScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
-                    Text("Discard & Switch", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.discardAndSwitch, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -260,7 +260,7 @@ fun AdminScreen(
                         isExitAdminPending = false
                     }
                 ) {
-                    Text("Keep Editing")
+                    Text(strings.keepEditing)
                 }
             }
         )

@@ -9,6 +9,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Refresh
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.TransactionType
@@ -132,15 +135,16 @@ fun AdminTransactionAccordionCard(
                 isStornoMode = isStornoMode,
                 isCanceled = isCanceled,
                 weightInputStrings = weightInputStrings,
-                onWeightInputChanged = { index, textInput, parsedGrams ->
+                onItemQuantityChanged = { index, newQty ->
+                    draftItems = draftItems.toMutableList().also { list ->
+                        list[index] = list[index].copy(quantity = newQty)
+                    }
+                },
+                onWeightInputChanged = { index, textInput ->
+                    val parsedGrams = textInput.toLongOrNull() ?: 0L
                     weightInputStrings = weightInputStrings + (index to textInput)
                     draftItems = draftItems.toMutableList().also { list ->
                         list[index] = list[index].copy(quantity = parsedGrams)
-                    }
-                },
-                onQuantityChanged = { index, newQty ->
-                    draftItems = draftItems.toMutableList().also { list ->
-                        list[index] = list[index].copy(quantity = newQty)
                     }
                 },
                 onToggleStornoMode = { isStornoMode = true }
@@ -205,7 +209,7 @@ fun AdminTransactionAccordionCard(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.height(44.dp)
                             ) {
-                                Text("Cancel", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text(strings.cancel, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             }
 
                             Button(
@@ -214,7 +218,18 @@ fun AdminTransactionAccordionCard(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.height(44.dp)
                             ) {
-                                Text("🛑 Storno Everything", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Block,
+                                        contentDescription = null,
+                                        tint = SurfaceWhite,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.stornoEverything, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                }
                             }
 
                             val isDraftModified = draftItems != activeItems
@@ -228,7 +243,18 @@ fun AdminTransactionAccordionCard(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.height(44.dp)
                             ) {
-                                Text("🔄 Apply Storno Changes", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        tint = SurfaceWhite,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.applyStornoChanges, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -245,7 +271,18 @@ fun AdminTransactionAccordionCard(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(44.dp)
                     ) {
-                        Text("🛑 Storno Transaction", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Block,
+                                contentDescription = null,
+                                tint = SurfaceWhite,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(strings.stornoTransactionBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                        }
                     }
                 }
             }
@@ -256,7 +293,7 @@ fun AdminTransactionAccordionCard(
         val originalCost = kotlin.math.abs(transaction.totalAmount)
         AlertDialog(
             onDismissRequest = { showStornoEverythingConfirm = false },
-            title = { Text("Approval Required: Storno Everything", fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
+            title = { Text(strings.approvalStornoEverythingTitle, fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
             text = {
                 Text(
                     "Are you sure you want to storno the ENTIRE purchase transaction for user ${transaction.userNameSnapshot}?\n\n" +
@@ -274,7 +311,7 @@ fun AdminTransactionAccordionCard(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
-                    Text("Approve Complete Storno", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.approveCompleteStorno, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -292,7 +329,7 @@ fun AdminTransactionAccordionCard(
 
         AlertDialog(
             onDismissRequest = { showUpdateItemsConfirm = false },
-            title = { Text("Approval Required: Storno Selected Items", fontWeight = FontWeight.Bold, color = AccentNavy) },
+            title = { Text(strings.approvalStornoSelectedTitle, fontWeight = FontWeight.Bold, color = AccentNavy) },
             text = {
                 Text(
                     "Are you sure you want to apply the selected item quantity adjustments for user ${transaction.userNameSnapshot}?\n\n" +
@@ -311,7 +348,7 @@ fun AdminTransactionAccordionCard(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                 ) {
-                    Text("Approve Selected Item Changes", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.approveSelectedItemChanges, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -326,7 +363,7 @@ fun AdminTransactionAccordionCard(
         val refundCents = -transaction.totalAmount
         AlertDialog(
             onDismissRequest = { showStornoNonPurchaseConfirm = false },
-            title = { Text("Approval Required: Storno ${transaction.type.name}", fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
+            title = { Text(strings.approvalStornoTxTitle(transaction.type.name), fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
             text = {
                 Text(
                     "Are you sure you want to storno this ${transaction.type.name} transaction for user ${transaction.userNameSnapshot}?\n\n" +
@@ -341,7 +378,7 @@ fun AdminTransactionAccordionCard(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
-                    Text("Approve Storno", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.approveStorno, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {

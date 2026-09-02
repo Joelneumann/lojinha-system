@@ -12,6 +12,7 @@ import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
 import de.joelneumann.lojinha.ui.components.admin.transactions.AdminTransactionAccordionCard
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
@@ -23,6 +24,7 @@ fun AdminTransactionsTabScreen(
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandTransaction: (String) -> Unit
 ) {
+    val strings = I18n.current
     val transactions by viewModel.transactions.collectAsState()
     val searchQuery by viewModel.searchFilter.collectAsState()
     val currentPage by viewModel.currentPage.collectAsState()
@@ -40,8 +42,8 @@ fun AdminTransactionsTabScreen(
         AdminTopBar(
             searchQuery = searchQuery,
             onQueryChange = viewModel::updateSearchFilter,
-            placeholder = "🔍 Search transaction by user, type, product, or date...",
-            countText = if (searchQuery.isBlank()) "$totalCount Transactions" else "${transactions.size} of $totalCount Transactions",
+            placeholder = strings.searchTransactionAdminPlaceholder,
+            countText = if (searchQuery.isBlank()) strings.transactionsCountText(totalCount) else strings.transactionsCountText(transactions.size, totalCount),
             onSearchSubmitted = openFirstResult
         )
 
@@ -49,7 +51,7 @@ fun AdminTransactionsTabScreen(
 
         if (transactions.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("No transactions found.", color = TextSecondaryMuted)
+                Text(strings.noTransactionsFound, color = TextSecondaryMuted)
             }
         } else {
             LazyColumn(

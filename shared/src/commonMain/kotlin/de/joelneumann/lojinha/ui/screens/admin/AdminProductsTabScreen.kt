@@ -67,8 +67,8 @@ fun AdminProductsTabScreen(
         AdminTopBar(
             searchQuery = searchQuery,
             onQueryChange = viewModel::updateSearchQuery,
-            placeholder = "🔍 Search product by name or barcode...",
-            countText = if (searchQuery.isBlank()) "${activeProducts.size} Products" else "${filteredActiveProducts.size} / ${activeProducts.size} Products",
+            placeholder = strings.searchProductAdminPlaceholder,
+            countText = if (searchQuery.isBlank()) strings.productsCountText(activeProducts.size) else strings.productsCountText(filteredActiveProducts.size, activeProducts.size),
             onSearchSubmitted = openFirstResult,
             actionButtonText = strings.addProduct,
             onActionButtonClick = viewModel::openNewProductModal
@@ -87,7 +87,7 @@ fun AdminProductsTabScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No matching products found.", color = TextSecondaryMuted)
+                        Text(strings.noMatchingProducts, color = TextSecondaryMuted)
                     }
                 }
             } else {
@@ -111,11 +111,11 @@ fun AdminProductsTabScreen(
                 item(key = "disabled-products-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
-                        title = "Disabled Products",
-                        countText = "${filteredDisabledProducts.size} ${if (filteredDisabledProducts.size == 1) "Product" else "Products"}",
+                        title = strings.disabledProducts,
+                        countText = strings.productsCountText(filteredDisabledProducts.size),
                         accentColor = ColorWarningAmber,
-                        showLabel = "Show Disabled Products",
-                        hideLabel = "Hide Disabled Products"
+                        showLabel = strings.showDisabledProducts,
+                        hideLabel = strings.hideDisabledProducts
                     ) {
                         filteredDisabledProducts.forEach { product ->
                             DisabledProductCard(
