@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha
 
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
@@ -37,10 +38,13 @@ fun main() = application {
     }
 
     val windowState = rememberWindowState(placement = WindowPlacement.Fullscreen)
+    @Suppress("DEPRECATION")
+    val appIcon = painterResource("icon.png")
     Window(
         onCloseRequest = ::exitApplication,
         title = "Lojinha POS & Self-Service Kiosk",
-        state = windowState
+        state = windowState,
+        icon = appIcon
     ) {
         App()
     }
