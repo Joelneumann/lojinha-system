@@ -56,7 +56,10 @@ class AppViewModel(
         }
     }
 
+    private var resetLanguageJob: Job? = null
+
     fun loginUser(user: User) {
+        resetLanguageJob?.cancel()
         viewModelScope.launch {
             _currentUser.value = user
             LanguageManager.setLanguage(user.language)
@@ -65,19 +68,21 @@ class AppViewModel(
     }
 
     fun logout() {
+        resetLanguageJob?.cancel()
         viewModelScope.launch {
             _currentUser.value = null
-            LanguageManager.resetToDefault()
             _currentScreen.value = AppScreen.MAIN_USER_SELECT
+            resetLanguageJob = viewModelScope.launch {
+                delay(300)
+                LanguageManager.resetToDefault()
+            }
         }
     }
 
     fun navigateTo(screen: AppScreen) {
         viewModelScope.launch {
             if (screen == AppScreen.MAIN_USER_SELECT) {
-                _currentUser.value = null
-                LanguageManager.resetToDefault()
-                _currentScreen.value = AppScreen.MAIN_USER_SELECT
+                logout()
                 return@launch
             }
             _currentScreen.value = screen
