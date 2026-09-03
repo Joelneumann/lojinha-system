@@ -22,6 +22,8 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
 import de.joelneumann.lojinha.ui.theme.ColorWarningAmber
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
+import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
 
 @Composable
@@ -44,35 +46,35 @@ fun AdminUsersTabScreen(
 
     val strings = I18n.current
 
-    val activeUsers = remember(users) { users.filter { it.isActive && !it.isDeleted } }
-    val deactivatedUsers = remember(users) { users.filter { !it.isActive && !it.isDeleted } }
-    val deletedUsers = remember(users) { users.filter { it.isDeleted } }
+    val activeUsers = remember(users) { users.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name } }
+    val deactivatedUsers = remember(users) { users.filter { !it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name } }
+    val deletedUsers = remember(users) { users.filter { it.isDeleted }.sortedByAccentInsensitive { it.name } }
 
     val filteredActiveUsers = remember(activeUsers, searchQuery) {
         if (searchQuery.isBlank()) activeUsers
         else activeUsers.filter { u ->
-            u.name.contains(searchQuery, ignoreCase = true) ||
+            u.name.containsIgnoreAccents(searchQuery) ||
                     (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
                     (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
-        }
+        }.sortedByAccentInsensitive { it.name }
     }
 
     val filteredDeactivatedUsers = remember(deactivatedUsers, searchQuery) {
         if (searchQuery.isBlank()) deactivatedUsers
         else deactivatedUsers.filter { u ->
-            u.name.contains(searchQuery, ignoreCase = true) ||
+            u.name.containsIgnoreAccents(searchQuery) ||
                     (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
                     (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
-        }
+        }.sortedByAccentInsensitive { it.name }
     }
 
     val filteredDeletedUsers = remember(deletedUsers, searchQuery) {
         if (searchQuery.isBlank()) deletedUsers
         else deletedUsers.filter { u ->
-            u.name.contains(searchQuery, ignoreCase = true) ||
+            u.name.containsIgnoreAccents(searchQuery) ||
                     (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
                     (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
-        }
+        }.sortedByAccentInsensitive { it.name }
     }
 
     val totalMatches = filteredActiveUsers.size + filteredDeactivatedUsers.size + filteredDeletedUsers.size

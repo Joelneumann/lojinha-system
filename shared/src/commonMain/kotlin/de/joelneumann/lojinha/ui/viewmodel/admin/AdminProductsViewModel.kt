@@ -7,7 +7,9 @@ import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
+import de.joelneumann.lojinha.ui.components.admin.products.ProductSortOption
 import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +29,9 @@ class AdminProductsViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    private val _sortOption = MutableStateFlow(ProductSortOption.NAME_ASC)
+    val sortOption: StateFlow<ProductSortOption> = _sortOption.asStateFlow()
+
     private val _editProduct = MutableStateFlow<Product?>(null)
     val editProduct: StateFlow<Product?> = _editProduct.asStateFlow()
 
@@ -39,7 +44,7 @@ class AdminProductsViewModel(
 
     fun loadData() {
         viewModelScope.launch {
-            productRepository.getProductsFlow().collect { _products.value = it }
+            productRepository.getProductsFlow().collect { _products.value = it.sortedByAccentInsensitive { p -> p.name } }
         }
         viewModelScope.launch {
             settingsRepository.getSettingsFlow().collect { _settings.value = it }
@@ -48,6 +53,10 @@ class AdminProductsViewModel(
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun updateSortOption(option: ProductSortOption) {
+        _sortOption.value = option
     }
 
     fun openNewProductModal() {
@@ -73,7 +82,7 @@ class AdminProductsViewModel(
     }
 
     private suspend fun refreshProducts() {
-        _products.value = productRepository.getAllProducts()
+        _products.value = productRepository.getAllProducts().sortedByAccentInsensitive { p -> p.name }
     }
 
     fun saveProduct(product: Product) {

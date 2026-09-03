@@ -4,6 +4,7 @@ import de.joelneumann.lojinha.data.dao.ProductDao
 import de.joelneumann.lojinha.data.entity.ProductEntity
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.repository.ProductRepository
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -13,11 +14,13 @@ class RoomProductRepositoryImpl(
 ) : ProductRepository {
 
     override fun getProductsFlow(): Flow<List<Product>> {
-        return productDao.getProductsFlow().map { entities -> entities.map { it.toDomain() } }
+        return productDao.getProductsFlow().map { entities ->
+            entities.map { it.toDomain() }.sortedByAccentInsensitive { it.name }
+        }
     }
 
     override suspend fun getAllProducts(): List<Product> {
-        return productDao.getAllProducts().map { it.toDomain() }
+        return productDao.getAllProducts().map { it.toDomain() }.sortedByAccentInsensitive { it.name }
     }
 
     override suspend fun getProductById(id: String): Product? {

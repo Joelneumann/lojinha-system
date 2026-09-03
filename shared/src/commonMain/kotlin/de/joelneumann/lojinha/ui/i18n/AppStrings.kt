@@ -105,6 +105,15 @@ interface AppStrings {
     val ok: String
     fun transactionsCountText(count: Int, total: Int? = null): String
     val searchProductAdminPlaceholder: String
+    val sortBy: String
+    val sortNameAsc: String
+    val sortNameDesc: String
+    val sortStockAsc: String
+    val sortStockDesc: String
+    val sortPriceAsc: String
+    val sortPriceDesc: String
+    val sortTypePiece: String
+    val sortTypeWeight: String
     val searchAccountAdminPlaceholder: String
     val searchTransactionAdminPlaceholder: String
     val systemAdminSettingsTitle: String

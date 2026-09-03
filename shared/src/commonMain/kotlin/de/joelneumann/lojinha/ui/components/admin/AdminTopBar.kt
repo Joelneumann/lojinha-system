@@ -24,6 +24,7 @@ fun AdminTopBar(
     onSearchSubmitted: () -> Unit,
     actionButtonText: String? = null,
     onActionButtonClick: (() -> Unit)? = null,
+    sortContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
@@ -47,9 +48,15 @@ fun AdminTopBar(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AdminCountPill(
-                        text = countText
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AdminCountPill(
+                            text = countText
+                        )
+                        sortContent?.invoke()
+                    }
 
                     if (actionButtonText != null && onActionButtonClick != null) {
                         Button(
@@ -83,6 +90,8 @@ fun AdminTopBar(
                 AdminCountPill(
                     text = countText
                 )
+
+                sortContent?.invoke()
 
                 if (actionButtonText != null && onActionButtonClick != null) {
                     Button(

@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.repository
 
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.*
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -63,9 +64,10 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
 
     override suspend fun getAllProducts(): List<Product> {
         return try {
-            client.httpClient.get("/api/admin/products") {
+            val list: List<Product> = client.httpClient.get("/api/admin/products") {
                 client.run { appendAdminAuth() }
             }.body()
+            list.sortedByAccentInsensitive { it.name }
         } catch (e: Exception) {
             emptyList()
         }
@@ -115,9 +117,10 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
 
     override suspend fun getAllUsers(): List<User> {
         return try {
-            client.httpClient.get("/api/admin/users") {
+            val list: List<User> = client.httpClient.get("/api/admin/users") {
                 client.run { appendAdminAuth() }
             }.body()
+            list.sortedByAccentInsensitive { it.name }
         } catch (e: Exception) {
             emptyList()
         }

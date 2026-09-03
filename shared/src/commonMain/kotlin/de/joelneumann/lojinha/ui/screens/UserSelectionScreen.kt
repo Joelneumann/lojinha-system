@@ -18,6 +18,8 @@ import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.ui.components.userselection.UserGrid
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 
 @Composable
@@ -90,7 +92,7 @@ fun UserSelectionContent(
 
     val filteredUsers = remember(users, searchQuery) {
         if (searchQuery.isBlank()) users
-        else users.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        else users.filter { it.name.containsIgnoreAccents(searchQuery) }.sortedByAccentInsensitive { it.name }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {

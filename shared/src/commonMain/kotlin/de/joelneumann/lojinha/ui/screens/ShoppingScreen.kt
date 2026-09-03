@@ -26,7 +26,9 @@ import de.joelneumann.lojinha.ui.components.shopping.*
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import androidx.compose.ui.input.pointer.pointerInput
 import de.joelneumann.lojinha.ui.viewmodel.CartItem
 import de.joelneumann.lojinha.ui.viewmodel.ShoppingViewModel
@@ -135,9 +137,9 @@ fun ShoppingContent(
     val filteredProducts = remember(products, searchQuery) {
         if (searchQuery.isBlank()) emptyList()
         else products.filter { p ->
-            p.name.contains(searchQuery, ignoreCase = true) ||
-                    p.barcodes.any { b -> b.code.contains(searchQuery, ignoreCase = true) }
-        }
+            p.name.containsIgnoreAccents(searchQuery) ||
+                    p.barcodes.any { b -> b.code.containsIgnoreAccents(searchQuery) }
+        }.sortedByAccentInsensitive { it.name }
     }
 
     val cartTotal = remember(cartItems) { cartItems.sumOf { it.lineTotal } }

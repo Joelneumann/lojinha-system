@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlin.random.Random
 
 class AdminUsersViewModel(
@@ -50,7 +51,7 @@ class AdminUsersViewModel(
 
     fun loadData() {
         viewModelScope.launch {
-            userRepository.getUsersFlow().collect { _users.value = it }
+            userRepository.getUsersFlow().collect { _users.value = it.sortedByAccentInsensitive { u -> u.name } }
         }
     }
 

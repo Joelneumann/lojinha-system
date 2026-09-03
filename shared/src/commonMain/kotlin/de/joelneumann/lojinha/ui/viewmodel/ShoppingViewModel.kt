@@ -7,7 +7,9 @@ import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,7 +62,7 @@ class ShoppingViewModel(
     fun loadProducts() {
         viewModelScope.launch {
             productRepository.getProductsFlow().collect { list ->
-                _products.value = list.filter { it.isActive }
+                _products.value = list.filter { it.isActive }.sortedByAccentInsensitive { it.name }
             }
         }
     }
@@ -85,7 +87,7 @@ class ShoppingViewModel(
 
         // 2. Otherwise check filtered product list by name
         val filtered = _products.value.filter { p ->
-            p.name.contains(query, ignoreCase = true)
+            p.name.containsIgnoreAccents(query)
         }
         if (filtered.size == 1) {
             onProductSelected(filtered.first(), globalMarkup)

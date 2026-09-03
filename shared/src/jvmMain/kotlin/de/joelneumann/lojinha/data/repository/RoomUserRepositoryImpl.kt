@@ -5,6 +5,7 @@ import de.joelneumann.lojinha.data.dao.UserDao
 import de.joelneumann.lojinha.data.entity.UserEntity
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -15,11 +16,13 @@ class RoomUserRepositoryImpl(
 ) : UserRepository {
 
     override fun getUsersFlow(): Flow<List<User>> {
-        return userDao.getUsersFlow().map { entities -> entities.map { it.toDomain() } }
+        return userDao.getUsersFlow().map { entities ->
+            entities.map { it.toDomain() }.sortedByAccentInsensitive { it.name }
+        }
     }
 
     override suspend fun getAllUsers(): List<User> {
-        return userDao.getAllUsers().map { it.toDomain() }
+        return userDao.getAllUsers().map { it.toDomain() }.sortedByAccentInsensitive { it.name }
     }
 
     override suspend fun getUserById(id: String): User? {

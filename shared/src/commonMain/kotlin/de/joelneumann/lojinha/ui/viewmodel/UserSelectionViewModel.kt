@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,7 +46,7 @@ class UserSelectionViewModel(
     fun loadUsers() {
         viewModelScope.launch {
             userRepository.getUsersFlow().collect { list ->
-                _users.value = list.filter { it.isActive && !it.isDeleted }
+                _users.value = list.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
             }
         }
     }
@@ -67,7 +69,7 @@ class UserSelectionViewModel(
             }
 
             // 2. Otherwise check filtered user list
-            val filtered = _users.value.filter { it.name.contains(query, ignoreCase = true) }
+            val filtered = _users.value.filter { it.name.containsIgnoreAccents(query) }
             if (filtered.size == 1) {
                 onUserCardClicked(filtered.first(), onLoginSuccess)
                 _searchQuery.value = ""
