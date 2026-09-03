@@ -57,23 +57,31 @@ class AppViewModel(
     }
 
     fun loginUser(user: User) {
-        _currentUser.value = user
-        LanguageManager.setLanguage(user.language)
-        _currentScreen.value = AppScreen.SHOPPING
+        viewModelScope.launch {
+            _currentUser.value = user
+            LanguageManager.setLanguage(user.language)
+            _currentScreen.value = AppScreen.SHOPPING
+        }
     }
 
     fun logout() {
-        _currentUser.value = null
-        LanguageManager.resetToDefault()
-        _currentScreen.value = AppScreen.MAIN_USER_SELECT
+        viewModelScope.launch {
+            _currentUser.value = null
+            LanguageManager.resetToDefault()
+            _currentScreen.value = AppScreen.MAIN_USER_SELECT
+        }
     }
 
     fun navigateTo(screen: AppScreen) {
-        if (screen == AppScreen.MAIN_USER_SELECT) {
-            logout()
-            return
+        viewModelScope.launch {
+            if (screen == AppScreen.MAIN_USER_SELECT) {
+                _currentUser.value = null
+                LanguageManager.resetToDefault()
+                _currentScreen.value = AppScreen.MAIN_USER_SELECT
+                return@launch
+            }
+            _currentScreen.value = screen
         }
-        _currentScreen.value = screen
     }
 
     fun updateCurrentUser(user: User) {

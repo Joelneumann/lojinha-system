@@ -19,6 +19,7 @@ import de.joelneumann.lojinha.ui.components.userselection.UserGrid
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 
@@ -86,7 +87,7 @@ fun UserSelectionContent(
 
     LaunchedEffect(selectedUserForPin, showAdminAuthDialog) {
         if (selectedUserForPin == null && !showAdminAuthDialog) {
-            focusRequester.requestFocus()
+            focusRequester.safeRequestFocus()
         }
     }
 
@@ -127,12 +128,7 @@ fun UserSelectionContent(
                     onQueryChange = onSearchQueryChange,
                     placeholder = strings.searchUserPlaceholder,
                     onSearchSubmitted = onSearchSubmitted,
-                    focusRequester = focusRequester,
-                    onFocusChanged = { focusState ->
-                        if (!focusState.isFocused && selectedUserForPin == null && !showAdminAuthDialog) {
-                            focusRequester.requestFocus()
-                        }
-                    }
+                    focusRequester = focusRequester
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))

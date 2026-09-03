@@ -1,5 +1,7 @@
 package de.joelneumann.lojinha.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -15,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import de.joelneumann.lojinha.data.database.DatabaseFactory
+import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
@@ -70,6 +73,12 @@ fun App() {
     val settings by appViewModel.settings.collectAsState()
     val currentUser by appViewModel.currentUser.collectAsState()
 
+    var cachedSessionUser by remember { mutableStateOf<User?>(null) }
+    if (currentUser != null) {
+        cachedSessionUser = currentUser
+    }
+    val sessionUser = currentUser ?: cachedSessionUser
+
     var showAbandonCartGuardDialog by remember { mutableStateOf(false) }
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -77,163 +86,180 @@ fun App() {
     LojinhaTheme {
         val strings = I18n.current
         Box(modifier = Modifier.fillMaxSize()) {
-            when (currentScreen) {
-                AppScreen.MAIN_USER_SELECT -> {
-                    val userSelectionViewModel: UserSelectionViewModel = viewModel(
-                        factory = LojinhaViewModelFactory.createUserSelectionViewModelFactory(userRepository)
-                    )
-                    UserSelectionScreen(
-                        viewModel = userSelectionViewModel,
-                        settings = settings,
-                        onUserLoggedIn = { user ->
-                            appViewModel.loginUser(user)
-                        },
-                        onNavigateToAdmin = {
-                            appViewModel.navigateTo(AppScreen.ADMIN_PANEL)
-                        }
-                    )
-                }
-
-                AppScreen.SHOPPING, AppScreen.TRANSACTION_HISTORY -> {
-                    if (currentUser != null) {
-                        val sessionNonce = remember(currentUser!!.id) { generateUuid() }
-                        val userSessionViewModel: UserSessionViewModel = viewModel(
-                            key = "user_session_${currentUser!!.id}_$sessionNonce",
-                            factory = LojinhaViewModelFactory.createUserSessionViewModelFactory(
-                                user = currentUser!!,
-                                settingsRepository = settingsRepository,
-                                onLogoutRequest = { appViewModel.logout() }
-                            )
+            Crossfade(
+                targetState = when (currentScreen) {
+                    AppScreen.MAIN_USER_SELECT -> AppScreen.MAIN_USER_SELECT
+                    AppScreen.ADMIN_PANEL -> AppScreen.ADMIN_PANEL
+                    AppScreen.SHOPPING, AppScreen.TRANSACTION_HISTORY -> AppScreen.SHOPPING
+                },
+                animationSpec = tween(durationMillis = 250),
+                modifier = Modifier.fillMaxSize()
+            ) { targetContext ->
+                when (targetContext) {
+                    AppScreen.MAIN_USER_SELECT -> {
+                        val userSelectionViewModel: UserSelectionViewModel = viewModel(
+                            factory = LojinhaViewModelFactory.createUserSelectionViewModelFactory(userRepository)
                         )
-
-                        val shoppingViewModel: ShoppingViewModel = viewModel(
-                            key = "shopping_${currentUser!!.id}_$sessionNonce",
-                            factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
+                        UserSelectionScreen(
+                            viewModel = userSelectionViewModel,
+                            settings = settings,
+                            onUserLoggedIn = { user ->
+                                appViewModel.loginUser(user)
+                            },
+                            onNavigateToAdmin = {
+                                appViewModel.navigateTo(AppScreen.ADMIN_PANEL)
+                            }
                         )
-                        val cartItems by shoppingViewModel.cartItems.collectAsState()
+                    }
 
-                        val showInactivityWarning by userSessionViewModel.showInactivityWarning.collectAsState()
-                        val inactivitySecondsRemaining by userSessionViewModel.inactivitySecondsRemaining.collectAsState()
-
-                        val handleLogoutRequest = {
-                            if (cartItems.isNotEmpty()) {
-                                showAbandonCartGuardDialog = true
-                            } else {
-                                userSessionViewModel.requestLogout()
-                            }
-                        }
-
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            when (currentScreen) {
-                                AppScreen.SHOPPING -> {
-                                    ShoppingScreen(
-                                        viewModel = shoppingViewModel,
-                                        user = currentUser!!,
-                                        settings = settings,
-                                        onLogout = handleLogoutRequest,
-                                        onNavigateToHistory = {
-                                            appViewModel.refreshCurrentUser()
-                                            appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
-                                        },
-                                        onUserInteracted = { userSessionViewModel.onUserInteracted() }
-                                    )
-                                }
-
-                                AppScreen.TRANSACTION_HISTORY -> {
-                                    val historyViewModel: TransactionHistoryViewModel = viewModel(
-                                        key = "history_${currentUser!!.id}_$sessionNonce",
-                                        factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(transactionRepository, userRepository)
-                                    )
-
-                                    TransactionHistoryScreen(
-                                        viewModel = historyViewModel,
-                                        user = currentUser!!,
-                                        settings = settings,
-                                        onContinueShopping = {
-                                            appViewModel.navigateTo(AppScreen.SHOPPING)
-                                        },
-                                        onLogout = handleLogoutRequest,
-                                        onUserUpdated = { updated ->
-                                            appViewModel.updateCurrentUser(updated)
-                                        },
-                                        onUserInteracted = { userSessionViewModel.onUserInteracted() }
-                                    )
-                                }
-
-                                else -> {}
-                            }
-
-                            // Inactivity Warning Modal Dialog (scoped to active user session)
-                            if (showInactivityWarning) {
-                                InactivityWarningDialog(
-                                    secondsRemaining = inactivitySecondsRemaining,
-                                    onStayLoggedIn = { userSessionViewModel.onUserInteracted() },
-                                    onLogoutNow = { userSessionViewModel.requestLogout() }
+                    AppScreen.SHOPPING, AppScreen.TRANSACTION_HISTORY -> {
+                        if (sessionUser != null) {
+                            val sessionNonce = remember(sessionUser.id) { generateUuid() }
+                            val userSessionViewModel: UserSessionViewModel = viewModel(
+                                key = "user_session_${sessionUser.id}_$sessionNonce",
+                                factory = LojinhaViewModelFactory.createUserSessionViewModelFactory(
+                                    user = sessionUser,
+                                    settingsRepository = settingsRepository,
+                                    onLogoutRequest = { appViewModel.logout() }
                                 )
+                            )
+
+                            val shoppingViewModel: ShoppingViewModel = viewModel(
+                                key = "shopping_${sessionUser.id}_$sessionNonce",
+                                factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
+                            )
+                            val cartItems by shoppingViewModel.cartItems.collectAsState()
+
+                            val showInactivityWarning by userSessionViewModel.showInactivityWarning.collectAsState()
+                            val inactivitySecondsRemaining by userSessionViewModel.inactivitySecondsRemaining.collectAsState()
+
+                            val handleLogoutRequest = {
+                                if (cartItems.isNotEmpty()) {
+                                    showAbandonCartGuardDialog = true
+                                } else {
+                                    userSessionViewModel.requestLogout()
+                                }
+                            }
+
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                val sessionSubScreen = if (currentScreen == AppScreen.TRANSACTION_HISTORY) AppScreen.TRANSACTION_HISTORY else AppScreen.SHOPPING
+                                Crossfade(
+                                    targetState = sessionSubScreen,
+                                    animationSpec = tween(durationMillis = 250),
+                                    modifier = Modifier.fillMaxSize()
+                                ) { activeScreen ->
+                                    when (activeScreen) {
+                                        AppScreen.SHOPPING -> {
+                                            ShoppingScreen(
+                                                viewModel = shoppingViewModel,
+                                                user = sessionUser,
+                                                settings = settings,
+                                                onLogout = handleLogoutRequest,
+                                                onNavigateToHistory = {
+                                                    appViewModel.refreshCurrentUser()
+                                                    appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
+                                                },
+                                                onUserInteracted = { userSessionViewModel.onUserInteracted() }
+                                            )
+                                        }
+
+                                        AppScreen.TRANSACTION_HISTORY -> {
+                                            val historyViewModel: TransactionHistoryViewModel = viewModel(
+                                                key = "history_${sessionUser.id}_$sessionNonce",
+                                                factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(transactionRepository, userRepository)
+                                            )
+
+                                            TransactionHistoryScreen(
+                                                viewModel = historyViewModel,
+                                                user = sessionUser,
+                                                settings = settings,
+                                                onContinueShopping = {
+                                                    appViewModel.navigateTo(AppScreen.SHOPPING)
+                                                },
+                                                onLogout = handleLogoutRequest,
+                                                onUserUpdated = { updated ->
+                                                    appViewModel.updateCurrentUser(updated)
+                                                },
+                                                onUserInteracted = { userSessionViewModel.onUserInteracted() }
+                                            )
+                                        }
+
+                                        else -> {}
+                                    }
+                                }
+
+                                // Inactivity Warning Modal Dialog (scoped to active user session)
+                                if (showInactivityWarning) {
+                                    InactivityWarningDialog(
+                                        secondsRemaining = inactivitySecondsRemaining,
+                                        onStayLoggedIn = { userSessionViewModel.onUserInteracted() },
+                                        onLogoutNow = { userSessionViewModel.requestLogout() }
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                AppScreen.ADMIN_PANEL -> {
-                    val adminProductsViewModel: AdminProductsViewModel = viewModel(
-                        factory = LojinhaViewModelFactory.createAdminProductsViewModelFactory(productRepository, settingsRepository)
-                    )
-                    val adminUsersViewModel: AdminUsersViewModel = viewModel(
-                        factory = LojinhaViewModelFactory.createAdminUsersViewModelFactory(userRepository, transactionRepository)
-                    )
-                    val adminTransactionsViewModel: AdminTransactionsViewModel = viewModel(
-                        factory = LojinhaViewModelFactory.createAdminTransactionsViewModelFactory(transactionRepository, userRepository, productRepository)
-                    )
-                    val adminSettingsViewModel: AdminSettingsViewModel = viewModel(
-                        factory = LojinhaViewModelFactory.createAdminSettingsViewModelFactory(
-                            settingsRepository = settingsRepository,
-                            backupRepository = backupRepository,
-                            onRunRoutineNow = { routine ->
-                                coroutineScope.launch {
-                                    autoBackupScheduler.executeRoutine(routine)
+                    AppScreen.ADMIN_PANEL -> {
+                        val adminProductsViewModel: AdminProductsViewModel = viewModel(
+                            factory = LojinhaViewModelFactory.createAdminProductsViewModelFactory(productRepository, settingsRepository)
+                        )
+                        val adminUsersViewModel: AdminUsersViewModel = viewModel(
+                            factory = LojinhaViewModelFactory.createAdminUsersViewModelFactory(userRepository, transactionRepository)
+                        )
+                        val adminTransactionsViewModel: AdminTransactionsViewModel = viewModel(
+                            factory = LojinhaViewModelFactory.createAdminTransactionsViewModelFactory(transactionRepository, userRepository, productRepository)
+                        )
+                        val adminSettingsViewModel: AdminSettingsViewModel = viewModel(
+                            factory = LojinhaViewModelFactory.createAdminSettingsViewModelFactory(
+                                settingsRepository = settingsRepository,
+                                backupRepository = backupRepository,
+                                onRunRoutineNow = { routine ->
+                                    coroutineScope.launch {
+                                        autoBackupScheduler.executeRoutine(routine)
+                                    }
+                                },
+                                oneDriveBackupService = oneDriveBackupService,
+                                onPreviewCsvImport = { platformFile, type ->
+                                    val file = java.io.File(platformFile.absolutePath)
+                                    if (type.equals("Products", ignoreCase = true)) {
+                                        backupRestoreService.importProductsFromCsv(file, dryRun = true)
+                                    } else {
+                                        backupRestoreService.importUsersFromCsv(file, dryRun = true)
+                                    }
+                                },
+                                onExecuteCsvImport = { platformFile, type ->
+                                    val file = java.io.File(platformFile.absolutePath)
+                                    val result = if (type.equals("Products", ignoreCase = true)) {
+                                        backupRestoreService.importProductsFromCsv(file, dryRun = false)
+                                    } else {
+                                        backupRestoreService.importUsersFromCsv(file, dryRun = false)
+                                    }
+                                    onDataChanged()
+                                    result
+                                },
+                                onExecuteDbRestore = { platformFile ->
+                                    val file = java.io.File(platformFile.absolutePath)
+                                    backupRestoreService.restoreDbFromBackup(file)
+                                    onDataChanged()
+                                },
+                                onExecuteWipeData = {
+                                    backupRestoreService.wipeAllData()
+                                    onDataChanged()
                                 }
-                            },
-                            oneDriveBackupService = oneDriveBackupService,
-                            onPreviewCsvImport = { platformFile, type ->
-                                val file = java.io.File(platformFile.absolutePath)
-                                if (type.equals("Products", ignoreCase = true)) {
-                                    backupRestoreService.importProductsFromCsv(file, dryRun = true)
-                                } else {
-                                    backupRestoreService.importUsersFromCsv(file, dryRun = true)
-                                }
-                            },
-                            onExecuteCsvImport = { platformFile, type ->
-                                val file = java.io.File(platformFile.absolutePath)
-                                val result = if (type.equals("Products", ignoreCase = true)) {
-                                    backupRestoreService.importProductsFromCsv(file, dryRun = false)
-                                } else {
-                                    backupRestoreService.importUsersFromCsv(file, dryRun = false)
-                                }
-                                onDataChanged()
-                                result
-                            },
-                            onExecuteDbRestore = { platformFile ->
-                                val file = java.io.File(platformFile.absolutePath)
-                                backupRestoreService.restoreDbFromBackup(file)
-                                onDataChanged()
-                            },
-                            onExecuteWipeData = {
-                                backupRestoreService.wipeAllData()
-                                onDataChanged()
+                            )
+                        )
+
+                        de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
+                            productsViewModel = adminProductsViewModel,
+                            usersViewModel = adminUsersViewModel,
+                            transactionsViewModel = adminTransactionsViewModel,
+                            settingsViewModel = adminSettingsViewModel,
+                            onExitAdmin = {
+                                appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
                             }
                         )
-                    )
-
-                    de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
-                        productsViewModel = adminProductsViewModel,
-                        usersViewModel = adminUsersViewModel,
-                        transactionsViewModel = adminTransactionsViewModel,
-                        settingsViewModel = adminSettingsViewModel,
-                        onExitAdmin = {
-                            appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
-                        }
-                    )
+                    }
                 }
             }
 

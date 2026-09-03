@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
 fun WeightInputDialog(
@@ -41,7 +42,7 @@ fun WeightInputDialog(
     var showWeightTooltip by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        weightFocusRequester.requestFocus()
+        weightFocusRequester.safeRequestFocus()
     }
 
     Dialog(onDismissRequest = onDismiss) {

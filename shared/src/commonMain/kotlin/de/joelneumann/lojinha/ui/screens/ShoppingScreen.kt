@@ -28,10 +28,12 @@ import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import androidx.compose.ui.input.pointer.pointerInput
 import de.joelneumann.lojinha.ui.viewmodel.CartItem
 import de.joelneumann.lojinha.ui.viewmodel.ShoppingViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun ShoppingScreen(
@@ -123,14 +125,15 @@ fun ShoppingContent(
 ) {
     val strings = I18n.current
     val searchFocusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        searchFocusRequester.requestFocus()
+        searchFocusRequester.safeRequestFocus()
     }
 
     LaunchedEffect(weightProductDialog) {
         if (weightProductDialog == null) {
-            searchFocusRequester.requestFocus()
+            searchFocusRequester.safeRequestFocus()
         }
     }
 
@@ -273,7 +276,9 @@ fun ShoppingContent(
                                 rate = rate,
                                 onClick = {
                                     onProductSelected(product)
-                                    searchFocusRequester.requestFocus()
+                                    coroutineScope.launch {
+                                        searchFocusRequester.safeRequestFocus()
+                                    }
                                 }
                             )
                         }

@@ -1,5 +1,9 @@
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.CanvasBasedWindow
 import de.joelneumann.lojinha.data.repository.*
 import de.joelneumann.lojinha.ui.AdminWebLoginScreen
@@ -42,25 +46,31 @@ fun main() {
         }
 
         LojinhaTheme(scaleFactor = WEB_UI_SCALE_FACTOR) {
-            if (!isAuthenticated) {
-                AdminWebLoginScreen(
-                    onLoginSubmit = { password ->
-                        networkClient.login(password)
-                    },
-                    onLoginSuccess = {
-                        isAuthenticated = true
-                    }
-                )
-            } else {
-                AdminScreen(
-                    productsViewModel = productsViewModel,
-                    usersViewModel = usersViewModel,
-                    transactionsViewModel = transactionsViewModel,
-                    settingsViewModel = settingsViewModel,
-                    onExitAdmin = {
-                        isAuthenticated = false
-                    }
-                )
+            Crossfade(
+                targetState = isAuthenticated,
+                animationSpec = tween(durationMillis = 250),
+                modifier = Modifier.fillMaxSize()
+            ) { authed ->
+                if (!authed) {
+                    AdminWebLoginScreen(
+                        onLoginSubmit = { password ->
+                            networkClient.login(password)
+                        },
+                        onLoginSuccess = {
+                            isAuthenticated = true
+                        }
+                    )
+                } else {
+                    AdminScreen(
+                        productsViewModel = productsViewModel,
+                        usersViewModel = usersViewModel,
+                        transactionsViewModel = transactionsViewModel,
+                        settingsViewModel = settingsViewModel,
+                        onExitAdmin = {
+                            isAuthenticated = false
+                        }
+                    )
+                }
             }
         }
     }

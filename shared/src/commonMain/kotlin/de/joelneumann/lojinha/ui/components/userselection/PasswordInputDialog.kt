@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
 fun PasswordInputDialog(
@@ -38,7 +39,7 @@ fun PasswordInputDialog(
     val inputFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
-        inputFocusRequester.requestFocus()
+        inputFocusRequester.safeRequestFocus()
     }
 
     Dialog(onDismissRequest = onDismiss) {
