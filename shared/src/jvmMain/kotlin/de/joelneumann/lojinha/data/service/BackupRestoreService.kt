@@ -10,6 +10,7 @@ import de.joelneumann.lojinha.data.entity.SettingsEntity
 import de.joelneumann.lojinha.data.entity.TransactionEntity
 import de.joelneumann.lojinha.data.entity.UserEntity
 import de.joelneumann.lojinha.domain.model.Barcode
+import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
@@ -22,15 +23,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-data class CsvImportResult(
-    val totalProcessed: Int,
-    val addedCount: Int,
-    val updatedCount: Int,
-    val strippedBarcodesCount: Int,
-    val errors: List<String> = emptyList(),
-    val warnings: List<String> = emptyList()
-)
 
 data class BackupFileInfo(
     val file: File,
@@ -387,7 +379,7 @@ class BackupRestoreService(
         db.settingsDao().insertOrUpdateSettings(defaultSettings)
     }
 
-    suspend fun importProductsFromCsv(csvFile: File): CsvImportResult = withContext(Dispatchers.IO) {
+    suspend fun importProductsFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
         require(csvFile.exists() && csvFile.isFile) { "Product CSV file does not exist: ${csvFile.absolutePath}" }
         val lines = csvFile.readLines().map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) {
@@ -483,7 +475,9 @@ class BackupRestoreService(
                 isActive = isActive
             )
 
-            db.productDao().insertOrUpdateProduct(productEntity)
+            if (!dryRun) {
+                db.productDao().insertOrUpdateProduct(productEntity)
+            }
             if (isExisting) updatedCount++ else addedCount++
         }
 
@@ -497,7 +491,7 @@ class BackupRestoreService(
         )
     }
 
-    suspend fun importUsersFromCsv(csvFile: File): CsvImportResult = withContext(Dispatchers.IO) {
+    suspend fun importUsersFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
         require(csvFile.exists() && csvFile.isFile) { "User CSV file does not exist: ${csvFile.absolutePath}" }
         val lines = csvFile.readLines().map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) {
@@ -593,7 +587,9 @@ class BackupRestoreService(
                 isActive = isActive
             )
 
-            db.userDao().insertOrUpdateUser(userEntity)
+            if (!dryRun) {
+                db.userDao().insertOrUpdateUser(userEntity)
+            }
             if (isExisting) updatedCount++ else addedCount++
         }
 

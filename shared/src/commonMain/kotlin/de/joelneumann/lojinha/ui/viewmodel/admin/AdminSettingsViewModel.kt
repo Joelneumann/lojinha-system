@@ -21,7 +21,11 @@ class AdminSettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val backupRepository: BackupRepository? = null,
     private val onRunRoutineNow: (suspend (BackupRoutine) -> Unit)? = null,
-    private val oneDriveBackupService: OneDriveBackupService? = null
+    private val oneDriveBackupService: OneDriveBackupService? = null,
+    private val onPreviewCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
+    private val onExecuteCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
+    private val onExecuteDbRestore: (suspend (PlatformFile) -> Unit)? = null,
+    private val onExecuteWipeData: (suspend () -> Unit)? = null
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(SystemSettings())
@@ -216,31 +220,80 @@ class AdminSettingsViewModel(
 
     fun prepareCsvImport(file: PlatformFile, type: String) {
         _csvImportType.value = type
-        val previewResult = CsvImportResult(
-            totalProcessed = 1,
-            addedCount = 1,
-            updatedCount = 0,
-            strippedBarcodesCount = 0,
-            errors = emptyList(),
-            warnings = emptyList()
-        )
-        _csvImportPreview.value = file to previewResult
+        viewModelScope.launch {
+            try {
+                val previewResult = if (onPreviewCsvImport != null) {
+                    onPreviewCsvImport.invoke(file, type)
+                } else {
+                    CsvImportResult(
+                        totalProcessed = 0,
+                        addedCount = 0,
+                        updatedCount = 0,
+                        strippedBarcodesCount = 0,
+                        errors = listOf("CSV import preview not supported."),
+                        warnings = emptyList()
+                    )
+                }
+                _csvImportPreview.value = file to previewResult
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to preview CSV: ${e.message}"
+            }
+        }
     }
 
     fun executeCsvImport() {
         val preview = _csvImportPreview.value ?: return
+        val file = preview.first
+        val type = _csvImportType.value
         _csvImportPreview.value = null
-        _statusMessage.value = "Import executed for ${preview.first.name}."
+        viewModelScope.launch {
+            try {
+                if (onExecuteCsvImport != null) {
+                    val result = onExecuteCsvImport.invoke(file, type)
+                    if (result.errors.isNotEmpty()) {
+                        _errorMessage.value = "Import finished with errors: ${result.errors.joinToString(", ")}"
+                    } else {
+                        _statusMessage.value = "Successfully imported ${result.totalProcessed} $type (${result.addedCount} added, ${result.updatedCount} updated)."
+                    }
+                } else {
+                    _statusMessage.value = "Import executed for ${file.name}."
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Import failed: ${e.message}"
+            }
+        }
     }
 
     fun executeDbRestore(file: PlatformFile) {
         _activeRestoreDbFile.value = null
-        _statusMessage.value = "Database restore requested for ${file.name}."
+        viewModelScope.launch {
+            try {
+                if (onExecuteDbRestore != null) {
+                    onExecuteDbRestore.invoke(file)
+                    _statusMessage.value = "Database restored successfully from ${file.name}."
+                } else {
+                    _statusMessage.value = "Database restore requested for ${file.name}."
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Restore failed: ${e.message}"
+            }
+        }
     }
 
     fun executeWipeData() {
         _showWipeDataDialog.value = false
-        _statusMessage.value = "Factory Reset completed."
+        viewModelScope.launch {
+            try {
+                if (onExecuteWipeData != null) {
+                    onExecuteWipeData.invoke()
+                    _statusMessage.value = "Factory Reset completed."
+                } else {
+                    _statusMessage.value = "Factory Reset completed."
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Factory Reset failed: ${e.message}"
+            }
+        }
     }
 
     fun clearCsvImportPreview() {

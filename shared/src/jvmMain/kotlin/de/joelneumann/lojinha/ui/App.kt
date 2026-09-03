@@ -194,7 +194,34 @@ fun App() {
                                     autoBackupScheduler.executeRoutine(routine)
                                 }
                             },
-                            oneDriveBackupService = oneDriveBackupService
+                            oneDriveBackupService = oneDriveBackupService,
+                            onPreviewCsvImport = { platformFile, type ->
+                                val file = java.io.File(platformFile.absolutePath)
+                                if (type.equals("Products", ignoreCase = true)) {
+                                    backupRestoreService.importProductsFromCsv(file, dryRun = true)
+                                } else {
+                                    backupRestoreService.importUsersFromCsv(file, dryRun = true)
+                                }
+                            },
+                            onExecuteCsvImport = { platformFile, type ->
+                                val file = java.io.File(platformFile.absolutePath)
+                                val result = if (type.equals("Products", ignoreCase = true)) {
+                                    backupRestoreService.importProductsFromCsv(file, dryRun = false)
+                                } else {
+                                    backupRestoreService.importUsersFromCsv(file, dryRun = false)
+                                }
+                                onDataChanged()
+                                result
+                            },
+                            onExecuteDbRestore = { platformFile ->
+                                val file = java.io.File(platformFile.absolutePath)
+                                backupRestoreService.restoreDbFromBackup(file)
+                                onDataChanged()
+                            },
+                            onExecuteWipeData = {
+                                backupRestoreService.wipeAllData()
+                                onDataChanged()
+                            }
                         )
                     )
 
