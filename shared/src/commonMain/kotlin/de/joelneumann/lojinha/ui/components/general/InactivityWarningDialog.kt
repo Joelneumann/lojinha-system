@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
@@ -28,7 +29,13 @@ fun InactivityWarningDialog(
     val secs = secondsRemaining % 60
     val formattedTime = "${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}"
 
-    Dialog(onDismissRequest = onStayLoggedIn) {
+    Dialog(
+        onDismissRequest = onStayLoggedIn,
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        )
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,

@@ -35,6 +35,9 @@ import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 
@@ -46,7 +49,7 @@ fun TransactionHistoryScreen(
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit,
-    onUserInteracted: () -> Unit = {}
+    onUserInteracted: (force: Boolean) -> Unit = {}
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val searchFilter by viewModel.searchFilter.collectAsState()
@@ -85,23 +88,23 @@ fun TransactionHistoryScreen(
         onLogout = onLogout,
         onUserUpdated = onUserUpdated,
         onSearchFilterChange = { query ->
-            onUserInteracted()
+            onUserInteracted(false)
             viewModel.updateSearchFilter(query)
         },
         onTypeFilterSelect = { type ->
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.selectTypeFilter(type)
         },
         onPageChange = { page ->
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.setPage(page)
         },
         onPageSizeChange = { size ->
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.setPageSize(size)
         },
         onOpenSettingsModal = {
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.openSettingsModal(user)
         },
         onCloseSettingsModal = viewModel::closeSettingsModal,
@@ -144,7 +147,7 @@ fun TransactionHistoryContent(
     onUpdateSecondaryCurrency: (SecondaryCurrency) -> Unit,
     onUpdateAvatar: (UserAvatarConfig) -> Unit,
     onSaveUserSettings: () -> Unit,
-    onUserInteracted: () -> Unit = {}
+    onUserInteracted: (force: Boolean) -> Unit = {}
 ) {
     val strings = I18n.current
 
@@ -174,13 +177,42 @@ fun TransactionHistoryContent(
             .fillMaxSize()
             .pointerInput(Unit) {
                 var lastInteractionTime = 0L
+                var lastPosition: Offset? = null
+                var accumulatedDistance = 0f
                 awaitPointerEventScope {
                     while (true) {
-                        awaitPointerEvent()
-                        val now = currentTimeMillis()
-                        if (now - lastInteractionTime >= 1000L) {
-                            lastInteractionTime = now
-                            onUserInteracted()
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        // Ignore exit and enter events (e.g. dialog popups appearing/disappearing or window focus shifts)
+                        if (event.type == PointerEventType.Exit || event.type == PointerEventType.Enter) {
+                            lastPosition = null
+                            accumulatedDistance = 0f
+                            continue
+                        }
+
+                        val currentPosition = event.changes.firstOrNull()?.position
+                        val prevPosition = lastPosition
+                        val isClickOrScroll = event.type == PointerEventType.Press || event.type == PointerEventType.Scroll
+
+                        var isRealMovement = false
+                        if (currentPosition != null && prevPosition != null && event.type == PointerEventType.Move) {
+                            val delta = (currentPosition - prevPosition).getDistance()
+                            accumulatedDistance += delta
+                            if (accumulatedDistance >= 15f) {
+                                isRealMovement = true
+                                accumulatedDistance = 0f
+                            }
+                        }
+
+                        if (currentPosition != null) {
+                            lastPosition = currentPosition
+                        }
+
+                        if (isClickOrScroll || isRealMovement) {
+                            val now = currentTimeMillis()
+                            if (now - lastInteractionTime >= 500L) {
+                                lastInteractionTime = now
+                                onUserInteracted(false)
+                            }
                         }
                     }
                 }

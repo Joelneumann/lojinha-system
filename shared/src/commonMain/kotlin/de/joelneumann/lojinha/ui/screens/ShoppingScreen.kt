@@ -31,6 +31,9 @@ import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import de.joelneumann.lojinha.ui.viewmodel.CartItem
 import de.joelneumann.lojinha.ui.viewmodel.ShoppingViewModel
@@ -43,7 +46,7 @@ fun ShoppingScreen(
     settings: SystemSettings,
     onLogout: () -> Unit,
     onNavigateToHistory: () -> Unit,
-    onUserInteracted: () -> Unit = {}
+    onUserInteracted: (force: Boolean) -> Unit = {}
 ) {
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -64,25 +67,28 @@ fun ShoppingScreen(
         weightError = weightError,
         showCheckoutConfirmation = showCheckoutConfirmation,
         onLogout = onLogout,
-        onSearchQueryChange = viewModel::updateSearchQuery,
+        onSearchQueryChange = { query ->
+            onUserInteracted(false)
+            viewModel.updateSearchQuery(query)
+        },
         onSearchSubmitted = {
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.onSearchSubmitted(settings.globalMarkupPercent)
         },
         onProductSelected = { product ->
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.onProductSelected(product, settings.globalMarkupPercent)
         },
         onUpdateCartQty = { id, qty ->
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.updateCartItemQuantity(id, qty)
         },
         onRemoveCartItem = { id ->
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.removeCartItem(id)
         },
         onOpenCheckout = {
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.openCheckoutConfirmation()
         },
         onCloseCheckout = viewModel::closeCheckoutConfirmation,
@@ -90,7 +96,7 @@ fun ShoppingScreen(
         onWeightInputChange = viewModel::updateWeightInput,
         onCloseWeightDialog = viewModel::closeWeightDialog,
         onSubmitWeightDialog = {
-            onUserInteracted()
+            onUserInteracted(true)
             viewModel.submitWeightDialog(settings.globalMarkupPercent)
         },
         onNavigateToHistory = onNavigateToHistory,
@@ -122,7 +128,7 @@ fun ShoppingContent(
     onCloseWeightDialog: () -> Unit,
     onSubmitWeightDialog: () -> Unit,
     onNavigateToHistory: () -> Unit,
-    onUserInteracted: () -> Unit = {}
+    onUserInteracted: (force: Boolean) -> Unit = {}
 ) {
     val strings = I18n.current
     val searchFocusRequester = remember { FocusRequester() }
@@ -156,13 +162,42 @@ fun ShoppingContent(
             .fillMaxSize()
             .pointerInput(Unit) {
                 var lastInteractionTime = 0L
+                var lastPosition: Offset? = null
+                var accumulatedDistance = 0f
                 awaitPointerEventScope {
                     while (true) {
-                        awaitPointerEvent()
-                        val now = currentTimeMillis()
-                        if (now - lastInteractionTime >= 1000L) {
-                            lastInteractionTime = now
-                            onUserInteracted()
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        // Ignore exit and enter events (e.g. dialog popups appearing/disappearing or window focus shifts)
+                        if (event.type == PointerEventType.Exit || event.type == PointerEventType.Enter) {
+                            lastPosition = null
+                            accumulatedDistance = 0f
+                            continue
+                        }
+
+                        val currentPosition = event.changes.firstOrNull()?.position
+                        val prevPosition = lastPosition
+                        val isClickOrScroll = event.type == PointerEventType.Press || event.type == PointerEventType.Scroll
+
+                        var isRealMovement = false
+                        if (currentPosition != null && prevPosition != null && event.type == PointerEventType.Move) {
+                            val delta = (currentPosition - prevPosition).getDistance()
+                            accumulatedDistance += delta
+                            if (accumulatedDistance >= 15f) {
+                                isRealMovement = true
+                                accumulatedDistance = 0f
+                            }
+                        }
+
+                        if (currentPosition != null) {
+                            lastPosition = currentPosition
+                        }
+
+                        if (isClickOrScroll || isRealMovement) {
+                            val now = currentTimeMillis()
+                            if (now - lastInteractionTime >= 500L) {
+                                lastInteractionTime = now
+                                onUserInteracted(false)
+                            }
                         }
                     }
                 }

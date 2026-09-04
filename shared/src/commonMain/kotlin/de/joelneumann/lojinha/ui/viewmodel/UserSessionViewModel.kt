@@ -38,13 +38,22 @@ class UserSessionViewModel(
         }
     }
 
-    fun onUserInteracted() {
+    fun onUserInteracted(force: Boolean = false) {
+        if (_showInactivityWarning.value && !force) {
+            // While the inactivity warning is visible, passive interactions (such as
+            // background pointer moves or window exit events) must not dismiss the warning.
+            return
+        }
+        resetInactivityTimer()
+    }
+
+    fun stayLoggedIn() {
         resetInactivityTimer()
     }
 
     fun resetInactivityTimer() {
         _showInactivityWarning.value = false
-        val timeoutSecs = _settings.value.inactivityTimeoutMinutes * 60
+        val timeoutSecs = maxOf(1, _settings.value.inactivityTimeoutMinutes) * 60
         _inactivitySecondsRemaining.value = timeoutSecs
 
         inactivityJob?.cancel()
@@ -65,7 +74,7 @@ class UserSessionViewModel(
         onLogoutRequest()
     }
 
-    private fun stopInactivityTimer() {
+    fun stopInactivityTimer() {
         inactivityJob?.cancel()
         inactivityJob = null
         _showInactivityWarning.value = false

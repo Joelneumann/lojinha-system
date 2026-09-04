@@ -124,6 +124,12 @@ fun App() {
                                 )
                             )
 
+                            DisposableEffect(sessionUser.id, sessionNonce) {
+                                onDispose {
+                                    userSessionViewModel.stopInactivityTimer()
+                                }
+                            }
+
                             val shoppingViewModel: ShoppingViewModel = viewModel(
                                 key = "shopping_${sessionUser.id}_$sessionNonce",
                                 factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
@@ -159,7 +165,7 @@ fun App() {
                                                     appViewModel.refreshCurrentUser()
                                                     appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
                                                 },
-                                                onUserInteracted = { userSessionViewModel.onUserInteracted() }
+                                                onUserInteracted = { force -> userSessionViewModel.onUserInteracted(force) }
                                             )
                                         }
 
@@ -180,7 +186,7 @@ fun App() {
                                                 onUserUpdated = { updated ->
                                                     appViewModel.updateCurrentUser(updated)
                                                 },
-                                                onUserInteracted = { userSessionViewModel.onUserInteracted() }
+                                                onUserInteracted = { force -> userSessionViewModel.onUserInteracted(force) }
                                             )
                                         }
 
@@ -192,7 +198,7 @@ fun App() {
                                 if (showInactivityWarning) {
                                     InactivityWarningDialog(
                                         secondsRemaining = inactivitySecondsRemaining,
-                                        onStayLoggedIn = { userSessionViewModel.onUserInteracted() },
+                                        onStayLoggedIn = { userSessionViewModel.stayLoggedIn() },
                                         onLogoutNow = { userSessionViewModel.requestLogout() }
                                     )
                                 }
