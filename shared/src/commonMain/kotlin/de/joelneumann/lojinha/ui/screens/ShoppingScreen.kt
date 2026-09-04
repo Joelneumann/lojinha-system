@@ -24,6 +24,7 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.*
 import de.joelneumann.lojinha.ui.components.shopping.*
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
@@ -127,12 +128,8 @@ fun ShoppingContent(
     val searchFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        searchFocusRequester.safeRequestFocus()
-    }
-
-    LaunchedEffect(weightProductDialog) {
-        if (weightProductDialog == null) {
+    LaunchedEffect(weightProductDialog, showCheckoutConfirmation, LanguageManager.currentLanguage) {
+        if (weightProductDialog == null && !showCheckoutConfirmation) {
             searchFocusRequester.safeRequestFocus()
         }
     }
@@ -173,6 +170,9 @@ fun ShoppingContent(
     ) {
         HeaderBar(
             title = strings.shopping,
+            onLanguageClick = {
+                coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+            },
             actions = {
                 Button(
                     onClick = onNavigateToHistory,
@@ -293,8 +293,14 @@ fun ShoppingContent(
                 rate = rate,
                 cartTotal = cartTotal,
                 balanceAfter = balanceAfter,
-                onQtyChange = onUpdateCartQty,
-                onRemoveItem = onRemoveCartItem,
+                onQtyChange = { productId, newQty ->
+                    onUpdateCartQty(productId, newQty)
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
+                onRemoveItem = { productId ->
+                    onRemoveCartItem(productId)
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
                 onCompletePurchase = onOpenCheckout,
                 modifier = Modifier.weight(0.9f)
             )
@@ -317,7 +323,10 @@ fun ShoppingContent(
             ConfirmationDialog(
                 title = strings.confirmPurchaseTitle,
                 message = strings.confirmPurchaseMsg(Formatting.formatBrl(cartTotal)),
-                onDismiss = onCloseCheckout,
+                onDismiss = {
+                    onCloseCheckout()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
                 onConfirm = onCompletePurchase,
                 confirmButtonColor = ColorSuccessEmerald
             )

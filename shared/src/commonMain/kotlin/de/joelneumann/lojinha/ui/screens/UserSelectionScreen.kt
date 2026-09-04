@@ -17,11 +17,13 @@ import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.ui.components.userselection.UserGrid
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun UserSelectionScreen(
@@ -84,8 +86,9 @@ fun UserSelectionContent(
 ) {
     val strings = I18n.current
     val focusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(selectedUserForPin, showAdminAuthDialog) {
+    LaunchedEffect(selectedUserForPin, showAdminAuthDialog, LanguageManager.currentLanguage) {
         if (selectedUserForPin == null && !showAdminAuthDialog) {
             focusRequester.safeRequestFocus()
         }
@@ -99,6 +102,11 @@ fun UserSelectionContent(
     Column(modifier = Modifier.fillMaxSize()) {
         HeaderBar(
             title = strings.appTitle,
+            onLanguageClick = {
+                coroutineScope.launch {
+                    focusRequester.safeRequestFocus()
+                }
+            },
             actions = {
                 Button(
                     onClick = onOpenAdminAuthDialog,

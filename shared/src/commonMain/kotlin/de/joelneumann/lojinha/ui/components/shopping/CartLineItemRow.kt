@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.ui.components.shopping
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,7 +78,9 @@ fun CartLineItemRow(
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .width(30.dp)
-                                    .clickable { onQtyChange(cartItem.quantity - 1) },
+                                    .pointerInput(cartItem.product.id, cartItem.quantity) {
+                                        detectTapGestures { onQtyChange(cartItem.quantity - 1) }
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text("-", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
@@ -99,7 +103,9 @@ fun CartLineItemRow(
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .width(30.dp)
-                                    .clickable { onQtyChange(cartItem.quantity + 1) },
+                                    .pointerInput(cartItem.product.id, cartItem.quantity) {
+                                        detectTapGestures { onQtyChange(cartItem.quantity + 1) }
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text("+", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
@@ -131,7 +137,9 @@ fun CartLineItemRow(
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .width(30.dp)
-                                    .clickable { onRemove() },
+                                    .pointerInput(cartItem.product.id) {
+                                        detectTapGestures { onRemove() }
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(

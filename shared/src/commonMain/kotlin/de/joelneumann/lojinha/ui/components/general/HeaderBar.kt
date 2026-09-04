@@ -3,6 +3,7 @@ package de.joelneumann.lojinha.ui.components.general
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -23,6 +25,7 @@ import de.joelneumann.lojinha.ui.theme.*
 fun HeaderBar(
     title: String,
     modifier: Modifier = Modifier,
+    onLanguageClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     val currentLanguage = LanguageManager.currentLanguage
@@ -77,7 +80,12 @@ fun HeaderBar(
                                         color = if (isSelected) AccentBlue else DividerBorder,
                                         shape = RoundedCornerShape(6.dp)
                                     )
-                                    .clickable { LanguageManager.setLanguage(lang) }
+                                    .pointerInput(lang) {
+                                        detectTapGestures {
+                                            LanguageManager.setLanguage(lang)
+                                            onLanguageClick?.invoke()
+                                        }
+                                    }
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Row(
@@ -117,7 +125,12 @@ fun HeaderBar(
                                         color = if (isSelected) AccentBlue else DividerBorder,
                                         shape = RoundedCornerShape(8.dp)
                                     )
-                                    .clickable { LanguageManager.setLanguage(lang) }
+                                    .pointerInput(lang) {
+                                        detectTapGestures {
+                                            LanguageManager.setLanguage(lang)
+                                            onLanguageClick?.invoke()
+                                        }
+                                    }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Row(
