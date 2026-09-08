@@ -301,6 +301,7 @@ fun ShoppingContent(
                 } else {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(bottom = 20.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(filteredProducts, key = { it.id }) { product ->

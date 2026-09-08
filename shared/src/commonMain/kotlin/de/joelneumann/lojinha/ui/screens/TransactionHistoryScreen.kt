@@ -317,6 +317,7 @@ fun TransactionHistoryContent(
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 16.dp),
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 ) {
                     items(transactionsWithBalance, key = { it.transaction.id }) { txWithBalance ->
