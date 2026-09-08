@@ -32,7 +32,8 @@ object GermanStrings : AppStrings {
     override val historyFilterAll = "Alle Typen"
     override val historyTypePurchase = "Einkauf"
     override val historyTypeDeposit = "Einzahlung"
-    override val historyTypeWithdrawal = "Auszahlung"
+    override val historyTypeDebit = "Abbuchung"
+    override val historyTypeCustomExpense = "Sonderausgabe"
     override val historyTypeCancellation = "Storno"
     override val historyTypeCorrection = "Korrektur"
     override fun cancellationNote(type: String, date: String) = "Storno von $type vom $date"
@@ -414,9 +415,17 @@ object GermanStrings : AppStrings {
 
     // --- Admin User Actions & Warnings ---
     override val depositViaAdmin = "Einzahlung über Admin"
-    override val withdrawalViaAdmin = "Auszahlung über Admin"
+    override val debitViaAdmin = "Abbuchung über Admin"
     override fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String) =
         "Barcode '$code' ist bereits dem Benutzer '$userName' zugewiesen!"
     override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
         "${if (isSymbolFilled) "Barcode-Nummer (ID)" else "Barcode-Symbol"} fehlt! Barcode-Symbol und Barcode-Nummer (ID) müssen beide ausgefüllt sein oder beide leer bleiben."
+
+    // --- Custom Expense / Balance Modal ---
+    override val customExpense = "Sonderausgabe"
+    override val customExpenseDialogTitle = "Sonderausgabe / Guthabenanpassung"
+    override val customExpenseDescriptionLabel = "Beschreibung / Posten:"
+    override val customExpenseDescriptionPlaceholder = "z.B. Schokokuchen, Kaffee, Sonderposten..."
+    override val customExpenseConfirmBtn = "Ausgabe buchen"
+    override val customDepositConfirmBtn = "Einzahlung buchen"
 }

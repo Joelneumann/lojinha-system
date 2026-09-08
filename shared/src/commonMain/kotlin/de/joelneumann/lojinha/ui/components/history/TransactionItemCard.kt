@@ -3,6 +3,8 @@ package de.joelneumann.lojinha.ui.components.history
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -46,7 +48,7 @@ fun TransactionItemCard(
                 val refTypeStr = when (refTx.type) {
                     TransactionType.PURCHASE -> strings.historyTypePurchase
                     TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit
-                    TransactionType.ADMIN_WITHDRAWAL -> strings.historyTypeWithdrawal
+                    TransactionType.ADMIN_WITHDRAWAL -> if (refTx.items.isNotEmpty()) strings.historyTypeCustomExpense else strings.historyTypeDebit
                     TransactionType.CANCELLATION -> strings.historyTypeCancellation
                     TransactionType.CORRECTION -> strings.historyTypeCorrection
                 }
@@ -59,11 +61,18 @@ fun TransactionItemCard(
         }
     }
 
+    val isCustomExpense = tx.type == TransactionType.ADMIN_WITHDRAWAL && tx.items.isNotEmpty()
     val typePair = when (tx.type) {
         TransactionType.PURCHASE -> Icons.Default.ShoppingCart to strings.historyTypePurchase
         TransactionType.ADMIN_DEPOSIT -> Icons.Default.AccountBalanceWallet to strings.historyTypeDeposit
-        TransactionType.ADMIN_WITHDRAWAL -> Icons.Default.Payments to strings.historyTypeWithdrawal
-        TransactionType.CANCELLATION -> Icons.Default.Undo to strings.historyTypeCancellation
+        TransactionType.ADMIN_WITHDRAWAL -> {
+            if (isCustomExpense) {
+                Icons.AutoMirrored.Filled.ReceiptLong to strings.historyTypeCustomExpense
+            } else {
+                Icons.Default.Payments to strings.historyTypeDebit
+            }
+        }
+        TransactionType.CANCELLATION -> Icons.AutoMirrored.Filled.Undo to strings.historyTypeCancellation
         TransactionType.CORRECTION -> Icons.Default.Edit to strings.historyTypeCorrection
     }
     val typeIcon = typePair.first

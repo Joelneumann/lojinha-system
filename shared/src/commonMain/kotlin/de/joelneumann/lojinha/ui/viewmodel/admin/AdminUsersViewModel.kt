@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.Transaction
+import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.TransactionType
+import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
@@ -33,14 +35,8 @@ class AdminUsersViewModel(
     private val _showUserModal = MutableStateFlow(false)
     val showUserModal: StateFlow<Boolean> = _showUserModal.asStateFlow()
 
-    private val _depositUser = MutableStateFlow<User?>(null)
-    val depositUser: StateFlow<User?> = _depositUser.asStateFlow()
-
-    private val _depositAmountInput = MutableStateFlow("")
-    val depositAmountInput: StateFlow<String> = _depositAmountInput.asStateFlow()
-
-    private val _depositNoteInput = MutableStateFlow("")
-    val depositNoteInput: StateFlow<String> = _depositNoteInput.asStateFlow()
+    private val _customExpenseUser = MutableStateFlow<User?>(null)
+    val customExpenseUser: StateFlow<User?> = _customExpenseUser.asStateFlow()
 
     private val _userDeleteErrorMessage = MutableStateFlow<String?>(null)
     val userDeleteErrorMessage: StateFlow<String?> = _userDeleteErrorMessage.asStateFlow()
@@ -116,38 +112,34 @@ class AdminUsersViewModel(
         _userDeleteErrorMessage.value = null
     }
 
-    fun openDepositModal(user: User) {
-        _depositUser.value = user
-        _depositAmountInput.value = ""
-        _depositNoteInput.value = ""
+    fun openCustomExpenseModal(user: User) {
+        _customExpenseUser.value = user
     }
 
-    fun closeDepositModal() {
-        _depositUser.value = null
-        _depositAmountInput.value = ""
-        _depositNoteInput.value = ""
+    fun closeCustomExpenseModal() {
+        _customExpenseUser.value = null
     }
 
-    fun updateDepositAmount(amountStr: String) {
-        _depositAmountInput.value = amountStr
-    }
-
-    fun updateDepositNote(note: String) {
-        _depositNoteInput.value = note
-    }
-
-    fun submitDeposit(isDeposit: Boolean) {
-        val user = _depositUser.value ?: return
-        val rawInput = _depositAmountInput.value.replace(',', '.')
-        val valDouble = rawInput.toDoubleOrNull() ?: return
-        if (valDouble <= 0.0) return
-
-        val cents = kotlin.math.round(valDouble * 100.0).toLong()
-        val delta = if (isDeposit) cents else -cents
-        val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
-
+    fun submitCustomExpense(user: User, deltaCents: Long, description: String) {
+        val isExpense = deltaCents < 0
+        val absCents = kotlin.math.abs(deltaCents)
+        val txType = if (isExpense) TransactionType.ADMIN_WITHDRAWAL else TransactionType.ADMIN_DEPOSIT
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
         val txId = generateUuid()
+
+        val items = if (isExpense) {
+            listOf(
+                TransactionItem(
+                    productId = "custom",
+                    productName = description,
+                    unitType = UnitType.PIECE,
+                    quantity = 1L,
+                    unitPriceAtPurchase = absCents
+                )
+            )
+        } else {
+            emptyList()
+        }
 
         val tx = Transaction(
             id = txId,
@@ -155,16 +147,16 @@ class AdminUsersViewModel(
             userNameSnapshot = user.name,
             timestamp = nowMillis,
             type = txType,
-            note = _depositNoteInput.value.ifBlank { if (isDeposit) "Deposit via Admin" else "Withdrawal via Admin" },
-            totalAmount = delta,
-            items = emptyList()
+            note = description,
+            totalAmount = deltaCents,
+            items = items
         )
 
         viewModelScope.launch {
-            userRepository.updateBalance(user.id, delta)
+            userRepository.updateBalance(user.id, deltaCents)
             transactionRepository.recordTransaction(tx)
             refreshUsers()
-            closeDepositModal()
+            closeCustomExpenseModal()
         }
     }
 
@@ -180,7 +172,7 @@ class AdminUsersViewModel(
             userNameSnapshot = userName,
             timestamp = nowMillis,
             type = txType,
-            note = note.ifBlank { if (isDeposit) "Deposit via Admin" else "Withdrawal via Admin" },
+            note = note.ifBlank { if (isDeposit) "Deposit via Admin" else "Debit via Admin" },
             totalAmount = centsDelta,
             items = emptyList()
         )
@@ -196,6 +188,6 @@ class AdminUsersViewModel(
         super.onCleared()
         _users.value = emptyList()
         _searchQuery.value = ""
-        closeDepositModal()
+        closeCustomExpenseModal()
     }
 }

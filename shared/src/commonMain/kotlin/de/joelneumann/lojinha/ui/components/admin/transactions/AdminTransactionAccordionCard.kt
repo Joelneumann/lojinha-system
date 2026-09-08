@@ -65,6 +65,20 @@ fun AdminTransactionAccordionCard(
         TransactionType.CORRECTION -> AdminBadgeType.WARNING
     }
 
+    val typeText = when (transaction.type) {
+        TransactionType.PURCHASE -> strings.historyTypePurchase.uppercase()
+        TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit.uppercase()
+        TransactionType.ADMIN_WITHDRAWAL -> {
+            if (transaction.items.isNotEmpty()) {
+                strings.historyTypeCustomExpense.uppercase()
+            } else {
+                strings.historyTypeDebit.uppercase()
+            }
+        }
+        TransactionType.CANCELLATION -> strings.historyTypeCancellation.uppercase()
+        TransactionType.CORRECTION -> strings.historyTypeCorrection.uppercase()
+    }
+
     AdminAccordionCard(
         title = transaction.userNameSnapshot,
         isExpanded = isExpanded,
@@ -72,7 +86,7 @@ fun AdminTransactionAccordionCard(
         modifier = modifier,
         headerBadges = {
             AdminStatusBadge(
-                text = transaction.type.name,
+                text = typeText,
                 type = typeBadgeType
             )
             if (isCanceled) {

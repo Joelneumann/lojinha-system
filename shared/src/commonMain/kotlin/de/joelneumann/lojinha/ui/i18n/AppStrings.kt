@@ -32,7 +32,8 @@ interface AppStrings {
     val historyFilterAll: String
     val historyTypePurchase: String
     val historyTypeDeposit: String
-    val historyTypeWithdrawal: String
+    val historyTypeDebit: String
+    val historyTypeCustomExpense: String
     val historyTypeCancellation: String
     val historyTypeCorrection: String
     fun cancellationNote(type: String, date: String): String
@@ -405,7 +406,15 @@ interface AppStrings {
 
     // --- Admin User Actions & Warnings ---
     val depositViaAdmin: String
-    val withdrawalViaAdmin: String
+    val debitViaAdmin: String
     fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String): String
     fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean): String
+
+    // --- Custom Expense / Balance Modal ---
+    val customExpense: String
+    val customExpenseDialogTitle: String
+    val customExpenseDescriptionLabel: String
+    val customExpenseDescriptionPlaceholder: String
+    val customExpenseConfirmBtn: String
+    val customDepositConfirmBtn: String
 }

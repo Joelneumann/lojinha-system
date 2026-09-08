@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.admin.*
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -21,6 +22,7 @@ fun AdminUserAccordionCard(
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
     onEditUser: (User) -> Unit,
+    onCustomExpense: (User) -> Unit,
     onAdjustBalance: (User, Long, String, Boolean) -> Unit,
     onToggleActive: (User) -> Unit,
     onDeleteUser: (User) -> Unit,
@@ -111,6 +113,7 @@ fun AdminUserAccordionCard(
 
         AdminCardActionsRow(
             onEdit = { onEditUser(user) },
+            onCustomExpense = { onCustomExpense(user) },
             toggleStatusText = if (user.isActive) strings.deactivate else strings.activate,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = user.isActive,
@@ -126,12 +129,16 @@ fun AdminUserAccordionCard(
 
         AlertDialog(
             onDismissRequest = { pendingBalanceAdjustment = null },
+            properties = DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false
+            ),
             title = { Text(strings.confirmBalanceAdjustmentTitle, fontWeight = FontWeight.Bold) },
             text = { Text(strings.confirmBalanceAdjustmentMsg(isDeposit, formattedAmount, user.name)) },
             confirmButton = {
                 Button(
                     onClick = {
-                        val note = if (isDeposit) strings.depositViaAdmin else strings.withdrawalViaAdmin
+                        val note = if (isDeposit) strings.depositViaAdmin else strings.debitViaAdmin
                         onAdjustBalance(user, absCents, note, isDeposit)
                         pendingBalanceAdjustment = null
                         moneyInput = ""

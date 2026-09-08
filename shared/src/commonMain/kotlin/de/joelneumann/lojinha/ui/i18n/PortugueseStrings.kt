@@ -32,7 +32,8 @@ object PortugueseStrings : AppStrings {
     override val historyFilterAll = "Todos os Tipos"
     override val historyTypePurchase = "Compra"
     override val historyTypeDeposit = "Depósito"
-    override val historyTypeWithdrawal = "Saque"
+    override val historyTypeDebit = "Débito"
+    override val historyTypeCustomExpense = "Despesa Avulsa"
     override val historyTypeCancellation = "Cancelamento"
     override val historyTypeCorrection = "Correção"
     override fun cancellationNote(type: String, date: String) = "Cancelamento de $type de $date"
@@ -414,9 +415,17 @@ object PortugueseStrings : AppStrings {
 
     // --- Admin User Actions & Warnings ---
     override val depositViaAdmin = "Depósito via Admin"
-    override val withdrawalViaAdmin = "Retirada via Admin"
+    override val debitViaAdmin = "Débito via Admin"
     override fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String) =
         "O código de barras '$code' já está atribuído ao usuário '$userName'!"
     override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
         "${if (isSymbolFilled) "O Número do Código de Barras (ID)" else "O Símbolo do Código de Barras"} está faltando! O Símbolo do Código de Barras e o Número do Código de Barras (ID) devem ser preenchidos juntos, ou deixe ambos vazios."
+
+    // --- Custom Expense / Balance Modal ---
+    override val customExpense = "Despesa Avulsa"
+    override val customExpenseDialogTitle = "Despesa Avulsa / Ajuste de Saldo"
+    override val customExpenseDescriptionLabel = "Descrição / Item:"
+    override val customExpenseDescriptionPlaceholder = "ex: Bolo de chocolate, Café, Lanche especial..."
+    override val customExpenseConfirmBtn = "Confirmar Despesa"
+    override val customDepositConfirmBtn = "Confirmar Depósito"
 }

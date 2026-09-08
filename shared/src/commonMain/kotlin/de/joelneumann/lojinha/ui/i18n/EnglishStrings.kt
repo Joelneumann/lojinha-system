@@ -32,7 +32,8 @@ object EnglishStrings : AppStrings {
     override val historyFilterAll = "All Types"
     override val historyTypePurchase = "Purchase"
     override val historyTypeDeposit = "Deposit"
-    override val historyTypeWithdrawal = "Withdrawal"
+    override val historyTypeDebit = "Debit"
+    override val historyTypeCustomExpense = "Custom Expense"
     override val historyTypeCancellation = "Cancellation"
     override val historyTypeCorrection = "Correction"
     override fun cancellationNote(type: String, date: String) = "Cancellation of $type from $date"
@@ -414,9 +415,17 @@ object EnglishStrings : AppStrings {
 
     // --- Admin User Actions & Warnings ---
     override val depositViaAdmin = "Deposit via Admin"
-    override val withdrawalViaAdmin = "Withdrawal via Admin"
+    override val debitViaAdmin = "Debit via Admin"
     override fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String) =
         "Barcode '$code' is already assigned to user '$userName'!"
     override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
         "${if (isSymbolFilled) "Barcode Number (ID)" else "Barcode Symbol"} is missing! Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty."
+
+    // --- Custom Expense / Balance Modal ---
+    override val customExpense = "Custom Expense"
+    override val customExpenseDialogTitle = "Custom Expense / Balance Adjustment"
+    override val customExpenseDescriptionLabel = "Description / Item:"
+    override val customExpenseDescriptionPlaceholder = "e.g. Chocolate Cake, Coffee, Special Snack..."
+    override val customExpenseConfirmBtn = "Confirm Expense"
+    override val customDepositConfirmBtn = "Confirm Deposit"
 }

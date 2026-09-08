@@ -16,7 +16,7 @@ import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
 import de.joelneumann.lojinha.ui.components.admin.users.AdminUserAccordionCard
 import de.joelneumann.lojinha.ui.components.admin.users.DeactivatedUserCard
 import de.joelneumann.lojinha.ui.components.admin.users.DeletedUserCard
-import de.joelneumann.lojinha.ui.components.admin.users.DepositDialog
+import de.joelneumann.lojinha.ui.components.admin.users.UserCustomExpenseDialog
 import de.joelneumann.lojinha.ui.components.admin.users.UserEditDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
@@ -39,9 +39,7 @@ fun AdminUsersTabScreen(
 
     val showUserModal by viewModel.showUserModal.collectAsState()
     val editUser by viewModel.editUser.collectAsState()
-    val depositUser by viewModel.depositUser.collectAsState()
-    val depositAmountInput by viewModel.depositAmountInput.collectAsState()
-    val depositNoteInput by viewModel.depositNoteInput.collectAsState()
+    val customExpenseUser by viewModel.customExpenseUser.collectAsState()
     val userDeleteError by viewModel.userDeleteErrorMessage.collectAsState()
 
     val strings = I18n.current
@@ -124,6 +122,7 @@ fun AdminUsersTabScreen(
                         isExpanded = isExpanded,
                         onExpandToggle = { onRequestToggleExpand(user.id) },
                         onEditUser = { viewModel.openEditUserModal(it) },
+                        onCustomExpense = { viewModel.openCustomExpenseModal(it) },
                         onAdjustBalance = { u, absCents, note, isDeposit ->
                             val delta = if (isDeposit) absCents else -absCents
                             viewModel.adjustUserBalance(u.id, u.name, delta, note)
@@ -185,15 +184,14 @@ fun AdminUsersTabScreen(
         )
     }
 
-    if (depositUser != null) {
-        DepositDialog(
-            user = depositUser!!,
-            amountInput = depositAmountInput,
-            noteInput = depositNoteInput,
-            onAmountChange = viewModel::updateDepositAmount,
-            onNoteChange = viewModel::updateDepositNote,
-            onSubmit = viewModel::submitDeposit,
-            onDismiss = viewModel::closeDepositModal
+    if (customExpenseUser != null) {
+        val targetUser = customExpenseUser!!
+        UserCustomExpenseDialog(
+            user = targetUser,
+            onSubmit = { deltaCents, description ->
+                viewModel.submitCustomExpense(targetUser, deltaCents, description)
+            },
+            onDismiss = { viewModel.closeCustomExpenseModal() }
         )
     }
 
