@@ -3,8 +3,12 @@ package de.joelneumann.lojinha.ui.components.admin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -71,12 +75,23 @@ fun AdminExpandableSection(
                     }
                 }
 
-                Text(
-                    text = if (isExpanded) "▲ $hideLabel" else "▼ $showLabel",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AccentNavy
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = if (isExpanded) hideLabel else showLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AccentNavy
+                    )
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = AccentNavy,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
 
             if (isExpanded) {
