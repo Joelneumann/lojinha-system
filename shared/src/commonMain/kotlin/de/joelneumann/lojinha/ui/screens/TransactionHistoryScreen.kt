@@ -261,37 +261,39 @@ fun TransactionHistoryContent(
         ) {
             // Top Row: Reused UserBalanceHeader (Left) & User Settings Button (Right)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 UserBalanceHeader(
                     user = user,
                     rate = rate,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).fillMaxHeight()
                 )
 
-                OutlinedButton(
+                Surface(
                     onClick = onOpenSettingsModal,
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, DividerBorder),
-                    modifier = Modifier.height(52.dp)
+                    color = SurfaceWhite,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.fillMaxHeight()
                 ) {
                     Row(
+                        modifier = Modifier.fillMaxHeight().padding(horizontal = 20.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = null,
                             tint = PrimaryNavy,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                         Text(
                             text = strings.userSettings,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy,
-                            fontSize = 14.sp
+                            fontSize = 15.sp
                         )
                     }
                 }

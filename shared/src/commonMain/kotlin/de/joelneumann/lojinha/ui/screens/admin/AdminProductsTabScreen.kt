@@ -87,7 +87,8 @@ fun AdminProductsTabScreen(
             sortContent = {
                 ProductSortButton(
                     selectedOption = sortOption,
-                    onOptionSelected = viewModel::updateSortOption
+                    onOptionSelected = viewModel::updateSortOption,
+                    modifier = Modifier.fillMaxHeight()
                 )
             }
         )

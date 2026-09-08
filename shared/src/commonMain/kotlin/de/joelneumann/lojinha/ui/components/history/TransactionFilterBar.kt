@@ -1,6 +1,8 @@
 package de.joelneumann.lojinha.ui.components.history
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,7 +26,7 @@ fun TransactionFilterBar(
     val strings = I18n.current
 
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().height(56.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -33,11 +35,14 @@ fun TransactionFilterBar(
             onQueryChange = onSearchFilterChange,
             placeholder = strings.historyFilterPlaceholder,
             onSearchSubmitted = {},
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f).fillMaxHeight()
         )
 
-        // Filter Type Chip Buttons
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Filter Type Buttons
+        Row(
+            modifier = Modifier.fillMaxHeight(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             val filterOptions: List<Pair<String, TransactionType?>> = listOf(
                 strings.historyFilterAll to null,
                 strings.historyTypePurchase to TransactionType.PURCHASE,
@@ -47,22 +52,26 @@ fun TransactionFilterBar(
 
             filterOptions.forEach { (label, type) ->
                 val isSelected = selectedTypeFilter == type
-                FilterChip(
-                    selected = isSelected,
+                Surface(
                     onClick = { onTypeFilterSelect(type) },
-                    label = {
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) AccentNavy else SurfaceWhite,
+                    border = if (isSelected) null else BorderStroke(1.dp, DividerBorder),
+                    modifier = Modifier.fillMaxHeight()
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxHeight().padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
                             text = label,
-                            fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                            color = if (isSelected) SurfaceWhite else PrimaryNavy,
+                            maxLines = 1
                         )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = AccentNavy,
-                        selectedLabelColor = SurfaceWhite,
-                        containerColor = SurfaceWhite
-                    )
-                )
+                    }
+                }
             }
         }
     }

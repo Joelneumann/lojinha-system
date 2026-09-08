@@ -37,10 +37,11 @@ fun ProductSortButton(
             shape = RoundedCornerShape(12.dp),
             color = SurfaceWhite,
             border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
-            shadowElevation = 1.dp
+            shadowElevation = 1.dp,
+            modifier = Modifier.fillMaxHeight()
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxHeight().padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
