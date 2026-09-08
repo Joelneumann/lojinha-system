@@ -3,7 +3,7 @@ package de.joelneumann.lojinha.ui.i18n
 object PortugueseStrings : AppStrings {
     override val appTitle = "Lojinha POS"
     override val searchUserPlaceholder = "Pesquisar usuário por nome... (Escanear código)"
-    override val adminLoginBtn = "Login Admin"
+    override val adminLoginBtn = "Admin Login"
     override val selectUserTitle = "Selecionar Usuário"
     override val enterPinTitle = "Digite o PIN"
     override val enterPinPrompt = "Por favor, digite o PIN para"
@@ -184,9 +184,13 @@ object PortugueseStrings : AppStrings {
     override val balanceChangeLabel = "Alteração de Saldo (+/-):"
     override val adjustBalanceBtn = "Ajustar Saldo"
     override val confirmBalanceAdjustmentTitle = "Confirmar Ajuste de Saldo"
-    override fun confirmBalanceAdjustmentMsg(actionText: String, userName: String) = "Tem certeza de que deseja $actionText o saldo da conta de $userName?"
+    override fun confirmBalanceAdjustmentMsg(isDeposit: Boolean, formattedAmount: String, userName: String) =
+        if (isDeposit) "Tem certeza de que deseja adicionar $formattedAmount ao saldo da conta de $userName?"
+        else "Tem certeza de que deseja debitar $formattedAmount do saldo da conta de $userName?"
     override val confirmUserStatusChangeTitle = "Confirmar Alteração de Status"
-    override fun confirmUserStatusChangeMsg(actionText: String, userName: String) = "Tem certeza de que deseja $actionText a conta '$userName'?"
+    override fun confirmUserStatusChangeMsg(isDeactivating: Boolean, userName: String) =
+        if (isDeactivating) "Tem certeza de que deseja desativar a conta '$userName'?"
+        else "Tem certeza de que deseja ativar a conta '$userName'?"
     override val confirmDeleteUserTitle = "Confirmar Exclusão de Conta"
     override fun confirmDeleteUserMsg(userName: String) = "Tem certeza de que deseja excluir a conta de usuário '$userName'?"
     override val yesDeleteUser = "Sim, Excluir Usuário"
@@ -372,4 +376,47 @@ object PortugueseStrings : AppStrings {
     override fun disconnectOneDriveConfirmMsg(account: String) = "Tem certeza de que deseja desconectar sua conta ($account)?"
     override val disconnectOneDriveWarningMsg = "Os backups agendados em nuvem para o OneDrive não serão executados até que você reconecte sua conta."
     override val disconnectBtn = "Desconectar"
+
+    // --- Product Admin Page Confirmations & Actions ---
+    override val adjustStockBtn = "Ajustar estoque"
+    override val stockDeltaPieceLabel = "Delta de estoque (+/- un):"
+    override val stockDeltaWeightLabel = "Delta de estoque (+/- kg):"
+    override val stockDeltaPiecePlaceholder = "ex: +10 ou -5"
+    override val stockDeltaWeightPlaceholder = "ex: +2.500 ou -0.500"
+    override val confirmStockAdjustmentTitle = "Confirmar ajuste de estoque"
+    override fun confirmStockAdjustmentMsg(isAddition: Boolean, formattedDelta: String, productName: String) =
+        "Tem certeza de que deseja ${if (isAddition) "ADICIONAR" else "REMOVER"} $formattedDelta ${if (isAddition) "ao" else "do"} estoque de '$productName'?"
+    override val confirmProductStatusChangeTitle = "Confirmar alteração de status do produto"
+    override fun confirmProductStatusChangeMsg(isDisabling: Boolean, productName: String) =
+        "Tem certeza de que deseja ${if (isDisabling) "desativar" else "ativar"} o produto '$productName'?"
+    override val confirmDeleteProductTitle = "Confirmar exclusão de produto"
+    override fun confirmDeleteProductMsg(productName: String) =
+        "Tem certeza de que deseja excluir permanentemente o produto '$productName'?"
+    override val yesDeleteProduct = "Sim, excluir produto"
+    override val saveChanges = "Salvar alterações"
+    override val disable = "Desativar"
+    override val enable = "Ativar"
+    override val deactivate = "Desativar"
+    override val activate = "Ativar"
+    override fun barcodeConflictAlreadyAssigned(code: String, productName: String) =
+        "O código de barras '$code' já está atribuído ao produto '$productName'!"
+    override fun barcodeConflictContainsAssigned(productName: String) =
+        "Contém código de barras atribuído ao produto '$productName'!"
+
+    // --- Settings OneDrive & Backup Solution Badges ---
+    override fun oneDriveAccountLabel(email: String) = "Conta: $email"
+    override val microsoftAccount = "Conta Microsoft"
+    override val badgeOverwrite = "SOBRESCREVER"
+    override val badgeNewFile = "NOVO ARQUIVO"
+    override val badgeRealtime = "TEMPO REAL"
+    override fun badgeTimed(time: String) = "AGENDADO $time"
+    override fun badgeInterval(hours: Int, minutes: Int) = "A CADA ${hours}h ${minutes}m"
+
+    // --- Admin User Actions & Warnings ---
+    override val depositViaAdmin = "Depósito via Admin"
+    override val withdrawalViaAdmin = "Retirada via Admin"
+    override fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String) =
+        "O código de barras '$code' já está atribuído ao usuário '$userName'!"
+    override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
+        "${if (isSymbolFilled) "O Número do Código de Barras (ID)" else "O Símbolo do Código de Barras"} está faltando! O Símbolo do Código de Barras e o Número do Código de Barras (ID) devem ser preenchidos juntos, ou deixe ambos vazios."
 }

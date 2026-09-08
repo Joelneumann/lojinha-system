@@ -95,20 +95,20 @@ fun AdminProductAccordionCard(
         headerBadges = {
             if (!product.isActive) {
                 AdminStatusBadge(
-                    text = "Disabled",
+                    text = strings.disabled,
                     type = AdminBadgeType.DANGER
                 )
             }
         },
         headerRightContent = {
             Text(
-                text = "Base Price: ${Formatting.formatBrl(product.basePrice)}",
+                text = "${strings.basePrice}: ${Formatting.formatBrl(product.basePrice)}",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = PrimaryNavy
             )
             Text(
-                text = "Stock: ${Formatting.formatQuantity(product.stockQuantity, product.unitType)}",
+                text = "${strings.stock}: ${Formatting.formatQuantity(product.stockQuantity, product.unitType)}",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (product.stockQuantity > 0) ColorSuccessEmerald else ColorDangerCrimson
@@ -138,7 +138,7 @@ fun AdminProductAccordionCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = if (product.unitType == UnitType.PIECE) "Stock Delta (+/- units):" else "Stock Delta (+/- kg):",
+                        text = if (product.unitType == UnitType.PIECE) strings.stockDeltaPieceLabel else strings.stockDeltaWeightLabel,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
@@ -148,7 +148,7 @@ fun AdminProductAccordionCard(
                 OutlinedTextField(
                     value = stockDeltaInput,
                     onValueChange = { stockDeltaInput = it },
-                    placeholder = { Text(if (product.unitType == UnitType.PIECE) "e.g. +10 or -5" else "e.g. +2.500 or -0.500", fontSize = 13.sp, color = TextSecondaryMuted) },
+                    placeholder = { Text(if (product.unitType == UnitType.PIECE) strings.stockDeltaPiecePlaceholder else strings.stockDeltaWeightPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(8.dp),
@@ -182,7 +182,7 @@ fun AdminProductAccordionCard(
                             tint = SurfaceWhite,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text("Adjust Stock", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                        Text(strings.adjustStockBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                     }
                 }
             }
@@ -193,26 +193,28 @@ fun AdminProductAccordionCard(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             AdminLabeledField(
-                label = "Product Name",
+                label = strings.productNameLabel,
                 value = draftName,
                 onValueChange = { draftName = it },
+                placeholder = strings.productNamePlaceholder,
                 modifier = Modifier.weight(1.5f)
             )
 
             AdminLabeledField(
-                label = "Base Price (R$)",
+                label = strings.basePriceBrlLabel,
                 value = draftPriceBrl,
                 onValueChange = { draftPriceBrl = it },
+                placeholder = strings.zeroPricePlaceholder,
                 modifier = Modifier.weight(1f)
             )
         }
 
         AdminSegmentedOptionsRow(
-            label = "Unit Type",
+            label = strings.unitTypeLabel,
             options = UnitType.entries,
             selected = draftUnitType,
             onSelect = { draftUnitType = it },
-            optionLabel = { it.name }
+            optionLabel = { if (it == UnitType.PIECE) strings.unitPiece else strings.unitWeight }
         )
 
         Row(
@@ -220,23 +222,23 @@ fun AdminProductAccordionCard(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             AdminLabeledField(
-                label = if (draftUnitType == UnitType.PIECE) "Absolute Stock (Units):" else "Absolute Stock (kg):",
+                label = if (draftUnitType == UnitType.PIECE) strings.stockQtyUnitsLabel else strings.stockQtyKgLabel,
                 value = draftStock,
                 onValueChange = { draftStock = it },
                 modifier = Modifier.weight(1f)
             )
 
             AdminLabeledField(
-                label = "Custom Markup % (Optional)",
+                label = strings.customMarkupOptionalLabel,
                 value = draftMarkup,
                 onValueChange = { draftMarkup = it },
-                placeholder = "Standard",
+                placeholder = strings.standardPlaceholder,
                 modifier = Modifier.weight(1f)
             )
         }
 
         Column(modifier = Modifier.fillMaxWidth()) {
-            Text("Associated Barcodes (${draftBarcodes.size})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+            Text(strings.associatedBarcodesTitle(draftBarcodes.size), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
             Spacer(modifier = Modifier.height(6.dp))
 
             if (draftBarcodes.isNotEmpty()) {
@@ -286,7 +288,7 @@ fun AdminProductAccordionCard(
                 OutlinedTextField(
                     value = newBarcodeCode,
                     onValueChange = { newBarcodeCode = it },
-                    placeholder = { Text("Barcode Code", fontSize = 12.sp) },
+                    placeholder = { Text(strings.barcodeCodePlaceholder, fontSize = 12.sp) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(8.dp),
@@ -296,7 +298,7 @@ fun AdminProductAccordionCard(
                 OutlinedTextField(
                     value = newBarcodeDesc,
                     onValueChange = { newBarcodeDesc = it },
-                    placeholder = { Text("Description (Optional)", fontSize = 12.sp) },
+                    placeholder = { Text(strings.descriptionOptionalPlaceholder, fontSize = 12.sp) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(8.dp),
@@ -319,7 +321,7 @@ fun AdminProductAccordionCard(
                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                     modifier = Modifier.height(52.dp)
                 ) {
-                    Text("+ Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(strings.addBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -336,7 +338,7 @@ fun AdminProductAccordionCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "Barcode '${newBarcodeCode.trim()}' is already assigned to product '${newBarcodeConflictProduct.name}'!",
+                        text = strings.barcodeConflictAlreadyAssigned(newBarcodeCode.trim(), newBarcodeConflictProduct.name),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = ColorDangerCrimson
@@ -357,7 +359,7 @@ fun AdminProductAccordionCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "Contains barcode assigned to product '${assignedBarcodeConflictProduct.name}'!",
+                        text = strings.barcodeConflictContainsAssigned(assignedBarcodeConflictProduct.name),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = ColorDangerCrimson
@@ -397,7 +399,7 @@ fun AdminProductAccordionCard(
                 onUnsavedStateChanged(false)
             },
             saveEnabled = hasUnsaved && draftName.isNotBlank() && assignedBarcodeConflictProduct == null,
-            toggleStatusText = if (product.isActive) "Disable" else "Enable",
+            toggleStatusText = if (product.isActive) strings.disable else strings.enable,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = product.isActive,
             onDelete = { showDeleteConfirm = true }
@@ -412,10 +414,10 @@ fun AdminProductAccordionCard(
 
         AlertDialog(
             onDismissRequest = { pendingStockAdjustment = null },
-            title = { Text("Confirm Stock Adjustment", fontWeight = FontWeight.Bold) },
+            title = { Text(strings.confirmStockAdjustmentTitle, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "Are you sure you want to ${if (isAddition) "ADD" else "REMOVE"} $formattedDelta ${if (isAddition) "to" else "from"} ${product.name}'s inventory?"
+                    strings.confirmStockAdjustmentMsg(isAddition, formattedDelta, product.name)
                 )
             },
             confirmButton = {
@@ -429,7 +431,7 @@ fun AdminProductAccordionCard(
                         containerColor = if (isAddition) ColorSuccessEmerald else ColorDangerCrimson
                     )
                 ) {
-                    Text("Confirm", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.confirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -441,11 +443,10 @@ fun AdminProductAccordionCard(
     }
 
     if (showToggleActiveConfirm) {
-        val actionText = if (product.isActive) "disable" else "enable"
         AlertDialog(
             onDismissRequest = { showToggleActiveConfirm = false },
-            title = { Text("Confirm Product Status Change", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to $actionText product '${product.name}'?") },
+            title = { Text(strings.confirmProductStatusChangeTitle, fontWeight = FontWeight.Bold) },
+            text = { Text(strings.confirmProductStatusChangeMsg(product.isActive, product.name)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -456,7 +457,7 @@ fun AdminProductAccordionCard(
                         containerColor = if (product.isActive) ColorWarningAmber else ColorSuccessEmerald
                     )
                 ) {
-                    Text("Confirm", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.confirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -470,8 +471,8 @@ fun AdminProductAccordionCard(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Confirm Delete Product", fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
-            text = { Text("Are you sure you want to permanently delete product '${product.name}'?") },
+            title = { Text(strings.confirmDeleteProductTitle, fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
+            text = { Text(strings.confirmDeleteProductMsg(product.name)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -480,7 +481,7 @@ fun AdminProductAccordionCard(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
-                    Text("Yes, Delete Product", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.yesDeleteProduct, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {

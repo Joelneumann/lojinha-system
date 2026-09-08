@@ -357,15 +357,14 @@ fun UserEditDialog(
                     onSelect = { selectedSecondaryCurrency = it },
                     optionLabel = { curr ->
                         when (curr) {
-                            SecondaryCurrency.NONE -> "None"
-                            SecondaryCurrency.USD -> "USD ($)"
-                            SecondaryCurrency.EUR -> "EUR (€)"
+                            SecondaryCurrency.NONE -> strings.secondaryCurrencyNone
+                            SecondaryCurrency.USD -> strings.secondaryCurrencyUsd
+                            SecondaryCurrency.EUR -> strings.secondaryCurrencyEur
                         }
                     }
                 )
 
                 if (isUserBarcodeIncomplete) {
-                    val missingMsg = if (isBarcodeSymbolFilled) "Barcode Number (ID) is missing!" else "Barcode Symbol is missing!"
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -378,7 +377,7 @@ fun UserEditDialog(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = "$missingMsg Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty.",
+                            text = strings.userBarcodeIncompleteWarning(isBarcodeSymbolFilled),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ColorWarningAmber
@@ -399,7 +398,7 @@ fun UserEditDialog(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = "Barcode '${barcodeToCheck}' is already assigned to user '${duplicateUser.name}'!",
+                            text = strings.barcodeConflictAlreadyAssignedToUser(barcodeToCheck, duplicateUser.name),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ColorDangerCrimson
@@ -409,14 +408,14 @@ fun UserEditDialog(
 
                 HorizontalDivider(color = DividerBorder)
 
-                val hasUserDialogChanges = name != user.name ||
-                        shouldResetPin ||
+                val hasDialogChanges = name != user.name ||
                         (isNewUser && pin.isNotBlank()) ||
-                        barcode != (user.userBarcode ?: "") ||
-                        barcodeNumber != (user.userBarcodeNumber ?: "") ||
+                        (!isNewUser && shouldResetPin && pin.isNotBlank()) ||
                         selectedLang != user.language ||
                         selectedSecondaryCurrency != user.secondaryCurrency ||
-                        selectedAvatar != user.avatar
+                        selectedAvatar != user.avatar ||
+                        barcode != (user.userBarcode ?: "") ||
+                        barcodeNumber != (user.userBarcodeNumber ?: "")
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -430,17 +429,17 @@ fun UserEditDialog(
                         Text(strings.cancel, fontSize = 14.sp)
                     }
 
-                    if (!isNewUser && hasUserDialogChanges) {
+                    if (!isNewUser && hasDialogChanges) {
                         OutlinedButton(
                             onClick = {
                                 name = user.name
+                                selectedLang = user.language
+                                selectedSecondaryCurrency = user.secondaryCurrency
+                                selectedAvatar = user.avatar
                                 shouldResetPin = false
                                 pin = ""
                                 barcode = user.userBarcode ?: ""
                                 barcodeNumber = user.userBarcodeNumber ?: ""
-                                selectedLang = user.language
-                                selectedSecondaryCurrency = user.secondaryCurrency
-                                selectedAvatar = user.avatar
                             },
                             modifier = Modifier.weight(1f).height(44.dp),
                             shape = RoundedCornerShape(8.dp)
@@ -455,7 +454,7 @@ fun UserEditDialog(
                                     tint = PrimaryNavy,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Text("Revert", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                                Text(strings.revertChanges, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                             }
                         }
                     }

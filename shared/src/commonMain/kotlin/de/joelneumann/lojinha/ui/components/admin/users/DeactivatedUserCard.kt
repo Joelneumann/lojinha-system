@@ -73,7 +73,7 @@ fun DeactivatedUserCard(
                         )
                     }
                     Text(
-                        text = "Balance: ${Formatting.formatBrl(user.balance)}" +
+                        text = "${strings.balance}: ${Formatting.formatBrl(user.balance)}" +
                                 if (user.userBarcodeNumber != null) " • ID: ${user.userBarcodeNumber}" else "",
                         fontSize = 13.sp,
                         color = TextSecondaryMuted

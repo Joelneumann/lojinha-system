@@ -101,7 +101,7 @@ fun ProductEditDialog(
                     options = UnitType.entries,
                     selected = unitType,
                     onSelect = { unitType = it },
-                    optionLabel = { it.name }
+                    optionLabel = { if (it == UnitType.PIECE) strings.unitPiece else strings.unitWeight }
                 )
 
                 Row(
@@ -228,7 +228,7 @@ fun ProductEditDialog(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "Barcode '${barcodeCode.trim()}' is already assigned to product '${newBarcodeConflictProduct.name}'!",
+                                text = strings.barcodeConflictAlreadyAssigned(barcodeCode.trim(), newBarcodeConflictProduct.name),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ColorDangerCrimson
@@ -252,7 +252,7 @@ fun ProductEditDialog(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = "Contains barcode assigned to product '${assignedBarcodeConflictProduct.name}'!",
+                            text = strings.barcodeConflictContainsAssigned(assignedBarcodeConflictProduct.name),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ColorDangerCrimson
@@ -306,7 +306,7 @@ fun ProductEditDialog(
                                     tint = PrimaryNavy,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Text("Revert", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                                Text(strings.revertChanges, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                             }
                         }
                     }

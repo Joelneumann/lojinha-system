@@ -113,14 +113,14 @@ fun AdminUserAccordionCard(
         headerBadges = {
             if (!user.isActive) {
                 AdminStatusBadge(
-                    text = "Deactivated",
+                    text = strings.deactivated,
                     type = AdminBadgeType.DANGER
                 )
             }
         },
         headerRightContent = {
             Text(
-                text = "Balance: ${Formatting.formatBrl(user.balance)}",
+                text = "${strings.balance}: ${Formatting.formatBrl(user.balance)}",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (user.balance >= 0) ColorSuccessEmerald else ColorDangerCrimson
@@ -140,7 +140,7 @@ fun AdminUserAccordionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "💵 Balance Change (+/-):",
+                    text = strings.balanceChangeLabel,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -149,7 +149,7 @@ fun AdminUserAccordionCard(
                 OutlinedTextField(
                     value = moneyInput,
                     onValueChange = { moneyInput = it },
-                    placeholder = { Text("e.g. 20 or -20", fontSize = 13.sp, color = TextSecondaryMuted) },
+                    placeholder = { Text(strings.amountPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(8.dp),
@@ -175,7 +175,7 @@ fun AdminUserAccordionCard(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(44.dp)
                 ) {
-                    Text("💵 Adjust Balance", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                    Text(strings.adjustBalanceBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                 }
             }
         }
@@ -185,7 +185,7 @@ fun AdminUserAccordionCard(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             AdminLabeledField(
-                label = "User Name",
+                label = strings.userNameLabel,
                 value = draftName,
                 onValueChange = { draftName = it },
                 modifier = Modifier.weight(1f)
@@ -202,7 +202,7 @@ fun AdminUserAccordionCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Reset PIN / Password",
+                        text = strings.resetPin,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = PrimaryNavy
@@ -214,14 +214,14 @@ fun AdminUserAccordionCard(
                     OutlinedTextField(
                         value = draftPin,
                         onValueChange = { draftPin = it },
-                        placeholder = { Text("New PIN (or blank for none)", fontSize = 13.sp, color = TextSecondaryMuted) },
+                        placeholder = { Text(strings.newPinOptionalPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
                         textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                         visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
                             IconButton(onClick = { isPinVisible = !isPinVisible }) {
                                 Icon(
                                     imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle PIN Visibility",
+                                    contentDescription = strings.hide,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -232,7 +232,7 @@ fun AdminUserAccordionCard(
                     )
                 } else {
                     OutlinedTextField(
-                        value = if (user.pin != null) "••••••••" else "No PIN set",
+                        value = if (user.pin != null) "••••••••" else strings.noPinSet,
                         onValueChange = {},
                         enabled = false,
                         textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
@@ -402,9 +402,9 @@ fun AdminUserAccordionCard(
                 onSelect = { draftSecondaryCurrency = it },
                 optionLabel = { curr ->
                     when (curr) {
-                        SecondaryCurrency.NONE -> "None"
-                        SecondaryCurrency.USD -> "USD ($)"
-                        SecondaryCurrency.EUR -> "EUR (€)"
+                        SecondaryCurrency.NONE -> strings.secondaryCurrencyNone
+                        SecondaryCurrency.USD -> strings.secondaryCurrencyUsd
+                        SecondaryCurrency.EUR -> strings.secondaryCurrencyEur
                     }
                 },
                 modifier = Modifier.weight(1f)
@@ -412,7 +412,6 @@ fun AdminUserAccordionCard(
         }
 
         if (isUserBarcodeIncomplete) {
-            val missingMsg = if (isBarcodeSymbolFilled) "Barcode Number (ID) is missing!" else "Barcode Symbol is missing!"
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -425,7 +424,7 @@ fun AdminUserAccordionCard(
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    text = "$missingMsg Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty.",
+                    text = strings.userBarcodeIncompleteWarning(isBarcodeSymbolFilled),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = ColorWarningAmber
@@ -446,7 +445,7 @@ fun AdminUserAccordionCard(
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    text = "Barcode '${barcodeToCheck}' is already assigned to user '${duplicateUser.name}'!",
+                    text = strings.barcodeConflictAlreadyAssignedToUser(barcodeToCheck, duplicateUser.name),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = ColorDangerCrimson
@@ -489,7 +488,7 @@ fun AdminUserAccordionCard(
                 onUnsavedStateChanged(false)
             },
             saveEnabled = hasUnsaved && draftName.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
-            toggleStatusText = if (user.isActive) "Deactivate" else "Activate",
+            toggleStatusText = if (user.isActive) strings.deactivate else strings.activate,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = user.isActive,
             onDelete = { showDeleteConfirm = true }
@@ -501,16 +500,15 @@ fun AdminUserAccordionCard(
         val isDeposit = cents > 0
         val absCents = kotlin.math.abs(cents)
         val formattedAmount = Formatting.formatBrl(absCents)
-        val actionText = if (isDeposit) "add $formattedAmount to" else "deduct $formattedAmount from"
 
         AlertDialog(
             onDismissRequest = { pendingBalanceAdjustment = null },
             title = { Text(strings.confirmBalanceAdjustmentTitle, fontWeight = FontWeight.Bold) },
-            text = { Text(strings.confirmBalanceAdjustmentMsg(actionText, user.name)) },
+            text = { Text(strings.confirmBalanceAdjustmentMsg(isDeposit, formattedAmount, user.name)) },
             confirmButton = {
                 Button(
                     onClick = {
-                        val note = if (isDeposit) "Deposit via Admin" else "Withdrawal via Admin"
+                        val note = if (isDeposit) strings.depositViaAdmin else strings.withdrawalViaAdmin
                         onAdjustBalance(user, absCents, note, isDeposit)
                         pendingBalanceAdjustment = null
                         moneyInput = ""
@@ -531,11 +529,10 @@ fun AdminUserAccordionCard(
     }
 
     if (showToggleActiveConfirm) {
-        val actionText = if (user.isActive) "deactivate" else "activate"
         AlertDialog(
             onDismissRequest = { showToggleActiveConfirm = false },
             title = { Text(strings.confirmUserStatusChangeTitle, fontWeight = FontWeight.Bold) },
-            text = { Text(strings.confirmUserStatusChangeMsg(actionText, user.name)) },
+            text = { Text(strings.confirmUserStatusChangeMsg(user.isActive, user.name)) },
             confirmButton = {
                 Button(
                     onClick = {

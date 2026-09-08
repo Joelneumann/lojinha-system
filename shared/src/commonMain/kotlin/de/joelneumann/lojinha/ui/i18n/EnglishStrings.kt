@@ -184,9 +184,13 @@ object EnglishStrings : AppStrings {
     override val balanceChangeLabel = "Balance Change (+/-):"
     override val adjustBalanceBtn = "Adjust Balance"
     override val confirmBalanceAdjustmentTitle = "Confirm Balance Adjustment"
-    override fun confirmBalanceAdjustmentMsg(actionText: String, userName: String) = "Are you sure you want to $actionText $userName's account balance?"
+    override fun confirmBalanceAdjustmentMsg(isDeposit: Boolean, formattedAmount: String, userName: String) =
+        if (isDeposit) "Are you sure you want to add $formattedAmount to $userName's account balance?"
+        else "Are you sure you want to deduct $formattedAmount from $userName's account balance?"
     override val confirmUserStatusChangeTitle = "Confirm Account Status Change"
-    override fun confirmUserStatusChangeMsg(actionText: String, userName: String) = "Are you sure you want to $actionText account '$userName'?"
+    override fun confirmUserStatusChangeMsg(isDeactivating: Boolean, userName: String) =
+        if (isDeactivating) "Are you sure you want to deactivate account '$userName'?"
+        else "Are you sure you want to activate account '$userName'?"
     override val confirmDeleteUserTitle = "Confirm Delete Account"
     override fun confirmDeleteUserMsg(userName: String) = "Are you sure you want to delete user account '$userName'?\n\nThe user account will be soft-deleted and moved to the 'Deleted Users' section at the bottom of the page."
     override val yesDeleteUser = "Yes, Delete User"
@@ -372,4 +376,47 @@ object EnglishStrings : AppStrings {
     override fun disconnectOneDriveConfirmMsg(account: String) = "Are you sure you want to disconnect your account ($account)?"
     override val disconnectOneDriveWarningMsg = "Scheduled cloud backups to OneDrive will no longer run until you reconnect your account."
     override val disconnectBtn = "Disconnect"
+
+    // --- Product Admin Page Confirmations & Actions ---
+    override val adjustStockBtn = "Adjust Stock"
+    override val stockDeltaPieceLabel = "Stock Delta (+/- units):"
+    override val stockDeltaWeightLabel = "Stock Delta (+/- kg):"
+    override val stockDeltaPiecePlaceholder = "e.g. +10 or -5"
+    override val stockDeltaWeightPlaceholder = "e.g. +2.500 or -0.500"
+    override val confirmStockAdjustmentTitle = "Confirm Stock Adjustment"
+    override fun confirmStockAdjustmentMsg(isAddition: Boolean, formattedDelta: String, productName: String) =
+        "Are you sure you want to ${if (isAddition) "ADD" else "REMOVE"} $formattedDelta ${if (isAddition) "to" else "from"} '$productName' inventory?"
+    override val confirmProductStatusChangeTitle = "Confirm Product Status Change"
+    override fun confirmProductStatusChangeMsg(isDisabling: Boolean, productName: String) =
+        "Are you sure you want to ${if (isDisabling) "disable" else "enable"} product '$productName'?"
+    override val confirmDeleteProductTitle = "Confirm Delete Product"
+    override fun confirmDeleteProductMsg(productName: String) =
+        "Are you sure you want to permanently delete product '$productName'?"
+    override val yesDeleteProduct = "Yes, Delete Product"
+    override val saveChanges = "Save Changes"
+    override val disable = "Disable"
+    override val enable = "Enable"
+    override val deactivate = "Deactivate"
+    override val activate = "Activate"
+    override fun barcodeConflictAlreadyAssigned(code: String, productName: String) =
+        "Barcode '$code' is already assigned to product '$productName'!"
+    override fun barcodeConflictContainsAssigned(productName: String) =
+        "Contains barcode assigned to product '$productName'!"
+
+    // --- Settings OneDrive & Backup Solution Badges ---
+    override fun oneDriveAccountLabel(email: String) = "Account: $email"
+    override val microsoftAccount = "Microsoft Account"
+    override val badgeOverwrite = "OVERWRITE"
+    override val badgeNewFile = "NEW FILE"
+    override val badgeRealtime = "REALTIME CHANGE"
+    override fun badgeTimed(time: String) = "TIMED $time"
+    override fun badgeInterval(hours: Int, minutes: Int) = "EVERY ${hours}h ${minutes}m"
+
+    // --- Admin User Actions & Warnings ---
+    override val depositViaAdmin = "Deposit via Admin"
+    override val withdrawalViaAdmin = "Withdrawal via Admin"
+    override fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String) =
+        "Barcode '$code' is already assigned to user '$userName'!"
+    override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
+        "${if (isSymbolFilled) "Barcode Number (ID)" else "Barcode Symbol"} is missing! Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty."
 }

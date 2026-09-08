@@ -547,7 +547,7 @@ fun AdminSettingsTabScreen(
                             ) {
                                 Column {
                                     Text(
-                                        text = "Account: ${settingsState.oneDriveAccountEmail ?: "Microsoft Account"}",
+                                        text = strings.oneDriveAccountLabel(settingsState.oneDriveAccountEmail ?: strings.microsoftAccount),
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = PrimaryNavy
@@ -680,9 +680,9 @@ fun AdminSettingsTabScreen(
                                     }
 
                                     val scheduleBadgeText = when (val cfg = routine.scheduleConfig) {
-                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed -> "TIMED ${cfg.timeOfDay}"
-                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Interval -> "EVERY ${cfg.intervalHours}h ${cfg.intervalMinutes}m"
-                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange -> "REALTIME CHANGE"
+                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed -> strings.badgeTimed(cfg.timeOfDay)
+                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Interval -> strings.badgeInterval(cfg.intervalHours, cfg.intervalMinutes)
+                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange -> strings.badgeRealtime
                                     }
 
                                     Card(
@@ -717,7 +717,7 @@ fun AdminSettingsTabScreen(
                                                          color = PrimaryNavy.copy(alpha = 0.08f),
                                                          shape = RoundedCornerShape(4.dp)
                                                      ) {
-                                                         val writeModeText = if (routine.writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) "OVERWRITE" else "NEW FILE"
+                                                         val writeModeText = if (routine.writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) strings.badgeOverwrite else strings.badgeNewFile
                                                          Text(writeModeText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                                      }
 

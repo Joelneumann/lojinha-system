@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
 @Composable
@@ -25,6 +26,8 @@ fun AdminCardActionsRow(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = I18n.current
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -54,7 +57,7 @@ fun AdminCardActionsRow(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = if (hasUnsaved) "Save Changes" else "Saved",
+                        text = if (hasUnsaved) strings.saveChanges else strings.saved,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -77,7 +80,7 @@ fun AdminCardActionsRow(
                             tint = PrimaryNavy,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text("Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Text(strings.revertChanges, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                     }
                 }
             }
@@ -128,7 +131,7 @@ fun AdminCardActionsRow(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "Delete",
+                        text = strings.delete,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = SurfaceWhite

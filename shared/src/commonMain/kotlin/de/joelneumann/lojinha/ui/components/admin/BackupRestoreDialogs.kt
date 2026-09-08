@@ -357,7 +357,7 @@ fun CsvImportMultiApprovalDialog(
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    text = if (step == 1) strings.step1CsvImportTitle(importType) else strings.step2AdminApprovalTitle,
+                    text = if (step == 1) strings.step1CsvImportTitle(if (importType == "Products") strings.products else strings.tabUsers) else strings.step2AdminApprovalTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp,
                     color = PrimaryNavy
@@ -376,10 +376,10 @@ fun CsvImportMultiApprovalDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("CSV File: ${file.name}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
-                            Text("Total Rows Found: ${importResultPreview.totalProcessed}", fontSize = 12.sp, color = AccentNavy)
-                            Text("New Records to Add: ${importResultPreview.addedCount}", fontSize = 12.sp, color = ColorSuccessEmerald)
-                            Text("Existing Records to Update: ${importResultPreview.updatedCount}", fontSize = 12.sp, color = PrimaryNavy)
+                            Text(strings.csvFileLabel(file.name), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
+                            Text(strings.totalRowsFoundLabel(importResultPreview.totalProcessed), fontSize = 12.sp, color = AccentNavy)
+                            Text(strings.newRecordsToAddLabel(importResultPreview.addedCount), fontSize = 12.sp, color = ColorSuccessEmerald)
+                            Text(strings.existingRecordsToUpdateLabel(importResultPreview.updatedCount), fontSize = 12.sp, color = PrimaryNavy)
                         }
                     }
 

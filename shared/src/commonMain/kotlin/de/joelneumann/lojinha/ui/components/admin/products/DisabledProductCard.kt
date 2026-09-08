@@ -63,7 +63,7 @@ fun DisabledProductCard(
                     )
                 }
                 Text(
-                    text = "Base Price: ${Formatting.formatBrl(product.basePrice)} • Stock: ${Formatting.formatQuantity(product.stockQuantity, product.unitType)}",
+                    text = "${strings.basePrice}: ${Formatting.formatBrl(product.basePrice)} • ${strings.stock}: ${Formatting.formatQuantity(product.stockQuantity, product.unitType)}",
                     fontSize = 13.sp,
                     color = TextSecondaryMuted
                 )

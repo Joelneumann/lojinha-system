@@ -184,9 +184,9 @@ interface AppStrings {
     val balanceChangeLabel: String
     val adjustBalanceBtn: String
     val confirmBalanceAdjustmentTitle: String
-    fun confirmBalanceAdjustmentMsg(actionText: String, userName: String): String
+    fun confirmBalanceAdjustmentMsg(isDeposit: Boolean, formattedAmount: String, userName: String): String
     val confirmUserStatusChangeTitle: String
-    fun confirmUserStatusChangeMsg(actionText: String, userName: String): String
+    fun confirmUserStatusChangeMsg(isDeactivating: Boolean, userName: String): String
     val confirmDeleteUserTitle: String
     fun confirmDeleteUserMsg(userName: String): String
     val yesDeleteUser: String
@@ -372,4 +372,40 @@ interface AppStrings {
     fun disconnectOneDriveConfirmMsg(account: String): String
     val disconnectOneDriveWarningMsg: String
     val disconnectBtn: String
+
+    // --- Product Admin Page Confirmations & Actions ---
+    val adjustStockBtn: String
+    val stockDeltaPieceLabel: String
+    val stockDeltaWeightLabel: String
+    val stockDeltaPiecePlaceholder: String
+    val stockDeltaWeightPlaceholder: String
+    val confirmStockAdjustmentTitle: String
+    fun confirmStockAdjustmentMsg(isAddition: Boolean, formattedDelta: String, productName: String): String
+    val confirmProductStatusChangeTitle: String
+    fun confirmProductStatusChangeMsg(isDisabling: Boolean, productName: String): String
+    val confirmDeleteProductTitle: String
+    fun confirmDeleteProductMsg(productName: String): String
+    val yesDeleteProduct: String
+    val saveChanges: String
+    val disable: String
+    val enable: String
+    val deactivate: String
+    val activate: String
+    fun barcodeConflictAlreadyAssigned(code: String, productName: String): String
+    fun barcodeConflictContainsAssigned(productName: String): String
+
+    // --- Settings OneDrive & Backup Solution Badges ---
+    fun oneDriveAccountLabel(email: String): String
+    val microsoftAccount: String
+    val badgeOverwrite: String
+    val badgeNewFile: String
+    val badgeRealtime: String
+    fun badgeTimed(time: String): String
+    fun badgeInterval(hours: Int, minutes: Int): String
+
+    // --- Admin User Actions & Warnings ---
+    val depositViaAdmin: String
+    val withdrawalViaAdmin: String
+    fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String): String
+    fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean): String
 }
