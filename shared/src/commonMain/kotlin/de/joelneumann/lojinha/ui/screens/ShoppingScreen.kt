@@ -246,7 +246,7 @@ fun ShoppingContent(
                 modifier = Modifier
                     .weight(1.3f)
                     .fillMaxHeight()
-                    .padding(20.dp)
+                    .padding(ScreenPadding)
             ) {
                 // User Header Row
                 UserBalanceHeader(

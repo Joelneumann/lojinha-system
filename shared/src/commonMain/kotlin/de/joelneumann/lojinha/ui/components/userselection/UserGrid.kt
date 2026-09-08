@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.theme.ScreenPadding
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 
 @Composable
@@ -37,7 +38,7 @@ fun UserGrid(
             columns = GridCells.Adaptive(minSize = 160.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            contentPadding = PaddingValues(bottom = ScreenPadding),
             modifier = modifier.fillMaxSize()
         ) {
             items(users, key = { it.id }) { user ->

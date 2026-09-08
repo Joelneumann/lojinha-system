@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 
 /**
  * UI Scale Factors.
@@ -16,6 +17,8 @@ import androidx.compose.ui.unit.Density
  */
 const val DEV_UI_SCALE_FACTOR: Float = 1.15f
 const val WEB_UI_SCALE_FACTOR: Float = 1.00f
+
+val ScreenPadding = 20.dp
 
 val SurfaceWhite = Color(0xFFFFFFFF)
 val SurfaceContainerLight = Color(0xFFF8FAFC)

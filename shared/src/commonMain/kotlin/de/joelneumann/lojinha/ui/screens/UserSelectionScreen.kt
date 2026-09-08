@@ -128,7 +128,7 @@ fun UserSelectionContent(
             modifier = Modifier
                 .fillMaxSize()
                 .background(SurfaceContainerLight)
-                .padding(24.dp)
+                .padding(ScreenPadding)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 SearchInputField(

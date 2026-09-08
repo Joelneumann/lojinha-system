@@ -93,7 +93,7 @@ fun AdminScreen(
                     .fillMaxWidth()
                     .background(SurfaceWhite)
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = if (isMobile) 10.dp else 20.dp, vertical = 10.dp),
+                    .padding(horizontal = if (isMobile) 10.dp else ScreenPadding, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -151,7 +151,7 @@ fun AdminScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(if (isMobile) 10.dp else 20.dp)
+                    .padding(if (isMobile) 10.dp else ScreenPadding)
             ) {
                 when (currentTab) {
                     AdminTab.PRODUCTS -> {

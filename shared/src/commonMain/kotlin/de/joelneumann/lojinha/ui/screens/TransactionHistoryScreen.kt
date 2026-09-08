@@ -257,7 +257,7 @@ fun TransactionHistoryContent(
             modifier = Modifier
                 .fillMaxSize()
                 .background(SurfaceContainerLight)
-                .padding(24.dp)
+                .padding(ScreenPadding)
         ) {
             // Top Row: Reused UserBalanceHeader (Left) & User Settings Button (Right)
             Row(
@@ -297,7 +297,7 @@ fun TransactionHistoryContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Search & Filter Bar reusing SearchInputField
             TransactionFilterBar(

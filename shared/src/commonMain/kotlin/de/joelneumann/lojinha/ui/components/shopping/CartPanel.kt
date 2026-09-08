@@ -41,7 +41,7 @@ fun CartPanel(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp)
+                .padding(ScreenPadding)
         ) {
             Text(
                 text = strings.cart,
