@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.AvatarType
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
@@ -55,7 +56,13 @@ fun UserSettingsModalDialog(
     var isPinVisible by remember { mutableStateOf(false) }
     var isAvatarExpanded by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        )
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
@@ -351,6 +358,12 @@ fun UserSettingsModalDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                val newPin = if (pinInput.isBlank()) null else pinInput.trim()
+                val hasChanges = (newPin != user.pin) ||
+                        (selectedLanguage != user.language) ||
+                        (selectedSecondaryCurrency != user.secondaryCurrency) ||
+                        (selectedAvatar != user.avatar)
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -365,11 +378,12 @@ fun UserSettingsModalDialog(
 
                     Button(
                         onClick = onSave,
+                        enabled = hasChanges,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                     ) {
-                        Text(strings.save, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                        Text(strings.save, fontWeight = FontWeight.Bold)
                     }
                 }
             }
