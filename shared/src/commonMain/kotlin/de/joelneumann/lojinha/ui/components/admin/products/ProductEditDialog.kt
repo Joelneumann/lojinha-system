@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.Barcode
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.UnitType
@@ -35,7 +36,7 @@ fun ProductEditDialog(
     val isNewProduct = remember(product.id) { product.id.isBlank() || product.name.isBlank() }
 
     var name by remember { mutableStateOf(product.name) }
-    var basePriceBrl by remember { mutableStateOf(if (isNewProduct) "0,00" else (product.basePrice.toDouble() / 100.0).toString().replace('.', ',')) }
+    var basePriceBrl by remember { mutableStateOf(if (isNewProduct) "0,00" else Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()) }
     var unitType by remember { mutableStateOf(product.unitType) }
     var stockQuantity by remember { mutableStateOf(if (isNewProduct) "0" else Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)) }
     var customMarkup by remember { mutableStateOf(product.customMarkupPercent?.toString() ?: "") }
@@ -53,7 +54,13 @@ fun ProductEditDialog(
         allProducts.firstOrNull { p -> p.id != product.id && p.barcodes.any { b -> barcodeList.any { bl -> bl.code.equals(b.code, ignoreCase = true) } } }
     }
 
-    Dialog(onDismissRequest = onCancel) {
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        )
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
@@ -326,7 +333,7 @@ fun ProductEditDialog(
                             )
                             onSave(updated)
                         },
-                        enabled = name.isNotBlank() && assignedBarcodeConflictProduct == null,
+                        enabled = name.isNotBlank() && assignedBarcodeConflictProduct == null && (isNewProduct || hasDialogChanges),
                         modifier = Modifier.weight(1f).height(44.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp)

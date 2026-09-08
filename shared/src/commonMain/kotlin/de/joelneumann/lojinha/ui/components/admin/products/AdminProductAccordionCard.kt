@@ -1,6 +1,5 @@
 package de.joelneumann.lojinha.ui.components.admin.products
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -12,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Barcode
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.ui.components.admin.*
@@ -23,74 +21,26 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 @Composable
 fun AdminProductAccordionCard(
     product: Product,
-    allProducts: List<Product>,
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
-    onSaveProduct: (Product) -> Unit,
+    onEditProduct: (Product) -> Unit,
     onAdjustStock: (String, Long) -> Unit,
     onToggleActive: (Product) -> Unit,
     onDeleteProduct: (Product) -> Unit,
-    onUnsavedStateChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
-
-    var draftName by remember(product.id, product.name) { mutableStateOf(product.name) }
-    var draftPriceBrl by remember(product.id, product.basePrice) {
-        mutableStateOf(Formatting.formatBrl(product.basePrice).replace("R$", "").trim())
-    }
-    var draftUnitType by remember(product.id, product.unitType) { mutableStateOf(product.unitType) }
-    var draftStock by remember(product.id, product.stockQuantity, product.unitType) {
-        mutableStateOf(Formatting.formatStockForAdmin(product.stockQuantity, product.unitType))
-    }
-    var draftMarkup by remember(product.id, product.customMarkupPercent) {
-        mutableStateOf(product.customMarkupPercent?.toString() ?: "")
-    }
-    var draftBarcodes by remember(product.id, product.barcodes) { mutableStateOf(product.barcodes) }
-
-    var newBarcodeCode by remember(product.id) { mutableStateOf("") }
-    var newBarcodeDesc by remember(product.id) { mutableStateOf("") }
-
-    val newBarcodeConflictProduct = remember(newBarcodeCode, allProducts, product.id) {
-        val trimmed = newBarcodeCode.trim()
-        if (trimmed.isBlank()) null
-        else allProducts.firstOrNull { p -> p.id != product.id && p.barcodes.any { b -> b.code.equals(trimmed, ignoreCase = true) } }
-    }
-
-    val assignedBarcodeConflictProduct = remember(draftBarcodes, allProducts, product.id) {
-        allProducts.firstOrNull { p -> p.id != product.id && p.barcodes.any { b -> draftBarcodes.any { db -> db.code.equals(b.code, ignoreCase = true) } } }
-    }
 
     var stockDeltaInput by remember(product.id) { mutableStateOf("") }
     var pendingStockAdjustment by remember { mutableStateOf<Long?>(null) }
     var showToggleActiveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    val initialPriceBrl = remember(product.basePrice) { Formatting.formatBrl(product.basePrice).replace("R$", "").trim() }
-    val initialStockAdmin = remember(product.stockQuantity, product.unitType) { Formatting.formatStockForAdmin(product.stockQuantity, product.unitType) }
-
-    val hasUnsaved = remember(
-        draftName, draftPriceBrl, draftUnitType, draftStock, draftMarkup, draftBarcodes, product
-    ) {
-        draftName != product.name ||
-                draftPriceBrl != initialPriceBrl ||
-                draftUnitType != product.unitType ||
-                draftStock != initialStockAdmin ||
-                draftMarkup != (product.customMarkupPercent?.toString() ?: "") ||
-                draftBarcodes != product.barcodes
-    }
-
-    LaunchedEffect(hasUnsaved, isExpanded) {
-        if (isExpanded) {
-            onUnsavedStateChanged(hasUnsaved)
-        }
-    }
-
     AdminAccordionCard(
         title = product.name,
         isExpanded = isExpanded,
         onExpandToggle = onExpandToggle,
-        hasUnsaved = hasUnsaved,
+        hasUnsaved = false,
         modifier = modifier,
         headerBadges = {
             if (!product.isActive) {
@@ -148,7 +98,13 @@ fun AdminProductAccordionCard(
                 OutlinedTextField(
                     value = stockDeltaInput,
                     onValueChange = { stockDeltaInput = it },
-                    placeholder = { Text(if (product.unitType == UnitType.PIECE) strings.stockDeltaPiecePlaceholder else strings.stockDeltaWeightPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
+                    placeholder = {
+                        Text(
+                            if (product.unitType == UnitType.PIECE) strings.stockDeltaPiecePlaceholder else strings.stockDeltaWeightPlaceholder,
+                            fontSize = 13.sp,
+                            color = TextSecondaryMuted
+                        )
+                    },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(8.dp),
@@ -172,233 +128,13 @@ fun AdminProductAccordionCard(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(44.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Inventory,
-                            contentDescription = null,
-                            tint = SurfaceWhite,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(strings.adjustStockBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
-                    }
+                    Text(strings.adjustStockBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                 }
             }
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            AdminLabeledField(
-                label = strings.productNameLabel,
-                value = draftName,
-                onValueChange = { draftName = it },
-                placeholder = strings.productNamePlaceholder,
-                modifier = Modifier.weight(1.5f)
-            )
-
-            AdminLabeledField(
-                label = strings.basePriceBrlLabel,
-                value = draftPriceBrl,
-                onValueChange = { draftPriceBrl = it },
-                placeholder = strings.zeroPricePlaceholder,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        AdminSegmentedOptionsRow(
-            label = strings.unitTypeLabel,
-            options = UnitType.entries,
-            selected = draftUnitType,
-            onSelect = { draftUnitType = it },
-            optionLabel = { if (it == UnitType.PIECE) strings.unitPiece else strings.unitWeight }
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            AdminLabeledField(
-                label = if (draftUnitType == UnitType.PIECE) strings.stockQtyUnitsLabel else strings.stockQtyKgLabel,
-                value = draftStock,
-                onValueChange = { draftStock = it },
-                modifier = Modifier.weight(1f)
-            )
-
-            AdminLabeledField(
-                label = strings.customMarkupOptionalLabel,
-                value = draftMarkup,
-                onValueChange = { draftMarkup = it },
-                placeholder = strings.standardPlaceholder,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(strings.associatedBarcodesTitle(draftBarcodes.size), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-            Spacer(modifier = Modifier.height(6.dp))
-
-            if (draftBarcodes.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    draftBarcodes.forEach { b ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = SurfaceContainerHighLight,
-                            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Sell,
-                                    contentDescription = null,
-                                    tint = PrimaryNavy,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Text("${b.code}${if (b.description != null) " (${b.description})" else ""}", fontSize = 12.sp, color = PrimaryNavy)
-                                Text(
-                                    text = "✕",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ColorDangerCrimson,
-                                    modifier = Modifier.clickable {
-                                        draftBarcodes = draftBarcodes.filter { it.code != b.code }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = newBarcodeCode,
-                    onValueChange = { newBarcodeCode = it },
-                    placeholder = { Text(strings.barcodeCodePlaceholder, fontSize = 12.sp) },
-                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                    modifier = Modifier.weight(1f).height(56.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = newBarcodeDesc,
-                    onValueChange = { newBarcodeDesc = it },
-                    placeholder = { Text(strings.descriptionOptionalPlaceholder, fontSize = 12.sp) },
-                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                    modifier = Modifier.weight(1f).height(56.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    singleLine = true
-                )
-
-                Button(
-                    onClick = {
-                        if (newBarcodeCode.isNotBlank() && newBarcodeConflictProduct == null) {
-                            val code = newBarcodeCode.trim()
-                            if (draftBarcodes.none { it.code.equals(code, ignoreCase = true) }) {
-                                draftBarcodes = draftBarcodes + Barcode(code, newBarcodeDesc.trim().ifBlank { null })
-                                newBarcodeCode = ""
-                                newBarcodeDesc = ""
-                            }
-                        }
-                    },
-                    enabled = newBarcodeCode.isNotBlank() && newBarcodeConflictProduct == null,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                    modifier = Modifier.height(52.dp)
-                ) {
-                    Text(strings.addBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            if (newBarcodeConflictProduct != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Error,
-                        contentDescription = null,
-                        tint = ColorDangerCrimson,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = strings.barcodeConflictAlreadyAssigned(newBarcodeCode.trim(), newBarcodeConflictProduct.name),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorDangerCrimson
-                    )
-                }
-            }
-
-            if (assignedBarcodeConflictProduct != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Error,
-                        contentDescription = null,
-                        tint = ColorDangerCrimson,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = strings.barcodeConflictContainsAssigned(assignedBarcodeConflictProduct.name),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorDangerCrimson
-                    )
-                }
-            }
-        }
-
-        HorizontalDivider(color = DividerBorder)
 
         AdminCardActionsRow(
-            hasUnsaved = hasUnsaved,
-            onSave = {
-                val priceCents = kotlin.math.round((draftPriceBrl.replace(',', '.').toDoubleOrNull() ?: 0.0) * 100).toLong()
-                val stock = Formatting.parseAdminStockToDb(draftStock, draftUnitType) ?: 0L
-                val markup = draftMarkup.toDoubleOrNull()
-                val updated = product.copy(
-                    name = draftName.trim(),
-                    basePrice = priceCents,
-                    unitType = draftUnitType,
-                    stockQuantity = stock,
-                    customMarkupPercent = markup,
-                    barcodes = draftBarcodes
-                )
-                onSaveProduct(updated)
-                onUnsavedStateChanged(false)
-            },
-            onRevert = {
-                draftName = product.name
-                draftPriceBrl = initialPriceBrl
-                draftUnitType = product.unitType
-                draftStock = initialStockAdmin
-                draftMarkup = product.customMarkupPercent?.toString() ?: ""
-                draftBarcodes = product.barcodes
-                newBarcodeCode = ""
-                newBarcodeDesc = ""
-                onUnsavedStateChanged(false)
-            },
-            saveEnabled = hasUnsaved && draftName.isNotBlank() && assignedBarcodeConflictProduct == null,
+            onEdit = { onEditProduct(product) },
             toggleStatusText = if (product.isActive) strings.disable else strings.enable,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = product.isActive,

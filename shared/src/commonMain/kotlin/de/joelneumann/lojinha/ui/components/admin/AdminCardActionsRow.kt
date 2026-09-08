@@ -16,10 +16,7 @@ import de.joelneumann.lojinha.ui.theme.*
 
 @Composable
 fun AdminCardActionsRow(
-    hasUnsaved: Boolean,
-    onSave: () -> Unit,
-    onRevert: () -> Unit,
-    saveEnabled: Boolean,
+    onEdit: () -> Unit,
     toggleStatusText: String,
     onToggleStatus: () -> Unit,
     isStatusActive: Boolean,
@@ -33,56 +30,28 @@ fun AdminCardActionsRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Button(
+            onClick = onEdit,
+            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.height(40.dp)
         ) {
-            Button(
-                onClick = onSave,
-                enabled = saveEnabled,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AccentNavy,
-                    disabledContainerColor = SurfaceContainerHighLight
-                ),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(42.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = if (hasUnsaved) Icons.Default.Save else Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = if (hasUnsaved) strings.saveChanges else strings.saved,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            if (hasUnsaved) {
-                OutlinedButton(
-                    onClick = onRevert,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(42.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Undo,
-                            contentDescription = null,
-                            tint = PrimaryNavy,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(strings.revertChanges, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                    }
-                }
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = null,
+                    tint = SurfaceWhite,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = strings.edit,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SurfaceWhite
+                )
             }
         }
 
@@ -93,7 +62,7 @@ fun AdminCardActionsRow(
             OutlinedButton(
                 onClick = onToggleStatus,
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(42.dp)
+                modifier = Modifier.height(40.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -118,7 +87,7 @@ fun AdminCardActionsRow(
                 onClick = onDelete,
                 colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(42.dp)
+                modifier = Modifier.height(40.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -141,3 +110,4 @@ fun AdminCardActionsRow(
         }
     }
 }
+

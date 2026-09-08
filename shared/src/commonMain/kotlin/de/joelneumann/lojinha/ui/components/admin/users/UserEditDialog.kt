@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.User
@@ -79,7 +80,13 @@ fun UserEditDialog(
     val isBarcodeNumberFilled = barcodeNumber.isNotBlank()
     val isUserBarcodeIncomplete = (isBarcodeSymbolFilled && !isBarcodeNumberFilled) || (!isBarcodeSymbolFilled && isBarcodeNumberFilled)
 
-    Dialog(onDismissRequest = onCancel) {
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        )
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
@@ -408,9 +415,9 @@ fun UserEditDialog(
 
                 HorizontalDivider(color = DividerBorder)
 
+                val isPinChanged = if (isNewUser) pin.isNotBlank() else (shouldResetPin && (pin.trim().ifBlank { null } != user.pin))
                 val hasDialogChanges = name != user.name ||
-                        (isNewUser && pin.isNotBlank()) ||
-                        (!isNewUser && shouldResetPin && pin.isNotBlank()) ||
+                        isPinChanged ||
                         selectedLang != user.language ||
                         selectedSecondaryCurrency != user.secondaryCurrency ||
                         selectedAvatar != user.avatar ||
@@ -478,7 +485,7 @@ fun UserEditDialog(
                             )
                             onSave(updated)
                         },
-                        enabled = name.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
+                        enabled = name.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete && (isNewUser || hasDialogChanges),
                         modifier = Modifier.weight(1f).height(44.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp)

@@ -1,114 +1,43 @@
 package de.joelneumann.lojinha.ui.components.admin.users
 
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.AvatarType
-import de.joelneumann.lojinha.domain.model.Language
-import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.User
-import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.ui.components.admin.*
-import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_COLORS
-import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_EMOJIS
-import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
-import de.joelneumann.lojinha.ui.components.userselection.parseHexColor
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-
 @Composable
 fun AdminUserAccordionCard(
     user: User,
-    allUsers: List<User>,
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
-    onSaveUser: (User) -> Unit,
+    onEditUser: (User) -> Unit,
     onAdjustBalance: (User, Long, String, Boolean) -> Unit,
     onToggleActive: (User) -> Unit,
     onDeleteUser: (User) -> Unit,
-    onUnsavedStateChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
-
-    var draftName by remember(user.id, user.name) { mutableStateOf(user.name) }
-    var shouldResetPin by remember(user.id) { mutableStateOf(false) }
-    var draftPin by remember(user.id) { mutableStateOf("") }
-    var isPinVisible by remember { mutableStateOf(false) }
-
-    var draftUserBarcode by remember(user.id, user.userBarcode) { mutableStateOf(user.userBarcode ?: "") }
-    var draftUserBarcodeNumber by remember(user.id, user.userBarcodeNumber) { mutableStateOf(user.userBarcodeNumber ?: "") }
-    var draftLanguage by remember(user.id, user.language) { mutableStateOf(user.language) }
-    var draftSecondaryCurrency by remember(user.id, user.secondaryCurrency) { mutableStateOf(user.secondaryCurrency) }
-    var draftAvatar by remember(user.id, user.avatar) { mutableStateOf(user.avatar) }
-
-    val barcodeToCheck = remember(draftUserBarcode, draftUserBarcodeNumber) {
-        val b1 = draftUserBarcode.trim()
-        val b2 = draftUserBarcodeNumber.trim()
-        if (b2.isNotBlank()) b2 else b1
-    }
-
-    val duplicateUser = remember(barcodeToCheck, allUsers, user.id) {
-        if (barcodeToCheck.isBlank()) null
-        else allUsers.firstOrNull { u ->
-            !u.isDeleted && u.id != user.id && (
-                (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(barcodeToCheck, ignoreCase = true)) ||
-                (u.userBarcode != null && u.userBarcode.equals(barcodeToCheck, ignoreCase = true))
-            )
-        }
-    }
-
-    val isBarcodeSymbolFilled = draftUserBarcode.isNotBlank()
-    val isBarcodeNumberFilled = draftUserBarcodeNumber.isNotBlank()
-    val isUserBarcodeIncomplete = (isBarcodeSymbolFilled && !isBarcodeNumberFilled) || (!isBarcodeSymbolFilled && isBarcodeNumberFilled)
 
     var moneyInput by remember(user.id) { mutableStateOf("") }
     var pendingBalanceAdjustment by remember { mutableStateOf<Long?>(null) }
     var showToggleActiveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    val hasUnsaved = remember(
-        draftName, shouldResetPin, draftPin, draftUserBarcode, draftUserBarcodeNumber, draftLanguage, draftSecondaryCurrency, draftAvatar, user
-    ) {
-        draftName != user.name ||
-                shouldResetPin ||
-                draftUserBarcode != (user.userBarcode ?: "") ||
-                draftUserBarcodeNumber != (user.userBarcodeNumber ?: "") ||
-                draftLanguage != user.language ||
-                draftSecondaryCurrency != user.secondaryCurrency ||
-                draftAvatar != user.avatar
-    }
-
-    LaunchedEffect(hasUnsaved, isExpanded) {
-        if (isExpanded) {
-            onUnsavedStateChanged(hasUnsaved)
-        }
-    }
-
     AdminAccordionCard(
         title = user.name,
         isExpanded = isExpanded,
         onExpandToggle = onExpandToggle,
-        hasUnsaved = hasUnsaved,
+        hasUnsaved = false,
         modifier = modifier,
         headerBadges = {
             if (!user.isActive) {
@@ -180,314 +109,8 @@ fun AdminUserAccordionCard(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            AdminLabeledField(
-                label = strings.userNameLabel,
-                value = draftName,
-                onValueChange = { draftName = it },
-                modifier = Modifier.weight(1f)
-            )
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { shouldResetPin = !shouldResetPin }
-                ) {
-                    Checkbox(
-                        checked = shouldResetPin,
-                        onCheckedChange = { shouldResetPin = it }
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = strings.resetPin,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = PrimaryNavy
-                    )
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-
-                if (shouldResetPin) {
-                    OutlinedTextField(
-                        value = draftPin,
-                        onValueChange = { draftPin = it },
-                        placeholder = { Text(strings.newPinOptionalPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
-                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                        visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { isPinVisible = !isPinVisible }) {
-                                Icon(
-                                    imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = strings.hide,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                } else {
-                    OutlinedTextField(
-                        value = if (user.pin != null) "••••••••" else strings.noPinSet,
-                        onValueChange = {},
-                        enabled = false,
-                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            disabledContainerColor = SurfaceContainerHighLight,
-                            disabledTextColor = TextSecondaryMuted,
-                            disabledBorderColor = DividerBorder
-                        )
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            AdminLabeledField(
-                label = strings.barcodeSymbolLabel,
-                value = draftUserBarcode,
-                onValueChange = {
-                    draftUserBarcode = it
-                    if (draftUserBarcodeNumber.isBlank()) draftUserBarcodeNumber = it
-                },
-                placeholder = strings.barcodeSymbolPlaceholder,
-                modifier = Modifier.weight(1f)
-            )
-
-            AdminLabeledField(
-                label = strings.barcodeNumberIdLabel,
-                value = draftUserBarcodeNumber,
-                onValueChange = { draftUserBarcodeNumber = it },
-                placeholder = strings.barcodeNumberIdPlaceholder,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(strings.profileAvatarColorTitle, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    UserAvatar(
-                        user = user,
-                        customAvatar = draftAvatar,
-                        modifier = Modifier.size(44.dp),
-                        fontSize = 20.sp
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = draftAvatar.type == AvatarType.INITIALS,
-                            onClick = { draftAvatar = draftAvatar.copy(type = AvatarType.INITIALS) },
-                            label = { Text(strings.initialsLabel, fontSize = 12.sp) }
-                        )
-                        FilterChip(
-                            selected = draftAvatar.type == AvatarType.EMOJI,
-                            onClick = { draftAvatar = draftAvatar.copy(type = AvatarType.EMOJI) },
-                            label = { Text(strings.emojiLabel, fontSize = 12.sp) }
-                        )
-                    }
-                }
-
-                if (draftAvatar.type == AvatarType.EMOJI) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        PRESET_AVATAR_EMOJIS.forEach { emoji ->
-                            val isSelected = draftAvatar.emoji == emoji
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isSelected) AccentNavy.copy(alpha = 0.2f) else SurfaceWhite)
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.dp,
-                                        color = if (isSelected) AccentNavy else DividerBorder,
-                                        shape = CircleShape
-                                    )
-                                    .clickable { draftAvatar = draftAvatar.copy(emoji = emoji) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(text = emoji, fontSize = 14.sp)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(strings.avatarColorTitle, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    PRESET_AVATAR_COLORS.forEach { colorHex ->
-                        val isSelected = draftAvatar.colorHex.equals(colorHex, ignoreCase = true)
-                        val chipColor = parseHexColor(colorHex)
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(chipColor)
-                                .border(
-                                    width = if (isSelected) 2.5.dp else 1.dp,
-                                    color = if (isSelected) PrimaryNavy else SurfaceWhite.copy(alpha = 0.5f),
-                                    shape = CircleShape
-                                )
-                                .clickable { draftAvatar = draftAvatar.copy(colorHex = colorHex) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = SurfaceWhite,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            AdminSegmentedOptionsRow(
-                label = strings.preferredLanguage,
-                options = Language.entries,
-                selected = draftLanguage,
-                onSelect = { draftLanguage = it },
-                optionContent = { lang ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon(language = lang, width = 16.dp, height = 11.dp)
-                        Text(lang.code.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            )
-
-            AdminSegmentedOptionsRow(
-                label = strings.secondaryCurrency,
-                options = SecondaryCurrency.entries,
-                selected = draftSecondaryCurrency,
-                onSelect = { draftSecondaryCurrency = it },
-                optionLabel = { curr ->
-                    when (curr) {
-                        SecondaryCurrency.NONE -> strings.secondaryCurrencyNone
-                        SecondaryCurrency.USD -> strings.secondaryCurrencyUsd
-                        SecondaryCurrency.EUR -> strings.secondaryCurrencyEur
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        if (isUserBarcodeIncomplete) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(top = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = ColorWarningAmber,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = strings.userBarcodeIncompleteWarning(isBarcodeSymbolFilled),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorWarningAmber
-                )
-            }
-        }
-
-        if (duplicateUser != null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(top = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Error,
-                    contentDescription = null,
-                    tint = ColorDangerCrimson,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = strings.barcodeConflictAlreadyAssignedToUser(barcodeToCheck, duplicateUser.name),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorDangerCrimson
-                )
-            }
-        }
-
-        HorizontalDivider(color = DividerBorder)
-
         AdminCardActionsRow(
-            hasUnsaved = hasUnsaved,
-            onSave = {
-                val bCode = draftUserBarcode.trim().ifBlank { null }
-                val bNum = draftUserBarcodeNumber.trim().ifBlank { null }
-                val finalPin = if (shouldResetPin) draftPin.trim().ifBlank { null } else user.pin
-                val updatedUser = user.copy(
-                    name = draftName.trim(),
-                    pin = finalPin,
-                    userBarcode = if (bCode != null && bNum != null) bCode else null,
-                    userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
-                    language = draftLanguage,
-                    secondaryCurrency = draftSecondaryCurrency,
-                    avatar = draftAvatar
-                )
-                onSaveUser(updatedUser)
-                shouldResetPin = false
-                draftPin = ""
-                onUnsavedStateChanged(false)
-            },
-            onRevert = {
-                draftName = user.name
-                shouldResetPin = false
-                draftPin = ""
-                draftUserBarcode = user.userBarcode ?: ""
-                draftUserBarcodeNumber = user.userBarcodeNumber ?: ""
-                draftLanguage = user.language
-                draftSecondaryCurrency = user.secondaryCurrency
-                draftAvatar = user.avatar
-                moneyInput = ""
-                onUnsavedStateChanged(false)
-            },
-            saveEnabled = hasUnsaved && draftName.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
+            onEdit = { onEditUser(user) },
             toggleStatusText = if (user.isActive) strings.deactivate else strings.activate,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = user.isActive,

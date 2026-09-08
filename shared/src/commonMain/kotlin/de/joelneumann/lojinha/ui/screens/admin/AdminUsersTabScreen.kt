@@ -46,6 +46,10 @@ fun AdminUsersTabScreen(
 
     val strings = I18n.current
 
+    LaunchedEffect(Unit) {
+        onUnsavedStateChanged(false)
+    }
+
     val activeUsers = remember(users) { users.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name } }
     val deactivatedUsers = remember(users) { users.filter { !it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name } }
     val deletedUsers = remember(users) { users.filter { it.isDeleted }.sortedByAccentInsensitive { it.name } }
@@ -117,17 +121,15 @@ fun AdminUsersTabScreen(
                     val isExpanded = expandedUserId == user.id
                     AdminUserAccordionCard(
                         user = user,
-                        allUsers = users,
                         isExpanded = isExpanded,
                         onExpandToggle = { onRequestToggleExpand(user.id) },
-                        onSaveUser = viewModel::saveUser,
+                        onEditUser = { viewModel.openEditUserModal(it) },
                         onAdjustBalance = { u, absCents, note, isDeposit ->
                             val delta = if (isDeposit) absCents else -absCents
                             viewModel.adjustUserBalance(u.id, u.name, delta, note)
                         },
                         onToggleActive = viewModel::toggleUserActive,
-                        onDeleteUser = { viewModel.softDeleteUser(it.id) },
-                        onUnsavedStateChanged = onUnsavedStateChanged
+                        onDeleteUser = { viewModel.softDeleteUser(it.id) }
                     )
                 }
             }

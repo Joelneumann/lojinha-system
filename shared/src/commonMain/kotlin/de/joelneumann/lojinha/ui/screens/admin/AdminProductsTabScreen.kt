@@ -42,6 +42,10 @@ fun AdminProductsTabScreen(
 
     val listState = rememberLazyListState()
 
+    LaunchedEffect(Unit) {
+        onUnsavedStateChanged(false)
+    }
+
     LaunchedEffect(sortOption) {
         listState.scrollToItem(0)
     }
@@ -115,14 +119,12 @@ fun AdminProductsTabScreen(
                     val isExpanded = expandedProductId == product.id
                     AdminProductAccordionCard(
                         product = product,
-                        allProducts = products,
                         isExpanded = isExpanded,
                         onExpandToggle = { onRequestToggleExpand(product.id) },
-                        onSaveProduct = viewModel::saveProduct,
+                        onEditProduct = { viewModel.openEditProductModal(it) },
                         onAdjustStock = viewModel::adjustProductStock,
                         onToggleActive = viewModel::toggleProductActive,
-                        onDeleteProduct = { viewModel.deleteProduct(it.id) },
-                        onUnsavedStateChanged = onUnsavedStateChanged
+                        onDeleteProduct = { viewModel.deleteProduct(it.id) }
                     )
                 }
             }
