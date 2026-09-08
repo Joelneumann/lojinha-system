@@ -3,6 +3,7 @@ package de.joelneumann.lojinha.ui.screens.admin
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +33,12 @@ fun AdminTransactionsTabScreen(
     val pageSize by viewModel.pageSize.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
 
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(currentPage, pageSize, searchQuery) {
+        listState.scrollToItem(0)
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         val openFirstResult = {
             if (transactions.isNotEmpty()) {
@@ -55,6 +62,7 @@ fun AdminTransactionsTabScreen(
             }
         } else {
             LazyColumn(
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 16.dp),
                 modifier = Modifier.weight(1f).fillMaxWidth()

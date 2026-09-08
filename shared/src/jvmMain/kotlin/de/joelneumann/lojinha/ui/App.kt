@@ -32,6 +32,8 @@ import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.joelneumann.lojinha.ui.viewmodel.*
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
@@ -207,17 +209,17 @@ fun App() {
                     }
 
                     AppScreen.ADMIN_PANEL -> {
-                        val adminProductsViewModel: AdminProductsViewModel = viewModel(
-                            factory = LojinhaViewModelFactory.createAdminProductsViewModelFactory(productRepository, settingsRepository)
-                        )
-                        val adminUsersViewModel: AdminUsersViewModel = viewModel(
-                            factory = LojinhaViewModelFactory.createAdminUsersViewModelFactory(userRepository, transactionRepository)
-                        )
-                        val adminTransactionsViewModel: AdminTransactionsViewModel = viewModel(
-                            factory = LojinhaViewModelFactory.createAdminTransactionsViewModelFactory(transactionRepository, userRepository, productRepository)
-                        )
-                        val adminSettingsViewModel: AdminSettingsViewModel = viewModel(
-                            factory = LojinhaViewModelFactory.createAdminSettingsViewModelFactory(
+                        val adminProductsViewModel = remember {
+                            AdminProductsViewModel(productRepository, settingsRepository)
+                        }
+                        val adminUsersViewModel = remember {
+                            AdminUsersViewModel(userRepository, transactionRepository)
+                        }
+                        val adminTransactionsViewModel = remember {
+                            AdminTransactionsViewModel(transactionRepository, userRepository, productRepository)
+                        }
+                        val adminSettingsViewModel = remember {
+                            AdminSettingsViewModel(
                                 settingsRepository = settingsRepository,
                                 backupRepository = backupRepository,
                                 onRunRoutineNow = { routine ->
@@ -254,7 +256,16 @@ fun App() {
                                     onDataChanged()
                                 }
                             )
-                        )
+                        }
+
+                        DisposableEffect(Unit) {
+                            onDispose {
+                                adminProductsViewModel.viewModelScope.cancel()
+                                adminUsersViewModel.viewModelScope.cancel()
+                                adminTransactionsViewModel.viewModelScope.cancel()
+                                adminSettingsViewModel.viewModelScope.cancel()
+                            }
+                        }
 
                         de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
                             productsViewModel = adminProductsViewModel,
