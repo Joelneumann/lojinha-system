@@ -63,4 +63,10 @@ interface TransactionDao {
           AND (:search IS NULL OR :search = '' OR userNameSnapshot LIKE '%' || :search || '%' OR note LIKE '%' || :search || '%' OR items LIKE '%' || :search || '%')
     """)
     suspend fun getTransactionsByUserIdCount(userId: String, search: String?, type: String?): Int
+
+    @Query("SELECT * FROM transactions WHERE referenceTransactionId IN (:referenceIds)")
+    suspend fun getTransactionsByReferenceIds(referenceIds: List<String>): List<TransactionEntity>
+
+    @Query("SELECT * FROM transactions WHERE id IN (:ids)")
+    suspend fun getTransactionsByIds(ids: List<String>): List<TransactionEntity>
 }

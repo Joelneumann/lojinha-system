@@ -210,6 +210,23 @@ interface AppStrings {
     val headerQtyWeight: String
     val headerLineTotal: String
     val editStornoItemsHeader: String
+    val correctPurchaseBtn: String
+    fun correctPurchaseDialogTitle(userName: String): String
+    val headerCurrent: String
+    val headerCorrection: String
+    fun currentOrderTotalLabel(amount: String): String
+    fun refundAdjustmentLabel(amount: String): String
+    fun chargeAdjustmentLabel(amount: String): String
+    val noChangesLabel: String
+    val applyCorrectionBtn: String
+    val stornoEntirePurchaseBtn: String
+    val badgeReversedCanceled: String
+    val badgeCorrected: String
+    val headerModifier: String
+    val headerPrevious: String
+    val headerNew: String
+    val headerAdjustment: String
+    fun updatedItemsHeader(count: Int): String
     val amountBrlLabel: String
     val amountPlaceholder: String
     val noteReasonLabel: String

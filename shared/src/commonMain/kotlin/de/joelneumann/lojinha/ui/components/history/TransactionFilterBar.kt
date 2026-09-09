@@ -53,7 +53,8 @@ fun TransactionFilterBar(
                 strings.historyTypePurchase to TransactionType.PURCHASE,
                 strings.historyTypeExpenses to TransactionType.ADMIN_WITHDRAWAL,
                 strings.historyTypeDeposit to TransactionType.ADMIN_DEPOSIT,
-                strings.historyTypeCancellation to TransactionType.CANCELLATION
+                strings.historyTypeCancellation to TransactionType.CANCELLATION,
+                strings.historyTypeCorrection to TransactionType.CORRECTION
             )
 
             filterOptions.forEach { (label, type) ->

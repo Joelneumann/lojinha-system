@@ -167,6 +167,16 @@ class LojinhaAdminServer(
                         transactionRepository.recordTransaction(transaction)
                         call.respond(HttpStatusCode.OK)
                     }
+                    post("/transactions/by-reference-ids") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@post
+                        val refIds = call.receive<List<String>>()
+                        call.respond(transactionRepository.getTransactionsByReferenceIds(refIds))
+                    }
+                    post("/transactions/by-ids") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@post
+                        val ids = call.receive<List<String>>()
+                        call.respond(transactionRepository.getTransactionsByIds(ids))
+                    }
 
                     // Settings
                     get("/settings") {

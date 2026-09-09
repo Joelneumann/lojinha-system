@@ -64,6 +64,7 @@ fun TransactionHistoryScreen(
     val selectedLanguage by viewModel.selectedLanguage.collectAsState()
     val selectedSecondaryCurrency by viewModel.selectedSecondaryCurrency.collectAsState()
     val selectedAvatar by viewModel.selectedAvatar.collectAsState()
+    val relatedTransactionsMap by viewModel.relatedTransactionsMap.collectAsState()
 
     LaunchedEffect(user.id) {
         viewModel.loadUserTransactions(user.id)
@@ -73,6 +74,7 @@ fun TransactionHistoryScreen(
         user = user,
         settings = settings,
         transactions = transactions,
+        relatedTransactionsMap = relatedTransactionsMap,
         searchFilter = searchFilter,
         selectedTypeFilter = selectedTypeFilter,
         showSettingsModal = showSettingsModal,
@@ -122,6 +124,7 @@ fun TransactionHistoryContent(
     user: User,
     settings: SystemSettings,
     transactions: List<Transaction>,
+    relatedTransactionsMap: Map<String, Transaction> = emptyMap(),
     searchFilter: String,
     selectedTypeFilter: TransactionType?,
     showSettingsModal: Boolean,
@@ -170,7 +173,9 @@ fun TransactionHistoryContent(
         else -> 0.0
     }
 
-    val allTransactionsMap = remember(transactions) { transactions.associateBy { it.id } }
+    val allTransactionsMap = remember(transactions, relatedTransactionsMap) {
+        (transactions + relatedTransactionsMap.values).associateBy { it.id }
+    }
 
     Column(
         modifier = Modifier

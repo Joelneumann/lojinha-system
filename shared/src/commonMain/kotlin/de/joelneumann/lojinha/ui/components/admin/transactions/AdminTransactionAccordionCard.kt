@@ -7,11 +7,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Edit
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.TransactionType
@@ -25,36 +26,20 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 @Composable
 fun AdminTransactionAccordionCard(
     transaction: Transaction,
-    activeItems: List<TransactionItem>,
+    effectiveItems: List<TransactionItem>,
     referencedTransaction: Transaction?,
+    cumulativeDelta: Long,
     isExpanded: Boolean,
     isCanceled: Boolean,
     isCorrected: Boolean,
     onExpandToggle: () -> Unit,
-    onStornoPurchaseWithUpdatedItems: (Transaction, List<TransactionItem>) -> Unit,
+    onOpenCorrectionModal: () -> Unit,
     onStornoNonPurchase: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
     val dateStr = remember(transaction.timestamp) { Formatting.formatTimestamp(transaction.timestamp) }
 
-    var isStornoMode by remember(transaction.id) { mutableStateOf(false) }
-    var draftItems by remember(transaction.id, activeItems) { mutableStateOf(activeItems) }
-
-    var weightInputStrings by remember(transaction.id, activeItems) {
-        mutableStateOf(activeItems.mapIndexed { idx, item -> idx to item.quantity.toString() }.toMap())
-    }
-
-    LaunchedEffect(isExpanded) {
-        if (!isExpanded) {
-            isStornoMode = false
-            draftItems = activeItems
-            weightInputStrings = activeItems.mapIndexed { idx, item -> idx to item.quantity.toString() }.toMap()
-        }
-    }
-
-    var showStornoEverythingConfirm by remember { mutableStateOf(false) }
-    var showUpdateItemsConfirm by remember { mutableStateOf(false) }
     var showStornoNonPurchaseConfirm by remember { mutableStateOf(false) }
 
     val typeBadgeType = when (transaction.type) {
@@ -91,12 +76,12 @@ fun AdminTransactionAccordionCard(
             )
             if (isCanceled) {
                 AdminStatusBadge(
-                    text = "REVERSED / CANCELED",
+                    text = strings.badgeReversedCanceled,
                     type = AdminBadgeType.DANGER
                 )
             } else if (isCorrected) {
                 AdminStatusBadge(
-                    text = "CORRECTED",
+                    text = strings.badgeCorrected,
                     type = AdminBadgeType.WARNING
                 )
             }
@@ -107,12 +92,66 @@ fun AdminTransactionAccordionCard(
                 fontSize = 13.sp,
                 color = TextSecondaryMuted
             )
-            Text(
-                text = Formatting.formatBrl(transaction.totalAmount),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (transaction.totalAmount < 0) ColorDangerCrimson else PrimaryNavy
-            )
+
+            if (isCanceled) {
+                val delta = if (cumulativeDelta != 0L) cumulativeDelta else -transaction.totalAmount
+                val finalAmount = transaction.totalAmount + delta
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = Formatting.formatBrl(transaction.totalAmount),
+                        fontSize = 13.sp,
+                        color = TextSecondaryMuted,
+                        textDecoration = TextDecoration.LineThrough
+                    )
+                    Text(
+                        text = "(${if (delta > 0) "+" else ""}${Formatting.formatBrl(delta)})",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (delta > 0) ColorSuccessEmerald else ColorDangerCrimson
+                    )
+                    Text(
+                        text = "➔ ${Formatting.formatBrl(finalAmount)}",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondaryMuted
+                    )
+                }
+            } else if (isCorrected && cumulativeDelta != 0L) {
+                val netAmount = transaction.totalAmount + cumulativeDelta
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = Formatting.formatBrl(transaction.totalAmount),
+                        fontSize = 13.sp,
+                        color = TextSecondaryMuted
+                    )
+                    Text(
+                        text = "(${if (cumulativeDelta > 0) "+" else ""}${Formatting.formatBrl(cumulativeDelta)})",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (cumulativeDelta > 0) ColorSuccessEmerald else ColorDangerCrimson
+                    )
+                    Text(
+                        text = "➔ ${Formatting.formatBrl(netAmount)}",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (netAmount < 0) ColorDangerCrimson else PrimaryNavy
+                    )
+                }
+            } else {
+                val isNegative = transaction.totalAmount < 0
+                Text(
+                    text = "${if (!isNegative && transaction.type != TransactionType.PURCHASE) "+" else ""}${Formatting.formatBrl(transaction.totalAmount)}",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isNegative) ColorDangerCrimson else if (transaction.type == TransactionType.PURCHASE) PrimaryNavy else ColorSuccessEmerald
+                )
+            }
         }
     ) {
         if (transaction.note != null || referencedTransaction != null) {
@@ -131,8 +170,15 @@ fun AdminTransactionAccordionCard(
                     if (referencedTransaction != null) {
                         val refDate = Formatting.formatTimestamp(referencedTransaction.timestamp)
                         val refAmount = Formatting.formatBrl(kotlin.math.abs(referencedTransaction.totalAmount))
+                        val refTypeStr = when (referencedTransaction.type) {
+                            TransactionType.PURCHASE -> strings.historyTypePurchase
+                            TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit
+                            TransactionType.ADMIN_WITHDRAWAL -> if (referencedTransaction.items.isNotEmpty()) strings.historyTypeCustomExpense else strings.historyTypeDebit
+                            TransactionType.CANCELLATION -> strings.historyTypeCancellation
+                            TransactionType.CORRECTION -> strings.historyTypeCorrection
+                        }
                         Text(
-                            text = "🔗 Reference: ${referencedTransaction.type.name} on $refDate ($refAmount)",
+                            text = "🔗 Reference: $refTypeStr on $refDate ($refAmount)",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = AccentNavy
@@ -142,138 +188,54 @@ fun AdminTransactionAccordionCard(
             }
         }
 
-        if (transaction.type == TransactionType.PURCHASE && draftItems.isNotEmpty()) {
+        // Items table for purchases, and updated items table for corrections (custom expenses show description in note above)
+        if (transaction.type == TransactionType.PURCHASE && effectiveItems.isNotEmpty()) {
             TransactionItemsTable(
                 transaction = transaction,
-                draftItems = draftItems,
-                isStornoMode = isStornoMode,
-                isCanceled = isCanceled,
-                weightInputStrings = weightInputStrings,
-                onItemQuantityChanged = { index, newQty ->
-                    draftItems = draftItems.toMutableList().also { list ->
-                        list[index] = list[index].copy(quantity = newQty)
-                    }
-                },
-                onWeightInputChanged = { index, textInput ->
-                    val parsedGrams = textInput.toLongOrNull() ?: 0L
-                    weightInputStrings = weightInputStrings + (index to textInput)
-                    draftItems = draftItems.toMutableList().also { list ->
-                        list[index] = list[index].copy(quantity = parsedGrams)
-                    }
-                },
-                onToggleStornoMode = { isStornoMode = true }
+                effectiveItems = effectiveItems,
+                isCorrected = isCorrected
+            )
+        } else if (transaction.type == TransactionType.CORRECTION && transaction.items.isNotEmpty()) {
+            CorrectionItemsTable(
+                transaction = transaction,
+                referencedTransaction = referencedTransaction
             )
         }
 
-        if (isStornoMode && transaction.type == TransactionType.PURCHASE) {
-            val originalCost = kotlin.math.abs(transaction.totalAmount)
-            val newCost = draftItems.sumOf { it.totalLinePrice }
-            val costDiff = newCost - originalCost
-
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = SurfaceContainerHighLight,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+        // Action Buttons Row
+        if (!isCanceled) {
+            if (transaction.type == TransactionType.PURCHASE) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Original Order Total: ${Formatting.formatBrl(originalCost)}", fontSize = 13.sp, color = TextSecondaryMuted)
-                        Text("New Order Total: ${Formatting.formatBrl(newCost)}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                    }
-
-                    if (costDiff != 0L) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (costDiff < 0) ColorSuccessEmerald.copy(alpha = 0.15f) else ColorDangerCrimson.copy(alpha = 0.15f)
+                    Button(
+                        onClick = onOpenCorrectionModal,
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = SurfaceWhite,
+                                modifier = Modifier.size(15.dp)
+                            )
                             Text(
-                                text = if (costDiff < 0) "Refund: ${Formatting.formatBrl(kotlin.math.abs(costDiff))}" else "Charge: ${Formatting.formatBrl(costDiff)}",
+                                text = strings.correctPurchaseBtn,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (costDiff < 0) ColorSuccessEmerald else ColorDangerCrimson,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                color = SurfaceWhite
                             )
                         }
                     }
                 }
-            }
-        }
-
-        HorizontalDivider(color = DividerBorder)
-
-        if (!isCanceled) {
-            if (transaction.type == TransactionType.PURCHASE) {
-                if (isStornoMode) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(
-                                onClick = {
-                                    draftItems = activeItems
-                                    weightInputStrings = activeItems.mapIndexed { idx, item -> idx to item.quantity.toString() }.toMap()
-                                    isStornoMode = false
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.height(44.dp)
-                            ) {
-                                Text(strings.cancel, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            }
-
-                            Button(
-                                onClick = { showStornoEverythingConfirm = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.height(44.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Block,
-                                        contentDescription = null,
-                                        tint = SurfaceWhite,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(strings.stornoEverything, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
-                                }
-                            }
-
-                            val isDraftModified = draftItems != activeItems
-                            Button(
-                                onClick = { showUpdateItemsConfirm = true },
-                                enabled = isDraftModified,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = AccentNavy,
-                                    disabledContainerColor = SurfaceContainerHighLight
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.height(44.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Refresh,
-                                        contentDescription = null,
-                                        tint = SurfaceWhite,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(strings.applyStornoChanges, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
+            } else if (transaction.type == TransactionType.ADMIN_DEPOSIT || transaction.type == TransactionType.ADMIN_WITHDRAWAL) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -283,11 +245,11 @@ fun AdminTransactionAccordionCard(
                         onClick = { showStornoNonPurchaseConfirm = true },
                         colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(44.dp)
+                        modifier = Modifier.height(40.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Block,
@@ -295,93 +257,42 @@ fun AdminTransactionAccordionCard(
                                 tint = SurfaceWhite,
                                 modifier = Modifier.size(15.dp)
                             )
-                            Text(strings.stornoTransactionBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                            Text(
+                                text = strings.stornoTransactionBtn,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SurfaceWhite
+                            )
                         }
                     }
                 }
             }
+            // Note: CORRECTION and CANCELLATION have NO buttons rendered!
         }
-    }
-
-    if (showStornoEverythingConfirm) {
-        val originalCost = kotlin.math.abs(transaction.totalAmount)
-        AlertDialog(
-            onDismissRequest = { showStornoEverythingConfirm = false },
-            title = { Text(strings.approvalStornoEverythingTitle, fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
-            text = {
-                Text(
-                    "Are you sure you want to storno the ENTIRE purchase transaction for user ${transaction.userNameSnapshot}?\n\n" +
-                            "• Refund Amount: ${Formatting.formatBrl(originalCost)} to account balance\n" +
-                            "• Inventory: All purchased item quantities will be returned to stock"
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val zeroedItems = transaction.items.map { it.copy(quantity = 0L) }
-                        onStornoPurchaseWithUpdatedItems(transaction, zeroedItems)
-                        showStornoEverythingConfirm = false
-                        isStornoMode = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
-                ) {
-                    Text(strings.approveCompleteStorno, color = SurfaceWhite, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showStornoEverythingConfirm = false }) {
-                    Text(strings.cancel)
-                }
-            }
-        )
-    }
-
-    if (showUpdateItemsConfirm) {
-        val originalCost = kotlin.math.abs(transaction.totalAmount)
-        val updatedCost = draftItems.sumOf { it.totalLinePrice }
-        val costDiff = updatedCost - originalCost
-
-        AlertDialog(
-            onDismissRequest = { showUpdateItemsConfirm = false },
-            title = { Text(strings.approvalStornoSelectedTitle, fontWeight = FontWeight.Bold, color = AccentNavy) },
-            text = {
-                Text(
-                    "Are you sure you want to apply the selected item quantity adjustments for user ${transaction.userNameSnapshot}?\n\n" +
-                            "• Original Purchase Total: ${Formatting.formatBrl(originalCost)}\n" +
-                            "• New Order Total: ${Formatting.formatBrl(updatedCost)}\n" +
-                            "• Account Balance Adjustment: ${if (costDiff < 0) "Refund" else "Charge"} ${Formatting.formatBrl(kotlin.math.abs(costDiff))}\n" +
-                            "• Inventory Stock: Will be updated automatically according to item changes."
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onStornoPurchaseWithUpdatedItems(transaction, draftItems)
-                        showUpdateItemsConfirm = false
-                        isStornoMode = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
-                ) {
-                    Text(strings.approveSelectedItemChanges, color = SurfaceWhite, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showUpdateItemsConfirm = false }) {
-                    Text(strings.cancel)
-                }
-            }
-        )
     }
 
     if (showStornoNonPurchaseConfirm) {
         val refundCents = -transaction.totalAmount
+        val readableType = when (transaction.type) {
+            TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit
+            TransactionType.ADMIN_WITHDRAWAL -> if (transaction.items.isNotEmpty()) strings.historyTypeCustomExpense else strings.historyTypeDebit
+            else -> transaction.type.name
+        }
+
         AlertDialog(
             onDismissRequest = { showStornoNonPurchaseConfirm = false },
-            title = { Text(strings.approvalStornoTxTitle(transaction.type.name), fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
+            title = {
+                Text(
+                    text = strings.approvalStornoTxTitle(readableType),
+                    fontWeight = FontWeight.Bold,
+                    color = ColorDangerCrimson
+                )
+            },
             text = {
                 Text(
-                    "Are you sure you want to storno this ${transaction.type.name} transaction for user ${transaction.userNameSnapshot}?\n\n" +
-                            "• Account Balance Adjustment: ${if (refundCents >= 0) "+" else ""}${Formatting.formatBrl(refundCents)}"
+                    "Are you sure you want to storno this $readableType transaction for user ${transaction.userNameSnapshot}?\n\n" +
+                            "• Account Balance Adjustment: ${if (refundCents >= 0) "+" else ""}${Formatting.formatBrl(refundCents)}\n" +
+                            "• Current note: ${transaction.note ?: "-"}"
                 )
             },
             confirmButton = {

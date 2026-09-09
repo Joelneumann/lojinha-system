@@ -89,4 +89,14 @@ class RoomTransactionRepositoryImpl(
             totalPages = totalPages
         )
     }
+
+    override suspend fun getTransactionsByReferenceIds(referenceIds: List<String>): List<Transaction> {
+        if (referenceIds.isEmpty()) return emptyList()
+        return transactionDao.getTransactionsByReferenceIds(referenceIds).map { it.toDomain() }
+    }
+
+    override suspend fun getTransactionsByIds(ids: List<String>): List<Transaction> {
+        if (ids.isEmpty()) return emptyList()
+        return transactionDao.getTransactionsByIds(ids).map { it.toDomain() }
+    }
 }

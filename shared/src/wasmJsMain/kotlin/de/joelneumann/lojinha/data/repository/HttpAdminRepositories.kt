@@ -252,6 +252,32 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
             PagedResult(emptyList(), 0, page, pageSize, 1)
         }
     }
+
+    override suspend fun getTransactionsByReferenceIds(referenceIds: List<String>): List<Transaction> {
+        if (referenceIds.isEmpty()) return emptyList()
+        return try {
+            client.httpClient.post("/api/admin/transactions/by-reference-ids") {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(referenceIds)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    override suspend fun getTransactionsByIds(ids: List<String>): List<Transaction> {
+        if (ids.isEmpty()) return emptyList()
+        return try {
+            client.httpClient.post("/api/admin/transactions/by-ids") {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(ids)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 }
 
 class HttpSettingsRepository(private val client: AdminNetworkClient) : SettingsRepository {

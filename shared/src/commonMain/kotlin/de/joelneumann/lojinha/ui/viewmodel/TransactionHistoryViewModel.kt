@@ -60,6 +60,9 @@ class TransactionHistoryViewModel(
     private val _totalPages = MutableStateFlow(1)
     val totalPages: StateFlow<Int> = _totalPages.asStateFlow()
 
+    private val _relatedTransactionsMap = MutableStateFlow<Map<String, Transaction>>(emptyMap())
+    val relatedTransactionsMap: StateFlow<Map<String, Transaction>> = _relatedTransactionsMap.asStateFlow()
+
     fun loadUserTransactions(userId: String) {
         currentUserId = userId
         _currentPage.value = 0
@@ -105,10 +108,19 @@ class TransactionHistoryViewModel(
                     searchQuery = _searchFilter.value,
                     typeFilter = _selectedTypeFilter.value
                 )
-                _transactions.value = paged.items
+                val items = paged.items
+                _transactions.value = items
                 _totalCount.value = paged.totalCount
                 _totalPages.value = paged.totalPages
                 _currentPage.value = paged.page
+
+                val refIds = items.mapNotNull { it.referenceTransactionId }.toSet()
+                val parentTxs = if (refIds.isNotEmpty()) transactionRepository.getTransactionsByIds(refIds.toList()) else emptyList()
+
+                val txIds = items.map { it.id }
+                val childTxs = if (txIds.isNotEmpty()) transactionRepository.getTransactionsByReferenceIds(txIds) else emptyList()
+
+                _relatedTransactionsMap.value = (parentTxs + childTxs).associateBy { it.id }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Normal cancellation when user updates filter/page rapidly
             }

@@ -8,7 +8,8 @@ data class TransactionItem(
     val productName: String,
     val unitType: UnitType = UnitType.PIECE,
     val quantity: Long,
-    val unitPriceAtPurchase: Long
+    val unitPriceAtPurchase: Long,
+    val previousQuantity: Long? = null
 ) {
     val totalLinePrice: Long
         get() = when (unitType) {

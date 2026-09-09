@@ -9,13 +9,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
 import de.joelneumann.lojinha.ui.components.admin.transactions.AdminTransactionAccordionCard
+import de.joelneumann.lojinha.ui.components.admin.transactions.PurchaseCorrectionDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
-import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 
 @Composable
@@ -27,6 +26,10 @@ fun AdminTransactionsTabScreen(
 ) {
     val strings = I18n.current
     val transactions by viewModel.transactions.collectAsState()
+    val relatedChildrenMap by viewModel.relatedChildrenMap.collectAsState()
+    val referencedParentsMap by viewModel.referencedParentsMap.collectAsState()
+    val correctionTarget by viewModel.correctionTarget.collectAsState()
+
     val searchQuery by viewModel.searchFilter.collectAsState()
     val currentPage by viewModel.currentPage.collectAsState()
     val totalPages by viewModel.totalPages.collectAsState()
@@ -74,24 +77,37 @@ fun AdminTransactionsTabScreen(
                 items(transactions, key = { it.id }) { tx ->
                     val isExpanded = expandedTransactionId == tx.id
 
-                    val cancellationChild = transactions.firstOrNull { it.referenceTransactionId == tx.id && it.type == TransactionType.CANCELLATION }
-                    val correctionChild = transactions.firstOrNull { it.referenceTransactionId == tx.id && it.type == TransactionType.CORRECTION }
+                    val children = relatedChildrenMap[tx.id] ?: emptyList()
+                    val cancellationChild = children.firstOrNull { it.type == TransactionType.CANCELLATION }
+                    val correctionChildren = children.filter { it.type == TransactionType.CORRECTION }.sortedBy { it.timestamp }
+                    val latestCorrection = correctionChildren.lastOrNull()
 
-                    val isCanceled = tx.type == TransactionType.CANCELLATION || cancellationChild != null || (tx.items.isNotEmpty() && tx.items.all { it.quantity == 0L })
-                    val isCorrected = !isCanceled && (tx.type == TransactionType.CORRECTION || correctionChild != null)
+                    val isCanceled = cancellationChild != null || (tx.type == TransactionType.PURCHASE && tx.items.isNotEmpty() && tx.items.all { it.quantity == 0L })
+                    val isCorrected = tx.type == TransactionType.PURCHASE && !isCanceled && correctionChildren.isNotEmpty()
 
-                    val activeItems = correctionChild?.items?.ifEmpty { tx.items } ?: tx.items
-                    val refTx = transactions.firstOrNull { it.id == tx.referenceTransactionId }
+                    val effectiveItems = AdminTransactionsViewModel.computeEffectiveItems(
+                        originalItems = tx.items,
+                        corrections = correctionChildren,
+                        cancellation = cancellationChild
+                    )
+                    val refTx = referencedParentsMap[tx.referenceTransactionId] ?: transactions.firstOrNull { it.id == tx.referenceTransactionId }
+
+                    val cumulativeDelta = if (isCanceled) {
+                        cancellationChild?.totalAmount ?: -tx.totalAmount
+                    } else {
+                        correctionChildren.sumOf { it.totalAmount }
+                    }
 
                     AdminTransactionAccordionCard(
                         transaction = tx,
-                        activeItems = activeItems,
+                        effectiveItems = effectiveItems,
                         referencedTransaction = refTx,
+                        cumulativeDelta = cumulativeDelta,
                         isExpanded = isExpanded,
                         isCanceled = isCanceled,
                         isCorrected = isCorrected,
                         onExpandToggle = { onRequestToggleExpand(tx.id) },
-                        onStornoPurchaseWithUpdatedItems = viewModel::stornoPurchaseWithUpdatedItems,
+                        onOpenCorrectionModal = { viewModel.openCorrectionModal(tx, effectiveItems) },
                         onStornoNonPurchase = viewModel::stornoNonPurchaseTransaction
                     )
                 }
@@ -107,6 +123,16 @@ fun AdminTransactionsTabScreen(
             totalCount = totalCount,
             onPageChange = viewModel::setPage,
             onPageSizeChange = viewModel::setPageSize
+        )
+    }
+
+    if (correctionTarget != null) {
+        val (origTx, currentEffective) = correctionTarget!!
+        PurchaseCorrectionDialog(
+            originalTransaction = origTx,
+            currentItems = currentEffective,
+            onApplyCorrection = viewModel::applyPurchaseCorrection,
+            onDismiss = viewModel::closeCorrectionModal
         )
     }
 }

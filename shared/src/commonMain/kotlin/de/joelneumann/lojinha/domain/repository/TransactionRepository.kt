@@ -27,5 +27,8 @@ interface TransactionRepository {
         searchQuery: String? = null,
         typeFilter: TransactionType? = null
     ): PagedResult<Transaction>
+
+    suspend fun getTransactionsByReferenceIds(referenceIds: List<String>): List<Transaction>
+    suspend fun getTransactionsByIds(ids: List<String>): List<Transaction>
 }
 
