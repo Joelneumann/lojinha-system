@@ -34,6 +34,7 @@ object PortugueseStrings : AppStrings {
     override val historyTypeDeposit = "Depósito"
     override val historyTypeDebit = "Débito"
     override val historyTypeCustomExpense = "Despesa Avulsa"
+    override val historyTypeExpenses = "Despesas"
     override val historyTypeCancellation = "Cancelamento"
     override val historyTypeCorrection = "Correção"
     override fun cancellationNote(type: String, date: String) = "Cancelamento de $type de $date"

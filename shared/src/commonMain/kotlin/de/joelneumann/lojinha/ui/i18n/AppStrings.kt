@@ -34,6 +34,7 @@ interface AppStrings {
     val historyTypeDeposit: String
     val historyTypeDebit: String
     val historyTypeCustomExpense: String
+    val historyTypeExpenses: String
     val historyTypeCancellation: String
     val historyTypeCorrection: String
     fun cancellationNote(type: String, date: String): String

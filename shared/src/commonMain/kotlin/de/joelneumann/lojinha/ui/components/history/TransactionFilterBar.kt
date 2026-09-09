@@ -1,7 +1,9 @@
 package de.joelneumann.lojinha.ui.components.history
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -40,12 +42,16 @@ fun TransactionFilterBar(
 
         // Filter Type Buttons
         Row(
-            modifier = Modifier.fillMaxHeight(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxHeight()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             val filterOptions: List<Pair<String, TransactionType?>> = listOf(
                 strings.historyFilterAll to null,
                 strings.historyTypePurchase to TransactionType.PURCHASE,
+                strings.historyTypeExpenses to TransactionType.ADMIN_WITHDRAWAL,
                 strings.historyTypeDeposit to TransactionType.ADMIN_DEPOSIT,
                 strings.historyTypeCancellation to TransactionType.CANCELLATION
             )
