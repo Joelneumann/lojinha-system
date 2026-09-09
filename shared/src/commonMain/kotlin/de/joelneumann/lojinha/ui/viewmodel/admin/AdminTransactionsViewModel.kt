@@ -44,6 +44,15 @@ class AdminTransactionsViewModel(
 
     init {
         loadData()
+        observeTransactions()
+    }
+
+    private fun observeTransactions() {
+        viewModelScope.launch {
+            transactionRepository.getTransactionsFlow().collect {
+                fetchPagedTransactions()
+            }
+        }
     }
 
     fun loadData() {
