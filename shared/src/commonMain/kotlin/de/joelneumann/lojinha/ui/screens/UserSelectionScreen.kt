@@ -55,7 +55,7 @@ fun UserSelectionScreen(
         onSearchSubmitted = { viewModel.onSearchSubmitted(onUserLoggedIn) },
         onUserClick = { user -> viewModel.onUserCardClicked(user, onUserLoggedIn) },
         onPinChange = viewModel::updatePinInput,
-        onPinSubmit = { viewModel.submitPin(onUserLoggedIn) },
+        onPinSubmit = { viewModel.submitPin(settings.adminPasswordHash, onUserLoggedIn) },
         onPinDismiss = viewModel::cancelPinDialog,
         onAdminPasswordChange = viewModel::updateAdminPassword,
         onAdminPasswordSubmit = { viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin) },

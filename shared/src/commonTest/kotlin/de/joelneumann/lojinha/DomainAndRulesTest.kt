@@ -3,6 +3,7 @@ package de.joelneumann.lojinha
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -590,5 +591,28 @@ class DomainAndRulesTest {
 
         val preciseMatchForId10 = serializedItems.contains("\"productId\":\"10\"")
         assertTrue(preciseMatchForId10, "Precise query MUST match product '10'")
+    }
+
+    @Test
+    fun testAdminPasswordBypassesUserPin() {
+        val userPin = "1234"
+        val customAdminPass = "adminSecret"
+
+        // 1. Wrong PIN fails
+        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "9999", customAdminPass))
+
+        // 2. User's own PIN succeeds
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "1234", customAdminPass))
+
+        // 3. Admin password bypasses user PIN
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, customAdminPass, customAdminPass))
+
+        // 4. Default admin password ("admin") bypasses user PIN when adminPassword is empty or default
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "admin", ""))
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "admin", "admin"))
+
+        // 5. Old/wrong admin password does not bypass
+        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "admin", customAdminPass))
+        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "wrongSecret", customAdminPass))
     }
 }
