@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,9 +23,14 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.formModalKeys
 
 @Composable
-fun UserCustomExpenseDialog(
+private fun CustomAmountDialog(
+    title: String,
+    descriptionLabel: String,
+    descriptionPlaceholder: String,
+    confirmButtonText: String,
+    confirmButtonColor: Color,
     user: User,
-    onSubmit: (deltaCents: Long, description: String) -> Unit,
+    onSubmit: (amountCents: Long, description: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val strings = I18n.current
@@ -37,14 +43,14 @@ fun UserCustomExpenseDialog(
         amountBrl.replace(',', '.').trim().toDoubleOrNull()
     }
     val cents = remember(parsedDouble) {
-        if (parsedDouble != null && parsedDouble != 0.0) {
+        if (parsedDouble != null && parsedDouble > 0.0) {
             kotlin.math.round(parsedDouble * 100.0).toLong()
         } else {
             0L
         }
     }
     val canSubmit = remember(description, cents) {
-        description.isNotBlank() && cents != 0L
+        description.isNotBlank() && cents > 0L
     }
     val isModified = remember(description, amountBrl) {
         description.isNotBlank() || amountBrl.isNotBlank()
@@ -92,7 +98,7 @@ fun UserCustomExpenseDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = strings.customExpenseDialogTitle,
+                    text = title,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -136,7 +142,7 @@ fun UserCustomExpenseDialog(
                 // Description / Reason
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = strings.customExpenseDescriptionLabel,
+                        text = descriptionLabel,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = PrimaryNavy
@@ -146,7 +152,7 @@ fun UserCustomExpenseDialog(
                         onValueChange = { description = it },
                         placeholder = {
                             Text(
-                                text = strings.customExpenseDescriptionPlaceholder,
+                                text = descriptionPlaceholder,
                                 fontSize = 13.sp,
                                 color = TextSecondaryMuted
                             )
@@ -164,17 +170,22 @@ fun UserCustomExpenseDialog(
                     )
                 }
 
-                // Amount / Balance Change (+/-)
+                // Amount
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = strings.balanceChangeLabel,
+                        text = strings.amountBrlLabel,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = PrimaryNavy
                     )
                     OutlinedTextField(
                         value = amountBrl,
-                        onValueChange = { amountBrl = it },
+                        onValueChange = { input ->
+                            val sanitized = input.filter { it.isDigit() || it == '.' || it == ',' }
+                            if (sanitized.count { it == '.' || it == ',' } <= 1) {
+                                amountBrl = sanitized
+                            }
+                        },
                         placeholder = {
                             Text(
                                 text = strings.amountPlaceholder,
@@ -216,15 +227,11 @@ fun UserCustomExpenseDialog(
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (cents < 0) ColorDangerCrimson else ColorSuccessEmerald
+                            containerColor = confirmButtonColor
                         )
                     ) {
                         Text(
-                            text = when {
-                                cents < 0 -> strings.customExpenseConfirmBtn
-                                cents > 0 -> strings.customDepositConfirmBtn
-                                else -> strings.confirm
-                            },
+                            text = confirmButtonText,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -250,4 +257,42 @@ fun UserCustomExpenseDialog(
             )
         }
     }
+}
+
+@Composable
+fun UserCustomExpenseDialog(
+    user: User,
+    onSubmit: (amountCents: Long, description: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val strings = I18n.current
+    CustomAmountDialog(
+        title = strings.customExpenseDialogTitle,
+        descriptionLabel = strings.customExpenseDescriptionLabel,
+        descriptionPlaceholder = strings.customExpenseDescriptionPlaceholder,
+        confirmButtonText = strings.customExpenseConfirmBtn,
+        confirmButtonColor = ColorDangerCrimson,
+        user = user,
+        onSubmit = onSubmit,
+        onDismiss = onDismiss
+    )
+}
+
+@Composable
+fun UserCustomIncomeDialog(
+    user: User,
+    onSubmit: (amountCents: Long, description: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val strings = I18n.current
+    CustomAmountDialog(
+        title = strings.customIncomeDialogTitle,
+        descriptionLabel = strings.customIncomeDescriptionLabel,
+        descriptionPlaceholder = strings.customIncomeDescriptionPlaceholder,
+        confirmButtonText = strings.customIncomeConfirmBtn,
+        confirmButtonColor = ColorSuccessEmerald,
+        user = user,
+        onSubmit = onSubmit,
+        onDismiss = onDismiss
+    )
 }

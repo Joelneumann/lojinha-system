@@ -73,7 +73,7 @@ fun TransactionItemCard(
                 val refDateStr = Formatting.formatTimestamp(refTx.timestamp)
                 val refTypeStr = when (refTx.type) {
                     TransactionType.PURCHASE -> strings.historyTypePurchase
-                    TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit
+                    TransactionType.ADMIN_DEPOSIT -> if (refTx.items.isNotEmpty()) strings.historyTypeCustomIncome else strings.historyTypeDeposit
                     TransactionType.ADMIN_WITHDRAWAL -> if (refTx.items.isNotEmpty()) strings.historyTypeCustomExpense else strings.historyTypeDebit
                     TransactionType.CANCELLATION -> strings.historyTypeCancellation
                     TransactionType.CORRECTION -> strings.historyTypeCorrection
@@ -88,9 +88,16 @@ fun TransactionItemCard(
     }
 
     val isCustomExpense = tx.type == TransactionType.ADMIN_WITHDRAWAL && tx.items.isNotEmpty()
+    val isCustomIncome = tx.type == TransactionType.ADMIN_DEPOSIT && tx.items.isNotEmpty()
     val typePair = when (tx.type) {
         TransactionType.PURCHASE -> Icons.Default.ShoppingCart to strings.historyTypePurchase
-        TransactionType.ADMIN_DEPOSIT -> Icons.Default.AccountBalanceWallet to strings.historyTypeDeposit
+        TransactionType.ADMIN_DEPOSIT -> {
+            if (isCustomIncome) {
+                Icons.Default.AddCircle to strings.historyTypeCustomIncome
+            } else {
+                Icons.Default.AccountBalanceWallet to strings.historyTypeDeposit
+            }
+        }
         TransactionType.ADMIN_WITHDRAWAL -> {
             if (isCustomExpense) {
                 Icons.AutoMirrored.Filled.ReceiptLong to strings.historyTypeCustomExpense
@@ -364,7 +371,7 @@ fun TransactionItemCard(
                     tx.items
                 }
                 val nonZeroItems = displayedItems.filter { it.quantity > 0 }
-                if (nonZeroItems.isNotEmpty() && tx.type != TransactionType.CANCELLATION && tx.type != TransactionType.ADMIN_WITHDRAWAL) {
+                if (nonZeroItems.isNotEmpty() && tx.type != TransactionType.CANCELLATION && tx.type != TransactionType.ADMIN_WITHDRAWAL && tx.type != TransactionType.ADMIN_DEPOSIT) {
                     Spacer(modifier = Modifier.height(10.dp))
                     HorizontalDivider(color = DividerBorder)
                     Spacer(modifier = Modifier.height(8.dp))

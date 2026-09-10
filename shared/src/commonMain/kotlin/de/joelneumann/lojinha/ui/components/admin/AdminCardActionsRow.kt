@@ -23,6 +23,7 @@ fun AdminCardActionsRow(
     isStatusActive: Boolean,
     onDelete: () -> Unit,
     onCustomExpense: (() -> Unit)? = null,
+    onCustomIncome: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -82,6 +83,35 @@ fun AdminCardActionsRow(
                         )
                         Text(
                             text = strings.customExpense,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryNavy
+                        )
+                    }
+                }
+            }
+
+            if (onCustomIncome != null) {
+                OutlinedButton(
+                    onClick = onCustomIncome,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(40.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = PrimaryNavy
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddCircle,
+                            contentDescription = null,
+                            tint = PrimaryNavy,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = strings.customIncome,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavy

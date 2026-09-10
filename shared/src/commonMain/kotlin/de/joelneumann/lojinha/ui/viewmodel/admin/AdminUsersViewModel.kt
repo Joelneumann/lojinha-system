@@ -38,6 +38,9 @@ class AdminUsersViewModel(
     private val _customExpenseUser = MutableStateFlow<User?>(null)
     val customExpenseUser: StateFlow<User?> = _customExpenseUser.asStateFlow()
 
+    private val _customIncomeUser = MutableStateFlow<User?>(null)
+    val customIncomeUser: StateFlow<User?> = _customIncomeUser.asStateFlow()
+
     private val _userDeleteErrorMessage = MutableStateFlow<String?>(null)
     val userDeleteErrorMessage: StateFlow<String?> = _userDeleteErrorMessage.asStateFlow()
 
@@ -120,26 +123,22 @@ class AdminUsersViewModel(
         _customExpenseUser.value = null
     }
 
-    fun submitCustomExpense(user: User, deltaCents: Long, description: String) {
-        val isExpense = deltaCents < 0
-        val absCents = kotlin.math.abs(deltaCents)
-        val txType = if (isExpense) TransactionType.ADMIN_WITHDRAWAL else TransactionType.ADMIN_DEPOSIT
+    fun submitCustomExpense(user: User, amountCents: Long, description: String) {
+        val absCents = kotlin.math.abs(amountCents)
+        val deltaCents = -absCents
+        val txType = TransactionType.ADMIN_WITHDRAWAL
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
         val txId = generateUuid()
 
-        val items = if (isExpense) {
-            listOf(
-                TransactionItem(
-                    productId = "custom",
-                    productName = description,
-                    unitType = UnitType.PIECE,
-                    quantity = 1L,
-                    unitPriceAtPurchase = absCents
-                )
+        val items = listOf(
+            TransactionItem(
+                productId = "custom",
+                productName = description,
+                unitType = UnitType.PIECE,
+                quantity = 1L,
+                unitPriceAtPurchase = absCents
             )
-        } else {
-            emptyList()
-        }
+        )
 
         val balBefore = user.balance
         val balAfter = user.balance + deltaCents
@@ -161,6 +160,54 @@ class AdminUsersViewModel(
             transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
             refreshUsers()
             closeCustomExpenseModal()
+        }
+    }
+
+    fun openCustomIncomeModal(user: User) {
+        _customIncomeUser.value = user
+    }
+
+    fun closeCustomIncomeModal() {
+        _customIncomeUser.value = null
+    }
+
+    fun submitCustomIncome(user: User, amountCents: Long, comment: String) {
+        val absCents = kotlin.math.abs(amountCents)
+        val deltaCents = absCents
+        val txType = TransactionType.ADMIN_DEPOSIT
+        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
+        val txId = generateUuid()
+
+        val items = listOf(
+            TransactionItem(
+                productId = "custom",
+                productName = comment,
+                unitType = UnitType.PIECE,
+                quantity = 1L,
+                unitPriceAtPurchase = absCents
+            )
+        )
+
+        val balBefore = user.balance
+        val balAfter = user.balance + deltaCents
+
+        val tx = Transaction(
+            id = txId,
+            userId = user.id,
+            userNameSnapshot = user.name,
+            timestamp = nowMillis,
+            type = txType,
+            note = comment,
+            totalAmount = deltaCents,
+            items = items,
+            userBalanceBefore = balBefore,
+            userBalanceAfter = balAfter
+        )
+
+        viewModelScope.launch {
+            transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
+            refreshUsers()
+            closeCustomIncomeModal()
         }
     }
 
@@ -198,5 +245,6 @@ class AdminUsersViewModel(
         _users.value = emptyList()
         _searchQuery.value = ""
         closeCustomExpenseModal()
+        closeCustomIncomeModal()
     }
 }

@@ -34,6 +34,7 @@ interface AppStrings {
     val historyTypeDeposit: String
     val historyTypeDebit: String
     val historyTypeCustomExpense: String
+    val historyTypeCustomIncome: String
     val historyTypeExpenses: String
     val historyTypeCancellation: String
     val historyTypeCorrection: String
@@ -431,11 +432,16 @@ interface AppStrings {
     fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String): String
     fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean): String
 
-    // --- Custom Expense / Balance Modal ---
+    // --- Custom Expense & Custom Income Modals ---
     val customExpense: String
     val customExpenseDialogTitle: String
     val customExpenseDescriptionLabel: String
     val customExpenseDescriptionPlaceholder: String
     val customExpenseConfirmBtn: String
     val customDepositConfirmBtn: String
+    val customIncome: String
+    val customIncomeDialogTitle: String
+    val customIncomeDescriptionLabel: String
+    val customIncomeDescriptionPlaceholder: String
+    val customIncomeConfirmBtn: String
 }

@@ -34,6 +34,7 @@ object GermanStrings : AppStrings {
     override val historyTypeDeposit = "Einzahlung"
     override val historyTypeDebit = "Abbuchung"
     override val historyTypeCustomExpense = "Sonderausgabe"
+    override val historyTypeCustomIncome = "Sondereinnahme"
     override val historyTypeExpenses = "Ausgaben"
     override val historyTypeCancellation = "Storno"
     override val historyTypeCorrection = "Korrektur"
@@ -442,11 +443,16 @@ object GermanStrings : AppStrings {
     override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
         "${if (isSymbolFilled) "Barcode-Nummer (ID)" else "Barcode-Symbol"} fehlt! Barcode-Symbol und Barcode-Nummer (ID) müssen beide ausgefüllt sein oder beide leer bleiben."
 
-    // --- Custom Expense / Balance Modal ---
+    // --- Custom Expense & Custom Income Modals ---
     override val customExpense = "Sonderausgabe"
-    override val customExpenseDialogTitle = "Sonderausgabe / Guthabenanpassung"
+    override val customExpenseDialogTitle = "Sonderausgabe"
     override val customExpenseDescriptionLabel = "Beschreibung / Posten:"
     override val customExpenseDescriptionPlaceholder = "z.B. Schokokuchen, Kaffee, Sonderposten..."
     override val customExpenseConfirmBtn = "Ausgabe buchen"
     override val customDepositConfirmBtn = "Einzahlung buchen"
+    override val customIncome = "Sondereinnahme"
+    override val customIncomeDialogTitle = "Sondereinnahme"
+    override val customIncomeDescriptionLabel = "Kommentar / Grund:"
+    override val customIncomeDescriptionPlaceholder = "z.B. Einzahlung, Bonus, Rückerstattung..."
+    override val customIncomeConfirmBtn = "Einnahme buchen"
 }

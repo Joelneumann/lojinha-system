@@ -34,6 +34,7 @@ object PortugueseStrings : AppStrings {
     override val historyTypeDeposit = "Depósito"
     override val historyTypeDebit = "Débito"
     override val historyTypeCustomExpense = "Despesa Avulsa"
+    override val historyTypeCustomIncome = "Receita Avulsa"
     override val historyTypeExpenses = "Despesas"
     override val historyTypeCancellation = "Cancelamento"
     override val historyTypeCorrection = "Correção"
@@ -442,11 +443,16 @@ object PortugueseStrings : AppStrings {
     override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
         "${if (isSymbolFilled) "O Número do Código de Barras (ID)" else "O Símbolo do Código de Barras"} está faltando! O Símbolo do Código de Barras e o Número do Código de Barras (ID) devem ser preenchidos juntos, ou deixe ambos vazios."
 
-    // --- Custom Expense / Balance Modal ---
+    // --- Custom Expense & Custom Income Modals ---
     override val customExpense = "Despesa Avulsa"
-    override val customExpenseDialogTitle = "Despesa Avulsa / Ajuste de Saldo"
+    override val customExpenseDialogTitle = "Despesa Avulsa"
     override val customExpenseDescriptionLabel = "Descrição / Item:"
     override val customExpenseDescriptionPlaceholder = "ex: Bolo de chocolate, Café, Lanche especial..."
     override val customExpenseConfirmBtn = "Confirmar Despesa"
     override val customDepositConfirmBtn = "Confirmar Depósito"
+    override val customIncome = "Receita Avulsa"
+    override val customIncomeDialogTitle = "Receita Avulsa"
+    override val customIncomeDescriptionLabel = "Comentário / Motivo:"
+    override val customIncomeDescriptionPlaceholder = "ex: Depósito, Bônus, Reembolso..."
+    override val customIncomeConfirmBtn = "Confirmar Receita"
 }

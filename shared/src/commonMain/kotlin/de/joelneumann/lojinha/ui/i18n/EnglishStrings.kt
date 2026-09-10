@@ -34,6 +34,7 @@ object EnglishStrings : AppStrings {
     override val historyTypeDeposit = "Deposit"
     override val historyTypeDebit = "Debit"
     override val historyTypeCustomExpense = "Custom Expense"
+    override val historyTypeCustomIncome = "Custom Income"
     override val historyTypeExpenses = "Expenses"
     override val historyTypeCancellation = "Cancellation"
     override val historyTypeCorrection = "Correction"
@@ -442,11 +443,16 @@ object EnglishStrings : AppStrings {
     override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
         "${if (isSymbolFilled) "Barcode Number (ID)" else "Barcode Symbol"} is missing! Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty."
 
-    // --- Custom Expense / Balance Modal ---
+    // --- Custom Expense & Custom Income Modals ---
     override val customExpense = "Custom Expense"
-    override val customExpenseDialogTitle = "Custom Expense / Balance Adjustment"
+    override val customExpenseDialogTitle = "Custom Expense"
     override val customExpenseDescriptionLabel = "Description / Item:"
     override val customExpenseDescriptionPlaceholder = "e.g. Chocolate Cake, Coffee, Special Snack..."
     override val customExpenseConfirmBtn = "Confirm Expense"
     override val customDepositConfirmBtn = "Confirm Deposit"
+    override val customIncome = "Custom Income"
+    override val customIncomeDialogTitle = "Custom Income"
+    override val customIncomeDescriptionLabel = "Comment / Reason:"
+    override val customIncomeDescriptionPlaceholder = "e.g. Deposit, Bonus, Reimbursement..."
+    override val customIncomeConfirmBtn = "Confirm Income"
 }

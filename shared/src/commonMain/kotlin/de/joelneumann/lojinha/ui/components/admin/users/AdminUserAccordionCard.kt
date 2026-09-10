@@ -24,6 +24,7 @@ fun AdminUserAccordionCard(
     onExpandToggle: () -> Unit,
     onEditUser: (User) -> Unit,
     onCustomExpense: (User) -> Unit,
+    onCustomIncome: (User) -> Unit,
     onAdjustBalance: (User, Long, String, Boolean) -> Unit,
     onToggleActive: (User) -> Unit,
     onDeleteUser: (User) -> Unit,
@@ -115,6 +116,7 @@ fun AdminUserAccordionCard(
         AdminCardActionsRow(
             onEdit = { onEditUser(user) },
             onCustomExpense = { onCustomExpense(user) },
+            onCustomIncome = { onCustomIncome(user) },
             toggleStatusText = if (user.isActive) strings.deactivate else strings.activate,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = user.isActive,

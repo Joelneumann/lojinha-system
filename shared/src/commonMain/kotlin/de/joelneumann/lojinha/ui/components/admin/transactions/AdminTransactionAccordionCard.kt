@@ -55,7 +55,13 @@ fun AdminTransactionAccordionCard(
 
     val typeText = when (transaction.type) {
         TransactionType.PURCHASE -> strings.historyTypePurchase.uppercase()
-        TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit.uppercase()
+        TransactionType.ADMIN_DEPOSIT -> {
+            if (transaction.items.isNotEmpty()) {
+                strings.historyTypeCustomIncome.uppercase()
+            } else {
+                strings.historyTypeDeposit.uppercase()
+            }
+        }
         TransactionType.ADMIN_WITHDRAWAL -> {
             if (transaction.items.isNotEmpty()) {
                 strings.historyTypeCustomExpense.uppercase()
@@ -175,7 +181,7 @@ fun AdminTransactionAccordionCard(
                         val refAmount = Formatting.formatBrl(kotlin.math.abs(referencedTransaction.totalAmount))
                         val refTypeStr = when (referencedTransaction.type) {
                             TransactionType.PURCHASE -> strings.historyTypePurchase
-                            TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit
+                            TransactionType.ADMIN_DEPOSIT -> if (referencedTransaction.items.isNotEmpty()) strings.historyTypeCustomIncome else strings.historyTypeDeposit
                             TransactionType.ADMIN_WITHDRAWAL -> if (referencedTransaction.items.isNotEmpty()) strings.historyTypeCustomExpense else strings.historyTypeDebit
                             TransactionType.CANCELLATION -> strings.historyTypeCancellation
                             TransactionType.CORRECTION -> strings.historyTypeCorrection
@@ -279,7 +285,7 @@ fun AdminTransactionAccordionCard(
     if (showStornoNonPurchaseConfirm) {
         val refundCents = -transaction.totalAmount
         val readableType = when (transaction.type) {
-            TransactionType.ADMIN_DEPOSIT -> strings.historyTypeDeposit
+            TransactionType.ADMIN_DEPOSIT -> if (transaction.items.isNotEmpty()) strings.historyTypeCustomIncome else strings.historyTypeDeposit
             TransactionType.ADMIN_WITHDRAWAL -> if (transaction.items.isNotEmpty()) strings.historyTypeCustomExpense else strings.historyTypeDebit
             else -> transaction.type.name
         }

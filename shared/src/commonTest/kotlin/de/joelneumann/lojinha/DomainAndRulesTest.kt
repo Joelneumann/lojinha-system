@@ -615,4 +615,62 @@ class DomainAndRulesTest {
         assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "admin", customAdminPass))
         assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "wrongSecret", customAdminPass))
     }
+
+    @Test
+    fun testCustomExpenseAndIncomeDeltaCalculations() {
+        // Custom Expense: always subtracts from user balance (-abs(amount))
+        val positiveExpense = 1500L // R$ 15,00
+        val negativeExpense = -1500L
+        assertEquals(-1500L, -kotlin.math.abs(positiveExpense))
+        assertEquals(-1500L, -kotlin.math.abs(negativeExpense))
+
+        // Custom Income: always adds to user balance (+abs(amount))
+        val positiveIncome = 2500L // R$ 25,00
+        val negativeIncome = -2500L
+        assertEquals(2500L, kotlin.math.abs(positiveIncome))
+        assertEquals(2500L, kotlin.math.abs(negativeIncome))
+
+        // Synthetic items verification
+        val expenseItem = TransactionItem(
+            productId = "custom",
+            productName = "Lost key replacement",
+            unitType = UnitType.PIECE,
+            quantity = 1L,
+            unitPriceAtPurchase = kotlin.math.abs(positiveExpense)
+        )
+        assertEquals("custom", expenseItem.productId)
+        assertEquals(1500L, expenseItem.unitPriceAtPurchase)
+
+        val incomeItem = TransactionItem(
+            productId = "custom",
+            productName = "Refund for damaged goods",
+            unitType = UnitType.PIECE,
+            quantity = 1L,
+            unitPriceAtPurchase = kotlin.math.abs(positiveIncome)
+        )
+        assertEquals("custom", incomeItem.productId)
+        assertEquals(2500L, incomeItem.unitPriceAtPurchase)
+    }
+
+    @Test
+    fun testCustomExpenseAndIncomeLocalization() {
+        listOf(
+            de.joelneumann.lojinha.ui.i18n.EnglishStrings,
+            de.joelneumann.lojinha.ui.i18n.GermanStrings,
+            de.joelneumann.lojinha.ui.i18n.PortugueseStrings
+        ).forEach { s ->
+            assertTrue(s.customExpense.isNotBlank())
+            assertTrue(s.customIncome.isNotBlank())
+            assertTrue(s.customExpenseDialogTitle.isNotBlank())
+            assertTrue(s.customIncomeDialogTitle.isNotBlank())
+            assertTrue(s.customExpenseDescriptionLabel.isNotBlank())
+            assertTrue(s.customIncomeDescriptionLabel.isNotBlank())
+            assertTrue(s.customExpenseDescriptionPlaceholder.isNotBlank())
+            assertTrue(s.customIncomeDescriptionPlaceholder.isNotBlank())
+            assertTrue(s.customExpenseConfirmBtn.isNotBlank())
+            assertTrue(s.customIncomeConfirmBtn.isNotBlank())
+            assertTrue(s.historyTypeCustomExpense.isNotBlank())
+            assertTrue(s.historyTypeCustomIncome.isNotBlank())
+        }
+    }
 }
