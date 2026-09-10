@@ -21,6 +21,8 @@ import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun DeletedUserCard(
@@ -106,6 +108,14 @@ fun DeletedUserCard(
     if (showRestoreConfirm) {
         AlertDialog(
             onDismissRequest = { showRestoreConfirm = false },
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(
+                onCancel = { showRestoreConfirm = false },
+                onConfirm = {
+                    onRestoreUser()
+                    showRestoreConfirm = false
+                }
+            ),
             title = { Text(strings.confirmUserRestorationTitle, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
             text = { Text(strings.confirmUserRestorationMsg(user.name)) },
             confirmButton = {

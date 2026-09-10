@@ -15,6 +15,7 @@ import de.joelneumann.lojinha.ui.components.admin.*
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun AdminUserAccordionCard(
@@ -126,23 +127,26 @@ fun AdminUserAccordionCard(
         val isDeposit = cents > 0
         val absCents = kotlin.math.abs(cents)
         val formattedAmount = Formatting.formatBrl(absCents)
+        val dismissDialog = { pendingBalanceAdjustment = null }
+        val confirmAdjustment = {
+            val note = if (isDeposit) strings.depositViaAdmin else strings.debitViaAdmin
+            onAdjustBalance(user, absCents, note, isDeposit)
+            pendingBalanceAdjustment = null
+            moneyInput = ""
+        }
 
         AlertDialog(
-            onDismissRequest = { pendingBalanceAdjustment = null },
+            onDismissRequest = dismissDialog,
             properties = DialogProperties(
-                dismissOnClickOutside = false,
-                dismissOnBackPress = false
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
             ),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmAdjustment),
             title = { Text(strings.confirmBalanceAdjustmentTitle, fontWeight = FontWeight.Bold) },
             text = { Text(strings.confirmBalanceAdjustmentMsg(isDeposit, formattedAmount, user.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        val note = if (isDeposit) strings.depositViaAdmin else strings.debitViaAdmin
-                        onAdjustBalance(user, absCents, note, isDeposit)
-                        pendingBalanceAdjustment = null
-                        moneyInput = ""
-                    },
+                    onClick = confirmAdjustment,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isDeposit) ColorSuccessEmerald else ColorDangerCrimson
                     )
@@ -151,7 +155,7 @@ fun AdminUserAccordionCard(
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { pendingBalanceAdjustment = null }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }
@@ -159,16 +163,24 @@ fun AdminUserAccordionCard(
     }
 
     if (showToggleActiveConfirm) {
+        val dismissDialog = { showToggleActiveConfirm = false }
+        val confirmToggle = {
+            onToggleActive(user)
+            showToggleActiveConfirm = false
+        }
+
         AlertDialog(
-            onDismissRequest = { showToggleActiveConfirm = false },
+            onDismissRequest = dismissDialog,
+            properties = DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            ),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmToggle),
             title = { Text(strings.confirmUserStatusChangeTitle, fontWeight = FontWeight.Bold) },
             text = { Text(strings.confirmUserStatusChangeMsg(user.isActive, user.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onToggleActive(user)
-                        showToggleActiveConfirm = false
-                    },
+                    onClick = confirmToggle,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (user.isActive) ColorWarningAmber else ColorSuccessEmerald
                     )
@@ -177,7 +189,7 @@ fun AdminUserAccordionCard(
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showToggleActiveConfirm = false }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }
@@ -185,23 +197,31 @@ fun AdminUserAccordionCard(
     }
 
     if (showDeleteConfirm) {
+        val dismissDialog = { showDeleteConfirm = false }
+        val confirmDelete = {
+            onDeleteUser(user)
+            showDeleteConfirm = false
+        }
+
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
+            onDismissRequest = dismissDialog,
+            properties = DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            ),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmDelete),
             title = { Text(strings.confirmDeleteUserTitle, fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
             text = { Text(strings.confirmDeleteUserMsg(user.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onDeleteUser(user)
-                        showDeleteConfirm = false
-                    },
+                    onClick = confirmDelete,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
                     Text(strings.yesDeleteUser, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showDeleteConfirm = false }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }

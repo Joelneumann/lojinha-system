@@ -22,8 +22,10 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
 import de.joelneumann.lojinha.ui.components.admin.AdminSegmentedOptionsRow
+import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.formModalKeys
 
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
@@ -80,18 +82,75 @@ fun UserEditDialog(
     val isBarcodeNumberFilled = barcodeNumber.isNotBlank()
     val isUserBarcodeIncomplete = (isBarcodeSymbolFilled && !isBarcodeNumberFilled) || (!isBarcodeSymbolFilled && isBarcodeNumberFilled)
 
+    val isPinChanged = if (isNewUser) pin.isNotBlank() else (shouldResetPin && (pin.trim().ifBlank { null } != user.pin))
+    val hasDialogChanges = name != user.name ||
+            isPinChanged ||
+            selectedLang != user.language ||
+            selectedSecondaryCurrency != user.secondaryCurrency ||
+            selectedAvatar != user.avatar ||
+            barcode != (user.userBarcode ?: "") ||
+            barcodeNumber != (user.userBarcodeNumber ?: "")
+
+    val isModified = if (isNewUser) {
+        name.isNotBlank() || pin.isNotBlank() || barcode.isNotBlank() || barcodeNumber.isNotBlank() ||
+                selectedLang != user.language || selectedSecondaryCurrency != user.secondaryCurrency || selectedAvatar != user.avatar
+    } else {
+        hasDialogChanges
+    }
+
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+
+    val handleDismissRequest = {
+        if (isModified) {
+            showDiscardConfirm = true
+        } else {
+            onCancel()
+        }
+    }
+
+    val canSave = name.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete && (isNewUser || hasDialogChanges)
+
+    val handleSave = {
+        if (canSave) {
+            val bCode = barcode.trim().ifBlank { null }
+            val bNum = barcodeNumber.trim().ifBlank { null }
+            val userBalance = if (isNewUser) 0L else user.balance
+            val finalPin = if (isNewUser) pin.trim().ifBlank { null } else if (shouldResetPin) pin.trim().ifBlank { null } else user.pin
+
+            val updated = user.copy(
+                name = name.trim(),
+                pin = finalPin,
+                userBarcode = if (bCode != null && bNum != null) bCode else null,
+                userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
+                language = selectedLang,
+                secondaryCurrency = selectedSecondaryCurrency,
+                avatar = selectedAvatar,
+                balance = userBalance
+            )
+            onSave(updated)
+        }
+    }
+
     Dialog(
-        onDismissRequest = onCancel,
+        onDismissRequest = handleDismissRequest,
         properties = DialogProperties(
-            dismissOnClickOutside = false,
-            dismissOnBackPress = false
+            dismissOnClickOutside = true,
+            dismissOnBackPress = true
         )
     ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
             shadowElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth(0.95f).widthIn(max = 480.dp).wrapContentHeight()
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .widthIn(max = 480.dp)
+                .wrapContentHeight()
+                .formModalKeys(
+                    onCancel = handleDismissRequest,
+                    onConfirm = handleSave,
+                    confirmEnabled = canSave
+                )
         ) {
             Column(
                 modifier = Modifier
@@ -415,21 +474,12 @@ fun UserEditDialog(
 
                 HorizontalDivider(color = DividerBorder)
 
-                val isPinChanged = if (isNewUser) pin.isNotBlank() else (shouldResetPin && (pin.trim().ifBlank { null } != user.pin))
-                val hasDialogChanges = name != user.name ||
-                        isPinChanged ||
-                        selectedLang != user.language ||
-                        selectedSecondaryCurrency != user.secondaryCurrency ||
-                        selectedAvatar != user.avatar ||
-                        barcode != (user.userBarcode ?: "") ||
-                        barcodeNumber != (user.userBarcodeNumber ?: "")
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onCancel,
+                        onClick = handleDismissRequest,
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -467,25 +517,8 @@ fun UserEditDialog(
                     }
 
                     Button(
-                        onClick = {
-                            val bCode = barcode.trim().ifBlank { null }
-                            val bNum = barcodeNumber.trim().ifBlank { null }
-                            val userBalance = if (isNewUser) 0L else user.balance
-                            val finalPin = if (isNewUser) pin.trim().ifBlank { null } else if (shouldResetPin) pin.trim().ifBlank { null } else user.pin
-
-                            val updated = user.copy(
-                                name = name.trim(),
-                                pin = finalPin,
-                                userBarcode = if (bCode != null && bNum != null) bCode else null,
-                                userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
-                                language = selectedLang,
-                                secondaryCurrency = selectedSecondaryCurrency,
-                                avatar = selectedAvatar,
-                                balance = userBalance
-                            )
-                            onSave(updated)
-                        },
-                        enabled = name.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete && (isNewUser || hasDialogChanges),
+                        onClick = handleSave,
+                        enabled = canSave,
                         modifier = Modifier.weight(1f).height(44.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp)
@@ -494,6 +527,23 @@ fun UserEditDialog(
                     }
                 }
             }
+        }
+
+        if (showDiscardConfirm) {
+            ConfirmationDialog(
+                title = strings.discardChangesTitle,
+                message = strings.discardChangesMsg,
+                confirmText = strings.discard,
+                cancelText = strings.cancel,
+                confirmButtonColor = ColorDangerCrimson,
+                onConfirm = {
+                    showDiscardConfirm = false
+                    onCancel()
+                },
+                onDismiss = {
+                    showDiscardConfirm = false
+                }
+            )
         }
     }
 }

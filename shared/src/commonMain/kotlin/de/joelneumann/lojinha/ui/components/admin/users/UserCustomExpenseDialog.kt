@@ -14,10 +14,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.formModalKeys
 
 @Composable
 fun UserCustomExpenseDialog(
@@ -29,6 +31,7 @@ fun UserCustomExpenseDialog(
 
     var description by remember { mutableStateOf("") }
     var amountBrl by remember { mutableStateOf("") }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
 
     val parsedDouble = remember(amountBrl) {
         amountBrl.replace(',', '.').trim().toDoubleOrNull()
@@ -43,12 +46,29 @@ fun UserCustomExpenseDialog(
     val canSubmit = remember(description, cents) {
         description.isNotBlank() && cents != 0L
     }
+    val isModified = remember(description, amountBrl) {
+        description.isNotBlank() || amountBrl.isNotBlank()
+    }
+
+    val handleDismissRequest = {
+        if (isModified) {
+            showDiscardConfirm = true
+        } else {
+            onDismiss()
+        }
+    }
+
+    val handleSubmit = {
+        if (canSubmit) {
+            onSubmit(cents, description.trim())
+        }
+    }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = handleDismissRequest,
         properties = DialogProperties(
-            dismissOnClickOutside = false,
-            dismissOnBackPress = false
+            dismissOnClickOutside = true,
+            dismissOnBackPress = true
         )
     ) {
         Surface(
@@ -59,6 +79,11 @@ fun UserCustomExpenseDialog(
                 .fillMaxWidth(0.95f)
                 .widthIn(max = 480.dp)
                 .wrapContentHeight()
+                .formModalKeys(
+                    onCancel = handleDismissRequest,
+                    onConfirm = handleSubmit,
+                    confirmEnabled = canSubmit
+                )
         ) {
             Column(
                 modifier = Modifier
@@ -178,7 +203,7 @@ fun UserCustomExpenseDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onDismiss,
+                        onClick = handleDismissRequest,
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -186,11 +211,7 @@ fun UserCustomExpenseDialog(
                     }
 
                     Button(
-                        onClick = {
-                            if (canSubmit) {
-                                onSubmit(cents, description.trim())
-                            }
-                        },
+                        onClick = handleSubmit,
                         enabled = canSubmit,
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(8.dp),
@@ -210,6 +231,23 @@ fun UserCustomExpenseDialog(
                     }
                 }
             }
+        }
+
+        if (showDiscardConfirm) {
+            ConfirmationDialog(
+                title = strings.discardChangesTitle,
+                message = strings.discardChangesMsg,
+                confirmText = strings.discard,
+                cancelText = strings.cancel,
+                confirmButtonColor = ColorDangerCrimson,
+                onConfirm = {
+                    showDiscardConfirm = false
+                    onDismiss()
+                },
+                onDismiss = {
+                    showDiscardConfirm = false
+                }
+            )
         }
     }
 }

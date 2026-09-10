@@ -15,14 +15,13 @@ import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun InactivityWarningDialog(
     secondsRemaining: Int,
     onStayLoggedIn: () -> Unit,
-    onLogoutNow: () -> Unit
+    onLogoutNow: (() -> Unit)? = null
 ) {
     val strings = I18n.current
     val mins = secondsRemaining / 60
@@ -32,15 +31,18 @@ fun InactivityWarningDialog(
     Dialog(
         onDismissRequest = onStayLoggedIn,
         properties = DialogProperties(
-            dismissOnClickOutside = false,
-            dismissOnBackPress = false
+            dismissOnClickOutside = true,
+            dismissOnBackPress = true
         )
     ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
             shadowElevation = 10.dp,
-            modifier = Modifier.width(420.dp).wrapContentHeight()
+            modifier = Modifier
+                .width(420.dp)
+                .wrapContentHeight()
+                .confirmationDialogKeys(onCancel = onStayLoggedIn, onConfirm = onStayLoggedIn)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -80,37 +82,13 @@ fun InactivityWarningDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Button(
+                    onClick = onStayLoggedIn,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                 ) {
-                    OutlinedButton(
-                        onClick = onLogoutNow,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(text = strings.logout, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Button(
-                        onClick = onStayLoggedIn,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
-                    ) {
-                        Text(text = strings.stayLoggedIn, fontWeight = FontWeight.Bold)
-                    }
+                    Text(text = strings.stayLoggedIn, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
         }

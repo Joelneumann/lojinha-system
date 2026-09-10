@@ -6,6 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -24,7 +25,8 @@ fun ProductCard(
     user: User,
     rate: Double,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isHighlighted: Boolean = false
 ) {
     val strings = I18n.current
     val unitPrice = product.calculateEffectiveUnitPrice(globalMarkup)
@@ -34,10 +36,16 @@ fun ProductCard(
         modifier = modifier
             .fillMaxWidth()
             .wrapContentHeight(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-        border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isHighlighted) Color(0xFFEFF6FF) else SurfaceWhite
+        ),
+        border = if (isHighlighted) {
+            androidx.compose.foundation.BorderStroke(2.dp, AccentNavy)
+        } else {
+            CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder))
+        },
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, hoveredElevation = 1.dp, pressedElevation = 1.dp, focusedElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier

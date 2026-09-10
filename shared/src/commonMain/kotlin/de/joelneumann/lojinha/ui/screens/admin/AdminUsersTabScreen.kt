@@ -25,6 +25,8 @@ import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun AdminUsersTabScreen(
@@ -198,6 +200,11 @@ fun AdminUsersTabScreen(
     if (userDeleteError != null) {
         AlertDialog(
             onDismissRequest = { viewModel.clearUserDeleteError() },
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(
+                onCancel = { viewModel.clearUserDeleteError() },
+                onConfirm = { viewModel.clearUserDeleteError() }
+            ),
             title = { Text(strings.auditLedgerTitle, fontWeight = FontWeight.Bold) },
             text = { Text(userDeleteError!!) },
             confirmButton = {

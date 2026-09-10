@@ -19,6 +19,8 @@ import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.pickFolder
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 private enum class ScheduleMode { TIMED, INTERVAL, ON_DATA_CHANGE }
 
@@ -391,6 +393,8 @@ fun DeleteRoutineConfirmationDialog(
     val strings = I18n.current
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirmDelete),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -473,6 +477,8 @@ fun ToggleRoutineConfirmationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirmToggle),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

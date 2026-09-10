@@ -23,9 +23,12 @@ import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.UnitType
+import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import de.joelneumann.lojinha.ui.utils.formModalKeys
 
 @Composable
 fun PurchaseCorrectionDialog(
@@ -42,6 +45,7 @@ fun PurchaseCorrectionDialog(
     }
 
     var showStornoAllConfirm by remember { mutableStateOf(false) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
 
     val originalCost = remember(originalTransaction) { kotlin.math.abs(originalTransaction.totalAmount) }
     val currentCost = remember(currentItems) { currentItems.sumOf { it.totalLinePrice } }
@@ -49,10 +53,19 @@ fun PurchaseCorrectionDialog(
     val costDiff = newCost - currentCost
     val isModified = draftItems != currentItems
 
+    val handleDismissRequest = {
+        if (isModified) {
+            showDiscardConfirm = true
+        } else {
+            onDismiss()
+        }
+    }
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = handleDismissRequest,
         properties = DialogProperties(
-            dismissOnClickOutside = false,
+            dismissOnClickOutside = true,
+            dismissOnBackPress = true,
             usePlatformDefaultWidth = false
         )
     ) {
@@ -64,6 +77,15 @@ fun PurchaseCorrectionDialog(
                 .widthIn(min = 600.dp, max = 740.dp)
                 .fillMaxWidth(0.9f)
                 .padding(16.dp)
+                .formModalKeys(
+                    onCancel = handleDismissRequest,
+                    onConfirm = {
+                        if (isModified) {
+                            onApplyCorrection(originalTransaction, currentItems, draftItems)
+                        }
+                    },
+                    confirmEnabled = isModified
+                )
         ) {
             Column(
                 modifier = Modifier
@@ -383,7 +405,7 @@ fun PurchaseCorrectionDialog(
 
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedButton(
-                            onClick = onDismiss,
+                            onClick = handleDismissRequest,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.height(44.dp)
                         ) {
@@ -424,11 +446,37 @@ fun PurchaseCorrectionDialog(
                 }
             }
         }
+
+        if (showDiscardConfirm) {
+            ConfirmationDialog(
+                title = strings.discardChangesTitle,
+                message = strings.discardChangesMsg,
+                confirmText = strings.discard,
+                cancelText = strings.cancel,
+                confirmButtonColor = ColorDangerCrimson,
+                onConfirm = {
+                    showDiscardConfirm = false
+                    onDismiss()
+                },
+                onDismiss = {
+                    showDiscardConfirm = false
+                }
+            )
+        }
     }
 
     if (showStornoAllConfirm) {
         AlertDialog(
             onDismissRequest = { showStornoAllConfirm = false },
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(
+                onCancel = { showStornoAllConfirm = false },
+                onConfirm = {
+                    val zeroedItems = currentItems.map { it.copy(quantity = 0L) }
+                    onApplyCorrection(originalTransaction, currentItems, zeroedItems)
+                    showStornoAllConfirm = false
+                }
+            ),
             title = {
                 Text(
                     strings.approvalStornoEverythingTitle,

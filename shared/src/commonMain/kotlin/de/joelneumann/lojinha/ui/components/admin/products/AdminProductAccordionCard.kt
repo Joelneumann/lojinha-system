@@ -17,6 +17,8 @@ import de.joelneumann.lojinha.ui.components.admin.*
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun AdminProductAccordionCard(
@@ -147,9 +149,17 @@ fun AdminProductAccordionCard(
         val isAddition = delta > 0
         val absDelta = kotlin.math.abs(delta)
         val formattedDelta = Formatting.formatQuantity(absDelta, product.unitType)
+        val dismissDialog = { pendingStockAdjustment = null }
+        val confirmAdjustment = {
+            onAdjustStock(product.id, delta)
+            pendingStockAdjustment = null
+            stockDeltaInput = ""
+        }
 
         AlertDialog(
-            onDismissRequest = { pendingStockAdjustment = null },
+            onDismissRequest = dismissDialog,
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmAdjustment),
             title = { Text(strings.confirmStockAdjustmentTitle, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
@@ -158,11 +168,7 @@ fun AdminProductAccordionCard(
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onAdjustStock(product.id, delta)
-                        pendingStockAdjustment = null
-                        stockDeltaInput = ""
-                    },
+                    onClick = confirmAdjustment,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isAddition) ColorSuccessEmerald else ColorDangerCrimson
                     )
@@ -171,7 +177,7 @@ fun AdminProductAccordionCard(
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { pendingStockAdjustment = null }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }
@@ -179,16 +185,21 @@ fun AdminProductAccordionCard(
     }
 
     if (showToggleActiveConfirm) {
+        val dismissDialog = { showToggleActiveConfirm = false }
+        val confirmToggle = {
+            onToggleActive(product)
+            showToggleActiveConfirm = false
+        }
+
         AlertDialog(
-            onDismissRequest = { showToggleActiveConfirm = false },
+            onDismissRequest = dismissDialog,
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmToggle),
             title = { Text(strings.confirmProductStatusChangeTitle, fontWeight = FontWeight.Bold) },
             text = { Text(strings.confirmProductStatusChangeMsg(product.isActive, product.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onToggleActive(product)
-                        showToggleActiveConfirm = false
-                    },
+                    onClick = confirmToggle,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (product.isActive) ColorWarningAmber else ColorSuccessEmerald
                     )
@@ -197,7 +208,7 @@ fun AdminProductAccordionCard(
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showToggleActiveConfirm = false }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }
@@ -205,23 +216,28 @@ fun AdminProductAccordionCard(
     }
 
     if (showDeleteConfirm) {
+        val dismissDialog = { showDeleteConfirm = false }
+        val confirmDelete = {
+            onDeleteProduct(product)
+            showDeleteConfirm = false
+        }
+
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
+            onDismissRequest = dismissDialog,
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmDelete),
             title = { Text(strings.confirmDeleteProductTitle, fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
             text = { Text(strings.confirmDeleteProductMsg(product.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onDeleteProduct(product)
-                        showDeleteConfirm = false
-                    },
+                    onClick = confirmDelete,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
                     Text(strings.yesDeleteProduct, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showDeleteConfirm = false }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }

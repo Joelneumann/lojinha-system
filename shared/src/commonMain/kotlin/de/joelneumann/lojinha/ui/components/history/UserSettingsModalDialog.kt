@@ -27,12 +27,21 @@ import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
+import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_COLORS
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_EMOJIS
 import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.components.userselection.parseHexColor
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.formModalKeys
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
@@ -55,18 +64,47 @@ fun UserSettingsModalDialog(
     val strings = I18n.current
     var isPinVisible by remember { mutableStateOf(false) }
     var isAvatarExpanded by remember { mutableStateOf(false) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+    val dialogFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        dialogFocusRequester.safeRequestFocus()
+    }
+
+    val newPin = if (pinInput.isBlank()) null else pinInput.trim()
+    val hasChanges = (newPin != user.pin) ||
+            (selectedLanguage != user.language) ||
+            (selectedSecondaryCurrency != user.secondaryCurrency) ||
+            (selectedAvatar != user.avatar)
+
+    val handleDismissRequest = {
+        if (hasChanges) {
+            showDiscardConfirm = true
+        } else {
+            onDismiss()
+        }
+    }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = handleDismissRequest,
         properties = DialogProperties(
-            dismissOnClickOutside = false,
-            dismissOnBackPress = false
+            dismissOnClickOutside = true,
+            dismissOnBackPress = true
         )
     ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
-            modifier = modifier.width(480.dp).wrapContentHeight()
+            modifier = modifier
+                .width(480.dp)
+                .wrapContentHeight()
+                .focusRequester(dialogFocusRequester)
+                .focusable()
+                .formModalKeys(
+                    onCancel = handleDismissRequest,
+                    onConfirm = { if (hasChanges) onSave() },
+                    confirmEnabled = hasChanges
+                )
         ) {
             Column(
                 modifier = Modifier
@@ -279,6 +317,8 @@ fun UserSettingsModalDialog(
                         }
                     },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { if (hasChanges) onSave() }),
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 )
 
@@ -358,18 +398,12 @@ fun UserSettingsModalDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                val newPin = if (pinInput.isBlank()) null else pinInput.trim()
-                val hasChanges = (newPin != user.pin) ||
-                        (selectedLanguage != user.language) ||
-                        (selectedSecondaryCurrency != user.secondaryCurrency) ||
-                        (selectedAvatar != user.avatar)
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onDismiss,
+                        onClick = handleDismissRequest,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -387,6 +421,23 @@ fun UserSettingsModalDialog(
                     }
                 }
             }
+        }
+
+        if (showDiscardConfirm) {
+            ConfirmationDialog(
+                title = strings.discardChangesTitle,
+                message = strings.discardChangesMsg,
+                confirmText = strings.discard,
+                cancelText = strings.cancel,
+                confirmButtonColor = ColorDangerCrimson,
+                onConfirm = {
+                    showDiscardConfirm = false
+                    onDismiss()
+                },
+                onDismiss = {
+                    showDiscardConfirm = false
+                }
+            )
         }
     }
 }

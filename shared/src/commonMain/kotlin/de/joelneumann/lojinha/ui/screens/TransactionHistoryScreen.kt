@@ -35,11 +35,15 @@ import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun TransactionHistoryScreen(
@@ -177,9 +181,32 @@ fun TransactionHistoryContent(
         (transactions + relatedTransactionsMap.values).associateBy { it.id }
     }
 
+    val searchFocusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(showSettingsModal) {
+        if (!showSettingsModal) {
+            searchFocusRequester.safeRequestFocus()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                    if (showSettingsModal) {
+                        false
+                    } else if (searchFilter.isNotBlank()) {
+                        onSearchFilterChange("")
+                        coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                        true
+                    } else {
+                        onContinueShopping()
+                        true
+                    }
+                } else false
+            }
             .pointerInput(Unit) {
                 var lastInteractionTime = 0L
                 var lastPosition: Offset? = null
@@ -226,6 +253,9 @@ fun TransactionHistoryContent(
         // Header Bar with "Continue Shopping" button on the left of Logout
         HeaderBar(
             title = strings.history,
+            onLanguageClick = {
+                coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+            },
             actions = {
                 Button(
                     onClick = onContinueShopping,
@@ -311,7 +341,9 @@ fun TransactionHistoryContent(
                 searchFilter = searchFilter,
                 selectedTypeFilter = selectedTypeFilter,
                 onSearchFilterChange = onSearchFilterChange,
-                onTypeFilterSelect = onTypeFilterSelect
+                onTypeFilterSelect = onTypeFilterSelect,
+                onEscape = onContinueShopping,
+                focusRequester = searchFocusRequester
             )
 
             Spacer(modifier = Modifier.height(16.dp))

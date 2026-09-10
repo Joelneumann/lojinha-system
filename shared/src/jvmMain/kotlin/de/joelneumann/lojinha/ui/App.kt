@@ -22,6 +22,7 @@ import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
+import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.general.InactivityWarningDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.screens.ShoppingScreen
@@ -289,25 +290,18 @@ fun App() {
 
             // Abandon Cart Guard Dialog
             if (showAbandonCartGuardDialog) {
-                AlertDialog(
-                    onDismissRequest = { showAbandonCartGuardDialog = false },
-                    title = { Text(strings.abandonCartTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
-                    text = { Text(strings.abandonCartMsg, color = TextSecondarySubtle) },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                showAbandonCartGuardDialog = false
-                                appViewModel.logout()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
-                        ) {
-                            Text(strings.confirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
-                        }
+                ConfirmationDialog(
+                    title = strings.abandonCartTitle,
+                    message = strings.abandonCartMsg,
+                    confirmText = strings.confirm,
+                    cancelText = strings.cancel,
+                    confirmButtonColor = ColorDangerCrimson,
+                    onConfirm = {
+                        showAbandonCartGuardDialog = false
+                        appViewModel.logout()
                     },
-                    dismissButton = {
-                        OutlinedButton(onClick = { showAbandonCartGuardDialog = false }) {
-                            Text(strings.cancel)
-                        }
+                    onDismiss = {
+                        showAbandonCartGuardDialog = false
                     }
                 )
             }

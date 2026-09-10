@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,7 +24,9 @@ fun TransactionFilterBar(
     selectedTypeFilter: TransactionType?,
     onSearchFilterChange: (String) -> Unit,
     onTypeFilterSelect: (TransactionType?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onEscape: () -> Unit = {},
+    focusRequester: FocusRequester? = null
 ) {
     val strings = I18n.current
 
@@ -37,6 +40,8 @@ fun TransactionFilterBar(
             onQueryChange = onSearchFilterChange,
             placeholder = strings.historyFilterPlaceholder,
             onSearchSubmitted = {},
+            onEscape = onEscape,
+            focusRequester = focusRequester,
             modifier = Modifier.weight(1f).fillMaxHeight()
         )
 

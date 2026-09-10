@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -29,7 +30,9 @@ fun CartPanel(
     onQtyChange: (productId: String, newQty: Long) -> Unit,
     onRemoveItem: (productId: String) -> Unit,
     onCompletePurchase: () -> Unit,
-    modifier: Modifier = Modifier
+    onSelectCartItem: (Int) -> Unit = {},
+    modifier: Modifier = Modifier,
+    selectedCartIndex: Int = -1
 ) {
     val strings = I18n.current
 
@@ -67,13 +70,15 @@ fun CartPanel(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(cartItems, key = { it.product.id }) { cartItem ->
+                        itemsIndexed(cartItems, key = { _, it -> it.product.id }) { index, cartItem ->
                             CartLineItemRow(
                                 cartItem = cartItem,
                                 user = user,
                                 rate = rate,
                                 onQtyChange = { newQty -> onQtyChange(cartItem.product.id, newQty) },
-                                onRemove = { onRemoveItem(cartItem.product.id) }
+                                onRemove = { onRemoveItem(cartItem.product.id) },
+                                onClick = { onSelectCartItem(index) },
+                                isSelected = (index == selectedCartIndex)
                             )
                         }
                     }

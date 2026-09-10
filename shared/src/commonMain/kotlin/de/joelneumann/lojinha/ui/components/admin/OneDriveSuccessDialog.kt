@@ -19,6 +19,9 @@ import de.joelneumann.lojinha.ui.theme.AccentNavy
 import de.joelneumann.lojinha.ui.theme.ColorSuccessEmerald
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
 
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+
 @Composable
 fun OneDriveSuccessDialog(
     accountEmail: String,
@@ -27,6 +30,8 @@ fun OneDriveSuccessDialog(
     val strings = I18n.current
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onDismiss),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

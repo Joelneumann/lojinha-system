@@ -28,6 +28,10 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
 
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+
 enum class AdminTab {
     PRODUCTS,
     USERS,
@@ -75,7 +79,26 @@ fun AdminScreen(
         }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(SurfaceContainerLight)) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(SurfaceContainerLight)
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                    if (pendingTabSwitch != null || isExitAdminPending) {
+                        false
+                    } else if (expandedProductId != null || expandedUserId != null || expandedTransactionId != null) {
+                        expandedProductId = null
+                        expandedUserId = null
+                        expandedTransactionId = null
+                        true
+                    } else {
+                        handleExitAdminRequest()
+                        true
+                    }
+                } else false
+            }
+    ) {
         val isMobile = maxWidth < 600.dp
 
         Column(modifier = Modifier.fillMaxSize()) {
@@ -202,11 +225,28 @@ fun AdminScreen(
 
     if (pendingTabSwitch != null || isExitAdminPending) {
         val targetName = if (isExitAdminPending) "Main Screen" else pendingTabSwitch?.name ?: ""
-        AlertDialog(
-            onDismissRequest = {
-                pendingTabSwitch = null
+        val dismissDialog = {
+            pendingTabSwitch = null
+            isExitAdminPending = false
+        }
+        val confirmDiscard = {
+            hasUnsavedChanges = false
+            if (isExitAdminPending) {
                 isExitAdminPending = false
-            },
+                onExitAdmin()
+            } else if (pendingTabSwitch != null) {
+                currentTab = pendingTabSwitch!!
+                pendingTabSwitch = null
+                expandedProductId = null
+                expandedUserId = null
+                expandedTransactionId = null
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = dismissDialog,
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmDiscard),
             title = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -235,31 +275,14 @@ fun AdminScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        hasUnsavedChanges = false
-                        if (isExitAdminPending) {
-                            isExitAdminPending = false
-                            onExitAdmin()
-                        } else if (pendingTabSwitch != null) {
-                            currentTab = pendingTabSwitch!!
-                            pendingTabSwitch = null
-                            expandedProductId = null
-                            expandedUserId = null
-                            expandedTransactionId = null
-                        }
-                    },
+                    onClick = confirmDiscard,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
                     Text(strings.discardAndSwitch, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(
-                    onClick = {
-                        pendingTabSwitch = null
-                        isExitAdminPending = false
-                    }
-                ) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.keepEditing)
                 }
             }

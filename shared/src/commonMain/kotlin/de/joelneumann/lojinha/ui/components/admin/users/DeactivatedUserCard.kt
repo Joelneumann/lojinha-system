@@ -21,6 +21,8 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.utils.Formatting
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun DeactivatedUserCard(
@@ -104,23 +106,28 @@ fun DeactivatedUserCard(
     }
 
     if (showActivateConfirm) {
+        val dismissDialog = { showActivateConfirm = false }
+        val confirmActivate = {
+            onActivateUser()
+            showActivateConfirm = false
+        }
+
         AlertDialog(
-            onDismissRequest = { showActivateConfirm = false },
+            onDismissRequest = dismissDialog,
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmActivate),
             title = { Text(strings.confirmUserActivationTitle, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
             text = { Text(strings.confirmUserActivationMsg(user.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onActivateUser()
-                        showActivateConfirm = false
-                    },
+                    onClick = confirmActivate,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                 ) {
                     Text(strings.yesActivateUser, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showActivateConfirm = false }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }

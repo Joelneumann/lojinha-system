@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -13,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -20,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.SystemSettings
+import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.*
 import de.joelneumann.lojinha.ui.components.shopping.*
@@ -54,7 +57,6 @@ fun ShoppingScreen(
     val weightProductDialog by viewModel.weightProductDialog.collectAsState()
     val weightInput by viewModel.weightInput.collectAsState()
     val weightError by viewModel.weightError.collectAsState()
-    val showCheckoutConfirmation by viewModel.showCheckoutConfirmation.collectAsState()
 
     ShoppingContent(
         user = user,
@@ -65,7 +67,6 @@ fun ShoppingScreen(
         weightProductDialog = weightProductDialog,
         weightInput = weightInput,
         weightError = weightError,
-        showCheckoutConfirmation = showCheckoutConfirmation,
         onLogout = onLogout,
         onSearchQueryChange = { query ->
             onUserInteracted(false)
@@ -87,12 +88,10 @@ fun ShoppingScreen(
             onUserInteracted(true)
             viewModel.removeCartItem(id)
         },
-        onOpenCheckout = {
+        onCompletePurchase = {
             onUserInteracted(true)
-            viewModel.openCheckoutConfirmation()
+            viewModel.completePurchase(user, onNavigateToHistory)
         },
-        onCloseCheckout = viewModel::closeCheckoutConfirmation,
-        onCompletePurchase = { viewModel.completePurchase(user, onNavigateToHistory) },
         onWeightInputChange = viewModel::updateWeightInput,
         onCloseWeightDialog = viewModel::closeWeightDialog,
         onSubmitWeightDialog = {
@@ -114,15 +113,12 @@ fun ShoppingContent(
     weightProductDialog: Product?,
     weightInput: String,
     weightError: String?,
-    showCheckoutConfirmation: Boolean,
     onLogout: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmitted: () -> Unit,
     onProductSelected: (Product) -> Unit,
     onUpdateCartQty: (productId: String, newQty: Long) -> Unit,
     onRemoveCartItem: (productId: String) -> Unit,
-    onOpenCheckout: () -> Unit,
-    onCloseCheckout: () -> Unit,
     onCompletePurchase: () -> Unit,
     onWeightInputChange: (String) -> Unit,
     onCloseWeightDialog: () -> Unit,
@@ -134,18 +130,29 @@ fun ShoppingContent(
     val searchFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(weightProductDialog, showCheckoutConfirmation, LanguageManager.currentLanguage) {
-        if (weightProductDialog == null && !showCheckoutConfirmation) {
-            searchFocusRequester.safeRequestFocus()
-        }
-    }
-
     val filteredProducts = remember(products, searchQuery) {
         if (searchQuery.isBlank()) emptyList()
         else products.filter { p ->
             p.name.containsIgnoreAccents(searchQuery) ||
                     p.barcodes.any { b -> b.code.containsIgnoreAccents(searchQuery) }
         }.sortedByAccentInsensitive { it.name }
+    }
+
+    var highlightedProductIndex by remember(filteredProducts) { mutableStateOf(-1) }
+    var selectedCartIndex by remember(cartItems.size) { mutableStateOf(-1) }
+    var showCheckoutConfirmation by remember { mutableStateOf(false) }
+
+    LaunchedEffect(cartItems.isEmpty()) {
+        if (cartItems.isEmpty()) {
+            selectedCartIndex = -1
+            showCheckoutConfirmation = false
+        }
+    }
+
+    LaunchedEffect(weightProductDialog, showCheckoutConfirmation, LanguageManager.currentLanguage) {
+        if (weightProductDialog == null && !showCheckoutConfirmation) {
+            searchFocusRequester.safeRequestFocus()
+        }
     }
 
     val cartTotal = remember(cartItems) { cartItems.sumOf { it.lineTotal } }
@@ -157,9 +164,132 @@ fun ShoppingContent(
         else -> 0.0
     }
 
+    fun isPlusKey(event: KeyEvent): Boolean {
+        return event.key == Key.Plus ||
+                event.key == Key.Equals ||
+                event.key == Key.NumPadAdd ||
+                event.utf16CodePoint == '+'.code ||
+                event.utf16CodePoint == '='.code
+    }
+
+    fun isMinusKey(event: KeyEvent): Boolean {
+        return event.key == Key.Minus ||
+                event.key == Key.NumPadSubtract ||
+                event.utf16CodePoint == '-'.code
+    }
+
+    fun handleSelectedAdjustment(event: KeyEvent): Boolean {
+        if (selectedCartIndex in cartItems.indices) {
+            val item = cartItems[selectedCartIndex]
+            val step = if (item.product.unitType == UnitType.WEIGHT) 100L else 1L
+            if (isPlusKey(event)) {
+                if (event.type == KeyEventType.KeyDown) {
+                    onUpdateCartQty(item.product.id, item.quantity + step)
+                }
+                return true
+            } else if (isMinusKey(event)) {
+                if (event.type == KeyEventType.KeyDown) {
+                    if (item.quantity > step) {
+                        onUpdateCartQty(item.product.id, item.quantity - step)
+                    } else {
+                        onRemoveCartItem(item.product.id)
+                        if (selectedCartIndex >= cartItems.size - 1) {
+                            selectedCartIndex = (cartItems.size - 2).coerceAtLeast(-1)
+                        }
+                    }
+                }
+                return true
+            }
+        } else if (highlightedProductIndex in filteredProducts.indices) {
+            val product = filteredProducts[highlightedProductIndex]
+            val step = if (product.unitType == UnitType.WEIGHT) 100L else 1L
+            val existingItem = cartItems.firstOrNull { it.product.id == product.id }
+            if (isPlusKey(event)) {
+                if (event.type == KeyEventType.KeyDown) {
+                    if (existingItem != null) {
+                        onUpdateCartQty(product.id, existingItem.quantity + step)
+                    } else {
+                        onProductSelected(product)
+                    }
+                }
+                return true
+            } else if (isMinusKey(event)) {
+                if (event.type == KeyEventType.KeyDown) {
+                    if (existingItem != null) {
+                        if (existingItem.quantity > step) {
+                            onUpdateCartQty(product.id, existingItem.quantity - step)
+                        } else {
+                            onRemoveCartItem(product.id)
+                        }
+                    }
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    fun handleCartNavigation(keyEvent: KeyEvent): Boolean {
+        if (selectedCartIndex !in cartItems.indices) return false
+        if (keyEvent.type != KeyEventType.KeyDown) {
+            return keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter || keyEvent.key == Key.Tab
+        }
+        return when (keyEvent.key) {
+            Key.Backspace, Key.Delete -> {
+                val item = cartItems[selectedCartIndex]
+                onRemoveCartItem(item.product.id)
+                if (selectedCartIndex >= cartItems.size - 1) {
+                    selectedCartIndex = (cartItems.size - 2).coerceAtLeast(-1)
+                }
+                true
+            }
+            Key.DirectionDown -> {
+                selectedCartIndex = (selectedCartIndex + 1).coerceAtMost(cartItems.size - 1)
+                true
+            }
+            Key.DirectionUp -> {
+                if (selectedCartIndex > 0) {
+                    selectedCartIndex -= 1
+                } else {
+                    selectedCartIndex = -1
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                }
+                true
+            }
+            Key.Escape, Key.Tab -> {
+                selectedCartIndex = -1
+                coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                true
+            }
+            Key.Enter, Key.NumPadEnter -> {
+                if (cartItems.isNotEmpty()) {
+                    showCheckoutConfirmation = true
+                }
+                true
+            }
+            else -> {
+                selectedCartIndex = -1
+                coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                false
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .onKeyEvent { keyEvent ->
+                if (handleSelectedAdjustment(keyEvent)) {
+                    true
+                } else if (handleCartNavigation(keyEvent)) {
+                    true
+                } else if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
+                    if (weightProductDialog == null && !showCheckoutConfirmation) {
+                        onLogout()
+                        true
+                    } else false
+                } else false
+            }
             .pointerInput(Unit) {
                 var lastInteractionTime = 0L
                 var lastPosition: Offset? = null
@@ -259,10 +389,78 @@ fun ShoppingContent(
                 // Search Bar Input (Auto-Focused)
                 SearchInputField(
                     query = searchQuery,
-                    onQueryChange = onSearchQueryChange,
+                    onQueryChange = { newQuery ->
+                        onSearchQueryChange(newQuery)
+                        highlightedProductIndex = -1
+                    },
                     placeholder = strings.searchProductPlaceholder,
-                    onSearchSubmitted = onSearchSubmitted,
-                    focusRequester = searchFocusRequester
+                    onSearchSubmitted = {
+                        if (searchQuery.isBlank()) {
+                            if (cartItems.isNotEmpty()) {
+                                onCompletePurchase()
+                            }
+                        } else if (highlightedProductIndex in filteredProducts.indices) {
+                            val p = filteredProducts[highlightedProductIndex]
+                            onProductSelected(p)
+                        } else {
+                            onSearchSubmitted()
+                        }
+                    },
+                    focusRequester = searchFocusRequester,
+                    onEscape = onLogout,
+                    onKeyDown = { event ->
+                        if (handleSelectedAdjustment(event)) {
+                            true
+                        } else if (selectedCartIndex in cartItems.indices) {
+                            handleCartNavigation(event)
+                        } else when {
+                            event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown -> {
+                                if (filteredProducts.isNotEmpty()) {
+                                    highlightedProductIndex = (highlightedProductIndex + 1).coerceAtMost(filteredProducts.size - 1)
+                                    true
+                                } else if (cartItems.isNotEmpty()) {
+                                    selectedCartIndex = 0
+                                    highlightedProductIndex = -1
+                                    true
+                                } else false
+                            }
+                            event.key == Key.DirectionUp && event.type == KeyEventType.KeyDown -> {
+                                if (filteredProducts.isNotEmpty()) {
+                                    if (highlightedProductIndex > 0) {
+                                        highlightedProductIndex -= 1
+                                        true
+                                    } else if (highlightedProductIndex == 0) {
+                                        highlightedProductIndex = -1
+                                        true
+                                    } else false
+                                } else false
+                            }
+                            event.key == Key.Tab && event.type == KeyEventType.KeyDown -> {
+                                if (cartItems.isNotEmpty()) {
+                                    selectedCartIndex = 0
+                                    highlightedProductIndex = -1
+                                    true
+                                } else false
+                            }
+                            (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
+                                if (event.type == KeyEventType.KeyDown) {
+                                    if (searchQuery.isBlank()) {
+                                        if (cartItems.isNotEmpty()) {
+                                            showCheckoutConfirmation = true
+                                        }
+                                        true
+                                    } else if (highlightedProductIndex in filteredProducts.indices) {
+                                        val p = filteredProducts[highlightedProductIndex]
+                                        onProductSelected(p)
+                                        true
+                                    } else false
+                                } else if (event.type == KeyEventType.KeyUp) {
+                                    searchQuery.isBlank() || highlightedProductIndex in filteredProducts.indices
+                                } else false
+                            }
+                            else -> false
+                        }
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -304,13 +502,16 @@ fun ShoppingContent(
                         contentPadding = PaddingValues(bottom = 20.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(filteredProducts, key = { it.id }) { product ->
+                        itemsIndexed(filteredProducts, key = { _, it -> it.id }) { index, product ->
                             ProductCard(
                                 product = product,
                                 globalMarkup = settings.globalMarkupPercent,
                                 user = user,
                                 rate = rate,
+                                isHighlighted = (index == highlightedProductIndex),
                                 onClick = {
+                                    highlightedProductIndex = index
+                                    selectedCartIndex = -1
                                     onProductSelected(product)
                                     coroutineScope.launch {
                                         searchFocusRequester.safeRequestFocus()
@@ -337,8 +538,14 @@ fun ShoppingContent(
                     onRemoveCartItem(productId)
                     coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
                 },
-                onCompletePurchase = onOpenCheckout,
-                modifier = Modifier.weight(0.9f)
+                onCompletePurchase = onCompletePurchase,
+                onSelectCartItem = { index ->
+                    selectedCartIndex = index
+                    highlightedProductIndex = -1
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
+                modifier = Modifier.weight(0.9f),
+                selectedCartIndex = selectedCartIndex
             )
         }
 
@@ -359,11 +566,13 @@ fun ShoppingContent(
             ConfirmationDialog(
                 title = strings.confirmPurchaseTitle,
                 message = strings.confirmPurchaseMsg(Formatting.formatBrl(cartTotal)),
-                onDismiss = {
-                    onCloseCheckout()
-                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                confirmText = strings.confirm,
+                cancelText = strings.cancel,
+                onDismiss = { showCheckoutConfirmation = false },
+                onConfirm = {
+                    showCheckoutConfirmation = false
+                    onCompletePurchase()
                 },
-                onConfirm = onCompletePurchase,
                 confirmButtonColor = ColorSuccessEmerald
             )
         }

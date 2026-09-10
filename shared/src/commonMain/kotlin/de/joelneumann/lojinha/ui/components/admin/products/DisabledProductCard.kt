@@ -18,6 +18,8 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorSuccessEmerald
 import de.joelneumann.lojinha.ui.theme.DividerBorder
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import de.joelneumann.lojinha.ui.utils.Formatting
@@ -92,23 +94,28 @@ fun DisabledProductCard(
     }
 
     if (showEnableConfirm) {
+        val dismissDialog = { showEnableConfirm = false }
+        val confirmEnable = {
+            onEnableProduct()
+            showEnableConfirm = false
+        }
+
         AlertDialog(
-            onDismissRequest = { showEnableConfirm = false },
+            onDismissRequest = dismissDialog,
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmEnable),
             title = { Text(strings.confirmProductActivationTitle, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
             text = { Text(strings.confirmProductActivationMsg(product.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onEnableProduct()
-                        showEnableConfirm = false
-                    },
+                    onClick = confirmEnable,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                 ) {
                     Text(strings.yesEnableProduct, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showEnableConfirm = false }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }

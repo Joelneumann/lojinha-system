@@ -88,6 +88,9 @@ interface AppStrings {
     val noTransactionsFound: String
     val unsavedChangesTitle: String
     fun unsavedChangesMsg(targetName: String): String
+    val discardChangesTitle: String
+    val discardChangesMsg: String
+    val discard: String
     val discardAndSwitch: String
     val keepEditing: String
     fun productsCountText(count: Int, total: Int? = null): String

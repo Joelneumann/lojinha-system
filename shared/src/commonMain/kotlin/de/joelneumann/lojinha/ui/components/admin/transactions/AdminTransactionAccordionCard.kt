@@ -22,6 +22,8 @@ import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun AdminTransactionAccordionCard(
@@ -284,6 +286,16 @@ fun AdminTransactionAccordionCard(
 
         AlertDialog(
             onDismissRequest = { showStornoNonPurchaseConfirm = false },
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(
+                onCancel = { showStornoNonPurchaseConfirm = false },
+                onConfirm = {
+                    if (!isSubmitting) {
+                        onStornoNonPurchase(transaction)
+                        showStornoNonPurchaseConfirm = false
+                    }
+                }
+            ),
             title = {
                 Text(
                     text = strings.approvalStornoTxTitle(readableType),

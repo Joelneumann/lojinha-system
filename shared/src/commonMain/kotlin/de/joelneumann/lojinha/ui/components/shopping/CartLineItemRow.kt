@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -17,7 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.theme.*
@@ -31,13 +32,22 @@ fun CartLineItemRow(
     rate: Double,
     onQtyChange: (Long) -> Unit,
     onRemove: () -> Unit,
-    modifier: Modifier = Modifier
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier,
+    isSelected: Boolean = false
 ) {
     Card(
+        onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceContainerLight),
-        border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder))
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) Color(0xFFEFF6FF) else SurfaceContainerLight
+        ),
+        border = if (isSelected) {
+            BorderStroke(2.dp, AccentNavy)
+        } else {
+            CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder))
+        }
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -64,91 +74,101 @@ fun CartLineItemRow(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (cartItem.product.unitType == UnitType.PIECE) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = SurfaceWhite,
-                        border = BorderStroke(1.dp, DividerBorder)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.height(30.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (cartItem.product.unitType == UnitType.PIECE) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SurfaceWhite,
+                            border = BorderStroke(1.dp, DividerBorder)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .width(30.dp)
-                                    .pointerInput(cartItem.product.id, cartItem.quantity) {
-                                        detectTapGestures { onQtyChange(cartItem.quantity - 1) }
-                                    },
-                                contentAlignment = Alignment.Center
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.height(30.dp)
                             ) {
-                                Text("-", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .width(30.dp)
+                                        .pointerInput(cartItem.product.id, cartItem.quantity) {
+                                            detectTapGestures { onQtyChange(cartItem.quantity - 1) }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("-", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+
+                                VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
+
+                                Text(
+                                    text = "${cartItem.quantity}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryNavy,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.widthIn(min = 36.dp).padding(horizontal = 4.dp)
+                                )
+
+                                VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .width(30.dp)
+                                        .pointerInput(cartItem.product.id, cartItem.quantity) {
+                                            detectTapGestures { onQtyChange(cartItem.quantity + 1) }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("+", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
                             }
-
-                            VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
-
-                            Text(
-                                text = "${cartItem.quantity}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PrimaryNavy,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.widthIn(min = 36.dp).padding(horizontal = 4.dp)
-                            )
-
-                            VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .width(30.dp)
-                                    .pointerInput(cartItem.product.id, cartItem.quantity) {
-                                        detectTapGestures { onQtyChange(cartItem.quantity + 1) }
-                                    },
-                                contentAlignment = Alignment.Center
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SurfaceWhite,
+                            border = BorderStroke(1.dp, DividerBorder)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.height(30.dp)
                             ) {
-                                Text("+", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Text(
+                                    text = Formatting.formatQuantity(cartItem.quantity, UnitType.WEIGHT),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryNavy,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 10.dp)
+                                )
                             }
                         }
                     }
-                } else {
+
+                    // Disconnected Delete Button
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = SurfaceWhite,
-                        border = BorderStroke(1.dp, DividerBorder)
+                        border = BorderStroke(1.dp, DividerBorder),
+                        modifier = Modifier.size(30.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.height(30.dp)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(cartItem.product.id) {
+                                    detectTapGestures { onRemove() }
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = Formatting.formatQuantity(cartItem.quantity, UnitType.WEIGHT),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PrimaryNavy,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = 10.dp)
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = ColorDangerCrimson,
+                                modifier = Modifier.size(15.dp)
                             )
-
-                            VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .width(30.dp)
-                                    .pointerInput(cartItem.product.id) {
-                                        detectTapGestures { onRemove() }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = null,
-                                    tint = ColorDangerCrimson,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
                         }
                     }
                 }

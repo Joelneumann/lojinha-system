@@ -18,6 +18,8 @@ import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.PlatformFile
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun DbRestoreMultiApprovalDialog(
@@ -32,8 +34,30 @@ fun DbRestoreMultiApprovalDialog(
     var inputPhrase by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    val handleConfirm = {
+        if (step == 1) {
+            step = 2
+        } else {
+            val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
+            val isPhraseCorrect = inputPhrase.trim() == "RESTORE"
+
+            if (!isPasswordCorrect) {
+                errorMessage = strings.incorrectAdminPassword
+            } else if (!isPhraseCorrect) {
+                errorMessage = strings.typeRestoreExactly
+            } else {
+                onConfirmRestore()
+            }
+        }
+    }
+    val handleDismiss = {
+        if (step == 2) step = 1 else onDismiss()
+    }
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = handleDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        modifier = Modifier.confirmationDialogKeys(onCancel = handleDismiss, onConfirm = handleConfirm),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
@@ -196,8 +220,30 @@ fun WipeDataMultiApprovalDialog(
     var inputPhrase by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    val handleConfirm = {
+        if (step == 1) {
+            step = 2
+        } else {
+            val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
+            val isPhraseCorrect = inputPhrase.trim() == "WIPE"
+
+            if (!isPasswordCorrect) {
+                errorMessage = strings.incorrectAdminPassword
+            } else if (!isPhraseCorrect) {
+                errorMessage = strings.typeWipeExactly
+            } else {
+                onConfirmWipe()
+            }
+        }
+    }
+    val handleDismiss = {
+        if (step == 2) step = 1 else onDismiss()
+    }
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = handleDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        modifier = Modifier.confirmationDialogKeys(onCancel = handleDismiss, onConfirm = handleConfirm),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
@@ -346,8 +392,26 @@ fun CsvImportMultiApprovalDialog(
     var inputPassword by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    val handleConfirm = {
+        if (step == 1) {
+            step = 2
+        } else {
+            val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
+            if (!isPasswordCorrect) {
+                errorMessage = strings.incorrectAdminPassword
+            } else {
+                onConfirmImport()
+            }
+        }
+    }
+    val handleDismiss = {
+        if (step == 2) step = 1 else onDismiss()
+    }
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = handleDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        modifier = Modifier.confirmationDialogKeys(onCancel = handleDismiss, onConfirm = handleConfirm),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(

@@ -14,6 +14,9 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
 
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+
 @Composable
 fun OneDriveDisconnectDialog(
     accountEmail: String?,
@@ -23,6 +26,8 @@ fun OneDriveDisconnectDialog(
     val strings = I18n.current
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirm),
         title = {
             Text(
                 text = strings.disconnectOneDriveTitle,

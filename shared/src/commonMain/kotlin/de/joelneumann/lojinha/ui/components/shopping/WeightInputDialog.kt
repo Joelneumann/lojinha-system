@@ -23,8 +23,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.formModalKeys
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
@@ -40,16 +42,27 @@ fun WeightInputDialog(
     val strings = I18n.current
     val weightFocusRequester = remember { FocusRequester() }
     var showWeightTooltip by remember { mutableStateOf(false) }
+    val canSubmit = weightError == null && weightInput.isNotBlank()
 
     LaunchedEffect(Unit) {
         weightFocusRequester.safeRequestFocus()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
-            modifier = modifier.width(420.dp).wrapContentHeight()
+            modifier = modifier
+                .width(420.dp)
+                .wrapContentHeight()
+                .formModalKeys(
+                    onCancel = onDismiss,
+                    onConfirm = { if (canSubmit) onSubmit() },
+                    confirmEnabled = canSubmit
+                )
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -111,13 +124,15 @@ fun WeightInputDialog(
                         .height(56.dp)
                         .focusRequester(weightFocusRequester)
                         .onKeyEvent { keyEvent ->
-                            if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                                onSubmit()
+                            if (keyEvent.type == KeyEventType.KeyDown && (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
+                                if (canSubmit) {
+                                    onSubmit()
+                                }
                                 true
                             } else false
                         },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { onSubmit() })
+                    keyboardActions = KeyboardActions(onDone = { if (canSubmit) onSubmit() })
                 )
 
                 if (showWeightTooltip) {
@@ -159,6 +174,7 @@ fun WeightInputDialog(
 
                     Button(
                         onClick = onSubmit,
+                        enabled = canSubmit,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)

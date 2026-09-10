@@ -35,7 +35,9 @@ fun SearchInputField(
     onSearchSubmitted: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
-    onFocusChanged: ((FocusState) -> Unit)? = null
+    onFocusChanged: ((FocusState) -> Unit)? = null,
+    onEscape: (() -> Unit)? = null,
+    onKeyDown: ((KeyEvent) -> Boolean)? = null
 ) {
     var baseModifier = modifier
         .fillMaxWidth()
@@ -67,12 +69,28 @@ fun SearchInputField(
             )
         },
         textStyle = LocalTextStyle.current.copy(fontSize = 15.sp),
-        modifier = baseModifier.onKeyEvent { keyEvent ->
-            if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                onSearchSubmitted()
-                true
-            } else false
-        },
+        modifier = baseModifier
+            .onPreviewKeyEvent { keyEvent ->
+                if (onKeyDown != null && onKeyDown(keyEvent)) {
+                    true
+                } else if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
+                    if (query.isNotBlank()) {
+                        onQueryChange("")
+                        true
+                    } else if (onEscape != null) {
+                        onEscape()
+                        true
+                    } else {
+                        false
+                    }
+                } else false
+            }
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyUp && (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
+                    onSearchSubmitted()
+                    true
+                } else false
+            },
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = SurfaceWhite,
