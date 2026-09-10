@@ -53,7 +53,18 @@ fun TransactionItemCard(
 
     val isCanceled = childCancellation != null || (tx.type == TransactionType.PURCHASE && tx.items.isNotEmpty() && tx.items.all { it.quantity == 0L })
     val isCorrected = tx.type == TransactionType.PURCHASE && !isCanceled && childCorrections.isNotEmpty()
-    val cumulativeDelta = remember(childCorrections) { childCorrections.sumOf { it.totalAmount } }
+    val allChildren = remember(tx.id, allTransactionsMap) {
+        allTransactionsMap.values.filter { it.referenceTransactionId == tx.id }
+    }
+    val cumulativeDelta = remember(allChildren, isCanceled, tx.totalAmount) {
+        if (allChildren.isNotEmpty()) {
+            allChildren.sumOf { it.totalAmount }
+        } else if (isCanceled) {
+            -tx.totalAmount
+        } else {
+            0L
+        }
+    }
 
     val displayNote = remember(tx, allTransactionsMap, LanguageManager.currentLanguage) {
         if (tx.type == TransactionType.CANCELLATION && tx.referenceTransactionId != null) {
@@ -263,7 +274,7 @@ fun TransactionItemCard(
             }
 
             // Direct Visibility of Items inside Transaction Card
-            if (tx.type == TransactionType.CORRECTION && tx.items.isNotEmpty()) {
+            if ((tx.type == TransactionType.CORRECTION || tx.type == TransactionType.CANCELLATION) && tx.items.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
                 HorizontalDivider(color = DividerBorder)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -347,8 +358,12 @@ fun TransactionItemCard(
                     }
                 }
             } else {
-                // For cancellations, do not render 0x zeroed items. For custom expenses, description is sufficient.
-                val nonZeroItems = tx.items.filter { it.quantity > 0 }
+                val displayedItems = if (isCorrected) {
+                    de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel.computeEffectiveItems(tx.items, childCorrections)
+                } else {
+                    tx.items
+                }
+                val nonZeroItems = displayedItems.filter { it.quantity > 0 }
                 if (nonZeroItems.isNotEmpty() && tx.type != TransactionType.CANCELLATION && tx.type != TransactionType.ADMIN_WITHDRAWAL) {
                     Spacer(modifier = Modifier.height(10.dp))
                     HorizontalDivider(color = DividerBorder)
@@ -362,13 +377,15 @@ fun TransactionItemCard(
                                 Text(
                                     text = "• ${Formatting.formatQuantity(item.quantity, item.unitType)} ${item.productName} x ${Formatting.formatBrl(item.unitPriceAtPurchase)}",
                                     fontSize = 13.sp,
-                                    color = TextSecondarySubtle
+                                    color = if (isCanceled) TextSecondaryMuted else TextSecondarySubtle,
+                                    textDecoration = if (isCanceled) TextDecoration.LineThrough else TextDecoration.None
                                 )
                                 Text(
                                     text = Formatting.formatBrl(item.totalLinePrice),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = PrimaryNavy
+                                    color = if (isCanceled) TextSecondaryMuted else PrimaryNavy,
+                                    textDecoration = if (isCanceled) TextDecoration.LineThrough else TextDecoration.None
                                 )
                             }
                         }

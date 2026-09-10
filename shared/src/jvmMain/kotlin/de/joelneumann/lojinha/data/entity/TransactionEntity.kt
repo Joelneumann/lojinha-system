@@ -1,12 +1,21 @@
 package de.joelneumann.lojinha.data.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.TransactionType
 
-@Entity(tableName = "transactions")
+@Entity(
+    tableName = "transactions",
+    indices = [
+        Index(value = ["referenceTransactionId"]),
+        Index(value = ["userId"]),
+        Index(value = ["timestamp"]),
+        Index(value = ["type"])
+    ]
+)
 data class TransactionEntity(
     @PrimaryKey val id: String,
     val userId: String,
@@ -16,7 +25,9 @@ data class TransactionEntity(
     val referenceTransactionId: String?,
     val note: String?,
     val totalAmount: Long,
-    val items: List<TransactionItem>
+    val items: List<TransactionItem>,
+    val userBalanceBefore: Long? = null,
+    val userBalanceAfter: Long? = null
 ) {
     fun toDomain(): Transaction = Transaction(
         id = id,
@@ -27,7 +38,9 @@ data class TransactionEntity(
         referenceTransactionId = referenceTransactionId,
         note = note,
         totalAmount = totalAmount,
-        items = items
+        items = items,
+        userBalanceBefore = userBalanceBefore,
+        userBalanceAfter = userBalanceAfter
     )
 
     companion object {
@@ -40,7 +53,9 @@ data class TransactionEntity(
             referenceTransactionId = tx.referenceTransactionId,
             note = tx.note,
             totalAmount = tx.totalAmount,
-            items = tx.items
+            items = tx.items,
+            userBalanceBefore = tx.userBalanceBefore,
+            userBalanceAfter = tx.userBalanceAfter
         )
     }
 }

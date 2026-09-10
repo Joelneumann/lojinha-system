@@ -29,6 +29,7 @@ fun AdminTransactionsTabScreen(
     val relatedChildrenMap by viewModel.relatedChildrenMap.collectAsState()
     val referencedParentsMap by viewModel.referencedParentsMap.collectAsState()
     val correctionTarget by viewModel.correctionTarget.collectAsState()
+    val isSubmitting by viewModel.isSubmitting.collectAsState()
 
     val searchQuery by viewModel.searchFilter.collectAsState()
     val currentPage by viewModel.currentPage.collectAsState()
@@ -92,10 +93,12 @@ fun AdminTransactionsTabScreen(
                     )
                     val refTx = referencedParentsMap[tx.referenceTransactionId] ?: transactions.firstOrNull { it.id == tx.referenceTransactionId }
 
-                    val cumulativeDelta = if (isCanceled) {
-                        cancellationChild?.totalAmount ?: -tx.totalAmount
+                    val cumulativeDelta = if (children.isNotEmpty()) {
+                        children.sumOf { it.totalAmount }
+                    } else if (isCanceled) {
+                        -tx.totalAmount
                     } else {
-                        correctionChildren.sumOf { it.totalAmount }
+                        0L
                     }
 
                     AdminTransactionAccordionCard(
@@ -106,6 +109,7 @@ fun AdminTransactionsTabScreen(
                         isExpanded = isExpanded,
                         isCanceled = isCanceled,
                         isCorrected = isCorrected,
+                        isSubmitting = isSubmitting,
                         onExpandToggle = { onRequestToggleExpand(tx.id) },
                         onOpenCorrectionModal = { viewModel.openCorrectionModal(tx, effectiveItems) },
                         onStornoNonPurchase = viewModel::stornoNonPurchaseTransaction

@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.domain.repository
 
 import de.joelneumann.lojinha.domain.model.PagedResult
 import de.joelneumann.lojinha.domain.model.Transaction
+import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.TransactionType
 import kotlinx.coroutines.flow.Flow
 
@@ -30,5 +31,20 @@ interface TransactionRepository {
 
     suspend fun getTransactionsByReferenceIds(referenceIds: List<String>): List<Transaction>
     suspend fun getTransactionsByIds(ids: List<String>): List<Transaction>
+
+    suspend fun getCancellationCountForReference(refId: String): Int
+    suspend fun executeAtomicTransaction(
+        transaction: Transaction,
+        balanceDelta: Long,
+        stockDeltas: Map<String, Long> = emptyMap()
+    )
+    suspend fun applyPurchaseCorrection(
+        originalTransactionId: String,
+        newItems: List<TransactionItem>
+    ): Boolean
+    suspend fun stornoNonPurchase(
+        transactionId: String
+    ): Boolean
 }
+
 

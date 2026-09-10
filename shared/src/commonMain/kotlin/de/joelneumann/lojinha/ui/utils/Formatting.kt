@@ -25,8 +25,10 @@ object Formatting {
         val convertedAmount = brlReais * rate
         val isNegative = convertedAmount < 0
         val absAmount = abs(convertedAmount)
-        val integerPart = absAmount.toLong()
-        val decimalPart = round((absAmount - integerPart) * 100).toLong()
+
+        val totalCents = round(absAmount * 100.0).toLong()
+        val integerPart = totalCents / 100
+        val decimalPart = totalCents % 100
         val decString = decimalPart.toString().padStart(2, '0')
 
         val formattedValue = "${secondaryCurrency.symbol} $integerPart.$decString"

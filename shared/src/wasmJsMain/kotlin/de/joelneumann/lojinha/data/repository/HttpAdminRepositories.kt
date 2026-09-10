@@ -278,6 +278,63 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
             emptyList()
         }
     }
+
+    override suspend fun getCancellationCountForReference(refId: String): Int {
+        return try {
+            val res = client.httpClient.get("/api/admin/transactions/cancellation-count/$refId") {
+                client.run { appendAdminAuth() }
+            }.body<Map<String, Int>>()
+            res["count"] ?: 0
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    override suspend fun executeAtomicTransaction(
+        transaction: Transaction,
+        balanceDelta: Long,
+        stockDeltas: Map<String, Long>
+    ) {
+        try {
+            client.httpClient.post("/api/admin/transactions/atomic") {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(AtomicTransactionRequest(transaction, balanceDelta, stockDeltas))
+            }
+        } catch (e: Exception) {
+            println("[HttpTransactionRepository] executeAtomicTransaction failed: ${e.message}")
+        }
+    }
+
+    override suspend fun applyPurchaseCorrection(
+        originalTransactionId: String,
+        newItems: List<TransactionItem>
+    ): Boolean {
+        return try {
+            val response = client.httpClient.post("/api/admin/transactions/purchase-correction") {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(PurchaseCorrectionRequest(originalTransactionId, newItems))
+            }
+            response.status == HttpStatusCode.OK
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    override suspend fun stornoNonPurchase(transactionId: String): Boolean {
+        return try {
+            val response = client.httpClient.post("/api/admin/transactions/storno-non-purchase") {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(StornoNonPurchaseRequest(transactionId))
+            }
+            response.status == HttpStatusCode.OK
+        } catch (e: Exception) {
+            false
+        }
+    }
+
 }
 
 class HttpSettingsRepository(private val client: AdminNetworkClient) : SettingsRepository {

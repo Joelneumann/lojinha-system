@@ -159,8 +159,8 @@ fun TransactionHistoryContent(
         val list = ArrayList<TransactionWithBalance>(sortedDesc.size)
         var current = user.balance
         for (tx in sortedDesc) {
-            val after = current
-            val before = after - tx.totalAmount
+            val before = tx.userBalanceBefore ?: (current - tx.totalAmount)
+            val after = tx.userBalanceAfter ?: current
             list.add(TransactionWithBalance(tx, before, after))
             current = before
         }

@@ -51,6 +51,9 @@ class AdminTransactionsViewModel(
     private val _correctionTarget = MutableStateFlow<Pair<Transaction, List<TransactionItem>>?>(null)
     val correctionTarget: StateFlow<Pair<Transaction, List<TransactionItem>>?> = _correctionTarget.asStateFlow()
 
+    private val _isSubmitting = MutableStateFlow(false)
+    val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
+
     init {
         loadData()
         observeTransactions()
@@ -143,120 +146,42 @@ class AdminTransactionsViewModel(
         currentItems: List<TransactionItem>,
         newItems: List<TransactionItem>
     ) {
-        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val isAllZero = newItems.all { it.quantity == 0L }
-
-        val currentCost = currentItems.sumOf { item ->
-            when (item.unitType) {
-                UnitType.PIECE -> item.unitPriceAtPurchase * item.quantity
-                UnitType.WEIGHT -> kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
-            }
-        }
-        val newCost = newItems.sumOf { item ->
-            when (item.unitType) {
-                UnitType.PIECE -> item.unitPriceAtPurchase * item.quantity
-                UnitType.WEIGHT -> kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
-            }
-        }
-        // Positive costDifference means newCost > currentCost (charge). balanceDelta is negative.
-        // Negative costDifference means newCost < currentCost (refund). balanceDelta is positive.
-        val costDifference = newCost - currentCost
-        val balanceDelta = -costDifference
-
-        val updatedItems = newItems.filter { newItem ->
-            val currentItem = currentItems.firstOrNull { it.productId == newItem.productId }
-            val currentQty = currentItem?.quantity ?: 0L
-            newItem.quantity != currentQty
-        }.map { newItem ->
-            val currentItem = currentItems.firstOrNull { it.productId == newItem.productId }
-            newItem.copy(previousQuantity = currentItem?.quantity ?: 0L)
-        }
-
-        if (updatedItems.isEmpty()) {
-            closeCorrectionModal()
-            return
-        }
-
-        val dateStr = Formatting.formatTimestamp(originalTx.timestamp, Language.EN)
-        val origAmountStr = Formatting.formatBrl(kotlin.math.abs(originalTx.totalAmount))
-        val humanNote = if (isAllZero) {
-            "Complete Storno of Purchase ($dateStr - $origAmountStr)"
-        } else {
-            "Item quantity correction for Purchase ($dateStr - Original $origAmountStr)"
-        }
-
-        val correctionTx = Transaction(
-            id = generateUuid(),
-            userId = originalTx.userId,
-            userNameSnapshot = originalTx.userNameSnapshot,
-            timestamp = nowMillis,
-            type = if (isAllZero) TransactionType.CANCELLATION else TransactionType.CORRECTION,
-            referenceTransactionId = originalTx.id,
-            note = humanNote,
-            totalAmount = balanceDelta,
-            items = updatedItems
-        )
+        if (_isSubmitting.value) return
+        _isSubmitting.value = true
 
         viewModelScope.launch {
             try {
-                if (balanceDelta != 0L) {
-                    userRepository.updateBalance(originalTx.userId, balanceDelta)
+                val success = transactionRepository.applyPurchaseCorrection(originalTx.id, newItems)
+                if (success) {
+                    closeCorrectionModal()
+                    fetchPagedTransactions()
                 }
-
-                newItems.forEach { newItem ->
-                    val currentItem = currentItems.firstOrNull { it.productId == newItem.productId }
-                    val currentQty = currentItem?.quantity ?: 0L
-                    val qtyChange = newItem.quantity - currentQty
-                    if (qtyChange != 0L) {
-                        val p = productRepository.getProductById(newItem.productId)
-                        if (p != null) {
-                            productRepository.updateStock(newItem.productId, -qtyChange)
-                        }
-                    }
-                }
-
-                transactionRepository.recordTransaction(correctionTx)
-                closeCorrectionModal()
-                fetchPagedTransactions()
             } catch (e: Exception) {
                 // Log or handle error
+            } finally {
+                _isSubmitting.value = false
             }
         }
     }
 
     fun stornoNonPurchaseTransaction(tx: Transaction) {
-        if (tx.type == TransactionType.CANCELLATION || tx.type == TransactionType.CORRECTION) return
-        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val cancellationId = generateUuid()
-
-        val refundAmount = -tx.totalAmount
-        val dateStr = Formatting.formatTimestamp(tx.timestamp, Language.EN)
-        val amountStr = Formatting.formatBrl(kotlin.math.abs(tx.totalAmount))
-        val typeLabel = when (tx.type) {
-            TransactionType.ADMIN_DEPOSIT -> "Deposit"
-            TransactionType.ADMIN_WITHDRAWAL -> if (tx.items.isNotEmpty()) "Custom Expense" else "Debit"
-            else -> tx.type.name
-        }
-
-        val stornoTx = Transaction(
-            id = cancellationId,
-            userId = tx.userId,
-            userNameSnapshot = tx.userNameSnapshot,
-            timestamp = nowMillis,
-            type = TransactionType.CANCELLATION,
-            referenceTransactionId = tx.id,
-            note = "Storno of $typeLabel ($dateStr - $amountStr)",
-            totalAmount = refundAmount,
-            items = emptyList()
-        )
+        if (tx.type != TransactionType.ADMIN_DEPOSIT && tx.type != TransactionType.ADMIN_WITHDRAWAL) return
+        if (_isSubmitting.value) return
+        _isSubmitting.value = true
 
         viewModelScope.launch {
             try {
-                userRepository.updateBalance(tx.userId, refundAmount)
-                transactionRepository.recordTransaction(stornoTx)
-                fetchPagedTransactions()
+                if (transactionRepository.getCancellationCountForReference(tx.id) > 0) {
+                    return@launch
+                }
+                val success = transactionRepository.stornoNonPurchase(tx.id)
+                if (success) {
+                    fetchPagedTransactions()
+                }
             } catch (e: Exception) {
                 // Log or handle error
+            } finally {
+                _isSubmitting.value = false
             }
         }
     }

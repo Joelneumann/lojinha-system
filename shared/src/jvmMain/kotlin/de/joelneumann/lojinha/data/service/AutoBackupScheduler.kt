@@ -42,6 +42,7 @@ class AutoBackupScheduler(
 
     private var dataChangeDebounceJob: Job? = null
 
+    @Synchronized
     fun triggerDataChangeBackup(debounceMs: Long = 1000L) {
         dataChangeDebounceJob?.cancel()
         dataChangeDebounceJob = externalScope.launch(Dispatchers.IO) {

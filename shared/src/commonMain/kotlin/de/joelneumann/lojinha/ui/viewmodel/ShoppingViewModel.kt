@@ -201,6 +201,9 @@ class ShoppingViewModel(
             )
         }
 
+        val balBefore = user.balance
+        val balAfter = user.balance - totalCents
+
         val tx = Transaction(
             id = txId,
             userId = user.id,
@@ -208,18 +211,18 @@ class ShoppingViewModel(
             timestamp = nowMillis,
             type = TransactionType.PURCHASE,
             totalAmount = -totalCents, // Negative for purchase
-            items = txItems
+            items = txItems,
+            userBalanceBefore = balBefore,
+            userBalanceAfter = balAfter
         )
 
         viewModelScope.launch {
-            // Deduct user balance
-            userRepository.updateBalance(user.id, -totalCents)
-            // Deduct stock for products
-            cart.forEach { item ->
-                productRepository.updateStock(item.product.id, -item.quantity)
-            }
-            // Record immutable transaction
-            transactionRepository.recordTransaction(tx)
+            val stockDeltas = cart.associate { it.product.id to -it.quantity }
+            transactionRepository.executeAtomicTransaction(
+                transaction = tx,
+                balanceDelta = -totalCents,
+                stockDeltas = stockDeltas
+            )
 
             clearCart()
             closeCheckoutConfirmation()

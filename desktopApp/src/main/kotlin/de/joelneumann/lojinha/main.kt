@@ -12,15 +12,17 @@ import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
+import de.joelneumann.lojinha.data.service.DataChangeNotifier
 import de.joelneumann.lojinha.server.LojinhaAdminServer
 import de.joelneumann.lojinha.ui.App
 
 fun main() = application {
     val database = DatabaseFactory.createDatabase()
-    val productRepository = RoomProductRepositoryImpl(database.productDao())
-    val userRepository = RoomUserRepositoryImpl(database.userDao(), database.transactionDao())
-    val transactionRepository = RoomTransactionRepositoryImpl(database.transactionDao())
-    val settingsRepository = RoomSettingsRepositoryImpl(database.settingsDao())
+    val onDataChanged = { DataChangeNotifier.notifyDataChanged() }
+    val productRepository = RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), onDataChanged)
+    val userRepository = RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged)
+    val transactionRepository = RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged)
+    val settingsRepository = RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged)
 
     val adminServer = LojinhaAdminServer(
         productRepository = productRepository,

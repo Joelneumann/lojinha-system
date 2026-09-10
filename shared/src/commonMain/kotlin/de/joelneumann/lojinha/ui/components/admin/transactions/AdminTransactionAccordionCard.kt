@@ -32,6 +32,7 @@ fun AdminTransactionAccordionCard(
     isExpanded: Boolean,
     isCanceled: Boolean,
     isCorrected: Boolean,
+    isSubmitting: Boolean = false,
     onExpandToggle: () -> Unit,
     onOpenCorrectionModal: () -> Unit,
     onStornoNonPurchase: (Transaction) -> Unit,
@@ -188,14 +189,14 @@ fun AdminTransactionAccordionCard(
             }
         }
 
-        // Items table for purchases, and updated items table for corrections (custom expenses show description in note above)
+        // Items table for purchases, and updated items table for corrections / cancellations
         if (transaction.type == TransactionType.PURCHASE && effectiveItems.isNotEmpty()) {
             TransactionItemsTable(
                 transaction = transaction,
                 effectiveItems = effectiveItems,
-                isCorrected = isCorrected
+                isCorrected = isCorrected || isCanceled
             )
-        } else if (transaction.type == TransactionType.CORRECTION && transaction.items.isNotEmpty()) {
+        } else if ((transaction.type == TransactionType.CORRECTION || transaction.type == TransactionType.CANCELLATION) && transaction.items.isNotEmpty()) {
             CorrectionItemsTable(
                 transaction = transaction,
                 referencedTransaction = referencedTransaction
@@ -212,6 +213,7 @@ fun AdminTransactionAccordionCard(
                 ) {
                     Button(
                         onClick = onOpenCorrectionModal,
+                        enabled = !isSubmitting,
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(40.dp)
@@ -243,6 +245,7 @@ fun AdminTransactionAccordionCard(
                 ) {
                     Button(
                         onClick = { showStornoNonPurchaseConfirm = true },
+                        enabled = !isSubmitting,
                         colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(40.dp)
@@ -301,6 +304,7 @@ fun AdminTransactionAccordionCard(
                         onStornoNonPurchase(transaction)
                         showStornoNonPurchaseConfirm = false
                     },
+                    enabled = !isSubmitting,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
                     Text(strings.approveStorno, color = SurfaceWhite, fontWeight = FontWeight.Bold)

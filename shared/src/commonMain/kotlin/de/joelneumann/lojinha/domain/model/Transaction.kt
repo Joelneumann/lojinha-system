@@ -28,5 +28,7 @@ data class Transaction(
     val referenceTransactionId: String? = null,
     val note: String? = null,
     val totalAmount: Long,
-    val items: List<TransactionItem> = emptyList()
+    val items: List<TransactionItem> = emptyList(),
+    val userBalanceBefore: Long? = null,
+    val userBalanceAfter: Long? = null
 )

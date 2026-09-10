@@ -46,7 +46,8 @@ fun App() {
     val oneDriveBackupService = remember { de.joelneumann.lojinha.data.service.OneDriveBackupService() }
     val coroutineScope = rememberCoroutineScope()
 
-    val settingsRepository = remember { RoomSettingsRepositoryImpl(database.settingsDao()) }
+    val onDataChanged = remember { { de.joelneumann.lojinha.data.service.DataChangeNotifier.notifyDataChanged() } }
+    val settingsRepository = remember { RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged) }
     val autoBackupScheduler = remember {
         de.joelneumann.lojinha.data.service.AutoBackupScheduler(
             backupRestoreService = backupRestoreService,
@@ -57,9 +58,15 @@ fun App() {
         )
     }
 
-    val onDataChanged = remember { { autoBackupScheduler.triggerDataChangeBackup() } }
+    DisposableEffect(autoBackupScheduler) {
+        val listener = { autoBackupScheduler.triggerDataChangeBackup() }
+        de.joelneumann.lojinha.data.service.DataChangeNotifier.addListener(listener)
+        onDispose {
+            de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
+        }
+    }
 
-    val productRepository = remember { RoomProductRepositoryImpl(database.productDao(), onDataChanged) }
+    val productRepository = remember { RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), onDataChanged) }
     val userRepository = remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
     val transactionRepository = remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
 

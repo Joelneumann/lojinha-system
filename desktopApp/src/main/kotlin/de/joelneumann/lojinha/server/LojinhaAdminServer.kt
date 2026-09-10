@@ -167,6 +167,16 @@ class LojinhaAdminServer(
                         transactionRepository.recordTransaction(transaction)
                         call.respond(HttpStatusCode.OK)
                     }
+                    post("/transactions/atomic") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@post
+                        val req = call.receive<AtomicTransactionRequest>()
+                        transactionRepository.executeAtomicTransaction(
+                            transaction = req.transaction,
+                            balanceDelta = req.balanceDelta,
+                            stockDeltas = req.stockDeltas
+                        )
+                        call.respond(HttpStatusCode.OK)
+                    }
                     post("/transactions/by-reference-ids") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val refIds = call.receive<List<String>>()
@@ -176,6 +186,32 @@ class LojinhaAdminServer(
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val ids = call.receive<List<String>>()
                         call.respond(transactionRepository.getTransactionsByIds(ids))
+                    }
+                    get("/transactions/cancellation-count/{refId}") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@get
+                        val refId = call.parameters["refId"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                        val count = transactionRepository.getCancellationCountForReference(refId)
+                        call.respond(mapOf("count" to count))
+                    }
+                    post("/transactions/purchase-correction") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@post
+                        val request = call.receive<PurchaseCorrectionRequest>()
+                        val success = transactionRepository.applyPurchaseCorrection(request.originalTransactionId, request.newItems)
+                        if (success) {
+                            call.respond(HttpStatusCode.OK)
+                        } else {
+                            call.respond(HttpStatusCode.BadRequest, "Failed to apply purchase correction")
+                        }
+                    }
+                    post("/transactions/storno-non-purchase") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@post
+                        val request = call.receive<StornoNonPurchaseRequest>()
+                        val success = transactionRepository.stornoNonPurchase(request.transactionId)
+                        if (success) {
+                            call.respond(HttpStatusCode.OK)
+                        } else {
+                            call.respond(HttpStatusCode.BadRequest, "Failed to storno transaction")
+                        }
                     }
 
                     // Settings

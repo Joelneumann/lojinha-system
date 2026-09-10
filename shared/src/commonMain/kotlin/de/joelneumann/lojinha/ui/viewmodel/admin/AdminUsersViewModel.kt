@@ -141,6 +141,9 @@ class AdminUsersViewModel(
             emptyList()
         }
 
+        val balBefore = user.balance
+        val balAfter = user.balance + deltaCents
+
         val tx = Transaction(
             id = txId,
             userId = user.id,
@@ -149,12 +152,13 @@ class AdminUsersViewModel(
             type = txType,
             note = description,
             totalAmount = deltaCents,
-            items = items
+            items = items,
+            userBalanceBefore = balBefore,
+            userBalanceAfter = balAfter
         )
 
         viewModelScope.launch {
-            userRepository.updateBalance(user.id, deltaCents)
-            transactionRepository.recordTransaction(tx)
+            transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
             refreshUsers()
             closeCustomExpenseModal()
         }
@@ -166,20 +170,25 @@ class AdminUsersViewModel(
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
         val txId = generateUuid()
 
-        val tx = Transaction(
-            id = txId,
-            userId = userId,
-            userNameSnapshot = userName,
-            timestamp = nowMillis,
-            type = txType,
-            note = note.ifBlank { if (isDeposit) "Deposit via Admin" else "Debit via Admin" },
-            totalAmount = centsDelta,
-            items = emptyList()
-        )
-
         viewModelScope.launch {
-            userRepository.updateBalance(userId, centsDelta)
-            transactionRepository.recordTransaction(tx)
+            val user = userRepository.getUserById(userId)
+            val balBefore = user?.balance ?: 0L
+            val balAfter = balBefore + centsDelta
+
+            val tx = Transaction(
+                id = txId,
+                userId = userId,
+                userNameSnapshot = userName,
+                timestamp = nowMillis,
+                type = txType,
+                note = note.ifBlank { if (isDeposit) "Deposit via Admin" else "Debit via Admin" },
+                totalAmount = centsDelta,
+                items = emptyList(),
+                userBalanceBefore = balBefore,
+                userBalanceAfter = balAfter
+            )
+
+            transactionRepository.executeAtomicTransaction(tx, centsDelta, emptyMap())
             refreshUsers()
         }
     }

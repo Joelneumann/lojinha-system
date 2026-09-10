@@ -69,4 +69,37 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE id IN (:ids)")
     suspend fun getTransactionsByIds(ids: List<String>): List<TransactionEntity>
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE referenceTransactionId = :refId AND type = 'CANCELLATION'")
+    suspend fun getCancellationCountForReference(refId: String): Int
+
+    @Query("""SELECT COUNT(*) FROM transactions WHERE items LIKE '%"productId":"' || :productId || '"%'""")
+    suspend fun getTransactionCountForProduct(productId: String): Int
+
+
+    @Query("SELECT balance FROM users WHERE id = :id")
+    suspend fun getUserBalance(id: String): Long?
+
+    @Query("UPDATE users SET balance = balance + :amountDelta WHERE id = :id")
+    suspend fun updateUserBalance(id: String, amountDelta: Long)
+
+    @Query("UPDATE products SET stockQuantity = stockQuantity + :delta WHERE id = :id")
+    suspend fun updateProductStock(id: String, delta: Long)
+
+    @androidx.room.Transaction
+    suspend fun executeAtomicTransaction(
+        transaction: TransactionEntity,
+        balanceDelta: Long,
+        stockDeltas: Map<String, Long>
+    ) {
+        if (balanceDelta != 0L) {
+            updateUserBalance(transaction.userId, balanceDelta)
+        }
+        for ((productId, delta) in stockDeltas) {
+            if (delta != 0L) {
+                updateProductStock(productId, delta)
+            }
+        }
+        insertTransaction(transaction)
+    }
 }

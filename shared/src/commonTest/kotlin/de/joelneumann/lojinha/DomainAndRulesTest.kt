@@ -92,6 +92,10 @@ class DomainAndRulesTest {
 
         val none = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.NONE, 0.18)
         assertEquals("", none)
+
+        // Test IEEE 754 precision boundary (R$ 16,65 with 0.18 rate: 16.65 * 0.18 = 2.997 -> $ 3.00, not $ 2.100)
+        val edgeCase = Formatting.formatSecondaryCurrency(1665L, SecondaryCurrency.USD, 0.18)
+        assertEquals(" (≈ $ 3.00)", edgeCase)
     }
 
     @Test
@@ -320,5 +324,236 @@ class DomainAndRulesTest {
         val legacyDecoded = json.decodeFromString<TransactionItem>(legacyJson)
         assertNull(legacyDecoded.previousQuantity)
         assertEquals(3L, legacyDecoded.quantity)
+    }
+
+    @Test
+    fun testSequentialCorrectionsAndFinalStornoCumulativeMath() {
+        // Initial purchase of R$ 20,00
+        val origPurchase = Transaction(
+            id = "tx-orig",
+            userId = "user-1",
+            userNameSnapshot = "Alice",
+            timestamp = 1000L,
+            type = TransactionType.PURCHASE,
+            totalAmount = -2000L, // -R$ 20,00
+            items = listOf(
+                TransactionItem("p1", "Item 1", UnitType.PIECE, 4L, 500L) // 4 * 5,00 = 20,00
+            ),
+            userBalanceBefore = 5000L,
+            userBalanceAfter = 3000L
+        )
+
+        // Step 1: Correction 1 reduces from 4 to 3 (refund +R$ 5,00)
+        val corr1 = Transaction(
+            id = "tx-corr1",
+            userId = "user-1",
+            userNameSnapshot = "Alice",
+            timestamp = 2000L,
+            type = TransactionType.CORRECTION,
+            referenceTransactionId = origPurchase.id,
+            totalAmount = 500L,
+            items = listOf(
+                TransactionItem("p1", "Item 1", UnitType.PIECE, 3L, 500L, previousQuantity = 4L)
+            ),
+            userBalanceBefore = 3000L,
+            userBalanceAfter = 3500L
+        )
+
+        // Step 2: Correction 2 reduces from 3 to 2 (refund +R$ 5,00)
+        val corr2 = Transaction(
+            id = "tx-corr2",
+            userId = "user-1",
+            userNameSnapshot = "Alice",
+            timestamp = 3000L,
+            type = TransactionType.CORRECTION,
+            referenceTransactionId = origPurchase.id,
+            totalAmount = 500L,
+            items = listOf(
+                TransactionItem("p1", "Item 1", UnitType.PIECE, 2L, 500L, previousQuantity = 3L)
+            ),
+            userBalanceBefore = 3500L,
+            userBalanceAfter = 4000L
+        )
+
+        // Step 3: Complete storno zeroes remaining 2 items (refund +R$ 10,00)
+        val storno = Transaction(
+            id = "tx-storno",
+            userId = "user-1",
+            userNameSnapshot = "Alice",
+            timestamp = 4000L,
+            type = TransactionType.CANCELLATION,
+            referenceTransactionId = origPurchase.id,
+            totalAmount = 1000L,
+            items = listOf(
+                TransactionItem("p1", "Item 1", UnitType.PIECE, 0L, 500L, previousQuantity = 2L)
+            ),
+            userBalanceBefore = 4000L,
+            userBalanceAfter = 5000L
+        )
+
+        val children = listOf(corr1, corr2, storno)
+
+        // Verify cumulative delta sum over all children
+        val cumulativeDelta = children.sumOf { it.totalAmount }
+        assertEquals(2000L, cumulativeDelta, "Cumulative delta must sum all children (+5,00 + 5,00 + 10,00 = +20,00)")
+
+        // Verify final net amount of the original purchase is R$ 0,00
+        val finalNetAmount = origPurchase.totalAmount + cumulativeDelta
+        assertEquals(0L, finalNetAmount, "Final net amount must be exactly 0 (full reversal)")
+
+        // Verify inventory effect
+        val effectiveItems = AdminTransactionsViewModel.computeEffectiveItems(
+            origPurchase.items,
+            listOf(corr1, corr2),
+            storno
+        )
+        assertTrue(effectiveItems.all { it.quantity == 0L }, "All items must be 0 quantity after complete cancellation")
+
+        // Verify final balance returned to starting balance
+        assertEquals(origPurchase.userBalanceBefore, storno.userBalanceAfter)
+    }
+
+    @Test
+    fun testDoubleStornoPreventionCheck() {
+        var cancellationCount = 0
+        fun checkAndStorno(tx: Transaction): Boolean {
+            if (tx.type != TransactionType.ADMIN_DEPOSIT && tx.type != TransactionType.ADMIN_WITHDRAWAL) {
+                return false
+            }
+            if (cancellationCount > 0) {
+                return false
+            }
+            cancellationCount++
+            return true
+        }
+
+        val depositTx = Transaction(
+            id = "dep-1",
+            userId = "u1",
+            userNameSnapshot = "User",
+            timestamp = 1000L,
+            type = TransactionType.ADMIN_DEPOSIT,
+            totalAmount = 5000L
+        )
+
+        // First storno succeeds
+        val firstResult = checkAndStorno(depositTx)
+        assertTrue(firstResult, "First storno must succeed")
+
+        // Second storno is rejected
+        val secondResult = checkAndStorno(depositTx)
+        assertFalse(secondResult, "Second storno must be rejected")
+    }
+
+    @Test
+    fun testTransactionBalanceSnapshotSerialization() {
+        val json = Json { ignoreUnknownKeys = true }
+
+        val txWithSnapshots = Transaction(
+            id = "tx-snap",
+            userId = "u1",
+            userNameSnapshot = "User",
+            timestamp = 1000L,
+            type = TransactionType.PURCHASE,
+            totalAmount = -1500L,
+            userBalanceBefore = 4000L,
+            userBalanceAfter = 2500L
+        )
+
+        val encoded = json.encodeToString(txWithSnapshots)
+        assertTrue(encoded.contains("\"userBalanceBefore\":4000"))
+        assertTrue(encoded.contains("\"userBalanceAfter\":2500"))
+
+        val decoded = json.decodeFromString<Transaction>(encoded)
+        assertEquals(4000L, decoded.userBalanceBefore)
+        assertEquals(2500L, decoded.userBalanceAfter)
+
+        // Legacy record without balance snapshots
+        val legacyJson = """{"id":"tx-old","userId":"u1","userNameSnapshot":"User","timestamp":1000,"type":"PURCHASE","totalAmount":-1500}"""
+        val legacyDecoded = json.decodeFromString<Transaction>(legacyJson)
+        assertNull(legacyDecoded.userBalanceBefore)
+        assertNull(legacyDecoded.userBalanceAfter)
+    }
+
+    @Test
+    fun testPartialPayloadPurchaseCorrectionMerging() {
+        val item1 = TransactionItem(productId = "p1", productName = "A", unitType = UnitType.PIECE, quantity = 3L, unitPriceAtPurchase = 500L)
+        val item2 = TransactionItem(productId = "p2", productName = "B", unitType = UnitType.PIECE, quantity = 2L, unitPriceAtPurchase = 300L)
+        val originalItems = listOf(item1, item2)
+
+        // Partial payload containing only p1 with updated quantity to 1
+        val partialPayload = listOf(item1.copy(quantity = 1L))
+        val newItemsMap = partialPayload.associateBy { it.productId }
+        val effectiveNewItems = originalItems.map { current ->
+            newItemsMap[current.productId] ?: current
+        }
+
+        assertEquals(2, effectiveNewItems.size)
+        assertEquals(1L, effectiveNewItems.first { it.productId == "p1" }.quantity)
+        assertEquals(2L, effectiveNewItems.first { it.productId == "p2" }.quantity) // p2 retained!
+
+        val updatedItems = effectiveNewItems.filter { newItem ->
+            val currentItem = originalItems.firstOrNull { it.productId == newItem.productId }
+            val currentQty = currentItem?.quantity ?: 0L
+            newItem.quantity != currentQty
+        }.map { newItem ->
+            val currentItem = originalItems.firstOrNull { it.productId == newItem.productId }
+            newItem.copy(previousQuantity = currentItem?.quantity ?: 0L)
+        }
+
+        assertEquals(1, updatedItems.size)
+        assertEquals("p1", updatedItems[0].productId)
+        assertEquals(1L, updatedItems[0].quantity)
+        assertEquals(3L, updatedItems[0].previousQuantity)
+    }
+
+    @Test
+    fun testAtomicTransactionRequestSerialization() {
+        val json = Json { ignoreUnknownKeys = true }
+        val tx = Transaction(
+            id = "tx-atom",
+            userId = "u1",
+            userNameSnapshot = "User",
+            timestamp = 2000L,
+            type = TransactionType.ADMIN_DEPOSIT,
+            totalAmount = 5000L,
+            userBalanceBefore = 1000L,
+            userBalanceAfter = 6000L
+        )
+        val req = AtomicTransactionRequest(
+            transaction = tx,
+            balanceDelta = 5000L,
+            stockDeltas = mapOf("p1" to 5L)
+        )
+        val encoded = json.encodeToString(req)
+        val decoded = json.decodeFromString<AtomicTransactionRequest>(encoded)
+        assertEquals("tx-atom", decoded.transaction.id)
+        assertEquals(5000L, decoded.balanceDelta)
+        assertEquals(5L, decoded.stockDeltas["p1"])
+    }
+
+    @Test
+    fun testJsonProductIdMatchingPrecision() {
+        val json = Json { ignoreUnknownKeys = true }
+        // Transaction with product "10", price 100, quantity 1
+        val item = TransactionItem(
+            productId = "10",
+            productName = "Product 10",
+            unitType = UnitType.PIECE,
+            quantity = 1L,
+            unitPriceAtPurchase = 100L
+        )
+        val serializedItems = json.encodeToString(listOf(item))
+
+        // Raw LIKE '%1%' would falsely match because 1 appears in productId '10', quantity 1, and price 100
+        val naivePattern = Regex(".*1.*")
+        assertTrue(naivePattern.matches(serializedItems), "Naive '%1%' falsely matches")
+
+        // Precise JSON attribute match: %"productId":"1"%
+        val preciseMatchForId1 = serializedItems.contains("\"productId\":\"1\"")
+        assertFalse(preciseMatchForId1, "Precise query must NOT match product '1' when only product '10' is present")
+
+        val preciseMatchForId10 = serializedItems.contains("\"productId\":\"10\"")
+        assertTrue(preciseMatchForId10, "Precise query MUST match product '10'")
     }
 }

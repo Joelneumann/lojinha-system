@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha.data.repository
 
 import de.joelneumann.lojinha.data.dao.ProductDao
+import de.joelneumann.lojinha.data.dao.TransactionDao
 import de.joelneumann.lojinha.data.entity.ProductEntity
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.repository.ProductRepository
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.map
 
 class RoomProductRepositoryImpl(
     private val productDao: ProductDao,
+    private val transactionDao: TransactionDao? = null,
     private val onDataChanged: (() -> Unit)? = null
 ) : ProductRepository {
 
@@ -45,7 +47,12 @@ class RoomProductRepositoryImpl(
     }
 
     override suspend fun hardDeleteProduct(id: String) {
-        productDao.deleteProduct(id)
+        val txCount = transactionDao?.getTransactionCountForProduct(id) ?: 0
+        if (txCount > 0) {
+            productDao.deactivateProduct(id)
+        } else {
+            productDao.deleteProduct(id)
+        }
         onDataChanged?.invoke()
     }
 

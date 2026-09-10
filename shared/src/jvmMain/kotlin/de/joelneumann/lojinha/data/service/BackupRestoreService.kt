@@ -183,7 +183,7 @@ class BackupRestoreService(
         // 3. Export Transactions
         val transactions = db.transactionDao().getAllTransactions().map { it.toDomain() }
         val txCsv = File(exportFolder, "transactions.csv")
-        val txLines = mutableListOf("id,userId,userNameSnapshot,timestamp,type,referenceTransactionId,note,totalAmount,itemCount")
+        val txLines = mutableListOf("id,userId,userNameSnapshot,timestamp,type,referenceTransactionId,note,totalAmount,itemCount,userBalanceBefore,userBalanceAfter")
         transactions.forEach { t ->
             val line = listOf(
                 escapeCsv(t.id),
@@ -194,7 +194,9 @@ class BackupRestoreService(
                 escapeCsv(t.referenceTransactionId ?: ""),
                 escapeCsv(t.note ?: ""),
                 t.totalAmount.toString(),
-                t.items.size.toString()
+                t.items.size.toString(),
+                t.userBalanceBefore?.toString() ?: "",
+                t.userBalanceAfter?.toString() ?: ""
             ).joinToString(",")
             txLines.add(line)
         }
@@ -277,10 +279,31 @@ class BackupRestoreService(
 
             // Read transactions
             if (tableNames.contains("transactions")) {
-                val stmt = connection.prepare("SELECT id, userId, userNameSnapshot, timestamp, type, referenceTransactionId, note, totalAmount, items FROM transactions")
+                // Check if the backup database has the v8 balance snapshot columns
+                val txColumns = mutableSetOf<String>()
+                val stmtCols = connection.prepare("PRAGMA table_info(transactions)")
+                try {
+                    while (stmtCols.step()) {
+                        txColumns.add(stmtCols.getText(1).lowercase())
+                    }
+                } finally {
+                    stmtCols.close()
+                }
+
+                val hasSnapshots = txColumns.contains("userbalancebefore") && txColumns.contains("userbalanceafter")
+                val query = if (hasSnapshots) {
+                    "SELECT id, userId, userNameSnapshot, timestamp, type, referenceTransactionId, note, totalAmount, items, userBalanceBefore, userBalanceAfter FROM transactions"
+                } else {
+                    "SELECT id, userId, userNameSnapshot, timestamp, type, referenceTransactionId, note, totalAmount, items FROM transactions"
+                }
+
+                val stmt = connection.prepare(query)
                 try {
                     while (stmt.step()) {
                         val itemsStr = if (stmt.isNull(8)) "" else stmt.getText(8)
+                        val balBefore = if (hasSnapshots && !stmt.isNull(9)) stmt.getLong(9) else null
+                        val balAfter = if (hasSnapshots && !stmt.isNull(10)) stmt.getLong(10) else null
+
                         val t = TransactionEntity(
                             id = stmt.getText(0),
                             userId = stmt.getText(1),
@@ -290,7 +313,9 @@ class BackupRestoreService(
                             referenceTransactionId = if (stmt.isNull(5)) null else stmt.getText(5),
                             note = if (stmt.isNull(6)) null else stmt.getText(6),
                             totalAmount = stmt.getLong(7),
-                            items = converters.toTransactionItemList(itemsStr)
+                            items = converters.toTransactionItemList(itemsStr),
+                            userBalanceBefore = balBefore,
+                            userBalanceAfter = balAfter
                         )
                         backupTransactions.add(t)
                     }
