@@ -112,6 +112,41 @@ class DomainAndRulesTest {
     }
 
     @Test
+    fun testDetectWeightUnit() {
+        // Decimals -> always KG
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1,5"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1.5"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("0,25"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("0."))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("0,"))
+
+        // Numbers <= 20 -> KG
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("2"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("20"))
+
+        // Numbers > 20 -> G
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("21"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("25"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("500"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("1000"))
+
+        // Explicit units
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1.5 kg"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("30kg"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("25 kg"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("500g"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("30 g"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("2g"))
+
+        // Invalid, negative or blank -> null
+        assertNull(Formatting.detectWeightUnit(""))
+        assertNull(Formatting.detectWeightUnit("   "))
+        assertNull(Formatting.detectWeightUnit("abc"))
+        assertNull(Formatting.detectWeightUnit("-5"))
+    }
+
+    @Test
     fun testAdminStockFormattingAndParsing() {
         // Test Piece unit type (must NOT be multiplied by 1000)
         assertEquals("10", Formatting.formatStockForAdmin(10L, UnitType.PIECE))

@@ -401,8 +401,8 @@ object EnglishStrings : AppStrings {
 
     // --- Product Admin Page Confirmations & Actions ---
     override val adjustStockBtn = "Adjust Stock"
-    override val stockDeltaPieceLabel = "Stock Delta (+/- units):"
-    override val stockDeltaWeightLabel = "Stock Delta (+/- kg):"
+    override val stockDeltaPieceLabel = "Change Stock (+/- units):"
+    override val stockDeltaWeightLabel = "Change Stock (+/- kg):"
     override val stockDeltaPiecePlaceholder = "e.g. +10 or -5"
     override val stockDeltaWeightPlaceholder = "e.g. +2.500 or -0.500"
     override val confirmStockAdjustmentTitle = "Confirm Stock Adjustment"

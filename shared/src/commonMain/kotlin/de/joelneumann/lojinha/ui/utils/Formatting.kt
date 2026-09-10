@@ -101,6 +101,37 @@ object Formatting {
         }
     }
 
+    enum class WeightUnitDisplay(val symbol: String) {
+        KG("KG"),
+        G("G")
+    }
+
+    fun detectWeightUnit(input: String): WeightUnitDisplay? {
+        val trimmed = input.trim().lowercase()
+        if (trimmed.isBlank()) return null
+
+        val hasKg = trimmed.contains("kg")
+        val hasG = !hasKg && trimmed.contains("g")
+
+        if (hasKg) return WeightUnitDisplay.KG
+        if (hasG) return WeightUnitDisplay.G
+
+        val cleaned = trimmed
+            .replace("kg", "")
+            .replace("g", "")
+            .trim()
+
+        if (cleaned.isBlank()) return null
+        if (cleaned.contains(',') || cleaned.contains('.')) {
+            return WeightUnitDisplay.KG
+        }
+
+        val valDouble = cleaned.toDoubleOrNull() ?: return null
+        if (valDouble <= 0.0) return null
+
+        return if (valDouble <= 20.0) WeightUnitDisplay.KG else WeightUnitDisplay.G
+    }
+
     fun formatTimestamp(
         timestampMs: Long,
         language: de.joelneumann.lojinha.domain.model.Language = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
