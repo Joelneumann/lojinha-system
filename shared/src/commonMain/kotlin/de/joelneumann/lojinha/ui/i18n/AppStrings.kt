@@ -444,4 +444,24 @@ interface AppStrings {
     val customIncomeDescriptionLabel: String
     val customIncomeDescriptionPlaceholder: String
     val customIncomeConfirmBtn: String
+
+    // --- Bulk Billing ---
+    val tabBulkBilling: String
+    val bulkBillingTitle: String
+    val createNewList: String
+    val listTypeFixed: String
+    val listTypeVariable: String
+    val executeChargesBtn: String
+    fun confirmExecuteChargesMsg(count: Int, total: String): String
+    val noListsCreated: String
+    val listNameLabel: String
+    val listNamePlaceholder: String
+    val listTypeLabel: String
+    val addUserToList: String
+    val searchUserToAdd: String
+    val noUsersInList: String
+    val quantity: String
+    val amount: String
+    val deleteListTitle: String
+    val deleteListMsg: String
 }

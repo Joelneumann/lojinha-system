@@ -1,0 +1,36 @@
+package de.joelneumann.lojinha.data.dao
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import de.joelneumann.lojinha.data.entity.BillingListEntity
+import de.joelneumann.lojinha.data.entity.BillingListUserEntity
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface BillingListDao {
+    @Query("SELECT * FROM billing_lists WHERE isDeleted = 0 ORDER BY name ASC")
+    fun getActiveBillingListsFlow(): Flow<List<BillingListEntity>>
+
+    @Query("SELECT * FROM billing_list_users WHERE listId = :listId")
+    fun getUsersForListFlow(listId: String): Flow<List<BillingListUserEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdateBillingList(list: BillingListEntity)
+
+    @Query("UPDATE billing_lists SET isDeleted = 1 WHERE id = :id")
+    suspend fun softDeleteBillingList(id: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBillingListUser(user: BillingListUserEntity)
+
+    @Query("DELETE FROM billing_list_users WHERE listId = :listId AND userId = :userId")
+    suspend fun removeUserFromList(listId: String, userId: String)
+    
+    @Query("UPDATE billing_list_users SET quantity = :quantity WHERE listId = :listId AND userId = :userId")
+    suspend fun updateUserQuantity(listId: String, userId: String, quantity: Int)
+
+    @Query("DELETE FROM billing_list_users WHERE listId = :listId")
+    suspend fun removeAllUsersFromList(listId: String)
+}

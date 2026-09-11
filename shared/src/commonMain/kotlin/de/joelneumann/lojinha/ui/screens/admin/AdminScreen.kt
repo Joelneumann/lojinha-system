@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +28,7 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.window.DialogProperties
@@ -36,6 +38,7 @@ enum class AdminTab {
     PRODUCTS,
     USERS,
     TRANSACTIONS,
+    BULK_BILLING,
     SETTINGS
 }
 
@@ -44,6 +47,7 @@ fun AdminScreen(
     productsViewModel: AdminProductsViewModel,
     usersViewModel: AdminUsersViewModel,
     transactionsViewModel: AdminTransactionsViewModel,
+    bulkBillingViewModel: AdminBulkBillingViewModel,
     settingsViewModel: AdminSettingsViewModel,
     onExitAdmin: () -> Unit
 ) {
@@ -124,6 +128,7 @@ fun AdminScreen(
                     Triple(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts),
                     Triple(AdminTab.USERS, Icons.Default.People, strings.tabUsers),
                     Triple(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions),
+                    Triple(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling),
                     Triple(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings)
                 )
 
@@ -209,6 +214,12 @@ fun AdminScreen(
                                 expandedTransactionId = if (expandedTransactionId == id) null else id
                             },
                             onRequestExpandTransaction = { id -> expandedTransactionId = id }
+                        )
+                    }
+
+                    AdminTab.BULK_BILLING -> {
+                        AdminBulkBillingTabScreen(
+                            viewModel = bulkBillingViewModel
                         )
                     }
 

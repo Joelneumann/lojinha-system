@@ -23,6 +23,15 @@ object DatabaseFactory {
         }
     }
 
+    private val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(connection: SQLiteConnection) {
+            connection.execSQL("CREATE TABLE IF NOT EXISTS `billing_lists` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `basePrice` INTEGER, `isDeleted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            connection.execSQL("CREATE TABLE IF NOT EXISTS `billing_list_users` (`id` TEXT NOT NULL, `listId` TEXT NOT NULL, `userId` TEXT NOT NULL, `quantity` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`listId`) REFERENCES `billing_lists`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`userId`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+            connection.execSQL("CREATE INDEX IF NOT EXISTS `index_billing_list_users_listId` ON `billing_list_users` (`listId`)")
+            connection.execSQL("CREATE INDEX IF NOT EXISTS `index_billing_list_users_userId` ON `billing_list_users` (`userId`)")
+        }
+    }
+
     @Volatile
     private var instance: AppDatabase? = null
 
@@ -42,7 +51,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9)
         builder.fallbackToDestructiveMigration(true)
         val db = builder.build()
 

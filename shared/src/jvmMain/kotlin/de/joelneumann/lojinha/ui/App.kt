@@ -226,6 +226,17 @@ fun App() {
                         val adminTransactionsViewModel = remember {
                             AdminTransactionsViewModel(transactionRepository, userRepository, productRepository)
                         }
+                        
+                        val billingListRepository = remember {
+                            de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(
+                                database.billingListDao(), onDataChanged
+                            )
+                        }
+                        
+                        val adminBulkBillingViewModel = remember {
+                            AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository)
+                        }
+                        
                         val adminSettingsViewModel = remember {
                             AdminSettingsViewModel(
                                 settingsRepository = settingsRepository,
@@ -271,6 +282,7 @@ fun App() {
                                 adminProductsViewModel.viewModelScope.cancel()
                                 adminUsersViewModel.viewModelScope.cancel()
                                 adminTransactionsViewModel.viewModelScope.cancel()
+                                adminBulkBillingViewModel.viewModelScope.cancel()
                                 adminSettingsViewModel.viewModelScope.cancel()
                             }
                         }
@@ -279,6 +291,7 @@ fun App() {
                             productsViewModel = adminProductsViewModel,
                             usersViewModel = adminUsersViewModel,
                             transactionsViewModel = adminTransactionsViewModel,
+                            bulkBillingViewModel = adminBulkBillingViewModel,
                             settingsViewModel = adminSettingsViewModel,
                             onExitAdmin = {
                                 appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
