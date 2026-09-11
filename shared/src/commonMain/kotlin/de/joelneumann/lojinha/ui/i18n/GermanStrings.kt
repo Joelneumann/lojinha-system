@@ -458,6 +458,8 @@ object GermanStrings : AppStrings {
     override val tabBulkBilling = "Massenabrechnung"
     override val bulkBillingTitle = "Massen- & Serienabrechnung"
     override val createNewList = "Liste erstellen"
+    override val editList = "Liste bearbeiten"
+    override val selectUsersTitle = "Benutzer auswählen"
     override val listTypeFixed = "Fester Preis"
     override val listTypeVariable = "Variabler Preis"
     override val executeChargesBtn = "Abrechnung jetzt ausführen"

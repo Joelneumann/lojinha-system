@@ -86,6 +86,11 @@ class RoomBillingListRepositoryImpl(
         onDataChanged()
     }
     
+    override suspend fun removeAllUsersFromList(listId: String) {
+        dao.removeAllUsersFromList(listId)
+        onDataChanged()
+    }
+    
     override suspend fun updateUserQuantity(listId: String, userId: String, quantity: Int) {
         dao.updateUserQuantity(listId, userId, quantity)
         onDataChanged()

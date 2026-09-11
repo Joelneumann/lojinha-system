@@ -449,6 +449,8 @@ interface AppStrings {
     val tabBulkBilling: String
     val bulkBillingTitle: String
     val createNewList: String
+    val editList: String
+    val selectUsersTitle: String
     val listTypeFixed: String
     val listTypeVariable: String
     val executeChargesBtn: String

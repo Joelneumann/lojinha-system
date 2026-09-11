@@ -37,8 +37,8 @@ import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 enum class AdminTab {
     PRODUCTS,
     USERS,
-    TRANSACTIONS,
     BULK_BILLING,
+    TRANSACTIONS,
     SETTINGS
 }
 
@@ -127,8 +127,8 @@ fun AdminScreen(
                 val tabItems = listOf(
                     Triple(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts),
                     Triple(AdminTab.USERS, Icons.Default.People, strings.tabUsers),
-                    Triple(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions),
                     Triple(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling),
+                    Triple(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions),
                     Triple(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings)
                 )
 

@@ -33,16 +33,24 @@ class AdminBulkBillingViewModel(
         _selectedListId.value = id
     }
 
-    fun createList(name: String, type: BillingListType, basePrice: Long?) {
+    fun saveBillingList(list: BillingList) {
         viewModelScope.launch {
-            val newList = BillingList(
-                id = generateUuid(),
-                name = name,
-                type = type,
-                basePrice = basePrice
-            )
-            billingListRepository.saveBillingList(newList)
-            _selectedListId.value = newList.id
+            val isNew = list.id.isBlank()
+            val idToSave = if (isNew) generateUuid() else list.id
+            val listToSave = list.copy(id = idToSave)
+            
+            billingListRepository.saveBillingList(listToSave)
+            
+            // Delete old users from list
+            billingListRepository.removeAllUsersFromList(idToSave)
+            
+            // Add new users
+            for (u in listToSave.users) {
+                billingListRepository.addUserToList(
+                    u.copy(id = generateUuid(), listId = idToSave)
+                )
+            }
+            _selectedListId.value = idToSave
         }
     }
 
@@ -52,30 +60,6 @@ class AdminBulkBillingViewModel(
             if (_selectedListId.value == id) {
                 _selectedListId.value = null
             }
-        }
-    }
-
-    fun addUserToList(listId: String, userId: String, quantity: Int) {
-        viewModelScope.launch {
-            val user = BillingListUser(
-                id = generateUuid(),
-                listId = listId,
-                userId = userId,
-                quantity = quantity
-            )
-            billingListRepository.addUserToList(user)
-        }
-    }
-
-    fun removeUserFromList(listId: String, userId: String) {
-        viewModelScope.launch {
-            billingListRepository.removeUserFromList(listId, userId)
-        }
-    }
-
-    fun updateUserQuantity(listId: String, userId: String, quantity: Int) {
-        viewModelScope.launch {
-            billingListRepository.updateUserQuantity(listId, userId, quantity)
         }
     }
 

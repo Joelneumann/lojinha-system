@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,7 +36,8 @@ fun AdminBulkBillingTabScreen(
     val activeUsers by viewModel.activeUsers.collectAsState()
     val variableAmounts by viewModel.variableAmounts.collectAsState()
 
-    var showCreateDialog by remember { mutableStateOf(false) }
+    var editingList by remember { mutableStateOf<BillingList?>(null) }
+    var isCreatingNew by remember { mutableStateOf(false) }
     var showDeleteDialogFor by remember { mutableStateOf<String?>(null) }
     var showExecuteDialogFor by remember { mutableStateOf<BillingList?>(null) }
 
@@ -54,7 +56,7 @@ fun AdminBulkBillingTabScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(strings.bulkBillingTitle, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = PrimaryNavy)
-                IconButton(onClick = { showCreateDialog = true }) {
+                IconButton(onClick = { isCreatingNew = true }) {
                     Icon(Icons.Default.Add, contentDescription = strings.createNewList, tint = AccentNavy)
                 }
             }
@@ -80,7 +82,7 @@ fun AdminBulkBillingTabScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(list.name, fontWeight = FontWeight.Bold, color = if (isSelected) AccentNavy else PrimaryNavy)
                                 Text(
                                     if (list.type == BillingListType.FIXED) strings.listTypeFixed else strings.listTypeVariable,
@@ -88,8 +90,14 @@ fun AdminBulkBillingTabScreen(
                                     color = TextSecondaryMuted
                                 )
                             }
-                            IconButton(onClick = { showDeleteDialogFor = list.id }, modifier = Modifier.size(24.dp)) {
-                                Icon(Icons.Default.Delete, contentDescription = strings.delete, tint = ColorDangerCrimson, modifier = Modifier.size(16.dp))
+                            Row {
+                                IconButton(onClick = { editingList = list }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Default.Edit, contentDescription = strings.editList, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                IconButton(onClick = { showDeleteDialogFor = list.id }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Default.Delete, contentDescription = strings.delete, tint = ColorDangerCrimson, modifier = Modifier.size(16.dp))
+                                }
                             }
                         }
                     }
@@ -105,7 +113,7 @@ fun AdminBulkBillingTabScreen(
         ) {
             if (selectedList == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(strings.noListsCreated, color = TextSecondaryMuted) // Or a "Select a list" placeholder
+                    Text(strings.noListsCreated, color = TextSecondaryMuted)
                 }
             } else {
                 Text(selectedList.name, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = PrimaryNavy)
@@ -116,95 +124,51 @@ fun AdminBulkBillingTabScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // User search dropdown would go here in a real app, keeping it simple for this MVP
-                var userSearchQuery by remember { mutableStateOf("") }
-                OutlinedTextField(
-                    value = userSearchQuery,
-                    onValueChange = { userSearchQuery = it },
-                    placeholder = { Text(strings.searchUserToAdd) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                val sortedUsers = selectedList.users.mapNotNull { listUser ->
+                    activeUsers.find { it.id == listUser.userId }?.let { it to listUser }
+                }.sortedBy { it.first.name.lowercase() }
 
-                if (userSearchQuery.isNotBlank()) {
-                    val searchResults = activeUsers.filter {
-                        it.name.contains(userSearchQuery, ignoreCase = true) &&
-                        selectedList.users.none { u -> u.userId == it.id }
-                    }.take(3)
-                    
-                    if (searchResults.isNotEmpty()) {
-                        Column(modifier = Modifier.fillMaxWidth().background(SurfaceContainerLight).padding(8.dp)) {
-                            searchResults.forEach { user ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().clickable {
-                                        viewModel.addUserToList(selectedList.id, user.id, 1)
-                                        userSearchQuery = ""
-                                    }.padding(8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(user.name)
-                                    Icon(Icons.Default.Add, contentDescription = null, tint = AccentNavy)
-                                }
-                            }
-                        }
-                    }
+                val totalExpectedAmount = if (selectedList.type == BillingListType.FIXED) {
+                    sortedUsers.sumOf { it.second.quantity * (selectedList.basePrice ?: 0L) }
+                } else {
+                    sortedUsers.sumOf { variableAmounts[it.first.id] ?: 0L }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                var totalExpectedAmount = 0L
-
                 LazyColumn(modifier = Modifier.weight(1f)) {
-                    if (selectedList.users.isEmpty()) {
+                    if (sortedUsers.isEmpty()) {
                         item {
                             Text(strings.noUsersInList, color = TextSecondaryMuted, modifier = Modifier.padding(16.dp))
                         }
                     } else {
-                        items(selectedList.users, key = { it.id }) { listUser ->
-                            val user = activeUsers.find { it.id == listUser.userId }
-                            if (user != null) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(user.name, modifier = Modifier.weight(1f))
-                                    
-                                    if (selectedList.type == BillingListType.FIXED) {
-                                        var qtyString by remember(listUser.quantity) { mutableStateOf(listUser.quantity.toString()) }
-                                        OutlinedTextField(
-                                            value = qtyString,
-                                            onValueChange = { qtyString = it },
-                                            modifier = Modifier.width(80.dp),
-                                            label = { Text(strings.quantity, fontSize = 10.sp) },
-                                            singleLine = true
-                                        )
-                                        // Update logic on focus lost or enter key would be better here, simplified for now
-                                        val qty = qtyString.toIntOrNull() ?: 0
-                                        val lineTotal = qty * (selectedList.basePrice ?: 0L)
-                                        totalExpectedAmount += lineTotal
+                        items(sortedUsers, key = { it.first.id }) { (user, listUser) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(user.name, modifier = Modifier.weight(1f))
+                                
+                                if (selectedList.type == BillingListType.FIXED) {
+                                    val lineTotal = listUser.quantity * (selectedList.basePrice ?: 0L)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("${listUser.quantity}x", modifier = Modifier.width(40.dp))
                                         Text(Formatting.formatBrl(lineTotal), modifier = Modifier.width(100.dp).padding(start = 8.dp))
-                                    } else {
-                                        val currentAmount = variableAmounts[user.id] ?: 0L
-                                        var amountStr by remember(currentAmount) { 
-                                            mutableStateOf(if (currentAmount == 0L) "" else Formatting.formatBrl(currentAmount).replace("R$ ", "")) 
-                                        }
-                                        OutlinedTextField(
-                                            value = amountStr,
-                                            onValueChange = { amountStr = it; 
-                                                val cents = it.replace(',', '.').toDoubleOrNull()?.let { v -> kotlin.math.round(v * 100).toLong() } ?: 0L
-                                                viewModel.setVariableAmount(user.id, cents)
-                                            },
-                                            modifier = Modifier.width(120.dp),
-                                            label = { Text(strings.amount, fontSize = 10.sp) },
-                                            singleLine = true
-                                        )
-                                        totalExpectedAmount += currentAmount
                                     }
-
-                                    IconButton(onClick = { viewModel.removeUserFromList(selectedList.id, user.id) }) {
-                                        Icon(Icons.Default.Delete, contentDescription = null, tint = ColorDangerCrimson)
+                                } else {
+                                    val currentAmount = variableAmounts[user.id] ?: 0L
+                                    var amountStr by remember(currentAmount) { 
+                                        mutableStateOf(if (currentAmount == 0L) "" else Formatting.formatBrl(currentAmount).replace("R$ ", "")) 
                                     }
+                                    OutlinedTextField(
+                                        value = amountStr,
+                                        onValueChange = { amountStr = it; 
+                                            val cents = it.replace(',', '.').toDoubleOrNull()?.let { v -> kotlin.math.round(v * 100).toLong() } ?: 0L
+                                            viewModel.setVariableAmount(user.id, cents)
+                                        },
+                                        modifier = Modifier.width(120.dp),
+                                        label = { Text(strings.amount, fontSize = 10.sp) },
+                                        singleLine = true
+                                    )
                                 }
                             }
                         }
@@ -231,12 +195,18 @@ fun AdminBulkBillingTabScreen(
         }
     }
 
-    if (showCreateDialog) {
-        CreateBillingListDialog(
-            onDismiss = { showCreateDialog = false },
-            onSubmit = { name, type, price ->
-                viewModel.createList(name, type, price)
-                showCreateDialog = false
+    if (isCreatingNew || editingList != null) {
+        BillingListEditDialog(
+            initialList = editingList,
+            activeUsers = activeUsers.filter { it.isActive && !it.isDeleted },
+            onSave = { updatedList ->
+                viewModel.saveBillingList(updatedList)
+                isCreatingNew = false
+                editingList = null
+            },
+            onCancel = {
+                isCreatingNew = false
+                editingList = null
             }
         )
     }

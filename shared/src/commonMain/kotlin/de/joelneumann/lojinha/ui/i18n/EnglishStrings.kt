@@ -458,6 +458,8 @@ object EnglishStrings : AppStrings {
     override val tabBulkBilling = "Bulk Billing"
     override val bulkBillingTitle = "Bulk & Recurring Billing"
     override val createNewList = "Create List"
+    override val editList = "Edit List"
+    override val selectUsersTitle = "Select Users"
     override val listTypeFixed = "Fixed Price"
     override val listTypeVariable = "Variable Price"
     override val executeChargesBtn = "Execute Charges Now"

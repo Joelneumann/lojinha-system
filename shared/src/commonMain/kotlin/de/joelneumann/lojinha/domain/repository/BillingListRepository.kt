@@ -10,5 +10,6 @@ interface BillingListRepository {
     suspend fun deleteBillingList(id: String)
     suspend fun addUserToList(user: BillingListUser)
     suspend fun removeUserFromList(listId: String, userId: String)
+    suspend fun removeAllUsersFromList(listId: String)
     suspend fun updateUserQuantity(listId: String, userId: String, quantity: Int)
 }
