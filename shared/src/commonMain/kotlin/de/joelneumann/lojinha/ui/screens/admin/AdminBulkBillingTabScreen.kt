@@ -122,6 +122,11 @@ fun AdminBulkBillingTabScreen(
                 } else strings.listTypeVariable
                 Text(typeText, fontSize = 14.sp, color = TextSecondaryMuted)
 
+                if (!selectedList.comment.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("${strings.billingListCommentLabel}: ${selectedList.comment}", fontSize = 14.sp, color = TextSecondaryMuted)
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 val sortedUsers = selectedList.users.mapNotNull { listUser ->

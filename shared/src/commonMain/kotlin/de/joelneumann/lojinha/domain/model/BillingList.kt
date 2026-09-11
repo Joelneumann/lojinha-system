@@ -14,6 +14,7 @@ data class BillingList(
     val name: String,
     val type: BillingListType,
     val basePrice: Long? = null,
+    val comment: String? = null,
     val isDeleted: Boolean = false,
     val users: List<BillingListUser> = emptyList()
 )

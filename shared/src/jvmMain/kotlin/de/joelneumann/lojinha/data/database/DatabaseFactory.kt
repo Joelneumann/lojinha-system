@@ -32,6 +32,12 @@ object DatabaseFactory {
         }
     }
 
+    private val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(connection: SQLiteConnection) {
+            connection.execSQL("ALTER TABLE `billing_lists` ADD COLUMN `comment` TEXT")
+        }
+    }
+
     @Volatile
     private var instance: AppDatabase? = null
 
@@ -51,7 +57,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
         builder.fallbackToDestructiveMigration(true)
         val db = builder.build()
 

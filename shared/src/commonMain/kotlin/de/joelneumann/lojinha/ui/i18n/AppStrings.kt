@@ -451,6 +451,8 @@ interface AppStrings {
     val createNewList: String
     val editList: String
     val selectUsersTitle: String
+    val billingListCommentLabel: String
+    val billingListCommentPlaceholder: String
     val listTypeFixed: String
     val listTypeVariable: String
     val executeChargesBtn: String

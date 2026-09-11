@@ -42,6 +42,7 @@ fun BillingListEditDialog(
     val isNew = initialList == null
 
     var name by remember { mutableStateOf(initialList?.name ?: "") }
+    var comment by remember { mutableStateOf(initialList?.comment ?: "") }
     var type by remember { mutableStateOf(initialList?.type ?: BillingListType.FIXED) }
     
     var priceInput by remember { 
@@ -67,6 +68,7 @@ fun BillingListEditDialog(
                 name = name,
                 type = type,
                 basePrice = price,
+                comment = comment.trim().ifBlank { null },
                 users = selectedUsers.map { (uid, qty) -> 
                     BillingListUser(id = "", listId = "", userId = uid, quantity = qty)
                 }
@@ -107,6 +109,14 @@ fun BillingListEditDialog(
                     value = name,
                     onValueChange = { name = it },
                     placeholder = strings.listNamePlaceholder,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                AdminLabeledField(
+                    label = strings.billingListCommentLabel,
+                    value = comment,
+                    onValueChange = { comment = it },
+                    placeholder = strings.billingListCommentPlaceholder,
                     modifier = Modifier.fillMaxWidth()
                 )
 

@@ -35,6 +35,7 @@ class RoomBillingListRepositoryImpl(
                             name = listEntity.name,
                             type = BillingListType.valueOf(listEntity.type),
                             basePrice = listEntity.basePrice,
+                            comment = listEntity.comment,
                             isDeleted = listEntity.isDeleted,
                             users = userEntities.map {
                                 BillingListUser(
@@ -58,6 +59,7 @@ class RoomBillingListRepositoryImpl(
                 name = list.name,
                 type = list.type.name,
                 basePrice = list.basePrice,
+                comment = list.comment,
                 isDeleted = list.isDeleted
             )
         )

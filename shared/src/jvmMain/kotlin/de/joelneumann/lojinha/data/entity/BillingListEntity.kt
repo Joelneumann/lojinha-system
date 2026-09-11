@@ -10,6 +10,7 @@ data class BillingListEntity(
     val name: String,
     val type: String,
     val basePrice: Long?,
+    val comment: String?,
     val isDeleted: Boolean = false
 )
 

@@ -460,6 +460,8 @@ object EnglishStrings : AppStrings {
     override val createNewList = "Create List"
     override val editList = "Edit List"
     override val selectUsersTitle = "Select Users"
+    override val billingListCommentLabel = "Transaction Note"
+    override val billingListCommentPlaceholder = "e.g. Parking Space July"
     override val listTypeFixed = "Fixed Price"
     override val listTypeVariable = "Variable Price"
     override val executeChargesBtn = "Execute Charges Now"
