@@ -468,4 +468,10 @@ interface AppStrings {
     val amount: String
     val deleteListTitle: String
     val deleteListMsg: String
+
+    val supportContactTitle: String
+    val supportEmailLabel: String
+    val supportEmailPlaceholder: String
+    val contactSupportBtn: String
+    val githubRepoBtn: String
 }

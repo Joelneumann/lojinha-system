@@ -477,4 +477,10 @@ object EnglishStrings : AppStrings {
     override val amount = "Amount"
     override val deleteListTitle = "Delete Billing List"
     override val deleteListMsg = "Are you sure you want to delete this list? This cannot be undone."
+
+    override val supportContactTitle = "Support Contact"
+    override val supportEmailLabel = "Support Email"
+    override val supportEmailPlaceholder = "admin@example.com"
+    override val contactSupportBtn = "Contact Support"
+    override val githubRepoBtn = "GitHub Repository"
 }

@@ -21,5 +21,6 @@ data class SystemSettings(
     val oneDriveAccountEmail: String? = null,
     val oneDriveAccountName: String? = null,
     val oneDriveDefaultFolder: String = "/LojinhaBackups",
-    val oneDriveTenant: String = "common"
+    val oneDriveTenant: String = "common",
+    val supportEmail: String? = null
 )

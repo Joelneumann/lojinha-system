@@ -477,4 +477,10 @@ object PortugueseStrings : AppStrings {
     override val amount = "Valor"
     override val deleteListTitle = "Excluir Lista"
     override val deleteListMsg = "Tem certeza de que deseja excluir esta lista? Isso não pode ser desfeito."
+
+    override val supportContactTitle = "Contato de Suporte"
+    override val supportEmailLabel = "Email de Suporte"
+    override val supportEmailPlaceholder = "admin@example.com"
+    override val contactSupportBtn = "Contatar Suporte"
+    override val githubRepoBtn = "Repositório GitHub"
 }

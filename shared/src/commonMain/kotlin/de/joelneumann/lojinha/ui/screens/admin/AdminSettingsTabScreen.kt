@@ -53,6 +53,7 @@ fun AdminSettingsTabScreen(
     var autoBackupScheduleType by remember(settings) { mutableStateOf(settings.autoBackupScheduleType) }
     var autoBackupTime by remember(settings) { mutableStateOf(settings.autoBackupTime) }
     var autoBackupIntervalHours by remember(settings) { mutableStateOf(settings.autoBackupIntervalHours.toString()) }
+    var supportEmail by remember(settings) { mutableStateOf(settings.supportEmail ?: "") }
 
     LaunchedEffect(settings) {
         newPassword = ""
@@ -67,6 +68,7 @@ fun AdminSettingsTabScreen(
         autoBackupScheduleType = settings.autoBackupScheduleType
         autoBackupTime = settings.autoBackupTime
         autoBackupIntervalHours = settings.autoBackupIntervalHours.toString()
+        supportEmail = settings.supportEmail ?: ""
     }
 
     val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
@@ -75,7 +77,7 @@ fun AdminSettingsTabScreen(
 
     val hasFieldChanges = remember(
         settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout,
-        backupLocation, autoBackupEnabled, autoBackupFormat, autoBackupScheduleType, autoBackupTime, autoBackupIntervalHours
+        backupLocation, autoBackupEnabled, autoBackupFormat, autoBackupScheduleType, autoBackupTime, autoBackupIntervalHours, supportEmail
     ) {
         newPassword.isNotEmpty() ||
                 globalMarkup != settings.globalMarkupPercent.toString() ||
@@ -83,6 +85,7 @@ fun AdminSettingsTabScreen(
                 eurRate != settings.eurExchangeRate.toString() ||
                 inactivityTimeout != settings.inactivityTimeoutMinutes.toString() ||
                 backupLocation != settings.backupLocationPath ||
+                supportEmail != (settings.supportEmail ?: "") ||
                 autoBackupEnabled != settings.autoBackupEnabled ||
                 autoBackupFormat != settings.autoBackupFormat ||
                 autoBackupScheduleType != settings.autoBackupScheduleType ||
@@ -145,6 +148,7 @@ fun AdminSettingsTabScreen(
                             autoBackupScheduleType = settings.autoBackupScheduleType
                             autoBackupTime = settings.autoBackupTime
                             autoBackupIntervalHours = settings.autoBackupIntervalHours.toString()
+                            supportEmail = settings.supportEmail ?: ""
                             onUnsavedStateChanged(false)
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -179,7 +183,8 @@ fun AdminSettingsTabScreen(
                                 autoBackupFormat = autoBackupFormat,
                                 autoBackupScheduleType = autoBackupScheduleType,
                                 autoBackupTime = autoBackupTime,
-                                autoBackupIntervalHours = autoBackupIntervalHours.toIntOrNull() ?: settings.autoBackupIntervalHours
+                                autoBackupIntervalHours = autoBackupIntervalHours.toIntOrNull() ?: settings.autoBackupIntervalHours,
+                                supportEmail = supportEmail.takeIf { it.isNotBlank() }
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
@@ -964,6 +969,93 @@ fun AdminSettingsTabScreen(
                                         modifier = Modifier.size(15.dp)
                                     )
                                     Text(strings.importUsersCsvBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // CARD 8: SUPPORT CONTACT
+            item(key = "support-contact-card") {
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContactSupport,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.supportContactTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+
+                        AdminLabeledField(
+                            label = strings.supportEmailLabel,
+                            value = supportEmail,
+                            onValueChange = { supportEmail = it },
+                            placeholder = strings.supportEmailPlaceholder,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: "support@example.com"
+                                    uriHandler.openUri("mailto:$email")
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.contactSupportBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    uriHandler.openUri("https://github.com/TODO_YOUR_PROJECT")
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Code,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.githubRepoBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
                             }
                         }

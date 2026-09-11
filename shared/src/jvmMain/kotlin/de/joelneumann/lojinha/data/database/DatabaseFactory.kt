@@ -38,6 +38,12 @@ object DatabaseFactory {
         }
     }
 
+    private val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(connection: SQLiteConnection) {
+            connection.execSQL("ALTER TABLE settings ADD COLUMN supportEmail TEXT DEFAULT NULL")
+        }
+    }
+
     @Volatile
     private var instance: AppDatabase? = null
 
@@ -57,7 +63,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
         builder.fallbackToDestructiveMigration(true)
         val db = builder.build()
 
