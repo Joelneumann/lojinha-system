@@ -673,4 +673,19 @@ class DomainAndRulesTest {
             assertTrue(s.historyTypeCustomIncome.isNotBlank())
         }
     }
+
+    @Test
+    fun testPurchaseOverviewLocalization() {
+        listOf(
+            de.joelneumann.lojinha.ui.i18n.EnglishStrings,
+            de.joelneumann.lojinha.ui.i18n.GermanStrings,
+            de.joelneumann.lojinha.ui.i18n.PortugueseStrings
+        ).forEach { s ->
+            assertTrue(s.purchaseOverviewTitle.isNotBlank())
+            assertTrue(s.goToTransactions.isNotBlank())
+            assertTrue(s.previousBalance.isNotBlank())
+            assertTrue(s.newBalance.isNotBlank())
+            assertTrue(s.logoutWithTimer(15).contains("15"))
+        }
+    }
 }

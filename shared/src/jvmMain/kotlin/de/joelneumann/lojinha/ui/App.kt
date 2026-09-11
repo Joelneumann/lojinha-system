@@ -175,7 +175,8 @@ fun App() {
                                                     appViewModel.refreshCurrentUser()
                                                     appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
                                                 },
-                                                onUserInteracted = { force -> userSessionViewModel.onUserInteracted(force) }
+                                                onUserInteracted = { force -> userSessionViewModel.onUserInteracted(force) },
+                                                onPurchaseFinalized = { appViewModel.refreshCurrentUser() }
                                             )
                                         }
 

@@ -55,6 +55,9 @@ class ShoppingViewModel(
     private val _showCheckoutConfirmation = MutableStateFlow(false)
     val showCheckoutConfirmation: StateFlow<Boolean> = _showCheckoutConfirmation.asStateFlow()
 
+    private val _completedPurchase = MutableStateFlow<Transaction?>(null)
+    val completedPurchase: StateFlow<Transaction?> = _completedPurchase.asStateFlow()
+
     init {
         loadProducts()
     }
@@ -183,7 +186,11 @@ class ShoppingViewModel(
         _showCheckoutConfirmation.value = false
     }
 
-    fun completePurchase(user: User, onPurchaseComplete: () -> Unit) {
+    fun dismissCompletedPurchase() {
+        _completedPurchase.value = null
+    }
+
+    fun completePurchase(user: User, onPurchaseFinalized: () -> Unit = {}) {
         val cart = _cartItems.value
         if (cart.isEmpty()) return
 
@@ -226,12 +233,14 @@ class ShoppingViewModel(
 
             clearCart()
             closeCheckoutConfirmation()
-            onPurchaseComplete()
+            _completedPurchase.value = tx
+            onPurchaseFinalized()
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         clearCart()
+        dismissCompletedPurchase()
     }
 }

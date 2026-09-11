@@ -22,6 +22,11 @@ interface AppStrings {
     val completePurchase: String
     val confirmPurchaseTitle: String
     fun confirmPurchaseMsg(amount: String): String
+    val purchaseOverviewTitle: String
+    val goToTransactions: String
+    fun logoutWithTimer(seconds: Int): String
+    val previousBalance: String
+    val newBalance: String
     val weightDialogTitle: String
     fun weightDialogMsg(productName: String): String
     val weightInputHint: String

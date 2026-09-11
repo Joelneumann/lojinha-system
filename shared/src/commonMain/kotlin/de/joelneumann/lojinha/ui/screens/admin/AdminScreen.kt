@@ -47,7 +47,7 @@ fun AdminScreen(
     productsViewModel: AdminProductsViewModel,
     usersViewModel: AdminUsersViewModel,
     transactionsViewModel: AdminTransactionsViewModel,
-    bulkBillingViewModel: AdminBulkBillingViewModel,
+    bulkBillingViewModel: AdminBulkBillingViewModel? = null,
     settingsViewModel: AdminSettingsViewModel,
     onExitAdmin: () -> Unit
 ) {
@@ -218,10 +218,12 @@ fun AdminScreen(
                     }
 
                     AdminTab.BULK_BILLING -> {
-                        AdminBulkBillingTabScreen(
-                            viewModel = bulkBillingViewModel,
-                            onNavigateToTransactions = { handleTabSwitchRequest(AdminTab.TRANSACTIONS) }
-                        )
+                        if (bulkBillingViewModel != null) {
+                            AdminBulkBillingTabScreen(
+                                viewModel = bulkBillingViewModel,
+                                onNavigateToTransactions = { handleTabSwitchRequest(AdminTab.TRANSACTIONS) }
+                            )
+                        }
                     }
 
                     AdminTab.SETTINGS -> {

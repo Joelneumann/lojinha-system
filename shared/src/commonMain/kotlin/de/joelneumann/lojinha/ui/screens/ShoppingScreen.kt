@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.SystemSettings
+import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.*
@@ -49,7 +50,8 @@ fun ShoppingScreen(
     settings: SystemSettings,
     onLogout: () -> Unit,
     onNavigateToHistory: () -> Unit,
-    onUserInteracted: (force: Boolean) -> Unit = {}
+    onUserInteracted: (force: Boolean) -> Unit = {},
+    onPurchaseFinalized: () -> Unit = {}
 ) {
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -57,6 +59,7 @@ fun ShoppingScreen(
     val weightProductDialog by viewModel.weightProductDialog.collectAsState()
     val weightInput by viewModel.weightInput.collectAsState()
     val weightError by viewModel.weightError.collectAsState()
+    val completedPurchase by viewModel.completedPurchase.collectAsState()
 
     ShoppingContent(
         user = user,
@@ -67,6 +70,7 @@ fun ShoppingScreen(
         weightProductDialog = weightProductDialog,
         weightInput = weightInput,
         weightError = weightError,
+        completedPurchase = completedPurchase,
         onLogout = onLogout,
         onSearchQueryChange = { query ->
             onUserInteracted(false)
@@ -88,10 +92,11 @@ fun ShoppingScreen(
             onUserInteracted(true)
             viewModel.removeCartItem(id)
         },
-        onCompletePurchase = {
+        onFinalizePurchase = {
             onUserInteracted(true)
-            viewModel.completePurchase(user, onNavigateToHistory)
+            viewModel.completePurchase(user, onPurchaseFinalized)
         },
+        onDismissCompletedPurchase = viewModel::dismissCompletedPurchase,
         onWeightInputChange = viewModel::updateWeightInput,
         onCloseWeightDialog = viewModel::closeWeightDialog,
         onSubmitWeightDialog = {
@@ -113,13 +118,15 @@ fun ShoppingContent(
     weightProductDialog: Product?,
     weightInput: String,
     weightError: String?,
+    completedPurchase: Transaction? = null,
     onLogout: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmitted: () -> Unit,
     onProductSelected: (Product) -> Unit,
     onUpdateCartQty: (productId: String, newQty: Long) -> Unit,
     onRemoveCartItem: (productId: String) -> Unit,
-    onCompletePurchase: () -> Unit,
+    onFinalizePurchase: () -> Unit,
+    onDismissCompletedPurchase: () -> Unit = {},
     onWeightInputChange: (String) -> Unit,
     onCloseWeightDialog: () -> Unit,
     onSubmitWeightDialog: () -> Unit,
@@ -149,8 +156,8 @@ fun ShoppingContent(
         }
     }
 
-    LaunchedEffect(weightProductDialog, showCheckoutConfirmation, LanguageManager.currentLanguage) {
-        if (weightProductDialog == null && !showCheckoutConfirmation) {
+    LaunchedEffect(weightProductDialog, showCheckoutConfirmation, completedPurchase, LanguageManager.currentLanguage) {
+        if (weightProductDialog == null && !showCheckoutConfirmation && completedPurchase == null) {
             searchFocusRequester.safeRequestFocus()
         }
     }
@@ -284,7 +291,7 @@ fun ShoppingContent(
                 } else if (handleCartNavigation(keyEvent)) {
                     true
                 } else if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
-                    if (weightProductDialog == null && !showCheckoutConfirmation) {
+                    if (weightProductDialog == null && !showCheckoutConfirmation && completedPurchase == null) {
                         onLogout()
                         true
                     } else false
@@ -397,7 +404,7 @@ fun ShoppingContent(
                     onSearchSubmitted = {
                         if (searchQuery.isBlank()) {
                             if (cartItems.isNotEmpty()) {
-                                onCompletePurchase()
+                                showCheckoutConfirmation = true
                             }
                         } else if (highlightedProductIndex in filteredProducts.indices) {
                             val p = filteredProducts[highlightedProductIndex]
@@ -538,7 +545,7 @@ fun ShoppingContent(
                     onRemoveCartItem(productId)
                     coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
                 },
-                onCompletePurchase = onCompletePurchase,
+                onCompletePurchase = onFinalizePurchase,
                 onSelectCartItem = { index ->
                     selectedCartIndex = index
                     highlightedProductIndex = -1
@@ -571,9 +578,26 @@ fun ShoppingContent(
                 onDismiss = { showCheckoutConfirmation = false },
                 onConfirm = {
                     showCheckoutConfirmation = false
-                    onCompletePurchase()
+                    onFinalizePurchase()
                 },
                 confirmButtonColor = ColorSuccessEmerald
+            )
+        }
+
+        // Purchase Overview Modal Dialog (Shown upon purchase finalization)
+        completedPurchase?.let { tx ->
+            PurchaseOverviewDialog(
+                transaction = tx,
+                user = user,
+                rate = rate,
+                onGoToTransactions = {
+                    onDismissCompletedPurchase()
+                    onNavigateToHistory()
+                },
+                onLogout = {
+                    onDismissCompletedPurchase()
+                    onLogout()
+                }
             )
         }
     }
