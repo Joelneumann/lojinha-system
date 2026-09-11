@@ -27,6 +27,7 @@ import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.screens.TransactionWithBalance
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.SystemNoteHelper
 
 @Composable
 fun TransactionItemCard(
@@ -80,10 +81,10 @@ fun TransactionItemCard(
                 }
                 strings.cancellationNote(refTypeStr, refDateStr)
             } else {
-                tx.note
+                SystemNoteHelper.decodeNote(tx.note, strings)
             }
         } else {
-            tx.note
+            SystemNoteHelper.decodeNote(tx.note, strings)
         }
     }
 

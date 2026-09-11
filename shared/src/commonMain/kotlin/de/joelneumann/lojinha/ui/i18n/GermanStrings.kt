@@ -209,6 +209,12 @@ object GermanStrings : AppStrings {
     override val approveSelectedItemChanges = "Ausgewählte Storno-Änderungen genehmigen"
     override fun approvalStornoTxTitle(type: String) = "Freigabe erforderlich: Storno $type"
     override val approveStorno = "Storno genehmigen"
+
+    // System Notes
+    override fun sysNoteCompleteStorno(date: String, amount: String) = "Vollständiges Storno des Kaufs ($date - $amount)"
+    override fun sysNotePartialStorno(date: String, amount: String) = "Mengenkorrektur für Kauf ($date - Ursprünglich $amount)"
+    override fun sysNoteNonPurchaseStorno(type: String, date: String, amount: String) = "Storno von $type ($date - $amount)"
+
     override fun originalOrderTotalLabel(amount: String) = "Ursprüngliche Gesamtsumme: $amount"
     override fun newOrderTotalLabel(amount: String) = "Neue Gesamtsumme: $amount"
     override val headerProduct = "Produkt"

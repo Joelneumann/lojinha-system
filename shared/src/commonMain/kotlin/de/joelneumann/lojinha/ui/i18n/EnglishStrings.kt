@@ -209,6 +209,12 @@ object EnglishStrings : AppStrings {
     override val approveSelectedItemChanges = "Approve Selected Item Changes"
     override fun approvalStornoTxTitle(type: String) = "Approval Required: Storno $type"
     override val approveStorno = "Approve Storno"
+
+    // System Notes
+    override fun sysNoteCompleteStorno(date: String, amount: String) = "Complete Storno of Purchase ($date - $amount)"
+    override fun sysNotePartialStorno(date: String, amount: String) = "Item quantity correction for Purchase ($date - Original $amount)"
+    override fun sysNoteNonPurchaseStorno(type: String, date: String, amount: String) = "Storno of $type ($date - $amount)"
+
     override fun originalOrderTotalLabel(amount: String) = "Original Order Total: $amount"
     override fun newOrderTotalLabel(amount: String) = "New Order Total: $amount"
     override val headerProduct = "Product"

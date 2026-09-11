@@ -228,7 +228,7 @@ class AdminUsersViewModel(
                 userNameSnapshot = userName,
                 timestamp = nowMillis,
                 type = txType,
-                note = note.ifBlank { if (isDeposit) "Deposit via Admin" else "Debit via Admin" },
+                note = note.ifBlank { if (isDeposit) "SYSNOTE|ADMIN_DEPOSIT" else "SYSNOTE|ADMIN_DEBIT" },
                 totalAmount = centsDelta,
                 items = emptyList(),
                 userBalanceBefore = balBefore,

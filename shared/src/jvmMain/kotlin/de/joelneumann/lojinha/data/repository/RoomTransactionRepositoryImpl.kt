@@ -182,9 +182,9 @@ class RoomTransactionRepositoryImpl(
         val dateStr = de.joelneumann.lojinha.ui.utils.Formatting.formatTimestamp(originalTx.timestamp, de.joelneumann.lojinha.domain.model.Language.EN)
         val origAmountStr = de.joelneumann.lojinha.ui.utils.Formatting.formatBrl(kotlin.math.abs(originalTx.totalAmount))
         val humanNote = if (isAllZero) {
-            "Complete Storno of Purchase ($dateStr - $origAmountStr)"
+            "SYSNOTE|COMPLETE_STORNO|$dateStr|$origAmountStr"
         } else {
-            "Item quantity correction for Purchase ($dateStr - Original $origAmountStr)"
+            "SYSNOTE|PARTIAL_STORNO|$dateStr|$origAmountStr"
         }
 
         val correctionTx = Transaction(
@@ -217,11 +217,7 @@ class RoomTransactionRepositoryImpl(
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
         val dateStr = de.joelneumann.lojinha.ui.utils.Formatting.formatTimestamp(tx.timestamp, de.joelneumann.lojinha.domain.model.Language.EN)
         val amountStr = de.joelneumann.lojinha.ui.utils.Formatting.formatBrl(kotlin.math.abs(tx.totalAmount))
-        val typeLabel = when (tx.type) {
-            TransactionType.ADMIN_DEPOSIT -> "Deposit"
-            TransactionType.ADMIN_WITHDRAWAL -> if (tx.items.isNotEmpty()) "Custom Expense" else "Debit"
-            else -> tx.type.name
-        }
+
 
         val stornoTx = Transaction(
             id = de.joelneumann.lojinha.ui.utils.generateUuid(),
@@ -230,7 +226,7 @@ class RoomTransactionRepositoryImpl(
             timestamp = nowMillis,
             type = TransactionType.CANCELLATION,
             referenceTransactionId = tx.id,
-            note = "Storno of $typeLabel ($dateStr - $amountStr)",
+            note = "SYSNOTE|NON_PURCHASE_STORNO|${tx.type.name}|${tx.items.isNotEmpty()}|$dateStr|$amountStr",
             totalAmount = refundAmount,
             items = emptyList(),
             userBalanceBefore = balBefore,

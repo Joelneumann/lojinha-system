@@ -205,6 +205,12 @@ interface AppStrings {
     val approveSelectedItemChanges: String
     fun approvalStornoTxTitle(type: String): String
     val approveStorno: String
+    
+    // System Notes
+    fun sysNoteCompleteStorno(date: String, amount: String): String
+    fun sysNotePartialStorno(date: String, amount: String): String
+    fun sysNoteNonPurchaseStorno(type: String, date: String, amount: String): String
+
     fun originalOrderTotalLabel(amount: String): String
     fun newOrderTotalLabel(amount: String): String
     val headerProduct: String

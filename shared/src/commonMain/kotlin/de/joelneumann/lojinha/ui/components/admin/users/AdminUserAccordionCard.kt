@@ -131,7 +131,7 @@ fun AdminUserAccordionCard(
         val formattedAmount = Formatting.formatBrl(absCents)
         val dismissDialog = { pendingBalanceAdjustment = null }
         val confirmAdjustment = {
-            val note = if (isDeposit) strings.depositViaAdmin else strings.debitViaAdmin
+            val note = ""
             onAdjustBalance(user, absCents, note, isDeposit)
             pendingBalanceAdjustment = null
             moneyInput = ""

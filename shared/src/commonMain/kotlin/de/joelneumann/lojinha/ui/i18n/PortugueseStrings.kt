@@ -209,6 +209,12 @@ object PortugueseStrings : AppStrings {
     override val approveSelectedItemChanges = "Aprovar Alterações dos Itens"
     override fun approvalStornoTxTitle(type: String) = "Aprovação Necessária: Estornar $type"
     override val approveStorno = "Aprovar Estorno"
+
+    // System Notes
+    override fun sysNoteCompleteStorno(date: String, amount: String) = "Estorno Completo da Compra ($date - $amount)"
+    override fun sysNotePartialStorno(date: String, amount: String) = "Correção de quantidade de itens para Compra ($date - Original $amount)"
+    override fun sysNoteNonPurchaseStorno(type: String, date: String, amount: String) = "Estorno de $type ($date - $amount)"
+
     override fun originalOrderTotalLabel(amount: String) = "Total do Pedido Original: $amount"
     override fun newOrderTotalLabel(amount: String) = "Novo Total do Pedido: $amount"
     override val headerProduct = "Produto"

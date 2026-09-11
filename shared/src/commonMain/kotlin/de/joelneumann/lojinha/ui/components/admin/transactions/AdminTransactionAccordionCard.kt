@@ -24,6 +24,7 @@ import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import de.joelneumann.lojinha.ui.utils.SystemNoteHelper
 
 @Composable
 fun AdminTransactionAccordionCard(
@@ -174,7 +175,7 @@ fun AdminTransactionAccordionCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (transaction.note != null) {
-                        Text("Description: ${transaction.note}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = PrimaryNavy)
+                        Text("Description: ${SystemNoteHelper.decodeNote(transaction.note, strings)}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = PrimaryNavy)
                     }
                     if (referencedTransaction != null) {
                         val refDate = Formatting.formatTimestamp(referencedTransaction.timestamp)
@@ -313,7 +314,7 @@ fun AdminTransactionAccordionCard(
                 Text(
                     "Are you sure you want to storno this $readableType transaction for user ${transaction.userNameSnapshot}?\n\n" +
                             "• Account Balance Adjustment: ${if (refundCents >= 0) "+" else ""}${Formatting.formatBrl(refundCents)}\n" +
-                            "• Current note: ${transaction.note ?: "-"}"
+                            "• Current note: ${SystemNoteHelper.decodeNote(transaction.note, strings) ?: "-"}"
                 )
             },
             confirmButton = {
