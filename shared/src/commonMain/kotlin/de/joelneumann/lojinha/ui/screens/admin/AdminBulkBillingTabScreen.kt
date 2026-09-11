@@ -28,7 +28,8 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 
 @Composable
 fun AdminBulkBillingTabScreen(
-    viewModel: AdminBulkBillingViewModel
+    viewModel: AdminBulkBillingViewModel,
+    onNavigateToTransactions: () -> Unit
 ) {
     val strings = I18n.current
     val billingLists by viewModel.billingLists.collectAsState()
@@ -161,8 +162,8 @@ fun AdminBulkBillingTabScreen(
                                     }
                                 } else {
                                     val currentAmount = variableAmounts[user.id] ?: 0L
-                                    var amountStr by remember(currentAmount) { 
-                                        mutableStateOf(if (currentAmount == 0L) "" else Formatting.formatBrl(currentAmount).replace("R$ ", "")) 
+                                    var amountStr by remember(selectedList.id, user.id) { 
+                                        mutableStateOf(if (currentAmount == 0L) "" else (currentAmount.toDouble() / 100.0).toString()) 
                                     }
                                     OutlinedTextField(
                                         value = amountStr,
@@ -246,6 +247,7 @@ fun AdminBulkBillingTabScreen(
             onConfirm = {
                 viewModel.executeCharges(list)
                 showExecuteDialogFor = null
+                onNavigateToTransactions()
             }
         )
     }

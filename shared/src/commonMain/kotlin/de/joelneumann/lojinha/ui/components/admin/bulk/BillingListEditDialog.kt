@@ -16,8 +16,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.BillingList
@@ -120,13 +122,15 @@ fun BillingListEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                AdminSegmentedOptionsRow(
-                    label = strings.listTypeLabel,
-                    options = BillingListType.entries,
-                    selected = type,
-                    onSelect = { if (isNew) type = it },
-                    optionLabel = { if (it == BillingListType.FIXED) strings.listTypeFixed else strings.listTypeVariable }
-                )
+                if (isNew) {
+                    AdminSegmentedOptionsRow(
+                        label = strings.listTypeLabel,
+                        options = BillingListType.entries,
+                        selected = type,
+                        onSelect = { type = it },
+                        optionLabel = { if (it == BillingListType.FIXED) strings.listTypeFixed else strings.listTypeVariable }
+                    )
+                }
 
                 if (type == BillingListType.FIXED) {
                     AdminLabeledField(
@@ -177,23 +181,53 @@ fun BillingListEditDialog(
                                 }
                                 
                                 if (isSelected && type == BillingListType.FIXED) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(
-                                            onClick = { if (qty > 1) selectedUsers = selectedUsers + (user.id to (qty - 1)) },
-                                            modifier = Modifier.size(28.dp).background(SurfaceWhite, RoundedCornerShape(4.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = SurfaceWhite,
+                                        border = BorderStroke(1.dp, DividerBorder)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.height(30.dp)
                                         ) {
-                                            Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        }
-                                        Text(
-                                            text = qty.toString(),
-                                            modifier = Modifier.padding(horizontal = 12.dp),
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        IconButton(
-                                            onClick = { selectedUsers = selectedUsers + (user.id to (qty + 1)) },
-                                            modifier = Modifier.size(28.dp).background(SurfaceWhite, RoundedCornerShape(4.dp))
-                                        ) {
-                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .width(30.dp)
+                                                    .clickable { 
+                                                        if (qty > 1) {
+                                                            selectedUsers = selectedUsers + (user.id to (qty - 1)) 
+                                                        } else {
+                                                            selectedUsers = selectedUsers - user.id
+                                                        }
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text("-", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                            }
+
+                                            VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
+
+                                            Text(
+                                                text = qty.toString(),
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PrimaryNavy,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.widthIn(min = 36.dp).padding(horizontal = 4.dp)
+                                            )
+
+                                            VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .width(30.dp)
+                                                    .clickable { selectedUsers = selectedUsers + (user.id to (qty + 1)) },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text("+", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                            }
                                         }
                                     }
                                 }

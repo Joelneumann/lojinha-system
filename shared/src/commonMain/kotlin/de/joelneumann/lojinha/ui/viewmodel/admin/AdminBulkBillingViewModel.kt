@@ -113,7 +113,7 @@ class AdminBulkBillingViewModel(
                     userNameSnapshot = user.name,
                     timestamp = nowMillis,
                     type = TransactionType.ADMIN_WITHDRAWAL,
-                    note = list.comment?.takeIf { it.isNotBlank() } ?: "Bulk Billing: ${list.name}",
+                    note = list.comment?.takeIf { it.isNotBlank() } ?: list.name,
                     totalAmount = deltaCents,
                     items = items,
                     userBalanceBefore = balBefore,

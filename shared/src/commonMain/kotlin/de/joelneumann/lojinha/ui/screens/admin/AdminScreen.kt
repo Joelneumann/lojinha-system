@@ -219,7 +219,8 @@ fun AdminScreen(
 
                     AdminTab.BULK_BILLING -> {
                         AdminBulkBillingTabScreen(
-                            viewModel = bulkBillingViewModel
+                            viewModel = bulkBillingViewModel,
+                            onNavigateToTransactions = { handleTabSwitchRequest(AdminTab.TRANSACTIONS) }
                         )
                     }
 

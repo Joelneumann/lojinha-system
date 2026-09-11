@@ -40,6 +40,7 @@ fun AdminTransactionsTabScreen(
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) {
+        listState.scrollToItem(0)
         viewModel.loadData()
     }
 
