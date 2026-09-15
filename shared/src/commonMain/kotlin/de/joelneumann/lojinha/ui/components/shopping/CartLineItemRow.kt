@@ -60,7 +60,8 @@ fun CartLineItemRow(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy,
-                    maxLines = 1,
+                    maxLines = 2,
+                    lineHeight = 18.sp,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))

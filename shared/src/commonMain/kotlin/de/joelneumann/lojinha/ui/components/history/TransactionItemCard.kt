@@ -235,52 +235,6 @@ fun TransactionItemCard(
                 )
             }
 
-            // Balance Flow Banner: Before ➔ After
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = SurfaceContainerHighLight,
-                border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${strings.balance}:",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = TextSecondarySubtle
-                    )
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = Formatting.formatBrl(balanceBefore),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextSecondaryMuted
-                        )
-
-                        Text(
-                            text = "➔",
-                            fontSize = 12.sp,
-                            color = TextSecondarySubtle
-                        )
-
-                        Text(
-                            text = Formatting.formatBrl(balanceAfter),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (balanceAfter >= 0) PrimaryNavy else ColorDangerCrimson
-                        )
-                    }
-                }
-            }
-
             // Direct Visibility of Items inside Transaction Card
             if ((tx.type == TransactionType.CORRECTION || tx.type == TransactionType.CANCELLATION) && tx.items.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
@@ -397,6 +351,52 @@ fun TransactionItemCard(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // Balance Flow Banner: Before ➔ After (placed under the item list)
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = SurfaceContainerHighLight,
+                border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${strings.balance}:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextSecondarySubtle
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = Formatting.formatBrl(balanceBefore),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextSecondaryMuted
+                        )
+
+                        Text(
+                            text = "➔",
+                            fontSize = 12.sp,
+                            color = TextSecondarySubtle
+                        )
+
+                        Text(
+                            text = Formatting.formatBrl(balanceAfter),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (balanceAfter >= 0) PrimaryNavy else ColorDangerCrimson
+                        )
                     }
                 }
             }
