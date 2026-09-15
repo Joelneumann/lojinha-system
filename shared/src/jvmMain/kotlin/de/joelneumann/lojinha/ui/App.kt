@@ -90,6 +90,13 @@ fun App() {
     val sessionUser = currentUser ?: cachedSessionUser
 
     var showAbandonCartGuardDialog by remember { mutableStateOf(false) }
+    var onUserInteractedSession by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    LaunchedEffect(currentUser) {
+        if (currentUser == null) {
+            showAbandonCartGuardDialog = false
+        }
+    }
 
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -130,12 +137,21 @@ fun App() {
                                 factory = LojinhaViewModelFactory.createUserSessionViewModelFactory(
                                     user = sessionUser,
                                     settingsRepository = settingsRepository,
-                                    onLogoutRequest = { appViewModel.logout() }
+                                    onLogoutRequest = {
+                                        showAbandonCartGuardDialog = false
+                                        appViewModel.logout()
+                                    },
+                                    initialSettings = settings
                                 )
                             )
 
+                            SideEffect {
+                                onUserInteractedSession = { userSessionViewModel.onUserInteracted(true) }
+                            }
+
                             DisposableEffect(sessionUser.id, sessionNonce) {
                                 onDispose {
+                                    onUserInteractedSession = null
                                     userSessionViewModel.stopInactivityTimer()
                                 }
                             }
@@ -172,11 +188,14 @@ fun App() {
                                                 settings = settings,
                                                 onLogout = handleLogoutRequest,
                                                 onNavigateToHistory = {
+                                                    userSessionViewModel.resumeInactivityTimer()
                                                     appViewModel.refreshCurrentUser()
                                                     appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
                                                 },
                                                 onUserInteracted = { force -> userSessionViewModel.onUserInteracted(force) },
-                                                onPurchaseFinalized = { appViewModel.refreshCurrentUser() }
+                                                onPurchaseFinalized = { appViewModel.refreshCurrentUser() },
+                                                onPauseTimer = { userSessionViewModel.pauseInactivityTimer() },
+                                                onResumeTimer = { userSessionViewModel.resumeInactivityTimer() }
                                             )
                                         }
 
@@ -209,8 +228,7 @@ fun App() {
                                 if (showInactivityWarning) {
                                     InactivityWarningDialog(
                                         secondsRemaining = inactivitySecondsRemaining,
-                                        onStayLoggedIn = { userSessionViewModel.stayLoggedIn() },
-                                        onLogoutNow = { userSessionViewModel.requestLogout() }
+                                        onStayLoggedIn = { userSessionViewModel.stayLoggedIn() }
                                     )
                                 }
                             }
@@ -316,6 +334,7 @@ fun App() {
                     },
                     onDismiss = {
                         showAbandonCartGuardDialog = false
+                        onUserInteractedSession?.invoke()
                     }
                 )
             }

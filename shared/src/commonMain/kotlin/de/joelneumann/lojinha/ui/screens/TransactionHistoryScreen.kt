@@ -94,7 +94,7 @@ fun TransactionHistoryScreen(
         onLogout = onLogout,
         onUserUpdated = onUserUpdated,
         onSearchFilterChange = { query ->
-            onUserInteracted(false)
+            onUserInteracted(true)
             viewModel.updateSearchFilter(query)
         },
         onTypeFilterSelect = { type ->
@@ -113,12 +113,30 @@ fun TransactionHistoryScreen(
             onUserInteracted(true)
             viewModel.openSettingsModal(user)
         },
-        onCloseSettingsModal = viewModel::closeSettingsModal,
-        onUpdatePinInput = viewModel::updatePinInput,
-        onUpdateLanguage = viewModel::updateLanguage,
-        onUpdateSecondaryCurrency = viewModel::updateSecondaryCurrency,
-        onUpdateAvatar = viewModel::updateAvatar,
-        onSaveUserSettings = { viewModel.saveUserSettings(user, onUserUpdated) },
+        onCloseSettingsModal = {
+            onUserInteracted(true)
+            viewModel.closeSettingsModal()
+        },
+        onUpdatePinInput = { pin ->
+            onUserInteracted(true)
+            viewModel.updatePinInput(pin)
+        },
+        onUpdateLanguage = { lang ->
+            onUserInteracted(true)
+            viewModel.updateLanguage(lang)
+        },
+        onUpdateSecondaryCurrency = { cur ->
+            onUserInteracted(true)
+            viewModel.updateSecondaryCurrency(cur)
+        },
+        onUpdateAvatar = { av ->
+            onUserInteracted(true)
+            viewModel.updateAvatar(av)
+        },
+        onSaveUserSettings = {
+            onUserInteracted(true)
+            viewModel.saveUserSettings(user, onUserUpdated)
+        },
         onUserInteracted = onUserInteracted
     )
 }
@@ -239,7 +257,10 @@ fun TransactionHistoryContent(
                             lastPosition = currentPosition
                         }
 
-                        if (isClickOrScroll || isRealMovement) {
+                        if (isClickOrScroll) {
+                            lastInteractionTime = currentTimeMillis()
+                            onUserInteracted(true)
+                        } else if (isRealMovement) {
                             val now = currentTimeMillis()
                             if (now - lastInteractionTime >= 500L) {
                                 lastInteractionTime = now

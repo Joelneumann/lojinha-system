@@ -150,6 +150,7 @@ object EnglishStrings : AppStrings {
     override val kioskSystemTimersTitle = "Kiosk System Timers"
     override val inactivityTimeoutLabel = "Inactivity Timeout (Minutes):"
     override val inactivityTimeoutPlaceholder = "e.g. 3"
+    override val inactivityTimeoutMinError = "Minimum inactivity timeout is 2 minutes"
     override val oneDriveIntegrationTitle = "Microsoft OneDrive Integration"
     override val connected = "Connected"
     override val disconnected = "Disconnected"

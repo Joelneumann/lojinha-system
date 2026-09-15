@@ -175,12 +175,12 @@ Clean top navigation bar present on all screens.
 │                                                          │
 │                      ⏰ 00:59                            │
 │                                                          │
-│  [ 🚪 Logout Now ]            [ ✅ Stay Logged In ]     │
+│                 [ ✅ Stay Logged In ]                    │
 └──────────────────────────────────────────────────────────┘
 ```
 
-- Triggers automatically when **1 minute remains** on the inactivity timer.
-- Pressing any key, moving the mouse, or clicking "Stay Logged In" resets the timer and closes the popup.
+- Triggers automatically when **1 minute remains** on the inactivity timer (minimum inactivity setting is 2 minutes).
+- Pressing any key, clicking the screen, or clicking "Stay Logged In" resets the timer and closes the popup.
 
 ---
 

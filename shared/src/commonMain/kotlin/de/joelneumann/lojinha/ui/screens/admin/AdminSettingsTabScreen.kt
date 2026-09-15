@@ -74,6 +74,8 @@ fun AdminSettingsTabScreen(
     val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
     val doPasswordsMatch = newPassword == confirmPassword
     val isPasswordValid = !isPasswordEntered || (newPassword.isNotBlank() && doPasswordsMatch)
+    val inactivityTimeoutValue = inactivityTimeout.toIntOrNull()
+    val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue >= 2
 
     val hasFieldChanges = remember(
         settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout,
@@ -171,13 +173,13 @@ fun AdminSettingsTabScreen(
 
                 Button(
                     onClick = {
-                        if (hasFieldChanges && isPasswordValid) {
+                        if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid) {
                             val updatedSettings = settings.copy(
                                 adminPasswordHash = if (newPassword.isNotBlank()) newPassword else settings.adminPasswordHash,
                                 globalMarkupPercent = globalMarkup.toDoubleOrNull() ?: settings.globalMarkupPercent,
                                 usdExchangeRate = usdRate.toDoubleOrNull() ?: settings.usdExchangeRate,
                                 eurExchangeRate = eurRate.toDoubleOrNull() ?: settings.eurExchangeRate,
-                                inactivityTimeoutMinutes = inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes,
+                                inactivityTimeoutMinutes = maxOf(2, inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes),
                                 backupLocationPath = backupLocation,
                                 autoBackupEnabled = autoBackupEnabled,
                                 autoBackupFormat = autoBackupFormat,
@@ -192,7 +194,7 @@ fun AdminSettingsTabScreen(
                             onUnsavedStateChanged(false)
                         }
                     },
-                    enabled = hasFieldChanges && isPasswordValid,
+                    enabled = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentNavy,
                         disabledContainerColor = SurfaceContainerHighLight
@@ -482,6 +484,15 @@ fun AdminSettingsTabScreen(
                             placeholder = strings.inactivityTimeoutPlaceholder,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        if (!isInactivityTimeoutValid) {
+                            Text(
+                                text = strings.inactivityTimeoutMinError,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(start = 2.dp)
+                            )
+                        }
                     }
                 }
             }

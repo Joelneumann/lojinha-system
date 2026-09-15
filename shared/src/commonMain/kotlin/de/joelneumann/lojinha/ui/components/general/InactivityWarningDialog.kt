@@ -15,18 +15,32 @@ import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
-import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
 fun InactivityWarningDialog(
     secondsRemaining: Int,
-    onStayLoggedIn: () -> Unit,
-    onLogoutNow: (() -> Unit)? = null
+    onStayLoggedIn: () -> Unit
 ) {
     val strings = I18n.current
     val mins = secondsRemaining / 60
     val secs = secondsRemaining % 60
     val formattedTime = "${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}"
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.safeRequestFocus()
+    }
 
     Dialog(
         onDismissRequest = onStayLoggedIn,
@@ -42,7 +56,20 @@ fun InactivityWarningDialog(
             modifier = Modifier
                 .width(420.dp)
                 .wrapContentHeight()
-                .confirmationDialogKeys(onCancel = onStayLoggedIn, onConfirm = onStayLoggedIn)
+                .focusRequester(focusRequester)
+                .focusable()
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) {
+                    onStayLoggedIn()
+                }
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        onStayLoggedIn()
+                        true
+                    } else false
+                }
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),

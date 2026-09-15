@@ -19,6 +19,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,6 +31,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.UnitType
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
@@ -47,16 +51,41 @@ fun PurchaseOverviewDialog(
 ) {
     val strings = I18n.current
     var secondsRemaining by remember { mutableStateOf(15) }
+    var lastInteractionTime by remember { mutableStateOf(currentTimeMillis()) }
+    var isActionHandled by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
 
-    // 15-second countdown timer (independent of inactivity timer)
-    LaunchedEffect(Unit) {
-        focusRequester.safeRequestFocus()
-        while (secondsRemaining > 0) {
-            delay(1000L)
-            secondsRemaining -= 1
+    val safeLogout: () -> Unit = {
+        if (!isActionHandled) {
+            isActionHandled = true
+            onLogout()
         }
-        onLogout()
+    }
+
+    val safeGoToTransactions: () -> Unit = {
+        if (!isActionHandled) {
+            isActionHandled = true
+            onGoToTransactions()
+        }
+    }
+
+    // 15-second countdown timer (independent of inactivity timer, resets on interaction)
+    LaunchedEffect(lastInteractionTime) {
+        focusRequester.safeRequestFocus()
+        val totalDurationSecs = 15
+        val startTime = lastInteractionTime
+        secondsRemaining = totalDurationSecs
+        while (secondsRemaining > 0 && !isActionHandled) {
+            delay(250L)
+            val now = currentTimeMillis()
+            val elapsedSecs = maxOf(0, ((now - startTime) / 1000L).toInt())
+            val remaining = minOf(totalDurationSecs, maxOf(0, totalDurationSecs - elapsedSecs))
+            secondsRemaining = remaining
+            if (remaining <= 0) {
+                safeLogout()
+                break
+            }
+        }
     }
 
     val totalCents = abs(transaction.totalAmount)
@@ -67,7 +96,7 @@ fun PurchaseOverviewDialog(
     }
 
     Dialog(
-        onDismissRequest = onLogout,
+        onDismissRequest = safeLogout,
         properties = DialogProperties(
             dismissOnClickOutside = false,
             dismissOnBackPress = true,
@@ -83,10 +112,25 @@ fun PurchaseOverviewDialog(
                 .wrapContentHeight()
                 .focusRequester(focusRequester)
                 .focusable()
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Press || event.type == PointerEventType.Scroll) {
+                                lastInteractionTime = currentTimeMillis()
+                            }
+                        }
+                    }
+                }
                 .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                        onLogout()
-                        true
+                    if (event.type == KeyEventType.KeyDown) {
+                        lastInteractionTime = currentTimeMillis()
+                        if (event.key == Key.Escape) {
+                            safeLogout()
+                            true
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
@@ -319,7 +363,7 @@ fun PurchaseOverviewDialog(
                 ) {
                     // Button 1: Go to Transactions
                     OutlinedButton(
-                        onClick = onGoToTransactions,
+                        onClick = safeGoToTransactions,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                         modifier = Modifier
                             .weight(1.15f)
@@ -350,7 +394,7 @@ fun PurchaseOverviewDialog(
 
                     // Button 2: Logout with independent 15s countdown
                     Button(
-                        onClick = onLogout,
+                        onClick = safeLogout,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                         modifier = Modifier
                             .weight(0.85f)

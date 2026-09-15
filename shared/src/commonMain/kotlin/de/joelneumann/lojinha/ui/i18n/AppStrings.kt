@@ -150,6 +150,7 @@ interface AppStrings {
     val kioskSystemTimersTitle: String
     val inactivityTimeoutLabel: String
     val inactivityTimeoutPlaceholder: String
+    val inactivityTimeoutMinError: String
     val oneDriveIntegrationTitle: String
     val connected: String
     val disconnected: String

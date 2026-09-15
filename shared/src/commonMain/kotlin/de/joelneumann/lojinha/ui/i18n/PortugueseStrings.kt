@@ -150,6 +150,7 @@ object PortugueseStrings : AppStrings {
     override val kioskSystemTimersTitle = "Temporizadores do Quiosque"
     override val inactivityTimeoutLabel = "Tempo Limite de Inatividade (Minutos):"
     override val inactivityTimeoutPlaceholder = "ex: 3"
+    override val inactivityTimeoutMinError = "Tempo limite de inatividade deve ser de pelo menos 2 minutos"
     override val oneDriveIntegrationTitle = "Integração Microsoft OneDrive"
     override val connected = "Conectado"
     override val disconnected = "Desconectado"

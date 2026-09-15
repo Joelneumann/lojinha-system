@@ -51,7 +51,9 @@ fun ShoppingScreen(
     onLogout: () -> Unit,
     onNavigateToHistory: () -> Unit,
     onUserInteracted: (force: Boolean) -> Unit = {},
-    onPurchaseFinalized: () -> Unit = {}
+    onPurchaseFinalized: () -> Unit = {},
+    onPauseTimer: () -> Unit = {},
+    onResumeTimer: () -> Unit = {}
 ) {
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -73,7 +75,7 @@ fun ShoppingScreen(
         completedPurchase = completedPurchase,
         onLogout = onLogout,
         onSearchQueryChange = { query ->
-            onUserInteracted(false)
+            onUserInteracted(true)
             viewModel.updateSearchQuery(query)
         },
         onSearchSubmitted = {
@@ -97,14 +99,22 @@ fun ShoppingScreen(
             viewModel.completePurchase(user, onPurchaseFinalized)
         },
         onDismissCompletedPurchase = viewModel::dismissCompletedPurchase,
-        onWeightInputChange = viewModel::updateWeightInput,
-        onCloseWeightDialog = viewModel::closeWeightDialog,
+        onWeightInputChange = { input ->
+            onUserInteracted(true)
+            viewModel.updateWeightInput(input)
+        },
+        onCloseWeightDialog = {
+            onUserInteracted(true)
+            viewModel.closeWeightDialog()
+        },
         onSubmitWeightDialog = {
             onUserInteracted(true)
             viewModel.submitWeightDialog(settings.globalMarkupPercent)
         },
         onNavigateToHistory = onNavigateToHistory,
-        onUserInteracted = onUserInteracted
+        onUserInteracted = onUserInteracted,
+        onPauseTimer = onPauseTimer,
+        onResumeTimer = onResumeTimer
     )
 }
 
@@ -131,7 +141,9 @@ fun ShoppingContent(
     onCloseWeightDialog: () -> Unit,
     onSubmitWeightDialog: () -> Unit,
     onNavigateToHistory: () -> Unit,
-    onUserInteracted: (force: Boolean) -> Unit = {}
+    onUserInteracted: (force: Boolean) -> Unit = {},
+    onPauseTimer: () -> Unit = {},
+    onResumeTimer: () -> Unit = {}
 ) {
     val strings = I18n.current
     val searchFocusRequester = remember { FocusRequester() }
@@ -153,6 +165,14 @@ fun ShoppingContent(
         if (cartItems.isEmpty()) {
             selectedCartIndex = -1
             showCheckoutConfirmation = false
+        }
+    }
+
+    LaunchedEffect(completedPurchase) {
+        if (completedPurchase != null) {
+            onPauseTimer()
+        } else {
+            onResumeTimer()
         }
     }
 
@@ -241,7 +261,7 @@ fun ShoppingContent(
         if (keyEvent.type != KeyEventType.KeyDown) {
             return keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter || keyEvent.key == Key.Tab
         }
-        return when (keyEvent.key) {
+        val handled = when (keyEvent.key) {
             Key.Backspace, Key.Delete -> {
                 val item = cartItems[selectedCartIndex]
                 onRemoveCartItem(item.product.id)
@@ -280,6 +300,10 @@ fun ShoppingContent(
                 false
             }
         }
+        if (handled) {
+            onUserInteracted(true)
+        }
+        return handled
     }
 
     Column(
@@ -329,7 +353,10 @@ fun ShoppingContent(
                             lastPosition = currentPosition
                         }
 
-                        if (isClickOrScroll || isRealMovement) {
+                        if (isClickOrScroll) {
+                            lastInteractionTime = currentTimeMillis()
+                            onUserInteracted(true)
+                        } else if (isRealMovement) {
                             val now = currentTimeMillis()
                             if (now - lastInteractionTime >= 500L) {
                                 lastInteractionTime = now
@@ -575,7 +602,10 @@ fun ShoppingContent(
                 message = strings.confirmPurchaseMsg(Formatting.formatBrl(cartTotal)),
                 confirmText = strings.confirm,
                 cancelText = strings.cancel,
-                onDismiss = { showCheckoutConfirmation = false },
+                onDismiss = {
+                    showCheckoutConfirmation = false
+                    onUserInteracted(true)
+                },
                 onConfirm = {
                     showCheckoutConfirmation = false
                     onFinalizePurchase()
