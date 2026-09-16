@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.server
 
+import de.joelneumann.lojinha.data.service.DataChangeNotifier
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.*
 import io.ktor.http.*
@@ -12,17 +13,29 @@ import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class LojinhaAdminServer(
     private val productRepository: ProductRepository,
     private val userRepository: UserRepository,
     private val transactionRepository: TransactionRepository,
+    private val billingListRepository: BillingListRepository,
     private val settingsRepository: SettingsRepository,
     private val port: Int = 8080
 ) {
     private var server: EmbeddedServer<*, *>? = null
+
+    // Token Session Management
+    private val activeTokens = ConcurrentHashMap<String, Long>() // token -> expiryTimestamp
+    private val failedLoginAttempts = ConcurrentHashMap<String, Pair<Int, Long>>() // ip -> (count, firstAttemptTime)
+    private val SESSION_DURATION_MS = 8 * 60 * 60 * 1000L // 8 hours
+    private val MAX_LOGIN_ATTEMPTS = 5
+    private val RATE_LIMIT_WINDOW_MS = 60 * 1000L // 1 minute
 
     fun start() {
         server = embeddedServer(Netty, port = port, host = "0.0.0.0") {
@@ -46,23 +59,57 @@ class LojinhaAdminServer(
             }
 
             routing {
-                // 1. Public Login Validation Endpoint
+                // 1. Public Login & Logout Endpoints
                 post("/api/admin/login") {
+                    val clientIp = call.request.local.remoteHost
+                    val now = System.currentTimeMillis()
+
+                    // Rate Limiting Check
+                    val currentAttempt = failedLoginAttempts[clientIp]
+                    if (currentAttempt != null) {
+                        val (count, firstAttempt) = currentAttempt
+                        if (now - firstAttempt < RATE_LIMIT_WINDOW_MS && count >= MAX_LOGIN_ATTEMPTS) {
+                            println("[AUTH] Rate limit exceeded for IP: $clientIp")
+                            call.respond(
+                                HttpStatusCode.TooManyRequests,
+                                LoginResponse(false, "Too many failed login attempts. Please wait a minute before retrying.")
+                            )
+                            return@post
+                        } else if (now - firstAttempt >= RATE_LIMIT_WINDOW_MS) {
+                            failedLoginAttempts.remove(clientIp)
+                        }
+                    }
+
                     try {
                         val req = call.receive<LoginRequest>()
                         val settings = settingsRepository.getSettings()
                         val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
                         val matches = (req.password == expectedPassword)
-                        println("[AUTH] Admin Login Attempt: received='${req.password}', expected='$expectedPassword', match=$matches")
+
+                        println("[AUTH] Admin Login Attempt: success=$matches")
                         if (matches) {
-                            call.respond(HttpStatusCode.OK, LoginResponse(true, "Authenticated"))
+                            failedLoginAttempts.remove(clientIp)
+                            val token = UUID.randomUUID().toString()
+                            activeTokens[token] = now + SESSION_DURATION_MS
+                            call.respond(HttpStatusCode.OK, LoginResponse(true, "Authenticated", token))
                         } else {
+                            val prevCount = failedLoginAttempts[clientIp]?.first ?: 0
+                            val firstTime = failedLoginAttempts[clientIp]?.second ?: now
+                            failedLoginAttempts[clientIp] = Pair(prevCount + 1, firstTime)
                             call.respond(HttpStatusCode.OK, LoginResponse(false, "Invalid admin password"))
                         }
                     } catch (e: Exception) {
                         println("[ERROR] Error processing login request: ${e.message}")
                         call.respond(HttpStatusCode.OK, LoginResponse(false, "Error processing login request"))
                     }
+                }
+
+                post("/api/admin/logout") {
+                    val token = call.extractBearerToken()
+                    if (token != null) {
+                        activeTokens.remove(token)
+                    }
+                    call.respond(HttpStatusCode.OK)
                 }
 
                 // 2. Protected Admin API Endpoints
@@ -214,22 +261,79 @@ class LojinhaAdminServer(
                         }
                     }
 
-                    // Settings
-                    get("/settings") {
+                    // Bulk Billing
+                    get("/billing-lists") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
-                        call.respond(settingsRepository.getSettings())
+                        val lists = billingListRepository.getActiveBillingListsFlow().first()
+                        call.respond(lists)
                     }
-                    post("/settings") {
+                    post("/billing-lists") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
-                        val settings = call.receive<SystemSettings>()
-                        settingsRepository.updateSettings(settings)
+                        val list = call.receive<BillingList>()
+                        val isNew = list.id.isBlank()
+                        val idToSave = if (isNew) UUID.randomUUID().toString() else list.id
+                        val listToSave = list.copy(id = idToSave)
+                        billingListRepository.saveBillingList(listToSave)
+                        billingListRepository.removeAllUsersFromList(idToSave)
+                        for (u in listToSave.users) {
+                            billingListRepository.addUserToList(
+                                u.copy(id = UUID.randomUUID().toString(), listId = idToSave)
+                            )
+                        }
+                        call.respond(HttpStatusCode.OK, mapOf("id" to idToSave))
+                    }
+                    delete("/billing-lists/{id}") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@delete
+                        val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                        billingListRepository.deleteBillingList(id)
                         call.respond(HttpStatusCode.OK)
+                    }
+
+                    // Real-Time Server-Sent Events (SSE) Stream
+                    get("/events") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@get
+                        call.response.cacheControl(CacheControl.NoCache(null))
+                        call.respondTextWriter(contentType = ContentType.Text.EventStream) {
+                            val channel = Channel<Unit>(Channel.CONFLATED)
+                            val listener = {
+                                channel.trySend(Unit)
+                                Unit
+                            }
+                            DataChangeNotifier.addListener(listener)
+                            try {
+                                write("event: connected\ndata: {}\n\n")
+                                flush()
+                                while (true) {
+                                    channel.receive()
+                                    write("event: data_changed\ndata: {}\n\n")
+                                    flush()
+                                }
+                            } catch (e: Exception) {
+                                // Client disconnected
+                            } finally {
+                                DataChangeNotifier.removeListener(listener)
+                                channel.close()
+                            }
+                        }
                     }
                 }
 
                 // 3. Serve static Wasm assets
                 get("/{filename...}") {
                     val filename = call.parameters.getAll("filename")?.joinToString("/") ?: "index.html"
+
+                    // Do not handle unknown API requests as static assets
+                    if (filename.startsWith("api/") || filename == "api") {
+                        call.respond(HttpStatusCode.NotFound)
+                        return@get
+                    }
+
+                    // Strict protection against path traversal attempts
+                    if (filename.contains("..")) {
+                        call.respond(HttpStatusCode.NotFound)
+                        return@get
+                    }
+
                     val file = findWasmAsset(filename)
                     if (file != null && file.exists() && !file.isDirectory) {
                         val contentType = when {
@@ -244,15 +348,16 @@ class LojinhaAdminServer(
                         }
                         call.respondFile(file)
                     } else {
-                        val indexFile = findWasmAsset("index.html")
-                        if (indexFile != null && indexFile.exists()) {
-                            call.respondFile(indexFile)
-                        } else {
-                            call.respondText(
-                                "Wasm distribution assets not found. Run './gradlew :shared:wasmJsBrowserDistribution' to build the Web Wasm bundle.",
-                                status = HttpStatusCode.NotFound
-                            )
+                        // Only fallback to index.html for root or clean single-segment SPA routes
+                        val isSpaRoute = !filename.contains(".") && !filename.contains("/")
+                        if (isSpaRoute) {
+                            val indexFile = findWasmAsset("index.html")
+                            if (indexFile != null && indexFile.exists()) {
+                                call.respondFile(indexFile)
+                                return@get
+                            }
                         }
+                        call.respond(HttpStatusCode.NotFound)
                     }
                 }
             }
@@ -262,14 +367,37 @@ class LojinhaAdminServer(
 
     private suspend fun ApplicationCall.checkAdminAuth(settingsRepository: SettingsRepository): Boolean {
         if (request.httpMethod == HttpMethod.Options) return true
-        val authPassword = request.headers["X-Admin-Password"]
-        val settings = settingsRepository.getSettings()
-        val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
-        if (authPassword == null || authPassword != expectedPassword) {
-            respond(HttpStatusCode.Unauthorized, "Unauthorized access")
-            return false
+
+        // 1. Check Bearer Token or Query Param
+        val token = extractBearerToken() ?: request.queryParameters["token"]
+        if (token != null) {
+            val expiry = activeTokens[token]
+            if (expiry != null && System.currentTimeMillis() < expiry) {
+                return true
+            }
         }
-        return true
+
+        // 2. Fallback check for legacy X-Admin-Password header
+        val authPassword = request.headers["X-Admin-Password"]
+        if (authPassword != null) {
+            val settings = settingsRepository.getSettings()
+            val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
+            if (authPassword == expectedPassword) {
+                return true
+            }
+        }
+
+        respond(HttpStatusCode.Unauthorized, "Unauthorized access")
+        return false
+    }
+
+    private fun ApplicationCall.extractBearerToken(): String? {
+        val authHeader = request.headers[HttpHeaders.Authorization] ?: return null
+        return if (authHeader.startsWith("Bearer ", ignoreCase = true)) {
+            authHeader.substring(7).trim()
+        } else {
+            null
+        }
     }
 
     private fun findWasmAsset(name: String): File? {
@@ -282,8 +410,18 @@ class LojinhaAdminServer(
             File("../shared/build/dist/wasmJs/developmentExecutable")
         )
         for (dir in candidatePaths) {
+            if (!dir.exists() || !dir.isDirectory) continue
             val file = File(dir, name)
-            if (file.exists()) return file
+            try {
+                // Canonical path check strictly prevents directory traversal attacks
+                val canonicalDirPath = dir.canonicalFile.toPath()
+                val canonicalFilePath = file.canonicalFile.toPath()
+                if (file.exists() && canonicalFilePath.startsWith(canonicalDirPath)) {
+                    return file
+                }
+            } catch (e: Exception) {
+                // Malformed path or security access violation
+            }
         }
         return null
     }

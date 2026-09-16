@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 
 class AdminProductsViewModel(
     private val productRepository: ProductRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository? = null
 ) : ViewModel() {
 
     private val _products = MutableStateFlow<List<Product>>(emptyList())
@@ -46,8 +46,10 @@ class AdminProductsViewModel(
         viewModelScope.launch {
             productRepository.getProductsFlow().collect { _products.value = it.sortedByAccentInsensitive { p -> p.name } }
         }
-        viewModelScope.launch {
-            settingsRepository.getSettingsFlow().collect { _settings.value = it }
+        settingsRepository?.let { repo ->
+            viewModelScope.launch {
+                repo.getSettingsFlow().collect { _settings.value = it }
+            }
         }
     }
 
@@ -117,10 +119,11 @@ class AdminProductsViewModel(
     }
 
     fun updateGlobalMarkup(markupPercent: Double) {
+        val repo = settingsRepository ?: return
         viewModelScope.launch {
             val current = _settings.value
-            settingsRepository.updateSettings(current.copy(globalMarkupPercent = markupPercent))
-            _settings.value = settingsRepository.getSettings()
+            repo.updateSettings(current.copy(globalMarkupPercent = markupPercent))
+            _settings.value = repo.getSettings()
         }
     }
 

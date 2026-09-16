@@ -39,9 +39,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import de.joelneumann.lojinha.ui.viewmodel.*
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
-fun App() {
-    val database = remember { DatabaseFactory.createDatabase() }
+fun App(
+    database: de.joelneumann.lojinha.data.database.AppDatabase = remember { DatabaseFactory.createDatabase() }
+) {
     val backupRepository = remember { de.joelneumann.lojinha.data.repository.RoomBackupRepositoryImpl(database.backupDao()) }
     val backupRestoreService = remember { de.joelneumann.lojinha.data.service.BackupRestoreService(database) }
     val oneDriveBackupService = remember { de.joelneumann.lojinha.data.service.OneDriveBackupService() }
@@ -117,6 +119,15 @@ fun App() {
                         val userSelectionViewModel: UserSelectionViewModel = viewModel(
                             factory = LojinhaViewModelFactory.createUserSelectionViewModelFactory(userRepository)
                         )
+                        DisposableEffect(userSelectionViewModel) {
+                            val listener = {
+                                userSelectionViewModel.loadUsers()
+                            }
+                            de.joelneumann.lojinha.data.service.DataChangeNotifier.addListener(listener)
+                            onDispose {
+                                de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
+                            }
+                        }
                         UserSelectionScreen(
                             viewModel = userSelectionViewModel,
                             settings = settings,

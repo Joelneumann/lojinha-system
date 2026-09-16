@@ -13,8 +13,54 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
 
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+
+@JsFun("(key, value) => window.sessionStorage.setItem(key, value)")
+private external fun jsSetSessionItem(key: String, value: String)
+
+@JsFun("(key) => window.sessionStorage.getItem(key)")
+private external fun jsGetSessionItem(key: String): String?
+
+@JsFun("(key) => window.sessionStorage.removeItem(key)")
+private external fun jsRemoveSessionItem(key: String)
+
+@JsFun("""
+(baseUrl, token) => {
+    if (window._lojinhaEventSource) {
+        window._lojinhaEventSource.close();
+    }
+    const url = baseUrl + '/api/admin/events' + (token ? '?token=' + encodeURIComponent(token) : '');
+    const es = new EventSource(url);
+    es.addEventListener('data_changed', () => {
+        window._lojinhaHasNewData = true;
+    });
+    window._lojinhaEventSource = es;
+}
+""")
+private external fun jsStartEventSource(baseUrl: String, token: String)
+
+@JsFun("""
+() => {
+    if (window._lojinhaEventSource) {
+        window._lojinhaEventSource.close();
+        window._lojinhaEventSource = null;
+    }
+}
+""")
+private external fun jsStopEventSource()
+
+@JsFun("() => { const flag = window._lojinhaHasNewData === true; window._lojinhaHasNewData = false; return flag; }")
+private external fun jsCheckAndClearDataChanged(): Boolean
+
 class AdminNetworkClient(private val baseUrl: String = "") {
+    var authToken: String? = null
     var adminPassword: String = ""
+
+    private val _onDataChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val onDataChanged: SharedFlow<Unit> = _onDataChanged.asSharedFlow()
+
+    private var syncJob: Job? = null
 
     val httpClient = HttpClient {
         install(ContentNegotiation) {
@@ -35,7 +81,11 @@ class AdminNetworkClient(private val baseUrl: String = "") {
             if (response.status.isSuccess()) {
                 val loginResponse: LoginResponse = response.body()
                 if (loginResponse.success) {
+                    authToken = loginResponse.token
                     adminPassword = password
+                    authToken?.let { token ->
+                        try { jsSetSessionItem("lojinha_admin_token", token) } catch (e: Exception) {}
+                    }
                     true
                 } else {
                     false
@@ -50,8 +100,71 @@ class AdminNetworkClient(private val baseUrl: String = "") {
         }
     }
 
+    suspend fun tryRestoreSession(): Boolean {
+        val storedToken = try { jsGetSessionItem("lojinha_admin_token") } catch (e: Exception) { null }
+        if (storedToken.isNullOrBlank()) return false
+        authToken = storedToken
+        return try {
+            val response = httpClient.get("$baseUrl/api/admin/products") {
+                appendAdminAuth()
+            }
+            if (response.status.isSuccess()) {
+                true
+            } else {
+                logout()
+                false
+            }
+        } catch (e: Exception) {
+            logout()
+            false
+        }
+    }
+
+    suspend fun logout() {
+        stopRealtimeSync()
+        try {
+            httpClient.post("$baseUrl/api/admin/logout") {
+                appendAdminAuth()
+            }
+        } catch (e: Exception) {}
+        authToken = null
+        adminPassword = ""
+        try { jsRemoveSessionItem("lojinha_admin_token") } catch (e: Exception) {}
+    }
+
+    fun startRealtimeSync(scope: CoroutineScope) {
+        val token = authToken ?: ""
+        try {
+            jsStartEventSource(baseUrl, token)
+        } catch (e: Exception) {
+            println("Failed to initialize EventSource: ${e.message}")
+        }
+
+        syncJob?.cancel()
+        syncJob = scope.launch {
+            while (isActive) {
+                delay(500)
+                try {
+                    if (jsCheckAndClearDataChanged()) {
+                        _onDataChanged.tryEmit(Unit)
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
+    fun stopRealtimeSync() {
+        syncJob?.cancel()
+        syncJob = null
+        try {
+            jsStopEventSource()
+        } catch (e: Exception) {}
+    }
+
     fun HttpRequestBuilder.appendAdminAuth() {
-        if (adminPassword.isNotBlank()) {
+        if (!authToken.isNullOrBlank()) {
+            header(HttpHeaders.Authorization, "Bearer $authToken")
+        } else if (adminPassword.isNotBlank()) {
             header("X-Admin-Password", adminPassword)
         }
     }
@@ -337,26 +450,48 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
 
 }
 
-class HttpSettingsRepository(private val client: AdminNetworkClient) : SettingsRepository {
-    override fun getSettingsFlow(): Flow<SystemSettings> = flow {
-        emit(getSettings())
+class HttpBillingListRepository(private val client: AdminNetworkClient) : BillingListRepository {
+    override fun getActiveBillingListsFlow(): Flow<List<BillingList>> = flow {
+        emit(getAllBillingLists())
     }
 
-    override suspend fun getSettings(): SystemSettings {
+    suspend fun getAllBillingLists(): List<BillingList> {
         return try {
-            client.httpClient.get("/api/admin/settings") {
+            client.httpClient.get("/api/admin/billing-lists") {
                 client.run { appendAdminAuth() }
             }.body()
         } catch (e: Exception) {
-            SystemSettings()
+            emptyList()
         }
     }
 
-    override suspend fun updateSettings(settings: SystemSettings) {
-        client.httpClient.post("/api/admin/settings") {
+    override suspend fun saveBillingList(list: BillingList) {
+        client.httpClient.post("/api/admin/billing-lists") {
             contentType(ContentType.Application.Json)
             client.run { appendAdminAuth() }
-            setBody(settings)
+            setBody(list)
         }
+    }
+
+    override suspend fun deleteBillingList(id: String) {
+        client.httpClient.delete("/api/admin/billing-lists/$id") {
+            client.run { appendAdminAuth() }
+        }
+    }
+
+    override suspend fun addUserToList(user: BillingListUser) {
+        // Managed through saveBillingList
+    }
+
+    override suspend fun removeUserFromList(listId: String, userId: String) {
+        // Managed through saveBillingList
+    }
+
+    override suspend fun removeAllUsersFromList(listId: String) {
+        // Managed through saveBillingList
+    }
+
+    override suspend fun updateUserQuantity(listId: String, userId: String, quantity: Int) {
+        // Managed through saveBillingList
     }
 }

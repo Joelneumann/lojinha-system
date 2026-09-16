@@ -1,7 +1,10 @@
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.CanvasBasedWindow
@@ -11,20 +14,23 @@ import de.joelneumann.lojinha.ui.screens.admin.AdminScreen
 import de.joelneumann.lojinha.ui.theme.LojinhaTheme
 import de.joelneumann.lojinha.ui.theme.WEB_UI_SCALE_FACTOR
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     CanvasBasedWindow("Lojinha Admin Console") {
         var isAuthenticated by remember { mutableStateOf(false) }
+        var isCheckingSession by remember { mutableStateOf(true) }
+        val scope = rememberCoroutineScope()
 
         val networkClient = remember { AdminNetworkClient() }
         val productRepository = remember { HttpProductRepository(networkClient) }
         val userRepository = remember { HttpUserRepository(networkClient) }
         val transactionRepository = remember { HttpTransactionRepository(networkClient) }
-        val settingsRepository = remember { HttpSettingsRepository(networkClient) }
+        val billingListRepository = remember { HttpBillingListRepository(networkClient) }
 
         val productsViewModel = remember(isAuthenticated) {
-            AdminProductsViewModel(productRepository, settingsRepository)
+            AdminProductsViewModel(productRepository)
         }
         val usersViewModel = remember(isAuthenticated) {
             AdminUsersViewModel(userRepository, transactionRepository)
@@ -32,44 +38,76 @@ fun main() {
         val transactionsViewModel = remember(isAuthenticated) {
             AdminTransactionsViewModel(transactionRepository, userRepository, productRepository)
         }
-        val settingsViewModel = remember(isAuthenticated) {
-            AdminSettingsViewModel(settingsRepository)
+        val bulkBillingViewModel = remember(isAuthenticated) {
+            AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository)
         }
 
+        // 1. Session restoration on startup
+        LaunchedEffect(Unit) {
+            val restored = networkClient.tryRestoreSession()
+            if (restored) {
+                isAuthenticated = true
+            }
+            isCheckingSession = false
+        }
+
+        // 2. Data loading and real-time synchronization
         LaunchedEffect(isAuthenticated) {
             if (isAuthenticated) {
+                networkClient.startRealtimeSync(this)
                 productsViewModel.loadData()
                 usersViewModel.loadData()
                 transactionsViewModel.loadData()
-                settingsViewModel.loadSettings()
+
+                // React to real-time events from host server
+                networkClient.onDataChanged.collect {
+                    productsViewModel.loadData()
+                    usersViewModel.loadData()
+                    transactionsViewModel.loadData()
+                }
+            } else {
+                networkClient.stopRealtimeSync()
             }
         }
 
         LojinhaTheme(scaleFactor = WEB_UI_SCALE_FACTOR) {
-            Crossfade(
-                targetState = isAuthenticated,
-                animationSpec = tween(durationMillis = 250),
-                modifier = Modifier.fillMaxSize()
-            ) { authed ->
-                if (!authed) {
-                    AdminWebLoginScreen(
-                        onLoginSubmit = { password ->
-                            networkClient.login(password)
-                        },
-                        onLoginSuccess = {
-                            isAuthenticated = true
-                        }
-                    )
-                } else {
-                    AdminScreen(
-                        productsViewModel = productsViewModel,
-                        usersViewModel = usersViewModel,
-                        transactionsViewModel = transactionsViewModel,
-                        settingsViewModel = settingsViewModel,
-                        onExitAdmin = {
-                            isAuthenticated = false
-                        }
-                    )
+            if (isCheckingSession) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                Crossfade(
+                    targetState = isAuthenticated,
+                    animationSpec = tween(durationMillis = 250),
+                    modifier = Modifier.fillMaxSize()
+                ) { authed ->
+                    if (!authed) {
+                        AdminWebLoginScreen(
+                            onLoginSubmit = { password ->
+                                networkClient.login(password)
+                            },
+                            onLoginSuccess = {
+                                isAuthenticated = true
+                            }
+                        )
+                    } else {
+                        AdminScreen(
+                            productsViewModel = productsViewModel,
+                            usersViewModel = usersViewModel,
+                            transactionsViewModel = transactionsViewModel,
+                            bulkBillingViewModel = bulkBillingViewModel,
+                            settingsViewModel = null,
+                            onExitAdmin = {
+                                scope.launch {
+                                    networkClient.logout()
+                                    isAuthenticated = false
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

@@ -11,6 +11,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.input.key.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -94,7 +98,23 @@ fun AdminWebLoginScreen(
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     isError = errorMessage != null,
-                    modifier = Modifier.fillMaxWidth()
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = { handleSubmit() }
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onKeyEvent { keyEvent ->
+                            if (keyEvent.type == KeyEventType.KeyDown && 
+                                (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
+                                handleSubmit()
+                                true
+                            } else {
+                                false
+                            }
+                        }
                 )
 
                 if (errorMessage != null) {

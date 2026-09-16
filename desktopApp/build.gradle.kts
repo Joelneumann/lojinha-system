@@ -25,6 +25,9 @@ dependencies {
 
     // Room Runtime for AppDatabase reference
     implementation(libs.androidx.room.runtime)
+
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.junit)
 }
 
 compose.desktop {
