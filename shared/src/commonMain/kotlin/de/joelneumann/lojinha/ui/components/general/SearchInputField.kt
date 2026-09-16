@@ -2,12 +2,15 @@ package de.joelneumann.lojinha.ui.components.general
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -61,6 +64,18 @@ fun SearchInputField(
                 tint = TextSecondaryMuted
             )
         },
+        trailingIcon = if (query.isNotBlank()) {
+            {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear",
+                        tint = TextSecondaryMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        } else null,
         placeholder = {
             Text(
                 text = placeholder,

@@ -33,6 +33,7 @@ import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import androidx.compose.ui.geometry.Offset
@@ -150,14 +151,12 @@ fun ShoppingContent(
     val coroutineScope = rememberCoroutineScope()
 
     val filteredProducts = remember(products, searchQuery) {
-        if (searchQuery.isBlank()) emptyList()
-        else products.filter { p ->
-            p.name.containsIgnoreAccents(searchQuery) ||
-                    p.barcodes.any { b -> b.code.containsIgnoreAccents(searchQuery) }
-        }.sortedByAccentInsensitive { it.name }
+        products.filterAndRankProducts(searchQuery)
     }
 
-    var highlightedProductIndex by remember(filteredProducts) { mutableStateOf(-1) }
+    var highlightedProductIndex by remember(filteredProducts) {
+        mutableStateOf(if (filteredProducts.isNotEmpty()) 0 else -1)
+    }
     var selectedCartIndex by remember(cartItems.size) { mutableStateOf(-1) }
     var showCheckoutConfirmation by remember { mutableStateOf(false) }
 
@@ -423,10 +422,7 @@ fun ShoppingContent(
                 // Search Bar Input (Auto-Focused)
                 SearchInputField(
                     query = searchQuery,
-                    onQueryChange = { newQuery ->
-                        onSearchQueryChange(newQuery)
-                        highlightedProductIndex = -1
-                    },
+                    onQueryChange = onSearchQueryChange,
                     placeholder = strings.searchProductPlaceholder,
                     onSearchSubmitted = {
                         if (searchQuery.isBlank()) {
@@ -436,6 +432,8 @@ fun ShoppingContent(
                         } else if (highlightedProductIndex in filteredProducts.indices) {
                             val p = filteredProducts[highlightedProductIndex]
                             onProductSelected(p)
+                        } else if (filteredProducts.isNotEmpty()) {
+                            onProductSelected(filteredProducts.first())
                         } else {
                             onSearchSubmitted()
                         }
@@ -487,9 +485,12 @@ fun ShoppingContent(
                                         val p = filteredProducts[highlightedProductIndex]
                                         onProductSelected(p)
                                         true
+                                    } else if (filteredProducts.isNotEmpty()) {
+                                        onProductSelected(filteredProducts.first())
+                                        true
                                     } else false
                                 } else if (event.type == KeyEventType.KeyUp) {
-                                    searchQuery.isBlank() || highlightedProductIndex in filteredProducts.indices
+                                    searchQuery.isBlank() || filteredProducts.isNotEmpty()
                                 } else false
                             }
                             else -> false
@@ -531,6 +532,18 @@ fun ShoppingContent(
                         )
                     }
                 } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp, start = 2.dp, end = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.productsCountText(filteredProducts.size, products.size),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextSecondaryMuted
+                        )
+                    }
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 20.dp),

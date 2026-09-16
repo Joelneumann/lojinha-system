@@ -8,6 +8,7 @@ import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,22 +79,9 @@ class ShoppingViewModel(
         val query = _searchQuery.value.trim()
         if (query.isBlank()) return
 
-        // 1. Try matching product by barcode first
-        val productByBarcode = _products.value.firstOrNull { p ->
-            p.barcodes.any { b -> b.code.equals(query, ignoreCase = true) }
-        }
-        if (productByBarcode != null) {
-            onProductSelected(productByBarcode, globalMarkup)
-            _searchQuery.value = ""
-            return
-        }
-
-        // 2. Otherwise check filtered product list by name
-        val filtered = _products.value.filter { p ->
-            p.name.containsIgnoreAccents(query)
-        }
-        if (filtered.size == 1) {
-            onProductSelected(filtered.first(), globalMarkup)
+        val ranked = _products.value.filterAndRankProducts(query)
+        if (ranked.isNotEmpty()) {
+            onProductSelected(ranked.first(), globalMarkup)
             _searchQuery.value = ""
         }
     }

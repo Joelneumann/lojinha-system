@@ -81,3 +81,75 @@ fun <T> Iterable<T>.sortedByAccentInsensitive(selector: (T) -> String): List<T> 
     return sortedWith(compareBy(ACCENT_INSENSITIVE_COMPARATOR, selector))
 }
 
+/**
+ * Filters and ranks a list of products against a search query.
+ * If [query] is blank, returns an empty list to prevent cluttering the screen for large catalogs.
+ *
+ * Products are ranked into relevance tiers:
+ * Tier 0: Exact match (exact product name or exact barcode code)
+ * Tier 1: Product name starts with query
+ * Tier 2: A word in the product name starts with query
+ * Tier 3: Multi-token query where all tokens match prefixes of words in the product name
+ * Tier 4: Multi-token query where all tokens are contained in the product name or barcode description
+ * Tier 5: Substring match inside the product name
+ * Tier 6: Barcode description match, or barcode code match (minimum 3 digits if purely numeric)
+ *
+ * Within each tier, products are sorted strictly alphabetically by name.
+ */
+fun List<de.joelneumann.lojinha.domain.model.Product>.filterAndRankProducts(query: String): List<de.joelneumann.lojinha.domain.model.Product> {
+    val trimmed = query.trim()
+    if (trimmed.isEmpty()) return emptyList()
+
+    val normQuery = trimmed.removeAccents().lowercase()
+    val queryTokens = normQuery.split("\\s+".toRegex()).filter { it.isNotEmpty() }
+    val isDigitsOnly = trimmed.all { it.isDigit() }
+
+    val rankedList = mutableListOf<Pair<Int, de.joelneumann.lojinha.domain.model.Product>>()
+
+    for (product in this) {
+        val normName = product.name.removeAccents().lowercase()
+        val nameWords = normName.split("[\\s\\-_/(),.:;+]+".toRegex()).filter { it.isNotEmpty() }
+        val barcodeCodes = product.barcodes.map { it.code.trim().removeAccents().lowercase() }
+        val barcodeDescs = product.barcodes.mapNotNull { it.description?.trim()?.removeAccents()?.lowercase() }
+
+        val tier: Int? = when {
+            // Tier 0: Exact name match or exact barcode code match
+            normName == normQuery || barcodeCodes.any { it == normQuery } -> 0
+
+            // Tier 1: Product name starts with query OR barcode code starts with query
+            normName.startsWith(normQuery) || barcodeCodes.any { it.startsWith(normQuery) } -> 1
+
+            // Tier 2: Any word in product name starts with query
+            nameWords.any { it.startsWith(normQuery) } -> 2
+
+            // Tier 3: Multi-token query where all tokens match prefixes of words in product name
+            queryTokens.size > 1 && queryTokens.all { token -> nameWords.any { word -> word.startsWith(token) } } -> 3
+
+            // Tier 4: Multi-token query where all tokens are found in product name or barcode description
+            queryTokens.size > 1 && queryTokens.all { token ->
+                normName.contains(token) || barcodeDescs.any { it.contains(token) }
+            } -> 4
+
+            // Tier 5: Substring match in product name
+            normName.contains(normQuery) -> 5
+
+            // Tier 6: Barcode description contains query, OR barcode code contains query (minimum 2 chars for numeric queries)
+            barcodeDescs.any { it.contains(normQuery) } ||
+                    ((!isDigitsOnly || trimmed.length >= 2) && barcodeCodes.any { it.contains(normQuery) }) -> 6
+
+            else -> null
+        }
+
+        if (tier != null) {
+            rankedList.add(tier to product)
+        }
+    }
+
+    return rankedList
+        .sortedWith(
+            compareBy<Pair<Int, de.joelneumann.lojinha.domain.model.Product>> { it.first }
+                .thenBy(ACCENT_INSENSITIVE_COMPARATOR) { it.second.name }
+        )
+        .map { it.second }
+}
+
