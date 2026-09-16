@@ -236,4 +236,25 @@ class RoomTransactionRepositoryImpl(
         executeAtomicTransaction(stornoTx, refundAmount, emptyMap())
         return true
     }
+
+    override suspend fun executeBatchTransactions(
+        requests: List<de.joelneumann.lojinha.domain.model.AtomicTransactionRequest>
+    ): Boolean {
+        if (requests.isEmpty()) return true
+        return try {
+            val items = requests.map { req ->
+                Triple(
+                    TransactionEntity.fromDomain(req.transaction),
+                    req.balanceDelta,
+                    req.stockDeltas
+                )
+            }
+            transactionDao.executeBatchAtomicTransactions(items)
+            onDataChanged?.invoke()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
 }

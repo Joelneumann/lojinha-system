@@ -102,4 +102,21 @@ interface TransactionDao {
         }
         insertTransaction(transaction)
     }
+
+    @androidx.room.Transaction
+    suspend fun executeBatchAtomicTransactions(
+        items: List<Triple<TransactionEntity, Long, Map<String, Long>>>
+    ) {
+        for ((tx, balDelta, stockDeltas) in items) {
+            if (balDelta != 0L) {
+                updateUserBalance(tx.userId, balDelta)
+            }
+            for ((productId, delta) in stockDeltas) {
+                if (delta != 0L) {
+                    updateProductStock(productId, delta)
+                }
+            }
+            insertTransaction(tx)
+        }
+    }
 }

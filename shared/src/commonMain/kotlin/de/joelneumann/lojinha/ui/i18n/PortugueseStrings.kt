@@ -215,6 +215,10 @@ object PortugueseStrings : AppStrings {
     override val approveSelectedItemChanges = "Aprovar Alterações dos Itens"
     override fun approvalStornoTxTitle(type: String) = "Aprovação Necessária: Estornar $type"
     override val approveStorno = "Aprovar Estorno"
+    override fun confirmStornoNonPurchaseBody(type: String, user: String, balanceAdjustment: String, currentNote: String) =
+        "Tem certeza de que deseja estornar esta transação de $type do usuário $user?\n\n• Ajuste de Saldo: $balanceAdjustment\n• Nota atual: $currentNote"
+    override fun confirmStornoEntirePurchaseBody(user: String, refundAmount: String, itemCount: Int) =
+        "Tem certeza de que deseja estornar completamente esta compra do usuário $user?\n\n• Reembolso de Saldo: $refundAmount\n• Estoque: Todos os itens restantes ($itemCount produtos) serão restaurados ao estoque."
 
     // System Notes
     override fun sysNoteCompleteStorno(date: String, amount: String) = "Estorno Completo da Compra ($date - $amount)"
@@ -357,7 +361,7 @@ object PortugueseStrings : AppStrings {
     override val statusFactoryResetCompleted = "Reset de fábrica concluído."
     override fun statusConnectedToOneDrive(email: String) = "Conectado ao OneDrive como $email."
     override val adminConsoleWebTitle = "Painel do Admin"
-    override val adminConsoleWebDesc = "Por favor, digite a senha de admin para gerenciar configurações, produtos e usuários pela rede."
+    override val adminConsoleWebDesc = "Por favor, digite a senha de admin para gerenciar produtos, contas, cobrança em massa e transações pela rede."
     override val adminPasswordLabelWeb = "Senha de Admin"
     override val loginBtn = "Entrar"
     override val invalidAdminPassword = "Senha de admin incorreta. Acesso negado."

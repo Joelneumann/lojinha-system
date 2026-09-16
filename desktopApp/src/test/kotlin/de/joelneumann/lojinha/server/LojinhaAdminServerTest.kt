@@ -4,6 +4,8 @@ import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -68,6 +70,7 @@ class LojinhaAdminServerTest {
         override suspend fun executeAtomicTransaction(transaction: Transaction, balanceDelta: Long, stockDeltas: Map<String, Long>) {}
         override suspend fun applyPurchaseCorrection(originalTransactionId: String, newItems: List<TransactionItem>): Boolean = true
         override suspend fun stornoNonPurchase(transactionId: String): Boolean = true
+        override suspend fun executeBatchTransactions(requests: List<AtomicTransactionRequest>): Boolean = true
     }
 
     private val fakeBillingListRepo = object : BillingListRepository {
@@ -239,4 +242,66 @@ class LojinhaAdminServerTest {
         assertEquals(429, rateLimitedRes.statusCode())
         assertTrue(rateLimitedRes.body().contains("Too many failed login attempts"))
     }
+
+    private fun getValidToken(): String {
+        val loginReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/login"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString("""{"password":"secretPass123"}"""))
+            .build()
+        val loginRes = client.send(loginReq, HttpResponse.BodyHandlers.ofString())
+        val tokenRegex = "\"token\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+        return tokenRegex.find(loginRes.body())!!.groupValues[1]
+    }
+
+    @Test
+    fun testCanDeleteUserEndpoint() {
+        val token = getValidToken()
+        val req = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/users/can-delete/user123"))
+            .header("Authorization", "Bearer $token")
+            .GET()
+            .build()
+        val res = client.send(req, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, res.statusCode())
+        assertTrue(res.body().contains("\"canDelete\":true") || res.body().contains("\"canDelete\": true"))
+    }
+
+    @Test
+    fun testBatchTransactionsEndpoint() {
+        val token = getValidToken()
+        val reqObj = listOf(
+            AtomicTransactionRequest(
+                transaction = Transaction(
+                    id = "tx1",
+                    userId = "u1",
+                    userNameSnapshot = "User 1",
+                    timestamp = 123456789L,
+                    type = TransactionType.PURCHASE,
+                    totalAmount = 1500L,
+                    items = listOf(
+                        TransactionItem(
+                            productId = "p1",
+                            productName = "Item 1",
+                            quantity = 1L,
+                            unitPriceAtPurchase = 1500L
+                        )
+                    )
+                ),
+                balanceDelta = -1500L,
+                stockDeltas = emptyMap()
+            )
+        )
+        val payload = Json.encodeToString(reqObj)
+
+        val req = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/transactions/batch"))
+            .header("Authorization", "Bearer $token")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(payload))
+            .build()
+        val res = client.send(req, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, res.statusCode())
+    }
 }
+

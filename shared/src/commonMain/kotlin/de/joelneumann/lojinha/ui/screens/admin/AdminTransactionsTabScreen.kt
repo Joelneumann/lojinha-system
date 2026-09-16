@@ -1,13 +1,17 @@
 package de.joelneumann.lojinha.ui.screens.admin
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
@@ -37,6 +41,8 @@ fun AdminTransactionsTabScreen(
     val pageSize by viewModel.pageSize.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
 
+    val selectedTypeFilter by viewModel.selectedTypeFilter.collectAsState()
+
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) {
@@ -44,7 +50,7 @@ fun AdminTransactionsTabScreen(
         viewModel.loadData()
     }
 
-    LaunchedEffect(currentPage, pageSize, searchQuery) {
+    LaunchedEffect(currentPage, pageSize, searchQuery, selectedTypeFilter) {
         listState.scrollToItem(0)
     }
 
@@ -63,7 +69,41 @@ fun AdminTransactionsTabScreen(
             onSearchSubmitted = openFirstResult
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val filterOptions = listOf(
+            null to strings.historyFilterAll,
+            TransactionType.PURCHASE to strings.historyTypePurchase,
+            TransactionType.ADMIN_DEPOSIT to strings.historyTypeDeposit,
+            TransactionType.ADMIN_WITHDRAWAL to strings.historyTypeDebit,
+            TransactionType.CORRECTION to strings.historyTypeCorrection,
+            TransactionType.CANCELLATION to strings.historyTypeCancellation
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            filterOptions.forEach { (type, label) ->
+                val isSelected = selectedTypeFilter == type
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { viewModel.updateTypeFilter(type) },
+                    label = {
+                        Text(
+                            text = label,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         if (transactions.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {

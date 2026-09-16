@@ -17,13 +17,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.data.repository.LoginResult
+import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import kotlinx.coroutines.launch
 
 @Composable
 fun AdminWebLoginScreen(
-    onLoginSubmit: suspend (String) -> Boolean,
+    onLoginSubmit: suspend (String) -> LoginResult,
     onLoginSuccess: () -> Unit
 ) {
+    val strings = I18n.current
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
@@ -34,12 +39,21 @@ fun AdminWebLoginScreen(
         isLoading = true
         errorMessage = null
         scope.launch {
-            val success = onLoginSubmit(password)
+            val result = onLoginSubmit(password)
             isLoading = false
-            if (success) {
-                onLoginSuccess()
-            } else {
-                errorMessage = "Invalid admin password. Access denied."
+            when (result) {
+                is LoginResult.Success -> {
+                    onLoginSuccess()
+                }
+                is LoginResult.RateLimited -> {
+                    errorMessage = result.message
+                }
+                is LoginResult.InvalidCredentials -> {
+                    errorMessage = strings.invalidAdminPassword
+                }
+                is LoginResult.NetworkError -> {
+                    errorMessage = result.message
+                }
             }
         }
     }
@@ -53,7 +67,7 @@ fun AdminWebLoginScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
-                .widthIn(max = 420.dp)
+                .widthIn(max = 440.dp)
                 .padding(vertical = 16.dp),
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
@@ -64,6 +78,33 @@ fun AdminWebLoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Language Switcher Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Language.entries.forEach { lang ->
+                        val isSelected = LanguageManager.currentLanguage == lang
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { LanguageManager.setLanguage(lang) },
+                            label = {
+                                Text(
+                                    text = when (lang) {
+                                        Language.BR -> "🇧🇷 PT"
+                                        Language.DE -> "🇩🇪 DE"
+                                        Language.EN -> "🇺🇸 EN"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            modifier = Modifier.padding(horizontal = 2.dp)
+                        )
+                    }
+                }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -75,7 +116,7 @@ fun AdminWebLoginScreen(
                         modifier = Modifier.size(26.dp)
                     )
                     Text(
-                        text = "Admin Console",
+                        text = strings.adminConsoleWebTitle,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -83,7 +124,7 @@ fun AdminWebLoginScreen(
                 }
 
                 Text(
-                    text = "Please enter the admin password to manage settings, products, and users over the network.",
+                    text = strings.adminConsoleWebDesc,
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -94,7 +135,7 @@ fun AdminWebLoginScreen(
                         password = it
                         errorMessage = null
                     },
-                    label = { Text("Admin Password") },
+                    label = { Text(strings.adminPasswordLabelWeb) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     isError = errorMessage != null,
@@ -141,7 +182,7 @@ fun AdminWebLoginScreen(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(strings.loginBtn, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

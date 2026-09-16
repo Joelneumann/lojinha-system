@@ -34,7 +34,26 @@ class RoomUserRepositoryImpl(
     }
 
     override suspend fun saveUser(user: User) {
-        userDao.insertOrUpdateUser(UserEntity.fromDomain(user))
+        val existing = userDao.getUserById(user.id)
+        if (existing != null) {
+            val entity = UserEntity.fromDomain(user)
+            userDao.updateUserProfile(
+                id = entity.id,
+                name = entity.name,
+                language = entity.language,
+                secondaryCurrency = entity.secondaryCurrency,
+                pin = entity.pin,
+                userBarcode = entity.userBarcode,
+                userBarcodeNumber = entity.userBarcodeNumber,
+                isActive = entity.isActive,
+                isDeleted = entity.isDeleted,
+                avatarType = entity.avatarType,
+                avatarEmoji = entity.avatarEmoji,
+                avatarColor = entity.avatarColor
+            )
+        } else {
+            userDao.insertOrUpdateUser(UserEntity.fromDomain(user))
+        }
         onDataChanged?.invoke()
     }
 

@@ -8,10 +8,7 @@ import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class AdminBulkBillingViewModel(
@@ -20,14 +17,38 @@ class AdminBulkBillingViewModel(
     private val transactionRepository: TransactionRepository
 ) : ViewModel() {
 
-    val billingLists: StateFlow<List<BillingList>> = billingListRepository.getActiveBillingListsFlow()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _billingLists = MutableStateFlow<List<BillingList>>(emptyList())
+    val billingLists: StateFlow<List<BillingList>> = _billingLists.asStateFlow()
 
-    val activeUsers: StateFlow<List<User>> = userRepository.getUsersFlow()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _activeUsers = MutableStateFlow<List<User>>(emptyList())
+    val activeUsers: StateFlow<List<User>> = _activeUsers.asStateFlow()
 
     private val _selectedListId = MutableStateFlow<String?>(null)
     val selectedListId: StateFlow<String?> = _selectedListId
+
+    init {
+        loadData()
+    }
+
+    fun loadData() {
+        viewModelScope.launch {
+            billingListRepository.getActiveBillingListsFlow().collect { lists ->
+                _billingLists.value = lists
+            }
+        }
+        viewModelScope.launch {
+            userRepository.getUsersFlow().collect { users ->
+                _activeUsers.value = users
+            }
+        }
+    }
+
+    fun refreshData() {
+        viewModelScope.launch {
+            _billingLists.value = billingListRepository.getActiveBillingListsFlow().first()
+            _activeUsers.value = userRepository.getAllUsers()
+        }
+    }
 
     fun selectList(id: String?) {
         _selectedListId.value = id
@@ -51,6 +72,7 @@ class AdminBulkBillingViewModel(
                 )
             }
             _selectedListId.value = idToSave
+            refreshData()
         }
     }
 
@@ -60,6 +82,7 @@ class AdminBulkBillingViewModel(
             if (_selectedListId.value == id) {
                 _selectedListId.value = null
             }
+            refreshData()
         }
     }
 
@@ -77,15 +100,25 @@ class AdminBulkBillingViewModel(
         viewModelScope.launch {
             val nowMillis = currentTimeMillis()
             val allUsers = activeUsers.value.associateBy { it.id }
+            val batchRequests = mutableListOf<de.joelneumann.lojinha.domain.model.AtomicTransactionRequest>()
 
             for (listUser in list.users) {
                 val user = allUsers[listUser.userId] ?: continue
                 if (!user.isActive || user.isDeleted) continue
 
-                val amountCents = if (list.type == BillingListType.FIXED) {
-                    (list.basePrice ?: 0L) * listUser.quantity
+                val unitPrice: Long
+                val quantity: Long
+                val amountCents: Long
+
+                if (list.type == BillingListType.FIXED) {
+                    unitPrice = list.basePrice ?: 0L
+                    quantity = listUser.quantity.toLong().coerceAtLeast(1L)
+                    amountCents = unitPrice * quantity
                 } else {
-                    _variableAmounts.value[listUser.userId] ?: 0L
+                    val customAmount = _variableAmounts.value[listUser.userId] ?: 0L
+                    unitPrice = kotlin.math.abs(customAmount)
+                    quantity = 1L
+                    amountCents = customAmount
                 }
 
                 if (amountCents <= 0) continue
@@ -99,8 +132,8 @@ class AdminBulkBillingViewModel(
                         productId = "custom_bulk",
                         productName = list.name,
                         unitType = UnitType.PIECE,
-                        quantity = listUser.quantity.toLong(),
-                        unitPriceAtPurchase = absCents
+                        quantity = quantity,
+                        unitPriceAtPurchase = unitPrice
                     )
                 )
 
@@ -120,11 +153,16 @@ class AdminBulkBillingViewModel(
                     userBalanceAfter = balAfter
                 )
 
-                transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
+                batchRequests.add(de.joelneumann.lojinha.domain.model.AtomicTransactionRequest(tx, deltaCents, emptyMap()))
+            }
+
+            if (batchRequests.isNotEmpty()) {
+                transactionRepository.executeBatchTransactions(batchRequests)
             }
 
             // Clear variable amounts after execution
             _variableAmounts.value = emptyMap()
+            refreshData()
         }
     }
 }

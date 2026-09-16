@@ -211,6 +211,8 @@ interface AppStrings {
     val approveSelectedItemChanges: String
     fun approvalStornoTxTitle(type: String): String
     val approveStorno: String
+    fun confirmStornoNonPurchaseBody(type: String, user: String, balanceAdjustment: String, currentNote: String): String
+    fun confirmStornoEntirePurchaseBody(user: String, refundAmount: String, itemCount: Int): String
     
     // System Notes
     fun sysNoteCompleteStorno(date: String, amount: String): String

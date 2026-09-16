@@ -29,45 +29,13 @@ fun main() {
         val transactionRepository = remember { HttpTransactionRepository(networkClient) }
         val billingListRepository = remember { HttpBillingListRepository(networkClient) }
 
-        val productsViewModel = remember(isAuthenticated) {
-            AdminProductsViewModel(productRepository)
-        }
-        val usersViewModel = remember(isAuthenticated) {
-            AdminUsersViewModel(userRepository, transactionRepository)
-        }
-        val transactionsViewModel = remember(isAuthenticated) {
-            AdminTransactionsViewModel(transactionRepository, userRepository, productRepository)
-        }
-        val bulkBillingViewModel = remember(isAuthenticated) {
-            AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository)
-        }
-
-        // 1. Session restoration on startup
+        // Session restoration on startup
         LaunchedEffect(Unit) {
             val restored = networkClient.tryRestoreSession()
             if (restored) {
                 isAuthenticated = true
             }
             isCheckingSession = false
-        }
-
-        // 2. Data loading and real-time synchronization
-        LaunchedEffect(isAuthenticated) {
-            if (isAuthenticated) {
-                networkClient.startRealtimeSync(this)
-                productsViewModel.loadData()
-                usersViewModel.loadData()
-                transactionsViewModel.loadData()
-
-                // React to real-time events from host server
-                networkClient.onDataChanged.collect {
-                    productsViewModel.loadData()
-                    usersViewModel.loadData()
-                    transactionsViewModel.loadData()
-                }
-            } else {
-                networkClient.stopRealtimeSync()
-            }
         }
 
         LojinhaTheme(scaleFactor = WEB_UI_SCALE_FACTOR) {
@@ -94,6 +62,34 @@ fun main() {
                             }
                         )
                     } else {
+                        val productsViewModel = remember { AdminProductsViewModel(productRepository) }
+                        val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository) }
+                        val transactionsViewModel = remember { AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
+                        val bulkBillingViewModel = remember { AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository) }
+
+                        LaunchedEffect(Unit) {
+                            networkClient.startRealtimeSync(this)
+                            launch {
+                                networkClient.onDataChanged.collect {
+                                    productsViewModel.loadData()
+                                    usersViewModel.loadData()
+                                    transactionsViewModel.loadData()
+                                    bulkBillingViewModel.loadData()
+                                }
+                            }
+                            launch {
+                                networkClient.onUnauthorized.collect {
+                                    isAuthenticated = false
+                                }
+                            }
+                        }
+
+                        DisposableEffect(Unit) {
+                            onDispose {
+                                networkClient.stopRealtimeSync()
+                            }
+                        }
+
                         AdminScreen(
                             productsViewModel = productsViewModel,
                             usersViewModel = usersViewModel,

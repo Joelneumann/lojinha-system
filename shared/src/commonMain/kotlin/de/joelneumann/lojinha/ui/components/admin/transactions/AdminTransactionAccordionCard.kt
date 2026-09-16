@@ -311,10 +311,15 @@ fun AdminTransactionAccordionCard(
                 )
             },
             text = {
+                val balanceAdjStr = "${if (refundCents >= 0) "+" else ""}${Formatting.formatBrl(refundCents)}"
+                val noteStr = SystemNoteHelper.decodeNote(transaction.note, strings) ?: "-"
                 Text(
-                    "Are you sure you want to storno this $readableType transaction for user ${transaction.userNameSnapshot}?\n\n" +
-                            "• Account Balance Adjustment: ${if (refundCents >= 0) "+" else ""}${Formatting.formatBrl(refundCents)}\n" +
-                            "• Current note: ${SystemNoteHelper.decodeNote(transaction.note, strings) ?: "-"}"
+                    strings.confirmStornoNonPurchaseBody(
+                        type = readableType,
+                        user = transaction.userNameSnapshot,
+                        balanceAdjustment = balanceAdjStr,
+                        currentNote = noteStr
+                    )
                 )
             },
             confirmButton = {

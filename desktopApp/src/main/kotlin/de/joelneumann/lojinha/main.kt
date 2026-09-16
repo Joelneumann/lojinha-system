@@ -37,9 +37,15 @@ fun main() = application {
     )
 
     DisposableEffect(Unit) {
-        adminServer.start()
+        try {
+            adminServer.start()
+        } catch (e: Exception) {
+            println("[WARN] Failed to start admin server: ${e.message}")
+        }
         onDispose {
-            adminServer.stop()
+            try {
+                adminServer.stop()
+            } catch (e: Exception) {}
         }
     }
 

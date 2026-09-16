@@ -5,6 +5,7 @@ import de.joelneumann.lojinha.domain.repository.*
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -30,7 +31,8 @@ private external fun jsRemoveSessionItem(key: String)
     if (window._lojinhaEventSource) {
         window._lojinhaEventSource.close();
     }
-    const url = baseUrl + '/api/admin/events' + (token ? '?token=' + encodeURIComponent(token) : '');
+    const cleanBase = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
+    const url = cleanBase + '/api/admin/events' + (token ? '?token=' + encodeURIComponent(token) : '');
     const es = new EventSource(url);
     es.addEventListener('data_changed', () => {
         window._lojinhaHasNewData = true;
@@ -53,12 +55,39 @@ private external fun jsStopEventSource()
 @JsFun("() => { const flag = window._lojinhaHasNewData === true; window._lojinhaHasNewData = false; return flag; }")
 private external fun jsCheckAndClearDataChanged(): Boolean
 
-class AdminNetworkClient(private val baseUrl: String = "") {
+sealed class LoginResult {
+    object Success : LoginResult()
+    data class RateLimited(val message: String) : LoginResult()
+    object InvalidCredentials : LoginResult()
+    data class NetworkError(val message: String) : LoginResult()
+}
+
+class AdminNetworkClient(val baseUrl: String = "") {
     var authToken: String? = null
     var adminPassword: String = ""
 
+    fun resolveUrl(path: String): String {
+        val cleanBase = baseUrl.trimEnd('/')
+        val cleanPath = if (path.startsWith("/")) path else "/$path"
+        return if (cleanBase.isEmpty()) cleanPath else "$cleanBase$cleanPath"
+    }
+
     private val _onDataChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val onDataChanged: SharedFlow<Unit> = _onDataChanged.asSharedFlow()
+
+    private val _onUnauthorized = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val onUnauthorized: SharedFlow<Unit> = _onUnauthorized.asSharedFlow()
+
+    fun notifyUnauthorized() {
+        val hadToken = authToken != null
+        stopRealtimeSync()
+        authToken = null
+        adminPassword = ""
+        try { jsRemoveSessionItem("lojinha_admin_token") } catch (e: Exception) {}
+        if (hadToken) {
+            _onUnauthorized.tryEmit(Unit)
+        }
+    }
 
     private var syncJob: Job? = null
 
@@ -70,15 +99,26 @@ class AdminNetworkClient(private val baseUrl: String = "") {
                 ignoreUnknownKeys = true
             })
         }
+        HttpResponseValidator {
+            validateResponse { response ->
+                if (response.status == HttpStatusCode.Unauthorized) {
+                    notifyUnauthorized()
+                }
+            }
+        }
     }
 
-    suspend fun login(password: String): Boolean {
+    suspend fun login(password: String): LoginResult {
         return try {
-            val response = httpClient.post("$baseUrl/api/admin/login") {
+            val response = httpClient.post(resolveUrl("/api/admin/login")) {
                 contentType(ContentType.Application.Json)
                 setBody(LoginRequest(password))
             }
-            if (response.status.isSuccess()) {
+            if (response.status == HttpStatusCode.TooManyRequests) {
+                val resp: LoginResponse? = try { response.body() } catch (e: Exception) { null }
+                val msg = resp?.message?.ifBlank { null } ?: "Too many failed attempts. Please wait a minute."
+                LoginResult.RateLimited(msg)
+            } else if (response.status.isSuccess()) {
                 val loginResponse: LoginResponse = response.body()
                 if (loginResponse.success) {
                     authToken = loginResponse.token
@@ -86,17 +126,17 @@ class AdminNetworkClient(private val baseUrl: String = "") {
                     authToken?.let { token ->
                         try { jsSetSessionItem("lojinha_admin_token", token) } catch (e: Exception) {}
                     }
-                    true
+                    LoginResult.Success
                 } else {
-                    false
+                    LoginResult.InvalidCredentials
                 }
             } else {
                 println("Client login failed with HTTP status: ${response.status}")
-                false
+                LoginResult.InvalidCredentials
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            false
+            LoginResult.NetworkError(e.message ?: "Network error")
         }
     }
 
@@ -105,17 +145,22 @@ class AdminNetworkClient(private val baseUrl: String = "") {
         if (storedToken.isNullOrBlank()) return false
         authToken = storedToken
         return try {
-            val response = httpClient.get("$baseUrl/api/admin/products") {
+            val response = httpClient.get(resolveUrl("/api/admin/products")) {
                 appendAdminAuth()
             }
             if (response.status.isSuccess()) {
                 true
-            } else {
+            } else if (response.status == HttpStatusCode.Unauthorized) {
                 logout()
+                false
+            } else {
+                // Server error / unavailable - do not clear stored token so user can retry
+                authToken = null
                 false
             }
         } catch (e: Exception) {
-            logout()
+            // Transient network failure - keep stored token
+            authToken = null
             false
         }
     }
@@ -123,7 +168,7 @@ class AdminNetworkClient(private val baseUrl: String = "") {
     suspend fun logout() {
         stopRealtimeSync()
         try {
-            httpClient.post("$baseUrl/api/admin/logout") {
+            httpClient.post(resolveUrl("/api/admin/logout")) {
                 appendAdminAuth()
             }
         } catch (e: Exception) {}
@@ -143,7 +188,8 @@ class AdminNetworkClient(private val baseUrl: String = "") {
         syncJob?.cancel()
         syncJob = scope.launch {
             while (isActive) {
-                delay(500)
+                delay(1200)
+                if (authToken.isNullOrBlank()) break
                 try {
                     if (jsCheckAndClearDataChanged()) {
                         _onDataChanged.tryEmit(Unit)
@@ -177,7 +223,7 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
 
     override suspend fun getAllProducts(): List<Product> {
         return try {
-            val list: List<Product> = client.httpClient.get("/api/admin/products") {
+            val list: List<Product> = client.httpClient.get(client.resolveUrl("/api/admin/products")) {
                 client.run { appendAdminAuth() }
             }.body()
             list.sortedByAccentInsensitive { it.name }
@@ -195,7 +241,7 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
     }
 
     override suspend fun saveProduct(product: Product) {
-        client.httpClient.post("/api/admin/products") {
+        client.httpClient.post(client.resolveUrl("/api/admin/products")) {
             contentType(ContentType.Application.Json)
             client.run { appendAdminAuth() }
             setBody(product)
@@ -203,19 +249,19 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
     }
 
     override suspend fun deactivateProduct(id: String) {
-        client.httpClient.post("/api/admin/products/deactivate/$id") {
+        client.httpClient.post(client.resolveUrl("/api/admin/products/deactivate/$id")) {
             client.run { appendAdminAuth() }
         }
     }
 
     override suspend fun hardDeleteProduct(id: String) {
-        client.httpClient.delete("/api/admin/products/$id") {
+        client.httpClient.delete(client.resolveUrl("/api/admin/products/$id")) {
             client.run { appendAdminAuth() }
         }
     }
 
     override suspend fun updateStock(productId: String, delta: Long) {
-        client.httpClient.post("/api/admin/products/stock") {
+        client.httpClient.post(client.resolveUrl("/api/admin/products/stock")) {
             contentType(ContentType.Application.Json)
             client.run { appendAdminAuth() }
             setBody(DeltaRequest(productId, delta))
@@ -230,7 +276,7 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
 
     override suspend fun getAllUsers(): List<User> {
         return try {
-            val list: List<User> = client.httpClient.get("/api/admin/users") {
+            val list: List<User> = client.httpClient.get(client.resolveUrl("/api/admin/users")) {
                 client.run { appendAdminAuth() }
             }.body()
             list.sortedByAccentInsensitive { it.name }
@@ -248,7 +294,7 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
     }
 
     override suspend fun saveUser(user: User) {
-        client.httpClient.post("/api/admin/users") {
+        client.httpClient.post(client.resolveUrl("/api/admin/users")) {
             contentType(ContentType.Application.Json)
             client.run { appendAdminAuth() }
             setBody(user)
@@ -256,34 +302,43 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
     }
 
     override suspend fun deactivateUser(id: String) {
-        client.httpClient.post("/api/admin/users/deactivate/$id") {
+        client.httpClient.post(client.resolveUrl("/api/admin/users/deactivate/$id")) {
             client.run { appendAdminAuth() }
         }
     }
 
     override suspend fun softDeleteUser(id: String) {
-        client.httpClient.post("/api/admin/users/soft-delete/$id") {
+        client.httpClient.post(client.resolveUrl("/api/admin/users/soft-delete/$id")) {
             client.run { appendAdminAuth() }
         }
     }
 
     override suspend fun restoreUser(id: String) {
-        client.httpClient.post("/api/admin/users/restore/$id") {
+        client.httpClient.post(client.resolveUrl("/api/admin/users/restore/$id")) {
             client.run { appendAdminAuth() }
         }
     }
 
-    override suspend fun canHardDeleteUser(id: String): Boolean = true
+    override suspend fun canHardDeleteUser(id: String): Boolean {
+        return try {
+            val res: Map<String, Boolean> = client.httpClient.get(client.resolveUrl("/api/admin/users/can-delete/$id")) {
+                client.run { appendAdminAuth() }
+            }.body()
+            res["canDelete"] ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     override suspend fun hardDeleteUser(id: String): Boolean {
-        val res = client.httpClient.delete("/api/admin/users/$id") {
+        val res = client.httpClient.delete(client.resolveUrl("/api/admin/users/$id")) {
             client.run { appendAdminAuth() }
         }
         return res.status.isSuccess()
     }
 
     override suspend fun updateBalance(userId: String, amountDelta: Long) {
-        client.httpClient.post("/api/admin/users/balance") {
+        client.httpClient.post(client.resolveUrl("/api/admin/users/balance")) {
             contentType(ContentType.Application.Json)
             client.run { appendAdminAuth() }
             setBody(DeltaRequest(userId, amountDelta))
@@ -292,13 +347,11 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
 }
 
 class HttpTransactionRepository(private val client: AdminNetworkClient) : TransactionRepository {
-    override fun getTransactionsFlow(): Flow<List<Transaction>> = flow {
-        emit(getAllTransactions())
-    }
+    override fun getTransactionsFlow(): Flow<List<Transaction>> = emptyFlow()
 
     override suspend fun getAllTransactions(): List<Transaction> {
         return try {
-            client.httpClient.get("/api/admin/transactions") {
+            client.httpClient.get(client.resolveUrl("/api/admin/transactions")) {
                 client.run { appendAdminAuth() }
             }.body()
         } catch (e: Exception) {
@@ -315,7 +368,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
     }
 
     override suspend fun recordTransaction(transaction: Transaction) {
-        client.httpClient.post("/api/admin/transactions") {
+        client.httpClient.post(client.resolveUrl("/api/admin/transactions")) {
             contentType(ContentType.Application.Json)
             client.run { appendAdminAuth() }
             setBody(transaction)
@@ -333,7 +386,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
         typeFilter: TransactionType?
     ): PagedResult<Transaction> {
         return try {
-            client.httpClient.get("/api/admin/transactions") {
+            client.httpClient.get(client.resolveUrl("/api/admin/transactions")) {
                 client.run { appendAdminAuth() }
                 parameter("page", page)
                 parameter("pageSize", pageSize)
@@ -353,7 +406,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
         typeFilter: TransactionType?
     ): PagedResult<Transaction> {
         return try {
-            client.httpClient.get("/api/admin/transactions") {
+            client.httpClient.get(client.resolveUrl("/api/admin/transactions")) {
                 client.run { appendAdminAuth() }
                 parameter("userId", userId)
                 parameter("page", page)
@@ -369,7 +422,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
     override suspend fun getTransactionsByReferenceIds(referenceIds: List<String>): List<Transaction> {
         if (referenceIds.isEmpty()) return emptyList()
         return try {
-            client.httpClient.post("/api/admin/transactions/by-reference-ids") {
+            client.httpClient.post(client.resolveUrl("/api/admin/transactions/by-reference-ids")) {
                 contentType(ContentType.Application.Json)
                 client.run { appendAdminAuth() }
                 setBody(referenceIds)
@@ -382,7 +435,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
     override suspend fun getTransactionsByIds(ids: List<String>): List<Transaction> {
         if (ids.isEmpty()) return emptyList()
         return try {
-            client.httpClient.post("/api/admin/transactions/by-ids") {
+            client.httpClient.post(client.resolveUrl("/api/admin/transactions/by-ids")) {
                 contentType(ContentType.Application.Json)
                 client.run { appendAdminAuth() }
                 setBody(ids)
@@ -394,7 +447,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
 
     override suspend fun getCancellationCountForReference(refId: String): Int {
         return try {
-            val res = client.httpClient.get("/api/admin/transactions/cancellation-count/$refId") {
+            val res = client.httpClient.get(client.resolveUrl("/api/admin/transactions/cancellation-count/$refId")) {
                 client.run { appendAdminAuth() }
             }.body<Map<String, Int>>()
             res["count"] ?: 0
@@ -409,7 +462,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
         stockDeltas: Map<String, Long>
     ) {
         try {
-            client.httpClient.post("/api/admin/transactions/atomic") {
+            client.httpClient.post(client.resolveUrl("/api/admin/transactions/atomic")) {
                 contentType(ContentType.Application.Json)
                 client.run { appendAdminAuth() }
                 setBody(AtomicTransactionRequest(transaction, balanceDelta, stockDeltas))
@@ -424,7 +477,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
         newItems: List<TransactionItem>
     ): Boolean {
         return try {
-            val response = client.httpClient.post("/api/admin/transactions/purchase-correction") {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/transactions/purchase-correction")) {
                 contentType(ContentType.Application.Json)
                 client.run { appendAdminAuth() }
                 setBody(PurchaseCorrectionRequest(originalTransactionId, newItems))
@@ -437,7 +490,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
 
     override suspend fun stornoNonPurchase(transactionId: String): Boolean {
         return try {
-            val response = client.httpClient.post("/api/admin/transactions/storno-non-purchase") {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/transactions/storno-non-purchase")) {
                 contentType(ContentType.Application.Json)
                 client.run { appendAdminAuth() }
                 setBody(StornoNonPurchaseRequest(transactionId))
@@ -448,6 +501,22 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
         }
     }
 
+    override suspend fun executeBatchTransactions(
+        requests: List<AtomicTransactionRequest>
+    ): Boolean {
+        if (requests.isEmpty()) return true
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/transactions/batch")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(requests)
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            println("[HttpTransactionRepository] executeBatchTransactions failed: ${e.message}")
+            false
+        }
+    }
 }
 
 class HttpBillingListRepository(private val client: AdminNetworkClient) : BillingListRepository {
@@ -457,7 +526,7 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
 
     suspend fun getAllBillingLists(): List<BillingList> {
         return try {
-            client.httpClient.get("/api/admin/billing-lists") {
+            client.httpClient.get(client.resolveUrl("/api/admin/billing-lists")) {
                 client.run { appendAdminAuth() }
             }.body()
         } catch (e: Exception) {
@@ -466,7 +535,7 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
     }
 
     override suspend fun saveBillingList(list: BillingList) {
-        client.httpClient.post("/api/admin/billing-lists") {
+        client.httpClient.post(client.resolveUrl("/api/admin/billing-lists")) {
             contentType(ContentType.Application.Json)
             client.run { appendAdminAuth() }
             setBody(list)
@@ -474,7 +543,7 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
     }
 
     override suspend fun deleteBillingList(id: String) {
-        client.httpClient.delete("/api/admin/billing-lists/$id") {
+        client.httpClient.delete(client.resolveUrl("/api/admin/billing-lists/$id")) {
             client.run { appendAdminAuth() }
         }
     }

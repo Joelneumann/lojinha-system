@@ -89,7 +89,17 @@ class AdminProductsViewModel(
 
     fun saveProduct(product: Product) {
         viewModelScope.launch {
-            productRepository.saveProduct(product)
+            val original = _editProduct.value
+            val isExisting = original != null && original.id.isNotBlank() && original.id == product.id
+            if (isExisting) {
+                val stockDelta = product.stockQuantity - original.stockQuantity
+                productRepository.saveProduct(product)
+                if (stockDelta != 0L) {
+                    productRepository.updateStock(product.id, stockDelta)
+                }
+            } else {
+                productRepository.saveProduct(product)
+            }
             refreshProducts()
             closeProductModal()
         }

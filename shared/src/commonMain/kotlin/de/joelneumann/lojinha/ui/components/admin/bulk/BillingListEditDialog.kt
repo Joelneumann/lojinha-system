@@ -57,13 +57,15 @@ fun BillingListEditDialog(
         )
     }
 
-    val canSave = name.isNotBlank() && (type != BillingListType.FIXED || priceInput.isNotBlank())
+    val parsedPriceCents = remember(priceInput) {
+        priceInput.replace(',', '.').toDoubleOrNull()?.let { kotlin.math.round(it * 100).toLong() }
+    }
+    val isPriceValid = type != BillingListType.FIXED || (parsedPriceCents != null && parsedPriceCents > 0L)
+    val canSave = name.isNotBlank() && isPriceValid
     
     val handleSave = {
         if (canSave) {
-            val price = if (type == BillingListType.FIXED) {
-                priceInput.replace(',', '.').toDoubleOrNull()?.let { kotlin.math.round(it * 100).toLong() }
-            } else null
+            val price = if (type == BillingListType.FIXED) parsedPriceCents else null
             
             val updatedList = BillingList(
                 id = initialList?.id ?: "",
