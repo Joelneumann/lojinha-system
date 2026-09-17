@@ -215,6 +215,10 @@ object EnglishStrings : AppStrings {
     override val approveSelectedItemChanges = "Approve Selected Item Changes"
     override fun approvalStornoTxTitle(type: String) = "Approval Required: Storno $type"
     override val approveStorno = "Approve Storno"
+    override fun confirmStornoNonPurchaseBody(type: String, user: String, balanceAdjustment: String, currentNote: String) =
+        "Are you sure you want to storno this $type transaction for user $user?\n\n• Account Balance Adjustment: $balanceAdjustment\n• Current note: $currentNote"
+    override fun confirmStornoEntirePurchaseBody(user: String, refundAmount: String, itemCount: Int) =
+        "Are you sure you want to completely storno this purchase for user $user?\n\n• Account Balance Refund: $refundAmount\n• Inventory: All remaining items ($itemCount products) will be restored to stock."
 
     // System Notes
     override fun sysNoteCompleteStorno(date: String, amount: String) = "Complete Storno of Purchase ($date - $amount)"
@@ -357,7 +361,7 @@ object EnglishStrings : AppStrings {
     override val statusFactoryResetCompleted = "Factory Reset completed."
     override fun statusConnectedToOneDrive(email: String) = "Connected to OneDrive as $email."
     override val adminConsoleWebTitle = "Admin Console"
-    override val adminConsoleWebDesc = "Please enter the admin password to manage settings, products, and users over the network."
+    override val adminConsoleWebDesc = "Please enter the admin password to manage products, accounts, bulk billing, and transactions over the network."
     override val adminPasswordLabelWeb = "Admin Password"
     override val loginBtn = "Login"
     override val invalidAdminPassword = "Invalid admin password. Access denied."
@@ -496,4 +500,7 @@ object EnglishStrings : AppStrings {
     override val supportEmailPlaceholder = "admin@example.com"
     override val contactSupportBtn = "Contact Support"
     override val githubRepoBtn = "GitHub Repository"
+
+    override val fieldDescription = "Description"
+    override val referenceLabel = "Reference"
 }

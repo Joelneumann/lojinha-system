@@ -45,6 +45,10 @@ interface TransactionRepository {
     suspend fun stornoNonPurchase(
         transactionId: String
     ): Boolean
+
+    suspend fun executeBatchTransactions(
+        requests: List<de.joelneumann.lojinha.domain.model.AtomicTransactionRequest>
+    ): Boolean
 }
 
 

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -36,6 +37,7 @@ fun AdminBulkBillingTabScreen(
     val selectedListId by viewModel.selectedListId.collectAsState()
     val activeUsers by viewModel.activeUsers.collectAsState()
     val variableAmounts by viewModel.variableAmounts.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     var editingList by remember { mutableStateOf<BillingList?>(null) }
     var isCreatingNew by remember { mutableStateOf(false) }
@@ -44,10 +46,9 @@ fun AdminBulkBillingTabScreen(
 
     val selectedList = billingLists.find { it.id == selectedListId }
 
-    Row(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        // LEFT PANE: List of Billing Lists
+    val contentLeftPane: @Composable (Modifier) -> Unit = { modifier ->
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight()
+            modifier = modifier
                 .background(SurfaceWhite, RoundedCornerShape(12.dp))
                 .padding(16.dp)
         ) {
@@ -105,10 +106,11 @@ fun AdminBulkBillingTabScreen(
                 }
             }
         }
+    }
 
-        // RIGHT PANE: Selected List Details
+    val contentRightPane: @Composable (Modifier, Boolean) -> Unit = { modifier, showBackButton ->
         Column(
-            modifier = Modifier.weight(2f).fillMaxHeight()
+            modifier = modifier
                 .background(SurfaceWhite, RoundedCornerShape(12.dp))
                 .padding(16.dp)
         ) {
@@ -117,6 +119,30 @@ fun AdminBulkBillingTabScreen(
                     Text(strings.noListsCreated, color = TextSecondaryMuted)
                 }
             } else {
+                if (showBackButton) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.selectList(null) }
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = strings.backBtn,
+                            tint = AccentNavy,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            strings.backBtn,
+                            color = AccentNavy,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
                 Text(selectedList.name, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = PrimaryNavy)
                 val typeText = if (selectedList.type == BillingListType.FIXED) {
                     "${strings.listTypeFixed} (${Formatting.formatBrl(selectedList.basePrice ?: 0L)})"
@@ -140,7 +166,10 @@ fun AdminBulkBillingTabScreen(
                     sortedUsers.sumOf { variableAmounts[it.first.id] ?: 0L }
                 }
 
-                LazyColumn(modifier = Modifier.weight(1f)) {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     if (sortedUsers.isEmpty()) {
                         item {
                             Text(strings.noUsersInList, color = TextSecondaryMuted, modifier = Modifier.padding(16.dp))
@@ -201,6 +230,22 @@ fun AdminBulkBillingTabScreen(
         }
     }
 
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        val isMobile = maxWidth < 700.dp
+        if (isMobile) {
+            if (selectedList == null) {
+                contentLeftPane(Modifier.fillMaxSize())
+            } else {
+                contentRightPane(Modifier.fillMaxSize(), true)
+            }
+        } else {
+            Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                contentLeftPane(Modifier.weight(1f).fillMaxHeight())
+                contentRightPane(Modifier.weight(2f).fillMaxHeight(), false)
+            }
+        }
+    }
+
     if (isCreatingNew || editingList != null) {
         BillingListEditDialog(
             initialList = editingList,
@@ -245,9 +290,26 @@ fun AdminBulkBillingTabScreen(
             totalFormatted = Formatting.formatBrl(total),
             onDismiss = { showExecuteDialogFor = null },
             onConfirm = {
-                viewModel.executeCharges(list)
+                val targetList = list
                 showExecuteDialogFor = null
-                onNavigateToTransactions()
+                viewModel.executeCharges(targetList) { success ->
+                    if (success) {
+                        onNavigateToTransactions()
+                    }
+                }
+            }
+        )
+    }
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.clearErrorMessage() },
+            title = { Text(strings.deleteListTitle.substringBefore(" ")) },
+            text = { Text(errorMessage ?: "") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearErrorMessage() }) {
+                    Text(strings.ok)
+                }
             }
         )
     }

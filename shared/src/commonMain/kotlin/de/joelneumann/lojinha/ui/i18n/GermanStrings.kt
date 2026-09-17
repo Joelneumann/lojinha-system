@@ -215,6 +215,10 @@ object GermanStrings : AppStrings {
     override val approveSelectedItemChanges = "Ausgewählte Storno-Änderungen genehmigen"
     override fun approvalStornoTxTitle(type: String) = "Freigabe erforderlich: Storno $type"
     override val approveStorno = "Storno genehmigen"
+    override fun confirmStornoNonPurchaseBody(type: String, user: String, balanceAdjustment: String, currentNote: String) =
+        "Sind Sie sicher, dass Sie diese $type-Transaktion für Benutzer $user stornieren möchten?\n\n• Kontostandanpassung: $balanceAdjustment\n• Aktuelle Notiz: $currentNote"
+    override fun confirmStornoEntirePurchaseBody(user: String, refundAmount: String, itemCount: Int) =
+        "Sind Sie sicher, dass Sie diesen Einkauf für Benutzer $user vollständig stornieren möchten?\n\n• Rückerstattung des Kontostands: $refundAmount\n• Warenbestand: Alle verbleibenden Artikel ($itemCount Produkte) werden wieder eingebucht."
 
     // System Notes
     override fun sysNoteCompleteStorno(date: String, amount: String) = "Vollständiges Storno des Kaufs ($date - $amount)"
@@ -357,7 +361,7 @@ object GermanStrings : AppStrings {
     override val statusFactoryResetCompleted = "Werkseinstellung abgeschlossen."
     override fun statusConnectedToOneDrive(email: String) = "Mit OneDrive verbunden als $email."
     override val adminConsoleWebTitle = "Admin-Konsole"
-    override val adminConsoleWebDesc = "Bitte geben Sie das Admin-Passwort ein, um Einstellungen, Produkte und Benutzer über das Netzwerk zu verwalten."
+    override val adminConsoleWebDesc = "Bitte geben Sie das Admin-Passwort ein, um Produkte, Konten, Sammelabrechnungen und Transaktionen über das Netzwerk zu verwalten."
     override val adminPasswordLabelWeb = "Admin-Passwort"
     override val loginBtn = "Anmelden"
     override val invalidAdminPassword = "Ungültiges Admin-Passwort. Zugriff verweigert."
@@ -496,4 +500,7 @@ object GermanStrings : AppStrings {
     override val supportEmailPlaceholder = "admin@example.com"
     override val contactSupportBtn = "Support kontaktieren"
     override val githubRepoBtn = "GitHub Repository"
+
+    override val fieldDescription = "Beschreibung"
+    override val referenceLabel = "Referenz"
 }

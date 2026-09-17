@@ -48,7 +48,7 @@ fun AdminScreen(
     usersViewModel: AdminUsersViewModel,
     transactionsViewModel: AdminTransactionsViewModel,
     bulkBillingViewModel: AdminBulkBillingViewModel? = null,
-    settingsViewModel: AdminSettingsViewModel,
+    settingsViewModel: AdminSettingsViewModel? = null,
     onExitAdmin: () -> Unit
 ) {
     val strings = I18n.current
@@ -124,13 +124,17 @@ fun AdminScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val tabItems = listOf(
-                    Triple(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts),
-                    Triple(AdminTab.USERS, Icons.Default.People, strings.tabUsers),
-                    Triple(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling),
-                    Triple(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions),
-                    Triple(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings)
-                )
+                val tabItems = buildList {
+                    add(Triple(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts))
+                    add(Triple(AdminTab.USERS, Icons.Default.People, strings.tabUsers))
+                    if (bulkBillingViewModel != null) {
+                        add(Triple(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling))
+                    }
+                    add(Triple(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions))
+                    if (settingsViewModel != null) {
+                        add(Triple(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings))
+                    }
+                }
 
                 tabItems.forEach { item ->
                     val tab = item.first
@@ -227,10 +231,12 @@ fun AdminScreen(
                     }
 
                     AdminTab.SETTINGS -> {
-                        AdminSettingsTabScreen(
-                            viewModel = settingsViewModel,
-                            onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
-                        )
+                        if (settingsViewModel != null) {
+                            AdminSettingsTabScreen(
+                                viewModel = settingsViewModel,
+                                onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
+                            )
+                        }
                     }
                 }
             }

@@ -485,10 +485,14 @@ fun PurchaseCorrectionDialog(
                 )
             },
             text = {
+                val refundStr = Formatting.formatBrl(currentCost)
+                val activeItemCount = currentItems.filter { it.quantity > 0 }.size
                 Text(
-                    "Are you sure you want to completely storno this purchase for user ${originalTransaction.userNameSnapshot}?\n\n" +
-                            "• Account Balance Refund: ${Formatting.formatBrl(currentCost)}\n" +
-                            "• Inventory: All remaining items (${currentItems.filter { it.quantity > 0 }.size} products) will be restored to stock."
+                    strings.confirmStornoEntirePurchaseBody(
+                        user = originalTransaction.userNameSnapshot,
+                        refundAmount = refundStr,
+                        itemCount = activeItemCount
+                    )
                 )
             },
             confirmButton = {

@@ -37,7 +37,21 @@ class RoomProductRepositoryImpl(
     }
 
     override suspend fun saveProduct(product: Product) {
-        productDao.insertOrUpdateProduct(ProductEntity.fromDomain(product))
+        val existing = productDao.getProductById(product.id)
+        if (existing != null) {
+            val entity = ProductEntity.fromDomain(product)
+            productDao.updateProductMetadata(
+                id = entity.id,
+                name = entity.name,
+                barcodes = entity.barcodes,
+                basePrice = entity.basePrice,
+                unitType = entity.unitType,
+                customMarkupPercent = entity.customMarkupPercent,
+                isActive = entity.isActive
+            )
+        } else {
+            productDao.insertOrUpdateProduct(ProductEntity.fromDomain(product))
+        }
         onDataChanged?.invoke()
     }
 

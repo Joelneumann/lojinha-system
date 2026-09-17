@@ -214,9 +214,10 @@ fun ProductEditDialog(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     if (barcodeList.isNotEmpty()) {
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             barcodeList.forEach { b ->
                                 Surface(
