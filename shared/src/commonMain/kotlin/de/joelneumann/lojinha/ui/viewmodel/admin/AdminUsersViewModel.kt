@@ -10,6 +10,7 @@ import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,12 +45,15 @@ class AdminUsersViewModel(
     private val _userDeleteErrorMessage = MutableStateFlow<String?>(null)
     val userDeleteErrorMessage: StateFlow<String?> = _userDeleteErrorMessage.asStateFlow()
 
+    private var usersJob: Job? = null
+
     init {
         loadData()
     }
 
     fun loadData() {
-        viewModelScope.launch {
+        usersJob?.cancel()
+        usersJob = viewModelScope.launch {
             userRepository.getUsersFlow().collect { _users.value = it.sortedByAccentInsensitive { u -> u.name } }
         }
     }
@@ -84,30 +88,46 @@ class AdminUsersViewModel(
 
     fun saveUser(user: User) {
         viewModelScope.launch {
-            userRepository.saveUser(user)
-            refreshUsers()
-            closeUserModal()
+            try {
+                userRepository.saveUser(user)
+                refreshUsers()
+                closeUserModal()
+            } catch (e: Exception) {
+                println("[AdminUsersViewModel] saveUser error: ${e.message}")
+            }
         }
     }
 
     fun toggleUserActive(user: User) {
         viewModelScope.launch {
-            userRepository.saveUser(user.copy(isActive = !user.isActive))
-            refreshUsers()
+            try {
+                userRepository.saveUser(user.copy(isActive = !user.isActive))
+                refreshUsers()
+            } catch (e: Exception) {
+                println("[AdminUsersViewModel] toggleUserActive error: ${e.message}")
+            }
         }
     }
 
     fun softDeleteUser(userId: String) {
         viewModelScope.launch {
-            userRepository.softDeleteUser(userId)
-            refreshUsers()
+            try {
+                userRepository.softDeleteUser(userId)
+                refreshUsers()
+            } catch (e: Exception) {
+                println("[AdminUsersViewModel] softDeleteUser error: ${e.message}")
+            }
         }
     }
 
     fun restoreUser(userId: String) {
         viewModelScope.launch {
-            userRepository.restoreUser(userId)
-            refreshUsers()
+            try {
+                userRepository.restoreUser(userId)
+                refreshUsers()
+            } catch (e: Exception) {
+                println("[AdminUsersViewModel] restoreUser error: ${e.message}")
+            }
         }
     }
 
@@ -157,9 +177,13 @@ class AdminUsersViewModel(
         )
 
         viewModelScope.launch {
-            transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
-            refreshUsers()
-            closeCustomExpenseModal()
+            try {
+                transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
+                refreshUsers()
+                closeCustomExpenseModal()
+            } catch (e: Exception) {
+                println("[AdminUsersViewModel] submitCustomExpense error: ${e.message}")
+            }
         }
     }
 
@@ -205,9 +229,13 @@ class AdminUsersViewModel(
         )
 
         viewModelScope.launch {
-            transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
-            refreshUsers()
-            closeCustomIncomeModal()
+            try {
+                transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
+                refreshUsers()
+                closeCustomIncomeModal()
+            } catch (e: Exception) {
+                println("[AdminUsersViewModel] submitCustomIncome error: ${e.message}")
+            }
         }
     }
 
@@ -218,25 +246,29 @@ class AdminUsersViewModel(
         val txId = generateUuid()
 
         viewModelScope.launch {
-            val user = userRepository.getUserById(userId)
-            val balBefore = user?.balance ?: 0L
-            val balAfter = balBefore + centsDelta
+            try {
+                val user = userRepository.getUserById(userId)
+                val balBefore = user?.balance ?: 0L
+                val balAfter = balBefore + centsDelta
 
-            val tx = Transaction(
-                id = txId,
-                userId = userId,
-                userNameSnapshot = userName,
-                timestamp = nowMillis,
-                type = txType,
-                note = note.ifBlank { if (isDeposit) "SYSNOTE|ADMIN_DEPOSIT" else "SYSNOTE|ADMIN_DEBIT" },
-                totalAmount = centsDelta,
-                items = emptyList(),
-                userBalanceBefore = balBefore,
-                userBalanceAfter = balAfter
-            )
+                val tx = Transaction(
+                    id = txId,
+                    userId = userId,
+                    userNameSnapshot = userName,
+                    timestamp = nowMillis,
+                    type = txType,
+                    note = note.ifBlank { if (isDeposit) "SYSNOTE|ADMIN_DEPOSIT" else "SYSNOTE|ADMIN_DEBIT" },
+                    totalAmount = centsDelta,
+                    items = emptyList(),
+                    userBalanceBefore = balBefore,
+                    userBalanceAfter = balAfter
+                )
 
-            transactionRepository.executeAtomicTransaction(tx, centsDelta, emptyMap())
-            refreshUsers()
+                transactionRepository.executeAtomicTransaction(tx, centsDelta, emptyMap())
+                refreshUsers()
+            } catch (e: Exception) {
+                println("[AdminUsersViewModel] adjustUserBalance error: ${e.message}")
+            }
         }
     }
 

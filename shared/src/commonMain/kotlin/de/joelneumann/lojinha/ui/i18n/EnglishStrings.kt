@@ -499,4 +499,7 @@ object EnglishStrings : AppStrings {
     override val supportEmailPlaceholder = "admin@example.com"
     override val contactSupportBtn = "Contact Support"
     override val githubRepoBtn = "GitHub Repository"
+
+    override val fieldDescription = "Description"
+    override val referenceLabel = "Reference"
 }

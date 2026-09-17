@@ -61,6 +61,33 @@
             color: #64748b;
         }
     </style>
+    <script>
+        (function() {
+            function supportsWasmGC() {
+                try {
+                    return typeof WebAssembly !== 'undefined' &&
+                        typeof WebAssembly.validate === 'function' &&
+                        WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 95, 0, 0, 0]));
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            if (!supportsWasmGC()) {
+                window.addEventListener('DOMContentLoaded', function() {
+                    var container = document.querySelector('.loading-container');
+                    if (container) {
+                        container.innerHTML = 
+                            '<div style="max-width: 480px; padding: 24px; text-align: center; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">' +
+                            '<h2 style="color: #b91c1c; margin-top: 0;">Browser Incompatible</h2>' +
+                            '<p style="color: #334155; line-height: 1.5;">This application requires <strong>WebAssembly Garbage Collection (WasmGC)</strong>, which is not supported by your current browser.</p>' +
+                            '<p style="color: #64748b; font-size: 13px;">Please update to a modern version of Chrome (119+), Firefox (120+), Safari (18.2+), or Edge (119+).</p>' +
+                            '</div>';
+                    }
+                });
+            }
+        })();
+    </script>
     <script type="application/javascript" src="lojinha.js"></script>
 </head>
 <body>

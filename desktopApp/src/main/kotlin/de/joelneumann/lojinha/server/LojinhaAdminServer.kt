@@ -348,8 +348,23 @@ class LojinhaAdminServer(
                 }
 
                 // 3. Serve static Wasm assets
+                get("/") {
+                    val indexFile = findWasmAsset("index.html")
+                    if (indexFile != null && indexFile.exists() && !indexFile.isDirectory) {
+                        call.respondFile(indexFile)
+                        return@get
+                    }
+                    val indexBytes = loadWasmResourceBytes("index.html")
+                    if (indexBytes != null) {
+                        call.respondBytes(indexBytes, ContentType.Text.Html)
+                        return@get
+                    }
+                    call.respond(HttpStatusCode.NotFound, "Admin web interface assets not found.")
+                }
+
                 get("/{filename...}") {
-                    val filename = call.parameters.getAll("filename")?.joinToString("/") ?: "index.html"
+                    val rawFilename = call.parameters.getAll("filename")?.joinToString("/")?.trim('/')
+                    val filename = if (rawFilename.isNullOrBlank()) "index.html" else rawFilename
 
                     // Do not handle unknown API requests as static assets
                     if (filename.startsWith("api/") || filename == "api") {
@@ -367,16 +382,16 @@ class LojinhaAdminServer(
                     if (file != null && file.exists() && !file.isDirectory) {
                         call.respondFile(file)
                     } else {
-                        val resourceBytes = loadWasmResourceBytes(filename)
+                        val resourceBytes = if (filename.isNotBlank()) loadWasmResourceBytes(filename) else null
                         if (resourceBytes != null) {
                             val contentType = getContentTypeForName(filename)
                             call.respondBytes(resourceBytes, contentType)
                         } else {
                             // Only fallback to index.html for root or clean single-segment SPA routes
-                            val isSpaRoute = !filename.contains(".") && !filename.contains("/")
+                            val isSpaRoute = !filename.contains(".")
                             if (isSpaRoute) {
                                 val indexFile = findWasmAsset("index.html")
-                                if (indexFile != null && indexFile.exists()) {
+                                if (indexFile != null && indexFile.exists() && !indexFile.isDirectory) {
                                     call.respondFile(indexFile)
                                     return@get
                                 }
@@ -456,12 +471,14 @@ class LojinhaAdminServer(
         name.endsWith(".png") -> ContentType.Image.PNG
         name.endsWith(".jpg") || name.endsWith(".jpeg") -> ContentType.Image.JPEG
         name.endsWith(".svg") -> ContentType.Image.SVG
-        name.endsWith(".json") -> ContentType.Application.Json
+        name.endsWith(".json") || name.endsWith(".map") -> ContentType.Application.Json
+        name.endsWith(".ico") -> ContentType("image", "x-icon")
         else -> ContentType.Application.OctetStream
     }
 
     private fun loadWasmResourceBytes(name: String): ByteArray? {
-        val clean = name.trimStart('/')
+        val clean = name.trim('/')
+        if (clean.isBlank()) return null
         val stream = LojinhaAdminServer::class.java.getResourceAsStream("/wasm/$clean")
             ?: Thread.currentThread().contextClassLoader.getResourceAsStream("wasm/$clean")
             ?: LojinhaAdminServer::class.java.getResourceAsStream("/$clean")
@@ -469,6 +486,8 @@ class LojinhaAdminServer(
     }
 
     private fun findWasmAsset(name: String): File? {
+        val clean = name.trim('/')
+        if (clean.isBlank()) return null
         val candidatePaths = listOf(
             File("shared/build/dist/wasmJs/productionExecutable"),
             File("shared/build/dist/wasmJs/developmentExecutable"),
@@ -479,12 +498,12 @@ class LojinhaAdminServer(
         )
         for (dir in candidatePaths) {
             if (!dir.exists() || !dir.isDirectory) continue
-            val file = File(dir, name)
+            val file = File(dir, clean)
             try {
                 // Canonical path check strictly prevents directory traversal attacks
                 val canonicalDirPath = dir.canonicalFile.toPath()
                 val canonicalFilePath = file.canonicalFile.toPath()
-                if (file.exists() && canonicalFilePath.startsWith(canonicalDirPath)) {
+                if (file.exists() && !file.isDirectory && canonicalFilePath.startsWith(canonicalDirPath)) {
                     return file
                 }
             } catch (e: Exception) {

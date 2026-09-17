@@ -30,6 +30,23 @@ dependencies {
     testImplementation(libs.junit)
 }
 
+val copyWasmResources by tasks.registering(Copy::class) {
+    description = "Copies production Wasm browser distribution into desktopApp resources under wasm/"
+    dependsOn(":shared:wasmJsBrowserDistribution")
+    from(project(":shared").layout.buildDirectory.dir("dist/wasmJs/productionExecutable"))
+    into(layout.buildDirectory.dir("generated/wasmResources/wasm"))
+}
+
+sourceSets {
+    named("main") {
+        resources.srcDir(copyWasmResources.map { it.destinationDir.parentFile })
+    }
+}
+
+tasks.named("processResources") {
+    dependsOn(copyWasmResources)
+}
+
 compose.desktop {
     application {
         mainClass = "de.joelneumann.lojinha.MainKt"

@@ -75,16 +75,9 @@ fun HeaderBar(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
-                                    .border(
-                                        width = if (isSelected) 1.5.dp else 1.dp,
-                                        color = if (isSelected) AccentBlue else DividerBorder,
-                                        shape = RoundedCornerShape(6.dp)
-                                    )
-                                    .pointerInput(lang) {
-                                        detectTapGestures {
-                                            LanguageManager.setLanguage(lang)
-                                            onLanguageClick?.invoke()
-                                        }
+                                    .clickable {
+                                        LanguageManager.setLanguage(lang)
+                                        onLanguageClick?.invoke()
                                     }
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
@@ -125,11 +118,9 @@ fun HeaderBar(
                                         color = if (isSelected) AccentBlue else DividerBorder,
                                         shape = RoundedCornerShape(8.dp)
                                     )
-                                    .pointerInput(lang) {
-                                        detectTapGestures {
-                                            LanguageManager.setLanguage(lang)
-                                            onLanguageClick?.invoke()
-                                        }
+                                    .clickable {
+                                        LanguageManager.setLanguage(lang)
+                                        onLanguageClick?.invoke()
                                     }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {

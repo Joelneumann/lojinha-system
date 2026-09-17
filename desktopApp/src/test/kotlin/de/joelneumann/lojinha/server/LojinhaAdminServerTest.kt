@@ -303,5 +303,19 @@ class LojinhaAdminServerTest {
         val res = client.send(req, HttpResponse.BodyHandlers.ofString())
         assertEquals(200, res.statusCode())
     }
+
+    @Test
+    fun testRootRouteServesHtmlNotDirectoryListing() {
+        val req = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/"))
+            .GET()
+            .build()
+        val res = client.send(req, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, res.statusCode())
+        val contentType = res.headers().firstValue("Content-Type").orElse("")
+        assertTrue(contentType.contains("text/html"), "Content-Type must be text/html, was: $contentType")
+        assertTrue(res.body().contains("<html") || res.body().contains("<!DOCTYPE html>"), "Body must contain HTML")
+        assertFalse(res.body().contains("037f170986f544477491.wasm\n"), "Body must not be a directory listing")
+    }
 }
 

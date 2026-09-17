@@ -35,7 +35,7 @@ fun AdminWebLoginScreen(
     val scope = rememberCoroutineScope()
 
     fun handleSubmit() {
-        if (password.isBlank()) return
+        if (isLoading || password.isBlank()) return
         isLoading = true
         errorMessage = null
         scope.launch {

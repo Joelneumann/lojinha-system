@@ -488,4 +488,7 @@ interface AppStrings {
     val supportEmailPlaceholder: String
     val contactSupportBtn: String
     val githubRepoBtn: String
+
+    val fieldDescription: String
+    val referenceLabel: String
 }

@@ -37,6 +37,7 @@ fun AdminBulkBillingTabScreen(
     val selectedListId by viewModel.selectedListId.collectAsState()
     val activeUsers by viewModel.activeUsers.collectAsState()
     val variableAmounts by viewModel.variableAmounts.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     var editingList by remember { mutableStateOf<BillingList?>(null) }
     var isCreatingNew by remember { mutableStateOf(false) }
@@ -289,9 +290,26 @@ fun AdminBulkBillingTabScreen(
             totalFormatted = Formatting.formatBrl(total),
             onDismiss = { showExecuteDialogFor = null },
             onConfirm = {
-                viewModel.executeCharges(list)
+                val targetList = list
                 showExecuteDialogFor = null
-                onNavigateToTransactions()
+                viewModel.executeCharges(targetList) { success ->
+                    if (success) {
+                        onNavigateToTransactions()
+                    }
+                }
+            }
+        )
+    }
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.clearErrorMessage() },
+            title = { Text(strings.deleteListTitle.substringBefore(" ")) },
+            text = { Text(errorMessage ?: "") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearErrorMessage() }) {
+                    Text(strings.ok)
+                }
             }
         )
     }

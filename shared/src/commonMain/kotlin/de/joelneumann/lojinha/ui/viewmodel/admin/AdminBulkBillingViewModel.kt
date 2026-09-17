@@ -8,6 +8,7 @@ import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -26,17 +27,29 @@ class AdminBulkBillingViewModel(
     private val _selectedListId = MutableStateFlow<String?>(null)
     val selectedListId: StateFlow<String?> = _selectedListId
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    fun clearErrorMessage() {
+        _errorMessage.value = null
+    }
+
+    private var listsJob: Job? = null
+    private var usersJob: Job? = null
+
     init {
         loadData()
     }
 
     fun loadData() {
-        viewModelScope.launch {
+        listsJob?.cancel()
+        listsJob = viewModelScope.launch {
             billingListRepository.getActiveBillingListsFlow().collect { lists ->
                 _billingLists.value = lists
             }
         }
-        viewModelScope.launch {
+        usersJob?.cancel()
+        usersJob = viewModelScope.launch {
             userRepository.getUsersFlow().collect { users ->
                 _activeUsers.value = users
             }
@@ -56,33 +69,41 @@ class AdminBulkBillingViewModel(
 
     fun saveBillingList(list: BillingList) {
         viewModelScope.launch {
-            val isNew = list.id.isBlank()
-            val idToSave = if (isNew) generateUuid() else list.id
-            val listToSave = list.copy(id = idToSave)
-            
-            billingListRepository.saveBillingList(listToSave)
-            
-            // Delete old users from list
-            billingListRepository.removeAllUsersFromList(idToSave)
-            
-            // Add new users
-            for (u in listToSave.users) {
-                billingListRepository.addUserToList(
-                    u.copy(id = generateUuid(), listId = idToSave)
-                )
+            try {
+                val isNew = list.id.isBlank()
+                val idToSave = if (isNew) generateUuid() else list.id
+                val listToSave = list.copy(id = idToSave)
+                
+                billingListRepository.saveBillingList(listToSave)
+                
+                // Delete old users from list
+                billingListRepository.removeAllUsersFromList(idToSave)
+                
+                // Add new users
+                for (u in listToSave.users) {
+                    billingListRepository.addUserToList(
+                        u.copy(id = generateUuid(), listId = idToSave)
+                    )
+                }
+                _selectedListId.value = idToSave
+                refreshData()
+            } catch (e: Exception) {
+                println("[AdminBulkBillingViewModel] saveBillingList error: ${e.message}")
             }
-            _selectedListId.value = idToSave
-            refreshData()
         }
     }
 
     fun deleteList(id: String) {
         viewModelScope.launch {
-            billingListRepository.deleteBillingList(id)
-            if (_selectedListId.value == id) {
-                _selectedListId.value = null
+            try {
+                billingListRepository.deleteBillingList(id)
+                if (_selectedListId.value == id) {
+                    _selectedListId.value = null
+                }
+                refreshData()
+            } catch (e: Exception) {
+                println("[AdminBulkBillingViewModel] deleteList error: ${e.message}")
             }
-            refreshData()
         }
     }
 
@@ -96,73 +117,85 @@ class AdminBulkBillingViewModel(
         }
     }
 
-    fun executeCharges(list: BillingList) {
+    fun executeCharges(list: BillingList, onComplete: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch {
-            val nowMillis = currentTimeMillis()
-            val allUsers = activeUsers.value.associateBy { it.id }
-            val batchRequests = mutableListOf<de.joelneumann.lojinha.domain.model.AtomicTransactionRequest>()
+            try {
+                val nowMillis = currentTimeMillis()
+                val allUsers = activeUsers.value.associateBy { it.id }
+                val batchRequests = mutableListOf<de.joelneumann.lojinha.domain.model.AtomicTransactionRequest>()
 
-            for (listUser in list.users) {
-                val user = allUsers[listUser.userId] ?: continue
-                if (!user.isActive || user.isDeleted) continue
+                for (listUser in list.users) {
+                    val user = allUsers[listUser.userId] ?: continue
+                    if (!user.isActive || user.isDeleted) continue
 
-                val unitPrice: Long
-                val quantity: Long
-                val amountCents: Long
+                    val unitPrice: Long
+                    val quantity: Long
+                    val amountCents: Long
 
-                if (list.type == BillingListType.FIXED) {
-                    unitPrice = list.basePrice ?: 0L
-                    quantity = listUser.quantity.toLong().coerceAtLeast(1L)
-                    amountCents = unitPrice * quantity
-                } else {
-                    val customAmount = _variableAmounts.value[listUser.userId] ?: 0L
-                    unitPrice = kotlin.math.abs(customAmount)
-                    quantity = 1L
-                    amountCents = customAmount
+                    if (list.type == BillingListType.FIXED) {
+                        unitPrice = list.basePrice ?: 0L
+                        quantity = listUser.quantity.toLong().coerceAtLeast(1L)
+                        amountCents = unitPrice * quantity
+                    } else {
+                        val customAmount = _variableAmounts.value[listUser.userId] ?: 0L
+                        unitPrice = kotlin.math.abs(customAmount)
+                        quantity = 1L
+                        amountCents = customAmount
+                    }
+
+                    if (amountCents <= 0) continue
+
+                    val absCents = kotlin.math.abs(amountCents)
+                    val deltaCents = -absCents
+                    val txId = generateUuid()
+
+                    val items = listOf(
+                        TransactionItem(
+                            productId = "custom_bulk",
+                            productName = list.name,
+                            unitType = UnitType.PIECE,
+                            quantity = quantity,
+                            unitPriceAtPurchase = unitPrice
+                        )
+                    )
+
+                    val balBefore = user.balance
+                    val balAfter = user.balance + deltaCents
+
+                    val tx = Transaction(
+                        id = txId,
+                        userId = user.id,
+                        userNameSnapshot = user.name,
+                        timestamp = nowMillis,
+                        type = TransactionType.ADMIN_WITHDRAWAL,
+                        note = list.comment?.takeIf { it.isNotBlank() } ?: list.name,
+                        totalAmount = deltaCents,
+                        items = items,
+                        userBalanceBefore = balBefore,
+                        userBalanceAfter = balAfter
+                    )
+
+                    batchRequests.add(de.joelneumann.lojinha.domain.model.AtomicTransactionRequest(tx, deltaCents, emptyMap()))
                 }
 
-                if (amountCents <= 0) continue
+                val success = if (batchRequests.isNotEmpty()) {
+                    transactionRepository.executeBatchTransactions(batchRequests)
+                } else true
 
-                val absCents = kotlin.math.abs(amountCents)
-                val deltaCents = -absCents
-                val txId = generateUuid()
-
-                val items = listOf(
-                    TransactionItem(
-                        productId = "custom_bulk",
-                        productName = list.name,
-                        unitType = UnitType.PIECE,
-                        quantity = quantity,
-                        unitPriceAtPurchase = unitPrice
-                    )
-                )
-
-                val balBefore = user.balance
-                val balAfter = user.balance + deltaCents
-
-                val tx = Transaction(
-                    id = txId,
-                    userId = user.id,
-                    userNameSnapshot = user.name,
-                    timestamp = nowMillis,
-                    type = TransactionType.ADMIN_WITHDRAWAL,
-                    note = list.comment?.takeIf { it.isNotBlank() } ?: list.name,
-                    totalAmount = deltaCents,
-                    items = items,
-                    userBalanceBefore = balBefore,
-                    userBalanceAfter = balAfter
-                )
-
-                batchRequests.add(de.joelneumann.lojinha.domain.model.AtomicTransactionRequest(tx, deltaCents, emptyMap()))
+                if (success) {
+                    _variableAmounts.value = emptyMap()
+                    _errorMessage.value = null
+                    refreshData()
+                    onComplete?.invoke(true)
+                } else {
+                    _errorMessage.value = "Failed to execute batch charges. Please check network connection and retry."
+                    onComplete?.invoke(false)
+                }
+            } catch (e: Exception) {
+                println("[AdminBulkBillingViewModel] executeCharges error: ${e.message}")
+                _errorMessage.value = "Error executing charges: ${e.message}"
+                onComplete?.invoke(false)
             }
-
-            if (batchRequests.isNotEmpty()) {
-                transactionRepository.executeBatchTransactions(batchRequests)
-            }
-
-            // Clear variable amounts after execution
-            _variableAmounts.value = emptyMap()
-            refreshData()
         }
     }
 }

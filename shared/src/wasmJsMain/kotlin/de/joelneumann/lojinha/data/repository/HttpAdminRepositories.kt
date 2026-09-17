@@ -33,11 +33,18 @@ private external fun jsRemoveSessionItem(key: String)
     }
     const cleanBase = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
     const url = cleanBase + '/api/admin/events' + (token ? '?token=' + encodeURIComponent(token) : '');
-    const es = new EventSource(url);
-    es.addEventListener('data_changed', () => {
-        window._lojinhaHasNewData = true;
-    });
-    window._lojinhaEventSource = es;
+    try {
+        const es = new EventSource(url);
+        es.addEventListener('data_changed', () => {
+            window._lojinhaHasNewData = true;
+        });
+        es.onerror = (e) => {
+            window._lojinhaSyncError = true;
+        };
+        window._lojinhaEventSource = es;
+    } catch (err) {
+        console.warn('Failed to start EventSource:', err);
+    }
 }
 """)
 private external fun jsStartEventSource(baseUrl: String, token: String)
@@ -241,30 +248,62 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
     }
 
     override suspend fun saveProduct(product: Product) {
-        client.httpClient.post(client.resolveUrl("/api/admin/products")) {
-            contentType(ContentType.Application.Json)
-            client.run { appendAdminAuth() }
-            setBody(product)
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/products")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(product)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("saveProduct failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpProductRepository] saveProduct failed: ${e.message}")
+            throw e
         }
     }
 
     override suspend fun deactivateProduct(id: String) {
-        client.httpClient.post(client.resolveUrl("/api/admin/products/deactivate/$id")) {
-            client.run { appendAdminAuth() }
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/products/deactivate/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("deactivateProduct failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpProductRepository] deactivateProduct failed: ${e.message}")
+            throw e
         }
     }
 
     override suspend fun hardDeleteProduct(id: String) {
-        client.httpClient.delete(client.resolveUrl("/api/admin/products/$id")) {
-            client.run { appendAdminAuth() }
+        try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/products/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("hardDeleteProduct failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpProductRepository] hardDeleteProduct failed: ${e.message}")
+            throw e
         }
     }
 
     override suspend fun updateStock(productId: String, delta: Long) {
-        client.httpClient.post(client.resolveUrl("/api/admin/products/stock")) {
-            contentType(ContentType.Application.Json)
-            client.run { appendAdminAuth() }
-            setBody(DeltaRequest(productId, delta))
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/products/stock")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(DeltaRequest(productId, delta))
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("updateStock failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpProductRepository] updateStock failed: ${e.message}")
+            throw e
         }
     }
 }
@@ -294,28 +333,60 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
     }
 
     override suspend fun saveUser(user: User) {
-        client.httpClient.post(client.resolveUrl("/api/admin/users")) {
-            contentType(ContentType.Application.Json)
-            client.run { appendAdminAuth() }
-            setBody(user)
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/users")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(user)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("saveUser failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpUserRepository] saveUser failed: ${e.message}")
+            throw e
         }
     }
 
     override suspend fun deactivateUser(id: String) {
-        client.httpClient.post(client.resolveUrl("/api/admin/users/deactivate/$id")) {
-            client.run { appendAdminAuth() }
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/users/deactivate/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("deactivateUser failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpUserRepository] deactivateUser failed: ${e.message}")
+            throw e
         }
     }
 
     override suspend fun softDeleteUser(id: String) {
-        client.httpClient.post(client.resolveUrl("/api/admin/users/soft-delete/$id")) {
-            client.run { appendAdminAuth() }
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/users/soft-delete/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("softDeleteUser failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpUserRepository] softDeleteUser failed: ${e.message}")
+            throw e
         }
     }
 
     override suspend fun restoreUser(id: String) {
-        client.httpClient.post(client.resolveUrl("/api/admin/users/restore/$id")) {
-            client.run { appendAdminAuth() }
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/users/restore/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("restoreUser failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpUserRepository] restoreUser failed: ${e.message}")
+            throw e
         }
     }
 
@@ -331,17 +402,30 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
     }
 
     override suspend fun hardDeleteUser(id: String): Boolean {
-        val res = client.httpClient.delete(client.resolveUrl("/api/admin/users/$id")) {
-            client.run { appendAdminAuth() }
+        return try {
+            val res = client.httpClient.delete(client.resolveUrl("/api/admin/users/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            res.status.isSuccess()
+        } catch (e: Exception) {
+            println("[HttpUserRepository] hardDeleteUser failed: ${e.message}")
+            false
         }
-        return res.status.isSuccess()
     }
 
     override suspend fun updateBalance(userId: String, amountDelta: Long) {
-        client.httpClient.post(client.resolveUrl("/api/admin/users/balance")) {
-            contentType(ContentType.Application.Json)
-            client.run { appendAdminAuth() }
-            setBody(DeltaRequest(userId, amountDelta))
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/users/balance")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(DeltaRequest(userId, amountDelta))
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("updateBalance failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpUserRepository] updateBalance failed: ${e.message}")
+            throw e
         }
     }
 }
@@ -368,10 +452,18 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
     }
 
     override suspend fun recordTransaction(transaction: Transaction) {
-        client.httpClient.post(client.resolveUrl("/api/admin/transactions")) {
-            contentType(ContentType.Application.Json)
-            client.run { appendAdminAuth() }
-            setBody(transaction)
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/transactions")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(transaction)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("recordTransaction failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpTransactionRepository] recordTransaction failed: ${e.message}")
+            throw e
         }
     }
 
@@ -462,13 +554,17 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
         stockDeltas: Map<String, Long>
     ) {
         try {
-            client.httpClient.post(client.resolveUrl("/api/admin/transactions/atomic")) {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/transactions/atomic")) {
                 contentType(ContentType.Application.Json)
                 client.run { appendAdminAuth() }
                 setBody(AtomicTransactionRequest(transaction, balanceDelta, stockDeltas))
             }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("executeAtomicTransaction failed with status ${response.status}")
+            }
         } catch (e: Exception) {
             println("[HttpTransactionRepository] executeAtomicTransaction failed: ${e.message}")
+            throw e
         }
     }
 
@@ -535,16 +631,32 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
     }
 
     override suspend fun saveBillingList(list: BillingList) {
-        client.httpClient.post(client.resolveUrl("/api/admin/billing-lists")) {
-            contentType(ContentType.Application.Json)
-            client.run { appendAdminAuth() }
-            setBody(list)
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/billing-lists")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(list)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("saveBillingList failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpBillingListRepository] saveBillingList failed: ${e.message}")
+            throw e
         }
     }
 
     override suspend fun deleteBillingList(id: String) {
-        client.httpClient.delete(client.resolveUrl("/api/admin/billing-lists/$id")) {
-            client.run { appendAdminAuth() }
+        try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/billing-lists/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("deleteBillingList failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpBillingListRepository] deleteBillingList failed: ${e.message}")
+            throw e
         }
     }
 

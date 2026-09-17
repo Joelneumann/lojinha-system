@@ -92,6 +92,7 @@ interface TransactionDao {
         balanceDelta: Long,
         stockDeltas: Map<String, Long>
     ) {
+        val currentBal = getUserBalance(transaction.userId) ?: 0L
         if (balanceDelta != 0L) {
             updateUserBalance(transaction.userId, balanceDelta)
         }
@@ -100,7 +101,11 @@ interface TransactionDao {
                 updateProductStock(productId, delta)
             }
         }
-        insertTransaction(transaction)
+        val authoritativeTx = transaction.copy(
+            userBalanceBefore = currentBal,
+            userBalanceAfter = currentBal + balanceDelta
+        )
+        insertTransaction(authoritativeTx)
     }
 
     @androidx.room.Transaction
@@ -108,6 +113,7 @@ interface TransactionDao {
         items: List<Triple<TransactionEntity, Long, Map<String, Long>>>
     ) {
         for ((tx, balDelta, stockDeltas) in items) {
+            val currentBal = getUserBalance(tx.userId) ?: 0L
             if (balDelta != 0L) {
                 updateUserBalance(tx.userId, balDelta)
             }
@@ -116,7 +122,11 @@ interface TransactionDao {
                     updateProductStock(productId, delta)
                 }
             }
-            insertTransaction(tx)
+            val authoritativeTx = tx.copy(
+                userBalanceBefore = currentBal,
+                userBalanceAfter = currentBal + balDelta
+            )
+            insertTransaction(authoritativeTx)
         }
     }
 }

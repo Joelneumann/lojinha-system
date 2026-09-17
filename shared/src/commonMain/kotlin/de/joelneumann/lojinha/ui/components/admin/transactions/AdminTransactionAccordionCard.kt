@@ -175,7 +175,7 @@ fun AdminTransactionAccordionCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (transaction.note != null) {
-                        Text("Description: ${SystemNoteHelper.decodeNote(transaction.note, strings)}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = PrimaryNavy)
+                        Text("${strings.fieldDescription}: ${SystemNoteHelper.decodeNote(transaction.note, strings)}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = PrimaryNavy)
                     }
                     if (referencedTransaction != null) {
                         val refDate = Formatting.formatTimestamp(referencedTransaction.timestamp)
@@ -188,7 +188,7 @@ fun AdminTransactionAccordionCard(
                             TransactionType.CORRECTION -> strings.historyTypeCorrection
                         }
                         Text(
-                            text = "🔗 Reference: $refTypeStr on $refDate ($refAmount)",
+                            text = "🔗 ${strings.referenceLabel}: $refTypeStr ($refDate, $refAmount)",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = AccentNavy
