@@ -2,8 +2,10 @@ package de.joelneumann.lojinha.domain.model
 
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
@@ -60,17 +62,19 @@ data class BackupRoutine(
     val lastBackupTimestamp: Long? = null
 ) {
     fun calculateNextDueTimestamp(): Long {
+        val nowInstant = Clock.System.now()
+        val nowEpochMs = nowInstant.toEpochMilliseconds()
+
         return when (val config = scheduleConfig) {
             is BackupScheduleConfig.Timed -> {
                 val parts = config.timeOfDay.split(":")
-                val targetHour = parts.getOrNull(0)?.toIntOrNull() ?: 2
-                val targetMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                val targetHour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 2
+                val targetMinute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
 
                 val tz = TimeZone.currentSystemDefault()
-                val nowInstant = Clock.System.now()
                 val nowLdt = nowInstant.toLocalDateTime(tz)
 
-                var targetLdt = LocalDateTime(
+                val todayTargetLdt = LocalDateTime(
                     year = nowLdt.year,
                     month = nowLdt.month,
                     dayOfMonth = nowLdt.dayOfMonth,
@@ -79,18 +83,21 @@ data class BackupRoutine(
                     second = 0,
                     nanosecond = 0
                 )
-                var targetMs = targetLdt.toInstant(tz).toEpochMilliseconds()
-                val last = lastBackupTimestamp ?: 0L
+                val todayTargetInstant = todayTargetLdt.toInstant(tz)
+                val todayTargetMs = todayTargetInstant.toEpochMilliseconds()
 
-                if (targetMs <= last || targetMs <= nowInstant.toEpochMilliseconds()) {
-                    targetMs += 86400000L
+                val last = lastBackupTimestamp?.takeIf { it <= nowEpochMs } ?: 0L
+
+                if (last >= todayTargetMs) {
+                    todayTargetInstant.plus(1, DateTimeUnit.DAY, tz).toEpochMilliseconds()
+                } else {
+                    todayTargetMs
                 }
-                targetMs
             }
             is BackupScheduleConfig.Interval -> {
                 val intervalMs = (config.intervalHours * 3600L + config.intervalMinutes * 60L) * 1000L
                 if (intervalMs <= 0) return Long.MAX_VALUE
-                val last = lastBackupTimestamp ?: config.anchorStartTimestamp
+                val last = lastBackupTimestamp?.takeIf { it <= nowEpochMs } ?: config.anchorStartTimestamp
                 last + intervalMs
             }
             is BackupScheduleConfig.OnDataChange -> {

@@ -85,28 +85,29 @@ class BackupRestoreService(
         }
         val targetFile = File(destinationDir, backupFileName)
 
-        // Checkpoint WAL via BundledSQLiteDriver to flush all active transactions into lojinha_room.db
-        try {
-            val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
-            try {
-                val stmt = connection.prepare("PRAGMA wal_checkpoint(FULL)")
-                try {
-                    stmt.step()
-                } finally {
-                    stmt.close()
-                }
-            } finally {
-                connection.close()
-            }
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            e.printStackTrace()
+        require(dbFile.exists()) { "Database file not found at ${dbFile.absolutePath}" }
+
+        // SQLite VACUUM INTO requires target file to not exist prior to command execution
+        if (targetFile.exists()) {
+            targetFile.delete()
         }
 
-        if (dbFile.exists()) {
-            dbFile.copyTo(targetFile, overwrite = true)
-        } else {
-            throw IllegalStateException("Database file not found at ${dbFile.absolutePath}")
+        // Use native VACUUM INTO for an atomic, crash-consistent live snapshot with full WAL integration
+        val escapedPath = targetFile.absolutePath.replace("'", "''")
+        val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
+        try {
+            val stmt = connection.prepare("VACUUM INTO '$escapedPath'")
+            try {
+                stmt.step()
+            } finally {
+                stmt.close()
+            }
+        } finally {
+            connection.close()
+        }
+
+        if (!targetFile.exists()) {
+            throw IllegalStateException("Failed to create database snapshot at ${targetFile.absolutePath}")
         }
         targetFile
     }

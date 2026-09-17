@@ -10,6 +10,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 class AutoBackupScheduler(
@@ -20,6 +22,7 @@ class AutoBackupScheduler(
     private val oneDriveBackupService: OneDriveBackupService? = null
 ) {
     private var schedulerJob: Job? = null
+    private val executionMutex = Mutex()
 
     fun startScheduler() {
         schedulerJob?.cancel()
@@ -47,8 +50,17 @@ class AutoBackupScheduler(
         dataChangeDebounceJob?.cancel()
         dataChangeDebounceJob = externalScope.launch(Dispatchers.IO) {
             try {
-                if (debounceMs > 0) {
-                    delay(debounceMs)
+                val activeRoutines = backupRepository.getAllBackups().filter {
+                    it.isEnabled && it.scheduleConfig is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange
+                }
+                if (activeRoutines.isEmpty()) return@launch
+
+                val configuredDebounce = activeRoutines.mapNotNull {
+                    (it.scheduleConfig as? de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange)?.debounceMs
+                }.minOrNull() ?: debounceMs
+
+                if (configuredDebounce > 0) {
+                    delay(configuredDebounce)
                 }
                 evaluateAndRunDataChangeRoutines()
             } catch (_: kotlinx.coroutines.CancellationException) {
@@ -92,7 +104,7 @@ class AutoBackupScheduler(
         }
     }
 
-    suspend fun executeRoutine(routine: BackupRoutine) {
+    suspend fun executeRoutine(routine: BackupRoutine) = executionMutex.withLock {
         try {
             var targetDir = File(routine.backupLocationPath)
             if (routine.type == BackupType.ONEDRIVE) {
@@ -100,7 +112,7 @@ class AutoBackupScheduler(
                     targetDir = File(System.getProperty("java.io.tmpdir"), "lojinha_onedrive_temp").apply { mkdirs() }
                 }
             } else {
-                if (!targetDir.exists() || !targetDir.isDirectory) return
+                if (!targetDir.exists() || !targetDir.isDirectory) return@withLock
             }
 
             val routineForBackup = routine.copy(backupLocationPath = targetDir.absolutePath)

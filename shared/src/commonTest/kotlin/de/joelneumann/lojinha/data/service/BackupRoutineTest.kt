@@ -5,6 +5,7 @@ import de.joelneumann.lojinha.domain.model.BackupRoutine
 import de.joelneumann.lojinha.domain.model.BackupScheduleConfig
 import de.joelneumann.lojinha.domain.model.BackupType
 import de.joelneumann.lojinha.domain.model.BackupWriteMode
+import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -64,20 +65,73 @@ class BackupRoutineTest {
     }
 
     @Test
-    fun testTimedScheduleCalculation() {
+    fun testTimedScheduleDueTodayWhenNotRunYet() {
+        val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val nowInstant = kotlinx.datetime.Clock.System.now()
+        val nowLdt = nowInstant.toLocalDateTime(tz)
+
+        // Target time 1 hour before current time (or 00:00 if hour is 0)
+        val targetHour = if (nowLdt.hour > 0) nowLdt.hour - 1 else 0
+        val timeStr = "${targetHour.toString().padStart(2, '0')}:00"
+
         val routine = BackupRoutine(
-            id = "rt-test-3",
-            name = "Daily Timed Routine",
+            id = "rt-test-timed-due",
+            name = "Daily Timed Routine Due Today",
             isEnabled = true,
             type = BackupType.LOCAL,
             fileType = BackupFileType.BOTH,
-            scheduleConfig = BackupScheduleConfig.Timed("03:00"),
+            scheduleConfig = BackupScheduleConfig.Timed(timeStr),
             backupLocationPath = "/tmp/backups",
-            lastBackupTimestamp = null
+            lastBackupTimestamp = null // Has not executed today
         )
 
         val nextDue = routine.calculateNextDueTimestamp()
-        assertTrue(nextDue > 0L)
+        val nowMs = nowInstant.toEpochMilliseconds()
+
+        if (nowLdt.hour > 0) {
+            // Target was earlier today, so it MUST be due now!
+            assertTrue(nowMs >= nextDue, "Expected nowMs ($nowMs) >= nextDue ($nextDue) for routine scheduled earlier today")
+        } else {
+            assertTrue(nextDue > 0L)
+        }
+    }
+
+    @Test
+    fun testTimedScheduleAdvancesToTomorrowAfterRunningToday() {
+        val nowInstant = kotlinx.datetime.Clock.System.now()
+        val nowMs = nowInstant.toEpochMilliseconds()
+
+        val routine = BackupRoutine(
+            id = "rt-test-timed-tomorrow",
+            name = "Daily Timed Routine Already Ran Today",
+            isEnabled = true,
+            type = BackupType.LOCAL,
+            fileType = BackupFileType.BOTH,
+            scheduleConfig = BackupScheduleConfig.Timed("02:00"),
+            backupLocationPath = "/tmp/backups",
+            lastBackupTimestamp = nowMs // Executed just now today
+        )
+
+        val nextDue = routine.calculateNextDueTimestamp()
+        // Must be in the future (tomorrow)
+        assertTrue(nextDue > nowMs, "Expected nextDue ($nextDue) > nowMs ($nowMs) after executing today")
+    }
+
+    @Test
+    fun testIntervalScheduleZeroOrNegativeReturnsMaxValue() {
+        val routineZero = BackupRoutine(
+            id = "rt-test-zero",
+            name = "Zero Interval",
+            scheduleConfig = BackupScheduleConfig.Interval(intervalHours = 0, intervalMinutes = 0)
+        )
+        assertEquals(Long.MAX_VALUE, routineZero.calculateNextDueTimestamp())
+
+        val routineNegative = BackupRoutine(
+            id = "rt-test-neg",
+            name = "Negative Interval",
+            scheduleConfig = BackupScheduleConfig.Interval(intervalHours = -1, intervalMinutes = 0)
+        )
+        assertEquals(Long.MAX_VALUE, routineNegative.calculateNextDueTimestamp())
     }
 
     @Test
