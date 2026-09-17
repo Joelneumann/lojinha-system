@@ -1,11 +1,16 @@
 package de.joelneumann.lojinha.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon
+import de.joelneumann.lojinha.ui.theme.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,30 +83,46 @@ fun AdminWebLoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Language Switcher Row
+                // Language Switcher Row (Aligned to the left side)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Language.entries.forEach { lang ->
-                        val isSelected = LanguageManager.currentLanguage == lang
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { LanguageManager.setLanguage(lang) },
-                            label = {
-                                Text(
-                                    text = when (lang) {
-                                        Language.BR -> "🇧🇷 PT"
-                                        Language.DE -> "🇩🇪 DE"
-                                        Language.EN -> "🇺🇸 EN"
-                                    },
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                )
-                            },
-                            modifier = Modifier.padding(horizontal = 2.dp)
-                        )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Language.entries.forEach { lang ->
+                            val isSelected = lang == LanguageManager.currentLanguage
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
+                                    .border(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        color = if (isSelected) AccentBlue else DividerBorder,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        LanguageManager.setLanguage(lang)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    LanguageFlagIcon(language = lang, width = 18.dp, height = 13.dp)
+                                    Text(
+                                        text = lang.code.uppercase(),
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) SurfaceWhite else PrimaryNavy
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 

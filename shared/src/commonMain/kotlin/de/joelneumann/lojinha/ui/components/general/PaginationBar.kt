@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -185,7 +186,7 @@ fun PaginationBar(
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.LastPage,
+                            imageVector = Icons.AutoMirrored.Filled.LastPage,
                             contentDescription = "Last Page",
                             modifier = Modifier.size(18.dp),
                             tint = if (currentPage < totalPages - 1) PrimaryNavy else TextSecondaryMuted.copy(alpha = 0.4f)
