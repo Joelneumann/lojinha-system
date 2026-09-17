@@ -476,6 +476,7 @@ interface AppStrings {
     val addUserToList: String
     val searchUserToAdd: String
     val noUsersInList: String
+    val noUsersFound: String
     val quantity: String
     val amount: String
     val deleteListTitle: String

@@ -117,6 +117,9 @@ fun App() {
                         val userSelectionViewModel: UserSelectionViewModel = viewModel(
                             factory = LojinhaViewModelFactory.createUserSelectionViewModelFactory(userRepository)
                         )
+                        LaunchedEffect(Unit) {
+                            userSelectionViewModel.resetState()
+                        }
                         UserSelectionScreen(
                             viewModel = userSelectionViewModel,
                             settings = settings,

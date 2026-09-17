@@ -5,15 +5,21 @@ import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.removeAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class UserSelectionViewModel(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
+
+    private val activeScope = coroutineScope ?: viewModelScope
 
     private val _users = MutableStateFlow<List<User>>(emptyList())
     val users: StateFlow<List<User>> = _users.asStateFlow()
@@ -39,16 +45,31 @@ class UserSelectionViewModel(
     private val _adminPasswordError = MutableStateFlow<String?>(null)
     val adminPasswordError: StateFlow<String?> = _adminPasswordError.asStateFlow()
 
+    private var loadUsersJob: Job? = null
+    private var isLoggingIn: Boolean = false
+
     init {
         loadUsers()
     }
 
     fun loadUsers() {
-        viewModelScope.launch {
+        loadUsersJob?.cancel()
+        loadUsersJob = activeScope.launch {
             userRepository.getUsersFlow().collect { list ->
                 _users.value = list.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
             }
         }
+    }
+
+    fun resetState() {
+        isLoggingIn = false
+        _searchQuery.value = ""
+        _selectedUserForPin.value = null
+        _pinInput.value = ""
+        _pinError.value = null
+        _showAdminAuthDialog.value = false
+        _adminPasswordInput.value = ""
+        _adminPasswordError.value = null
     }
 
     fun updateSearchQuery(query: String) {
@@ -59,7 +80,7 @@ class UserSelectionViewModel(
         val query = _searchQuery.value.trim()
         if (query.isBlank()) return
 
-        viewModelScope.launch {
+        activeScope.launch {
             // 1. Try matching user by barcode first
             val userByBarcode = userRepository.getUserByBarcode(query)
             if (userByBarcode != null && userByBarcode.isActive && !userByBarcode.isDeleted) {
@@ -70,7 +91,11 @@ class UserSelectionViewModel(
 
             // 2. Otherwise check filtered user list
             val filtered = _users.value.filter { it.name.containsIgnoreAccents(query) }
-            if (filtered.size == 1) {
+            val exactMatch = filtered.firstOrNull { it.name.trim().removeAccents().equals(query.removeAccents(), ignoreCase = true) }
+            if (exactMatch != null) {
+                onUserCardClicked(exactMatch, onLoginSuccess)
+                _searchQuery.value = ""
+            } else if (filtered.size == 1) {
                 onUserCardClicked(filtered.first(), onLoginSuccess)
                 _searchQuery.value = ""
             }
@@ -78,7 +103,10 @@ class UserSelectionViewModel(
     }
 
     fun onUserCardClicked(user: User, onLoginSuccess: (User) -> Unit) {
-        if (user.pin.isNull_or_blank()) {
+        if (isLoggingIn) return
+        if (user.pin.isNullOrBlank()) {
+            isLoggingIn = true
+            _searchQuery.value = ""
             onLoginSuccess(user)
         } else {
             _selectedUserForPin.value = user
@@ -93,10 +121,13 @@ class UserSelectionViewModel(
     }
 
     fun submitPin(adminPassword: String = "", onLoginSuccess: (User) -> Unit) {
+        if (isLoggingIn) return
         val user = _selectedUserForPin.value ?: return
         if (verifyPinOrAdminBypass(user.pin, _pinInput.value, adminPassword)) {
+            isLoggingIn = true
             _selectedUserForPin.value = null
             _pinInput.value = ""
+            _searchQuery.value = ""
             onLoginSuccess(user)
         } else {
             _pinError.value = "pin_incorrect"
@@ -111,6 +142,7 @@ class UserSelectionViewModel(
     }
 
     fun cancelPinDialog() {
+        isLoggingIn = false
         _selectedUserForPin.value = null
         _pinInput.value = ""
         _pinError.value = null
@@ -142,12 +174,10 @@ class UserSelectionViewModel(
         }
     }
 
-    private fun String?.isNull_or_blank(): Boolean = this == null || this.trim().isEmpty()
-
     override fun onCleared() {
         super.onCleared()
-        _searchQuery.value = ""
-        cancelPinDialog()
-        closeAdminAuthDialog()
+        loadUsersJob?.cancel()
+        loadUsersJob = null
+        resetState()
     }
 }

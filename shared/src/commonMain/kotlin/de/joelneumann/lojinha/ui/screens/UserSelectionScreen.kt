@@ -143,7 +143,8 @@ fun UserSelectionContent(
 
                 UserGrid(
                     users = filteredUsers,
-                    onUserClick = onUserClick
+                    onUserClick = onUserClick,
+                    emptyText = strings.noUsersFound
                 )
             }
 

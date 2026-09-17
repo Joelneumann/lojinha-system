@@ -485,6 +485,7 @@ object EnglishStrings : AppStrings {
     override val addUserToList = "Add User"
     override val searchUserToAdd = "Search user to add..."
     override val noUsersInList = "No users in this list. Add users to get started."
+    override val noUsersFound = "No users found."
     override val quantity = "Quantity"
     override val amount = "Amount"
     override val deleteListTitle = "Delete Billing List"
