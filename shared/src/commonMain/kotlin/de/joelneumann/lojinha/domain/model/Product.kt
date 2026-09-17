@@ -21,8 +21,10 @@ data class Product(
 ) {
     fun calculateEffectiveUnitPrice(globalMarkupPercent: Double): Long {
         val markup = customMarkupPercent ?: globalMarkupPercent
-        if (markup <= 0.0) return basePrice
+        if (markup.isNaN() || !markup.isFinite() || markup <= 0.0) return basePrice
         val multiplier = 1.0 + (markup / 100.0)
-        return kotlin.math.round(basePrice * multiplier).toLong()
+        val calculated = kotlin.math.round(basePrice * multiplier)
+        if (!calculated.isFinite() || calculated > Long.MAX_VALUE.toDouble()) return basePrice
+        return calculated.toLong().coerceAtLeast(basePrice)
     }
 }

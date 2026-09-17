@@ -78,6 +78,13 @@ fun AdminSettingsTabScreen(
     val inactivityTimeoutValue = inactivityTimeout.toIntOrNull()
     val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue >= 2
 
+    val globalMarkupValue = remember(globalMarkup) { Formatting.parsePercentageInput(globalMarkup) }
+    val isGlobalMarkupValid = globalMarkupValue != null && globalMarkupValue in 0.0..1000.0
+    val parsedUsdRate = remember(usdRate) { usdRate.trim().replace(',', '.').toDoubleOrNull() }
+    val isUsdRateValid = parsedUsdRate != null && parsedUsdRate.isFinite() && parsedUsdRate > 0.0
+    val parsedEurRate = remember(eurRate) { eurRate.trim().replace(',', '.').toDoubleOrNull() }
+    val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate > 0.0
+
     val hasFieldChanges = remember(
         settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout,
         backupLocation, autoBackupEnabled, autoBackupFormat, autoBackupScheduleType, autoBackupTime, autoBackupIntervalHours, supportEmail
@@ -174,12 +181,12 @@ fun AdminSettingsTabScreen(
 
                 Button(
                     onClick = {
-                        if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid) {
+                        if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid) {
                             val updatedSettings = settings.copy(
                                 adminPasswordHash = if (newPassword.isNotBlank()) newPassword else settings.adminPasswordHash,
-                                globalMarkupPercent = globalMarkup.toDoubleOrNull() ?: settings.globalMarkupPercent,
-                                usdExchangeRate = usdRate.toDoubleOrNull() ?: settings.usdExchangeRate,
-                                eurExchangeRate = eurRate.toDoubleOrNull() ?: settings.eurExchangeRate,
+                                globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
+                                usdExchangeRate = parsedUsdRate ?: settings.usdExchangeRate,
+                                eurExchangeRate = parsedEurRate ?: settings.eurExchangeRate,
                                 inactivityTimeoutMinutes = maxOf(2, inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes),
                                 backupLocationPath = backupLocation,
                                 autoBackupEnabled = autoBackupEnabled,
@@ -195,7 +202,7 @@ fun AdminSettingsTabScreen(
                             onUnsavedStateChanged(false)
                         }
                     },
-                    enabled = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid,
+                    enabled = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentNavy,
                         disabledContainerColor = SurfaceContainerHighLight
@@ -400,6 +407,14 @@ fun AdminSettingsTabScreen(
                             placeholder = strings.globalProductMarkupPlaceholder,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        if (!isGlobalMarkupValid) {
+                            Text(
+                                text = strings.invalidMarkupError,
+                                fontSize = 11.sp,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                            )
+                        }
                     }
                 }
             }

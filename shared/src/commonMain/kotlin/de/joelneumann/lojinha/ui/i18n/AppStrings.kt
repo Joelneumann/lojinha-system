@@ -492,4 +492,9 @@ interface AppStrings {
 
     val fieldDescription: String
     val referenceLabel: String
+
+    val sellingPriceLabel: String
+    val markupCustomSuffix: String
+    val markupStandardSuffix: String
+    val invalidMarkupError: String
 }

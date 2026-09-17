@@ -16,6 +16,7 @@ import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.utils.Formatting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
@@ -459,7 +460,15 @@ class BackupRestoreService(
             val stock = stockStr.toLongOrNull() ?: 0L
 
             val markupStr = if (markupIdx != -1 && markupIdx < cols.size) cols[markupIdx].trim() else ""
-            val markup = markupStr.toDoubleOrNull()
+            val parsedMarkup = if (markupStr.isNotEmpty()) Formatting.parsePercentageInput(markupStr) else null
+            val markup = if (parsedMarkup != null && parsedMarkup in 0.0..1000.0) {
+                parsedMarkup
+            } else {
+                if (markupStr.isNotEmpty() && (parsedMarkup == null || parsedMarkup !in 0.0..1000.0)) {
+                    warnings.add("Row ${i + 1} ('$name'): Invalid custom markup '$markupStr' ignored.")
+                }
+                null
+            }
 
             val activeStr = if (activeIdx != -1 && activeIdx < cols.size) cols[activeIdx].trim() else "true"
             val isActive = activeStr.toBooleanStrictOrNull() ?: true

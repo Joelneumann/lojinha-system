@@ -34,6 +34,7 @@ fun AdminProductsTabScreen(
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val sortOption by viewModel.sortOption.collectAsState()
+    val settings by viewModel.settings.collectAsState()
 
     val showProductModal by viewModel.showProductModal.collectAsState()
     val editProduct by viewModel.editProduct.collectAsState()
@@ -119,6 +120,7 @@ fun AdminProductsTabScreen(
                     val isExpanded = expandedProductId == product.id
                     AdminProductAccordionCard(
                         product = product,
+                        globalMarkup = settings.globalMarkupPercent,
                         isExpanded = isExpanded,
                         onExpandToggle = { onRequestToggleExpand(product.id) },
                         onEditProduct = { viewModel.openEditProductModal(it) },

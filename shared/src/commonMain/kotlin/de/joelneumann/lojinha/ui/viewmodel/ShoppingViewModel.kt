@@ -103,7 +103,11 @@ class ShoppingViewModel(
         val existingIndex = currentList.indexOfFirst { it.product.id == product.id }
         if (existingIndex >= 0) {
             val item = currentList[existingIndex]
-            currentList[existingIndex] = item.copy(quantity = item.quantity + 1)
+            currentList[existingIndex] = item.copy(
+                product = product,
+                quantity = item.quantity + 1,
+                unitPriceWithMarkup = unitPrice
+            )
         } else {
             currentList.add(CartItem(product = product, quantity = 1, unitPriceWithMarkup = unitPrice))
         }
@@ -125,7 +129,11 @@ class ShoppingViewModel(
             val existingIndex = currentList.indexOfFirst { it.product.id == product.id }
             if (existingIndex >= 0) {
                 val item = currentList[existingIndex]
-                currentList[existingIndex] = item.copy(quantity = item.quantity + grams)
+                currentList[existingIndex] = item.copy(
+                    product = product,
+                    quantity = item.quantity + grams,
+                    unitPriceWithMarkup = unitPrice
+                )
             } else {
                 currentList.add(CartItem(product = product, quantity = grams, unitPriceWithMarkup = unitPrice))
             }

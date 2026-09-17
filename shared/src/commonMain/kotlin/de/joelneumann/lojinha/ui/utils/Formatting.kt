@@ -156,4 +156,28 @@ object Formatting {
             de.joelneumann.lojinha.domain.model.Language.BR -> "$dayStr/$monthStr/$yearStr, $hour24Str:$minuteStr"
         }
     }
+
+    fun parsePercentageInput(input: String): Double? {
+        val cleaned = input.trim()
+            .replace("%", "")
+            .replace(',', '.')
+            .trim()
+        if (cleaned.isBlank()) return null
+        val value = cleaned.toDoubleOrNull() ?: return null
+        return if (value.isFinite()) value else null
+    }
+
+    fun formatMarkupPercent(markup: Double): String {
+        if (!markup.isFinite() || markup < 0.0) return "+0%"
+        val isWhole = markup == kotlin.math.floor(markup) && !markup.isInfinite()
+        val formatted = if (isWhole) markup.toLong().toString() else markup.toString()
+        return "+$formatted%"
+    }
+
+    fun formatMarkupDisplay(markup: Double, isCustom: Boolean, strings: de.joelneumann.lojinha.ui.i18n.AppStrings): String {
+        val pct = formatMarkupPercent(markup)
+        val suffix = if (isCustom) strings.markupCustomSuffix else strings.markupStandardSuffix
+        return "${strings.markupPercent}: $pct ($suffix)"
+    }
 }
+

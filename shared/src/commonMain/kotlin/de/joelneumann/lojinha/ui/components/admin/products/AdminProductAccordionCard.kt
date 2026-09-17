@@ -23,6 +23,7 @@ import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 @Composable
 fun AdminProductAccordionCard(
     product: Product,
+    globalMarkup: Double = 0.0,
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
     onEditProduct: (Product) -> Unit,
@@ -53,12 +54,30 @@ fun AdminProductAccordionCard(
             }
         },
         headerRightContent = {
-            Text(
-                text = "${strings.basePrice}: ${Formatting.formatBrl(product.basePrice)}",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = PrimaryNavy
-            )
+            val effectivePrice = product.calculateEffectiveUnitPrice(globalMarkup)
+            val isCustom = product.customMarkupPercent != null
+            val activeMarkup = product.customMarkupPercent ?: globalMarkup
+
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "${strings.basePrice}: ${Formatting.formatBrl(product.basePrice)}",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PrimaryNavy
+                )
+                Text(
+                    text = Formatting.formatMarkupDisplay(activeMarkup, isCustom, strings),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isCustom) AccentNavy else TextSecondaryMuted
+                )
+                Text(
+                    text = "${strings.sellingPriceLabel}: ${Formatting.formatBrl(effectivePrice)}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AccentNavy
+                )
+            }
             Text(
                 text = "${strings.stock}: ${Formatting.formatQuantity(product.stockQuantity, product.unitType)}",
                 fontSize = 14.sp,

@@ -153,18 +153,8 @@ class AdminProductsViewModel(
         }
     }
 
-    fun updateGlobalMarkup(markupPercent: Double) {
-        val repo = settingsRepository ?: return
-        viewModelScope.launch {
-            try {
-                val current = _settings.value
-                repo.updateSettings(current.copy(globalMarkupPercent = markupPercent))
-                _settings.value = repo.getSettings()
-            } catch (e: Exception) {
-                println("[AdminProductsViewModel] updateGlobalMarkup error: ${e.message}")
-            }
-        }
-    }
+
+
 
     override fun onCleared() {
         super.onCleared()
