@@ -65,6 +65,7 @@ private class FakeTransactionRepository : TransactionRepository {
     }
     override suspend fun applyPurchaseCorrection(originalTransactionId: String, newItems: List<TransactionItem>): Boolean = true
     override suspend fun stornoNonPurchase(transactionId: String): Boolean = true
+    override suspend fun executeBatchTransactions(requests: List<de.joelneumann.lojinha.domain.model.AtomicTransactionRequest>): Boolean = true
 }
 
 private class TxFakeUserRepository : UserRepository {

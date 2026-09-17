@@ -74,7 +74,95 @@ class DomainAndRulesTest {
         // Custom markup overrides global markup
         val productWithCustom = product.copy(customMarkupPercent = 20.0)
         assertEquals(960L, productWithCustom.calculateEffectiveUnitPrice(10.0))
+
+        // Custom markup of 0.0% explicitly overrides global markup and charges base price
+        val productZeroCustom = product.copy(customMarkupPercent = 0.0)
+        assertEquals(800L, productZeroCustom.calculateEffectiveUnitPrice(10.0))
+
+        // Negative markups are clamped to base price (never sell below wholesale base price)
+        assertEquals(800L, product.calculateEffectiveUnitPrice(-10.0))
+        val productNegativeCustom = product.copy(customMarkupPercent = -15.0)
+        assertEquals(800L, productNegativeCustom.calculateEffectiveUnitPrice(10.0))
+
+        // Fractional markup (12.5%)
+        assertEquals(900L, product.calculateEffectiveUnitPrice(12.5))
+
+        // Fractional markup with cent rounding (15% on R$ 1,05 = 105 * 1.15 = 120.75 -> 121 cents)
+        val cheapItem = product.copy(basePrice = 105L)
+        assertEquals(121L, cheapItem.calculateEffectiveUnitPrice(15.0))
+
+        // IEEE 754 non-finite edge cases: NaN must NEVER drop price to 0L
+        assertEquals(800L, product.calculateEffectiveUnitPrice(Double.NaN))
+        val productWithNaN = product.copy(customMarkupPercent = Double.NaN)
+        assertEquals(800L, productWithNaN.calculateEffectiveUnitPrice(10.0))
+
+        // Infinity must NEVER overflow or corrupt price
+        assertEquals(800L, product.calculateEffectiveUnitPrice(Double.POSITIVE_INFINITY))
+        assertEquals(800L, product.calculateEffectiveUnitPrice(Double.NEGATIVE_INFINITY))
+        val productWithInfinity = product.copy(customMarkupPercent = Double.POSITIVE_INFINITY)
+        assertEquals(800L, productWithInfinity.calculateEffectiveUnitPrice(10.0))
     }
+
+    @Test
+    fun testWeightProductMarkupCalculations() {
+        val apples = Product(
+            id = "w1",
+            name = "Apples",
+            basePrice = 2500L, // R$ 25,00 / kg
+            unitType = UnitType.WEIGHT,
+            customMarkupPercent = 10.0 // 10% markup -> R$ 27,50 / kg
+        )
+
+        val unitPriceWithMarkup = apples.calculateEffectiveUnitPrice(0.0)
+        assertEquals(2750L, unitPriceWithMarkup)
+
+        // 1000g (1 kg)
+        val item1kg = de.joelneumann.lojinha.ui.viewmodel.CartItem(apples, 1000L, unitPriceWithMarkup)
+        assertEquals(2750L, item1kg.lineTotal)
+
+        // 350g: (2750 * 350) / 1000 = 962.5 -> rounds to even integer 962 cents (R$ 9,62)
+        val item350g = de.joelneumann.lojinha.ui.viewmodel.CartItem(apples, 350L, unitPriceWithMarkup)
+        assertEquals(962L, item350g.lineTotal)
+    }
+
+    @Test
+    fun testPercentageInputParsing() {
+        assertEquals(10.0, Formatting.parsePercentageInput("10%"))
+        assertEquals(10.5, Formatting.parsePercentageInput("10,5%"))
+        assertEquals(10.5, Formatting.parsePercentageInput("10.5"))
+        assertEquals(25.0, Formatting.parsePercentageInput("  25,0 %  "))
+        assertEquals(0.0, Formatting.parsePercentageInput("0"))
+        assertEquals(-5.0, Formatting.parsePercentageInput("-5%"))
+
+        assertNull(Formatting.parsePercentageInput(""))
+        assertNull(Formatting.parsePercentageInput("   "))
+        assertNull(Formatting.parsePercentageInput("abc"))
+        assertNull(Formatting.parsePercentageInput("NaN"))
+        assertNull(Formatting.parsePercentageInput("Infinity"))
+        assertNull(Formatting.parsePercentageInput("-Infinity"))
+    }
+
+    @Test
+    fun testFormatMarkupDisplay() {
+        assertEquals("+10%", Formatting.formatMarkupPercent(10.0))
+        assertEquals("+12.5%", Formatting.formatMarkupPercent(12.5))
+        assertEquals("+0%", Formatting.formatMarkupPercent(0.0))
+        assertEquals("+0%", Formatting.formatMarkupPercent(-5.0))
+        assertEquals("+0%", Formatting.formatMarkupPercent(Double.NaN))
+
+        val enCustom = Formatting.formatMarkupDisplay(15.0, true, de.joelneumann.lojinha.ui.i18n.EnglishStrings)
+        assertEquals("Markup %: +15% (Custom)", enCustom)
+
+        val enStandard = Formatting.formatMarkupDisplay(10.0, false, de.joelneumann.lojinha.ui.i18n.EnglishStrings)
+        assertEquals("Markup %: +10% (Standard)", enStandard)
+
+        val deStandard = Formatting.formatMarkupDisplay(10.0, false, de.joelneumann.lojinha.ui.i18n.GermanStrings)
+        assertEquals("Aufschlag %: +10% (Standard)", deStandard)
+
+        val ptCustom = Formatting.formatMarkupDisplay(15.0, true, de.joelneumann.lojinha.ui.i18n.PortugueseStrings)
+        assertEquals("Margem %: +15% (Personalizada)", ptCustom)
+    }
+
 
     @Test
     fun testMoneyFormatting() {

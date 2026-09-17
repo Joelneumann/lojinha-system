@@ -80,7 +80,12 @@ fun ProductEditDialog(
         allProducts.firstOrNull { p -> p.id != product.id && p.barcodes.any { b -> barcodeList.any { bl -> bl.code.equals(b.code, ignoreCase = true) } } }
     }
 
-    val canSave = name.isNotBlank() && assignedBarcodeConflictProduct == null && (isNewProduct || hasDialogChanges)
+    val parsedMarkup = remember(customMarkup) { Formatting.parsePercentageInput(customMarkup) }
+    val isCustomMarkupValid = remember(customMarkup, parsedMarkup) {
+        customMarkup.isBlank() || (parsedMarkup != null && parsedMarkup in 0.0..1000.0)
+    }
+
+    val canSave = name.isNotBlank() && assignedBarcodeConflictProduct == null && isCustomMarkupValid && (isNewProduct || hasDialogChanges)
 
     val handleDismissRequest = {
         if (isModified) {
@@ -94,7 +99,7 @@ fun ProductEditDialog(
         if (canSave) {
             val priceCents = kotlin.math.round((basePriceBrl.replace(',', '.').toDoubleOrNull() ?: 0.0) * 100).toLong()
             val stock = Formatting.parseAdminStockToDb(stockQuantity, unitType) ?: 0L
-            val markup = customMarkup.toDoubleOrNull()
+            val markup = if (customMarkup.isBlank()) null else parsedMarkup
             val updated = product.copy(
                 name = name.trim(),
                 basePrice = priceCents,
@@ -201,13 +206,23 @@ fun ProductEditDialog(
                         modifier = Modifier.weight(1f)
                     )
 
-                    AdminLabeledField(
-                        label = strings.customMarkupOptionalLabel,
-                        value = customMarkup,
-                        onValueChange = { customMarkup = it },
-                        placeholder = strings.standardPlaceholder,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        AdminLabeledField(
+                            label = strings.customMarkupOptionalLabel,
+                            value = customMarkup,
+                            onValueChange = { customMarkup = it },
+                            placeholder = strings.standardPlaceholder,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (!isCustomMarkupValid) {
+                            Text(
+                                text = strings.invalidMarkupError,
+                                fontSize = 11.sp,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                            )
+                        }
+                    }
                 }
 
                 Column(modifier = Modifier.fillMaxWidth()) {

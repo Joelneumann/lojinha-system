@@ -503,4 +503,9 @@ object PortugueseStrings : AppStrings {
 
     override val fieldDescription = "Descrição"
     override val referenceLabel = "Referência"
+
+    override val sellingPriceLabel = "Venda"
+    override val markupCustomSuffix = "Personalizada"
+    override val markupStandardSuffix = "Padrão"
+    override val invalidMarkupError = "Deve ser uma porcentagem entre 0 e 1000"
 }
