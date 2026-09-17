@@ -1,10 +1,14 @@
 package de.joelneumann.lojinha.data.service
 
 import androidx.room.Room
+import androidx.room.immediateTransaction
+import androidx.room.useWriterConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.Converters
 import de.joelneumann.lojinha.data.entity.BackupEntity
+import de.joelneumann.lojinha.data.entity.BillingListEntity
+import de.joelneumann.lojinha.data.entity.BillingListUserEntity
 import de.joelneumann.lojinha.data.entity.ProductEntity
 import de.joelneumann.lojinha.data.entity.SettingsEntity
 import de.joelneumann.lojinha.data.entity.TransactionEntity
@@ -34,9 +38,9 @@ data class BackupFileInfo(
 )
 
 class BackupRestoreService(
-    private val db: AppDatabase
+    private val db: AppDatabase,
+    private val dbFile: File = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
 ) {
-    private val dbFile = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
 
     suspend fun listBackupsInDirectory(dirPath: String): List<BackupFileInfo> = withContext(Dispatchers.IO) {
         if (dirPath.isBlank()) return@withContext emptyList()
@@ -73,24 +77,14 @@ class BackupRestoreService(
         return sdf.format(Date())
     }
 
-    suspend fun performDbBackup(
-        destinationDir: File,
-        writeMode: de.joelneumann.lojinha.domain.model.BackupWriteMode = de.joelneumann.lojinha.domain.model.BackupWriteMode.CREATE_NEW_FILE
-    ): File = withContext(Dispatchers.IO) {
-        require(destinationDir.exists() && destinationDir.isDirectory) { "Destination directory does not exist or is not a directory: ${destinationDir.absolutePath}" }
-        val backupFileName = if (writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) {
-            "lojinha_backup_latest.db"
-        } else {
-            "lojinha_backup_${getTimestampString()}.db"
-        }
-        val targetFile = File(destinationDir, backupFileName)
-
+    suspend fun performDbSnapshot(targetFile: File): File = withContext(Dispatchers.IO) {
         require(dbFile.exists()) { "Database file not found at ${dbFile.absolutePath}" }
 
         // SQLite VACUUM INTO requires target file to not exist prior to command execution
         if (targetFile.exists()) {
             targetFile.delete()
         }
+        targetFile.parentFile?.mkdirs()
 
         // Use native VACUUM INTO for an atomic, crash-consistent live snapshot with full WAL integration
         val escapedPath = targetFile.absolutePath.replace("'", "''")
@@ -110,6 +104,20 @@ class BackupRestoreService(
             throw IllegalStateException("Failed to create database snapshot at ${targetFile.absolutePath}")
         }
         targetFile
+    }
+
+    suspend fun performDbBackup(
+        destinationDir: File,
+        writeMode: de.joelneumann.lojinha.domain.model.BackupWriteMode = de.joelneumann.lojinha.domain.model.BackupWriteMode.CREATE_NEW_FILE
+    ): File = withContext(Dispatchers.IO) {
+        require(destinationDir.exists() && destinationDir.isDirectory) { "Destination directory does not exist or is not a directory: ${destinationDir.absolutePath}" }
+        val backupFileName = if (writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) {
+            "lojinha_backup_latest.db"
+        } else {
+            "lojinha_backup_${getTimestampString()}.db"
+        }
+        val targetFile = File(destinationDir, backupFileName)
+        performDbSnapshot(targetFile)
     }
 
     suspend fun executeRoutineBackup(routine: de.joelneumann.lojinha.domain.model.BackupRoutine): File = withContext(Dispatchers.IO) {
@@ -217,10 +225,25 @@ class BackupRestoreService(
         val backupTransactions = mutableListOf<TransactionEntity>()
         var backupSettings: SettingsEntity? = null
         val backupRoutines = mutableListOf<BackupEntity>()
+        val backupBillingLists = mutableListOf<BillingListEntity>()
+        val backupBillingListUsers = mutableListOf<BillingListUserEntity>()
 
         // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
         val connection = BundledSQLiteDriver().open(backupFile.absolutePath)
         try {
+            // Quick integrity check before processing
+            val integrityStmt = connection.prepare("PRAGMA quick_check")
+            try {
+                if (integrityStmt.step()) {
+                    val result = integrityStmt.getText(0)
+                    if (result.lowercase() != "ok") {
+                        throw IllegalStateException("Backup file failed integrity check: $result")
+                    }
+                }
+            } finally {
+                integrityStmt.close()
+            }
+
             val tableNames = mutableSetOf<String>()
             val stmtTables = connection.prepare("SELECT name FROM sqlite_master WHERE type='table'")
             try {
@@ -233,7 +256,31 @@ class BackupRestoreService(
 
             // Read users
             if (tableNames.contains("users")) {
-                val stmt = connection.prepare("SELECT id, name, balance, language, secondaryCurrency, pin, userBarcode, userBarcodeNumber, isActive, isDeleted FROM users")
+                val userColumns = mutableSetOf<String>()
+                val stmtCols = connection.prepare("PRAGMA table_info(users)")
+                try {
+                    while (stmtCols.step()) {
+                        userColumns.add(stmtCols.getText(1).lowercase())
+                    }
+                } finally {
+                    stmtCols.close()
+                }
+
+                val hasIsDeleted = userColumns.contains("isdeleted")
+                val hasAvatarType = userColumns.contains("avatartype")
+                val hasAvatarEmoji = userColumns.contains("avataremoji")
+                val hasAvatarColor = userColumns.contains("avatarcolor")
+
+                val userQuery = buildString {
+                    append("SELECT id, name, balance, language, secondaryCurrency, pin, userBarcode, userBarcodeNumber, isActive")
+                    if (hasIsDeleted) append(", isDeleted") else append(", 0")
+                    if (hasAvatarType) append(", avatarType") else append(", 'INITIALS'")
+                    if (hasAvatarEmoji) append(", avatarEmoji") else append(", '😀'")
+                    if (hasAvatarColor) append(", avatarColor") else append(", '#1E293B'")
+                    append(" FROM users")
+                }
+
+                val stmt = connection.prepare(userQuery)
                 try {
                     while (stmt.step()) {
                         val u = UserEntity(
@@ -246,7 +293,10 @@ class BackupRestoreService(
                             userBarcode = if (stmt.isNull(6)) null else stmt.getText(6),
                             userBarcodeNumber = if (stmt.isNull(7)) null else stmt.getText(7),
                             isActive = stmt.getLong(8) != 0L,
-                            isDeleted = try { stmt.getLong(9) != 0L } catch (e: Exception) { false }
+                            isDeleted = stmt.getLong(9) != 0L,
+                            avatarType = if (stmt.isNull(10)) "INITIALS" else stmt.getText(10),
+                            avatarEmoji = if (stmt.isNull(11)) "😀" else stmt.getText(11),
+                            avatarColor = if (stmt.isNull(12)) "#1E293B" else stmt.getText(12)
                         )
                         backupUsers.add(u)
                     }
@@ -282,7 +332,6 @@ class BackupRestoreService(
 
             // Read transactions
             if (tableNames.contains("transactions")) {
-                // Check if the backup database has the v8 balance snapshot columns
                 val txColumns = mutableSetOf<String>()
                 val stmtCols = connection.prepare("PRAGMA table_info(transactions)")
                 try {
@@ -329,7 +378,36 @@ class BackupRestoreService(
 
             // Read settings
             if (tableNames.contains("settings")) {
-                val stmt = connection.prepare("SELECT id, adminPasswordHash, globalMarkupPercent, usdExchangeRate, eurExchangeRate, inactivityTimeoutMinutes FROM settings LIMIT 1")
+                val settingsColumns = mutableSetOf<String>()
+                val stmtCols = connection.prepare("PRAGMA table_info(settings)")
+                try {
+                    while (stmtCols.step()) {
+                        settingsColumns.add(stmtCols.getText(1).lowercase())
+                    }
+                } finally {
+                    stmtCols.close()
+                }
+
+                val settingsQuery = buildString {
+                    append("SELECT id, adminPasswordHash, globalMarkupPercent, usdExchangeRate, eurExchangeRate, inactivityTimeoutMinutes")
+                    append(if (settingsColumns.contains("backuplocationpath")) ", backupLocationPath" else ", ''")
+                    append(if (settingsColumns.contains("autobackupenabled")) ", autoBackupEnabled" else ", 0")
+                    append(if (settingsColumns.contains("autobackupformat")) ", autoBackupFormat" else ", 'DB'")
+                    append(if (settingsColumns.contains("autobackupscheduletype")) ", autoBackupScheduleType" else ", 'DAILY'")
+                    append(if (settingsColumns.contains("autobackuptime")) ", autoBackupTime" else ", '02:00'")
+                    append(if (settingsColumns.contains("autobackupintervalhours")) ", autoBackupIntervalHours" else ", 24")
+                    append(if (settingsColumns.contains("lastbackuptimestamp")) ", lastBackupTimestamp" else ", NULL")
+                    append(if (settingsColumns.contains("onedriveclientid")) ", oneDriveClientId" else ", '202e1c94-b152-4751-b0e6-a2a4b8eb4901'")
+                    append(if (settingsColumns.contains("onedriverefreshtoken")) ", oneDriveRefreshToken" else ", NULL")
+                    append(if (settingsColumns.contains("onedriveaccountemail")) ", oneDriveAccountEmail" else ", NULL")
+                    append(if (settingsColumns.contains("onedriveaccountname")) ", oneDriveAccountName" else ", NULL")
+                    append(if (settingsColumns.contains("onedrivedefaultfolder")) ", oneDriveDefaultFolder" else ", '/LojinhaBackups'")
+                    append(if (settingsColumns.contains("onedrivetenant")) ", oneDriveTenant" else ", 'common'")
+                    append(if (settingsColumns.contains("supportemail")) ", supportEmail" else ", NULL")
+                    append(" FROM settings LIMIT 1")
+                }
+
+                val stmt = connection.prepare(settingsQuery)
                 try {
                     if (stmt.step()) {
                         backupSettings = SettingsEntity(
@@ -338,7 +416,21 @@ class BackupRestoreService(
                             globalMarkupPercent = stmt.getDouble(2),
                             usdExchangeRate = stmt.getDouble(3),
                             eurExchangeRate = stmt.getDouble(4),
-                            inactivityTimeoutMinutes = stmt.getLong(5).toInt()
+                            inactivityTimeoutMinutes = stmt.getLong(5).toInt(),
+                            backupLocationPath = if (stmt.isNull(6)) "" else stmt.getText(6),
+                            autoBackupEnabled = stmt.getLong(7) != 0L,
+                            autoBackupFormat = if (stmt.isNull(8)) "DB" else stmt.getText(8),
+                            autoBackupScheduleType = if (stmt.isNull(9)) "DAILY" else stmt.getText(9),
+                            autoBackupTime = if (stmt.isNull(10)) "02:00" else stmt.getText(10),
+                            autoBackupIntervalHours = stmt.getLong(11).toInt(),
+                            lastBackupTimestamp = if (stmt.isNull(12)) null else stmt.getLong(12),
+                            oneDriveClientId = if (stmt.isNull(13)) "202e1c94-b152-4751-b0e6-a2a4b8eb4901" else stmt.getText(13),
+                            oneDriveRefreshToken = if (stmt.isNull(14)) null else stmt.getText(14),
+                            oneDriveAccountEmail = if (stmt.isNull(15)) null else stmt.getText(15),
+                            oneDriveAccountName = if (stmt.isNull(16)) null else stmt.getText(16),
+                            oneDriveDefaultFolder = if (stmt.isNull(17)) "/LojinhaBackups" else stmt.getText(17),
+                            oneDriveTenant = if (stmt.isNull(18)) "common" else stmt.getText(18),
+                            supportEmail = if (stmt.isNull(19)) null else stmt.getText(19)
                         )
                     }
                 } finally {
@@ -348,12 +440,29 @@ class BackupRestoreService(
 
             // Read backup_routines
             if (tableNames.contains("backup_routines")) {
-                val stmt = connection.prepare("SELECT id, name, isEnabled, type, fileType, scheduleConfig, backupLocationPath, lastBackupTimestamp, writeMode FROM backup_routines")
+                val routineColumns = mutableSetOf<String>()
+                val stmtCols = connection.prepare("PRAGMA table_info(backup_routines)")
+                try {
+                    while (stmtCols.step()) {
+                        routineColumns.add(stmtCols.getText(1).lowercase())
+                    }
+                } finally {
+                    stmtCols.close()
+                }
+
+                val hasWriteMode = routineColumns.contains("writemode")
+                val routineQuery = buildString {
+                    append("SELECT id, name, isEnabled, type, fileType, scheduleConfig, backupLocationPath, lastBackupTimestamp")
+                    if (hasWriteMode) append(", writeMode") else append(", 'CREATE_NEW_FILE'")
+                    append(" FROM backup_routines")
+                }
+
+                val stmt = connection.prepare(routineQuery)
                 try {
                     while (stmt.step()) {
                         val cfgStr = if (stmt.isNull(5)) "" else stmt.getText(5)
                         val lastTs = if (stmt.isNull(7)) null else stmt.getLong(7)
-                        val writeModeStr = try { if (stmt.isNull(8)) "CREATE_NEW_FILE" else stmt.getText(8) } catch (e: Exception) { "CREATE_NEW_FILE" }
+                        val writeModeStr = if (stmt.isNull(8)) "CREATE_NEW_FILE" else stmt.getText(8)
                         val b = BackupEntity(
                             id = stmt.getText(0),
                             name = stmt.getText(1),
@@ -371,40 +480,127 @@ class BackupRestoreService(
                     stmt.close()
                 }
             }
+
+            // Read billing_lists
+            if (tableNames.contains("billing_lists")) {
+                val listCols = mutableSetOf<String>()
+                val stmtCols = connection.prepare("PRAGMA table_info(billing_lists)")
+                try {
+                    while (stmtCols.step()) {
+                        listCols.add(stmtCols.getText(1).lowercase())
+                    }
+                } finally {
+                    stmtCols.close()
+                }
+
+                val hasComment = listCols.contains("comment")
+                val hasIsDeleted = listCols.contains("isdeleted")
+                val listQuery = buildString {
+                    append("SELECT id, name, type, basePrice")
+                    if (hasComment) append(", comment") else append(", NULL")
+                    if (hasIsDeleted) append(", isDeleted") else append(", 0")
+                    append(" FROM billing_lists")
+                }
+
+                val stmt = connection.prepare(listQuery)
+                try {
+                    while (stmt.step()) {
+                        val basePrice = if (stmt.isNull(3)) null else stmt.getLong(3)
+                        val comment = if (stmt.isNull(4)) null else stmt.getText(4)
+                        val isDel = stmt.getLong(5) != 0L
+                        val bl = BillingListEntity(
+                            id = stmt.getText(0),
+                            name = stmt.getText(1),
+                            type = stmt.getText(2),
+                            basePrice = basePrice,
+                            comment = comment,
+                            isDeleted = isDel
+                        )
+                        backupBillingLists.add(bl)
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
+
+            // Read billing_list_users
+            if (tableNames.contains("billing_list_users")) {
+                val stmt = connection.prepare("SELECT id, listId, userId, quantity FROM billing_list_users")
+                try {
+                    while (stmt.step()) {
+                        val blu = BillingListUserEntity(
+                            id = stmt.getText(0),
+                            listId = stmt.getText(1),
+                            userId = stmt.getText(2),
+                            quantity = stmt.getLong(3).toInt()
+                        )
+                        backupBillingListUsers.add(blu)
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
         } finally {
             connection.close()
         }
 
-        // 2. Clear current database tables
-        db.userDao().deleteAllUsers()
-        db.productDao().deleteAllProducts()
-        db.transactionDao().deleteAllTransactions()
-        db.backupDao().deleteAllBackups()
+        // 2. Create pre-restore safety snapshot before touching active database
+        val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_restore_safety.db")
+        if (dbFile.exists()) {
+            performDbSnapshot(safetyFile)
+        }
 
-        // 3. Insert extracted backup records into active database
-        backupUsers.forEach { db.userDao().insertOrUpdateUser(it) }
-        backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
-        backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
-        backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
-        if (backupSettings != null) {
-            db.settingsDao().insertOrUpdateSettings(backupSettings)
+        // 3. Atomically clear and restore active database inside an immediate transaction
+        db.useWriterConnection { transactor ->
+            transactor.immediateTransaction {
+                // Clear tables in reverse dependency order (children first)
+                db.billingListDao().deleteAllBillingListUsers()
+                db.billingListDao().deleteAllBillingLists()
+                db.userDao().deleteAllUsers()
+                db.productDao().deleteAllProducts()
+                db.transactionDao().deleteAllTransactions()
+                db.backupDao().deleteAllBackups()
+
+                // Insert extracted backup records (parents first)
+                backupUsers.forEach { db.userDao().insertOrUpdateUser(it) }
+                backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
+                backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
+                backupBillingLists.forEach { db.billingListDao().insertOrUpdateBillingList(it) }
+                backupBillingListUsers.forEach { db.billingListDao().insertBillingListUser(it) }
+                backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
+                if (backupSettings != null) {
+                    db.settingsDao().insertOrUpdateSettings(backupSettings)
+                }
+            }
         }
     }
 
     suspend fun wipeAllData() = withContext(Dispatchers.IO) {
-        db.userDao().deleteAllUsers()
-        db.productDao().deleteAllProducts()
-        db.transactionDao().deleteAllTransactions()
-        // Reset settings to initial defaults
-        val defaultSettings = SettingsEntity(
-            id = 1,
-            adminPasswordHash = "admin",
-            globalMarkupPercent = 0.0,
-            usdExchangeRate = 0.18,
-            eurExchangeRate = 0.16,
-            inactivityTimeoutMinutes = 3
-        )
-        db.settingsDao().insertOrUpdateSettings(defaultSettings)
+        val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_wipe_safety.db")
+        if (dbFile.exists()) {
+            performDbSnapshot(safetyFile)
+        }
+
+        db.useWriterConnection { transactor ->
+            transactor.immediateTransaction {
+                db.billingListDao().deleteAllBillingListUsers()
+                db.billingListDao().deleteAllBillingLists()
+                db.userDao().deleteAllUsers()
+                db.productDao().deleteAllProducts()
+                db.transactionDao().deleteAllTransactions()
+
+                // Reset settings to initial defaults
+                val defaultSettings = SettingsEntity(
+                    id = 1,
+                    adminPasswordHash = "admin",
+                    globalMarkupPercent = 0.0,
+                    usdExchangeRate = 0.18,
+                    eurExchangeRate = 0.16,
+                    inactivityTimeoutMinutes = 3
+                )
+                db.settingsDao().insertOrUpdateSettings(defaultSettings)
+            }
+        }
     }
 
     suspend fun importProductsFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
