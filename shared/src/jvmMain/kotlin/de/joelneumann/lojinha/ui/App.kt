@@ -163,17 +163,47 @@ fun App() {
                                 key = "shopping_${sessionUser.id}_$sessionNonce",
                                 factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
                             )
+                            val historyViewModel: TransactionHistoryViewModel = viewModel(
+                                key = "history_${sessionUser.id}_$sessionNonce",
+                                factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(transactionRepository, userRepository)
+                            )
                             val cartItems by shoppingViewModel.cartItems.collectAsState()
 
                             val showInactivityWarning by userSessionViewModel.showInactivityWarning.collectAsState()
-                            val inactivitySecondsRemaining by userSessionViewModel.inactivitySecondsRemaining.collectAsState()
 
-                            val handleLogoutRequest = {
-                                if (cartItems.isNotEmpty()) {
-                                    showAbandonCartGuardDialog = true
-                                } else {
-                                    userSessionViewModel.requestLogout()
+                            val handleLogoutRequest = remember(cartItems.isNotEmpty(), userSessionViewModel) {
+                                {
+                                    if (cartItems.isNotEmpty()) {
+                                        showAbandonCartGuardDialog = true
+                                    } else {
+                                        userSessionViewModel.requestLogout()
+                                    }
                                 }
+                            }
+                            val onContinueShopping = remember(appViewModel) {
+                                { appViewModel.navigateTo(AppScreen.SHOPPING) }
+                            }
+                            val onNavigateToHistory = remember(userSessionViewModel, appViewModel) {
+                                {
+                                    userSessionViewModel.resumeInactivityTimer()
+                                    appViewModel.refreshCurrentUser()
+                                    appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
+                                }
+                            }
+                            val onUserUpdated = remember(appViewModel) {
+                                { updated: de.joelneumann.lojinha.domain.model.User -> appViewModel.updateCurrentUser(updated) }
+                            }
+                            val onUserInteracted = remember(userSessionViewModel) {
+                                { force: Boolean -> userSessionViewModel.onUserInteracted(force) }
+                            }
+                            val onPurchaseFinalized = remember(appViewModel) {
+                                { appViewModel.refreshCurrentUser() }
+                            }
+                            val onPauseTimer = remember(userSessionViewModel) {
+                                { userSessionViewModel.pauseInactivityTimer() }
+                            }
+                            val onResumeTimer = remember(userSessionViewModel) {
+                                { userSessionViewModel.resumeInactivityTimer() }
                             }
 
                             Box(modifier = Modifier.fillMaxSize()) {
@@ -190,36 +220,23 @@ fun App() {
                                                 user = sessionUser,
                                                 settings = settings,
                                                 onLogout = handleLogoutRequest,
-                                                onNavigateToHistory = {
-                                                    userSessionViewModel.resumeInactivityTimer()
-                                                    appViewModel.refreshCurrentUser()
-                                                    appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
-                                                },
-                                                onUserInteracted = { force -> userSessionViewModel.onUserInteracted(force) },
-                                                onPurchaseFinalized = { appViewModel.refreshCurrentUser() },
-                                                onPauseTimer = { userSessionViewModel.pauseInactivityTimer() },
-                                                onResumeTimer = { userSessionViewModel.resumeInactivityTimer() }
+                                                onNavigateToHistory = onNavigateToHistory,
+                                                onUserInteracted = onUserInteracted,
+                                                onPurchaseFinalized = onPurchaseFinalized,
+                                                onPauseTimer = onPauseTimer,
+                                                onResumeTimer = onResumeTimer
                                             )
                                         }
 
                                         AppScreen.TRANSACTION_HISTORY -> {
-                                            val historyViewModel: TransactionHistoryViewModel = viewModel(
-                                                key = "history_${sessionUser.id}_$sessionNonce",
-                                                factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(transactionRepository, userRepository)
-                                            )
-
                                             TransactionHistoryScreen(
                                                 viewModel = historyViewModel,
                                                 user = sessionUser,
                                                 settings = settings,
-                                                onContinueShopping = {
-                                                    appViewModel.navigateTo(AppScreen.SHOPPING)
-                                                },
+                                                onContinueShopping = onContinueShopping,
                                                 onLogout = handleLogoutRequest,
-                                                onUserUpdated = { updated ->
-                                                    appViewModel.updateCurrentUser(updated)
-                                                },
-                                                onUserInteracted = { force -> userSessionViewModel.onUserInteracted(force) }
+                                                onUserUpdated = onUserUpdated,
+                                                onUserInteracted = onUserInteracted
                                             )
                                         }
 
@@ -229,6 +246,7 @@ fun App() {
 
                                 // Inactivity Warning Modal Dialog (scoped to active user session)
                                 if (showInactivityWarning) {
+                                    val inactivitySecondsRemaining by userSessionViewModel.inactivitySecondsRemaining.collectAsState()
                                     InactivityWarningDialog(
                                         secondsRemaining = inactivitySecondsRemaining,
                                         onStayLoggedIn = { userSessionViewModel.stayLoggedIn() }

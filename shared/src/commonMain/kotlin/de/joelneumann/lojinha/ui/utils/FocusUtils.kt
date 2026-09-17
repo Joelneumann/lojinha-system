@@ -13,7 +13,8 @@ suspend fun FocusRequester.safeRequestFocus() {
             withFrameNanos { }
             requestFocus()
             break
-        } catch (_: Throwable) {
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             delay(25)
         }
     }

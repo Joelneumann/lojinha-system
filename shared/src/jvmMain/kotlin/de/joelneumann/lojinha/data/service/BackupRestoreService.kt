@@ -98,6 +98,7 @@ class BackupRestoreService(
                 connection.close()
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
         }
 

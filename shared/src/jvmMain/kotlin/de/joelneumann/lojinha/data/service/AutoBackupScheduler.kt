@@ -46,10 +46,14 @@ class AutoBackupScheduler(
     fun triggerDataChangeBackup(debounceMs: Long = 1000L) {
         dataChangeDebounceJob?.cancel()
         dataChangeDebounceJob = externalScope.launch(Dispatchers.IO) {
-            if (debounceMs > 0) {
-                delay(debounceMs)
+            try {
+                if (debounceMs > 0) {
+                    delay(debounceMs)
+                }
+                evaluateAndRunDataChangeRoutines()
+            } catch (_: kotlinx.coroutines.CancellationException) {
+                // Expected when debouncing rapid successive data changes
             }
-            evaluateAndRunDataChangeRoutines()
         }
     }
 
@@ -109,6 +113,7 @@ class AutoBackupScheduler(
             val updated = routine.copy(lastBackupTimestamp = System.currentTimeMillis())
             backupRepository.saveBackupRoutine(updated)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
         }
     }
