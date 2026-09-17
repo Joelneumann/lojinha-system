@@ -11,6 +11,7 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,8 +20,11 @@ import kotlinx.coroutines.launch
 
 class TransactionHistoryViewModel(
     private val transactionRepository: TransactionRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
+
+    private val activeScope = coroutineScope ?: viewModelScope
 
     private val _transactions = MutableStateFlow<List<Transaction>>(emptyList())
     val transactions: StateFlow<List<Transaction>> = _transactions.asStateFlow()
@@ -63,8 +67,13 @@ class TransactionHistoryViewModel(
     private val _relatedTransactionsMap = MutableStateFlow<Map<String, Transaction>>(emptyMap())
     val relatedTransactionsMap: StateFlow<Map<String, Transaction>> = _relatedTransactionsMap.asStateFlow()
 
-    fun loadUserTransactions(userId: String) {
+    fun loadUserTransactions(userId: String, resetFilters: Boolean = true) {
         currentUserId = userId
+        if (resetFilters) {
+            _searchFilter.value = ""
+            _selectedTypeFilter.value = null
+            _showSettingsModal.value = false
+        }
         _currentPage.value = 0
         fetchPage()
     }
@@ -99,7 +108,7 @@ class TransactionHistoryViewModel(
     private fun fetchPage() {
         val userId = currentUserId ?: return
         fetchJob?.cancel()
-        fetchJob = viewModelScope.launch {
+        fetchJob = activeScope.launch {
             try {
                 val paged = transactionRepository.getTransactionsByUserIdPaged(
                     userId = userId,
@@ -162,7 +171,7 @@ class TransactionHistoryViewModel(
             secondaryCurrency = _selectedSecondaryCurrency.value,
             avatar = _selectedAvatar.value
         )
-        viewModelScope.launch {
+        activeScope.launch {
             userRepository.saveUser(updated)
             _showSettingsModal.value = false
             onSaved(updated)
@@ -174,11 +183,16 @@ class TransactionHistoryViewModel(
         _selectedTypeFilter.value = null
         _currentPage.value = 0
         _showSettingsModal.value = false
+        fetchPage()
     }
 
     override fun onCleared() {
         super.onCleared()
+        fetchJob?.cancel()
         _transactions.value = emptyList()
-        resetFilters()
+        _searchFilter.value = ""
+        _selectedTypeFilter.value = null
+        _currentPage.value = 0
+        _showSettingsModal.value = false
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -70,8 +71,8 @@ fun TransactionHistoryScreen(
     val selectedAvatar by viewModel.selectedAvatar.collectAsState()
     val relatedTransactionsMap by viewModel.relatedTransactionsMap.collectAsState()
 
-    LaunchedEffect(user.id) {
-        viewModel.loadUserTransactions(user.id)
+    LaunchedEffect(Unit) {
+        viewModel.loadUserTransactions(user.id, resetFilters = true)
     }
 
     TransactionHistoryContent(
@@ -201,6 +202,11 @@ fun TransactionHistoryContent(
 
     val searchFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(currentPage, transactions.firstOrNull()?.id) {
+        listState.scrollToItem(0)
+    }
 
     LaunchedEffect(showSettingsModal) {
         if (!showSettingsModal) {
@@ -376,6 +382,7 @@ fun TransactionHistoryContent(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 16.dp),
                     modifier = Modifier.weight(1f).fillMaxWidth()

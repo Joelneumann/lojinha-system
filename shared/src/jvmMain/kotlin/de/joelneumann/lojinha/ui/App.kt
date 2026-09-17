@@ -183,10 +183,11 @@ fun App() {
                             val onContinueShopping = remember(appViewModel) {
                                 { appViewModel.navigateTo(AppScreen.SHOPPING) }
                             }
-                            val onNavigateToHistory = remember(userSessionViewModel, appViewModel) {
+                            val onNavigateToHistory = remember(userSessionViewModel, appViewModel, historyViewModel, sessionUser) {
                                 {
                                     userSessionViewModel.resumeInactivityTimer()
                                     appViewModel.refreshCurrentUser()
+                                    sessionUser?.let { historyViewModel.loadUserTransactions(it.id, resetFilters = true) }
                                     appViewModel.navigateTo(AppScreen.TRANSACTION_HISTORY)
                                 }
                             }
