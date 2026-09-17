@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.data.service.OneDriveBackupService
 import de.joelneumann.lojinha.domain.model.DeviceCodeResponse
-import de.joelneumann.lojinha.domain.model.BackupFileInfo
 import de.joelneumann.lojinha.domain.model.BackupRoutine
 import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.SystemSettings
@@ -74,9 +73,6 @@ class AdminSettingsViewModel(
 
     private val _csvImportType = MutableStateFlow("Products") // "Products" or "Users"
     val csvImportType: StateFlow<String> = _csvImportType.asStateFlow()
-
-    private val _detectedBackups = MutableStateFlow<List<BackupFileInfo>>(emptyList())
-    val detectedBackups: StateFlow<List<BackupFileInfo>> = _detectedBackups.asStateFlow()
 
     private val _showOneDriveDisconnectDialog = MutableStateFlow(false)
     val showOneDriveDisconnectDialog: StateFlow<Boolean> = _showOneDriveDisconnectDialog.asStateFlow()
@@ -307,6 +303,8 @@ class AdminSettingsViewModel(
         }
         val clientId = _settings.value.oneDriveClientId.ifBlank { "202e1c94-b152-4751-b0e6-a2a4b8eb4901" }
 
+        val tenant = _settings.value.oneDriveTenant.ifBlank { "common" }
+
         _showOneDriveAuthDialog.value = true
         _oneDriveAuthStatus.value = "Initializing browser login..."
 
@@ -314,6 +312,7 @@ class AdminSettingsViewModel(
         oneDriveAuthJob = viewModelScope.launch {
             val tokenRes = service.startPkceAuth(
                 clientId = clientId,
+                tenant = tenant,
                 onStatusUpdate = { status -> _oneDriveAuthStatus.value = status }
             )
 

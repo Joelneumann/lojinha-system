@@ -5,9 +5,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.AppDatabase_Impl
 import de.joelneumann.lojinha.data.entity.*
-import de.joelneumann.lojinha.domain.model.Barcode
-import de.joelneumann.lojinha.domain.model.TransactionItem
-import de.joelneumann.lojinha.domain.model.UnitType
+import de.joelneumann.lojinha.domain.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import java.io.File
@@ -266,5 +264,139 @@ class BackupRestoreServiceJvmTest {
         val users = db.userDao().getAllUsers()
         assertEquals(1, users.size, "Database should remain untouched on restore failure")
         assertEquals("Charlie", users.first().name)
+    }
+
+    @Test
+    fun testParseCsvRecordsWithBomQuotesAndMultiline() {
+        val rawCsv = "\uFEFFid,name,description\n" +
+                "1,\"Item with, comma\",\"Simple desc\"\n" +
+                "2,\"Item with \"\"escaped quotes\"\"\",\"Line 1\nLine 2\"\n" +
+                "3,Normal,\"\"\n"
+
+        val records = service.parseCsvRecords(rawCsv)
+        assertEquals(4, records.size)
+
+        // Header
+        assertEquals(listOf("id", "name", "description"), records[0])
+
+        // Row 1: comma inside quotes
+        assertEquals(listOf("1", "Item with, comma", "Simple desc"), records[1])
+
+        // Row 2: escaped quotes and multiline
+        assertEquals(listOf("2", "Item with \"escaped quotes\"", "Line 1\nLine 2"), records[2])
+
+        // Row 3: empty quoted string
+        assertEquals(listOf("3", "Normal", ""), records[3])
+    }
+
+    @Test
+    fun testPerformCsvBackupIncludesItemsInTransactions() = runTest {
+        // Seed user and transaction with items
+        val user = UserEntity("u-csv", "CsvUser", 1000L, "en", "NONE", null, null, null, true)
+        db.userDao().insertOrUpdateUser(user)
+
+        val txItem1 = TransactionItem("p1", "Item One", UnitType.PIECE, 2L, 400L)
+        val txItem2 = TransactionItem("p2", "Item Two", UnitType.WEIGHT, 150L, 300L)
+        val transaction = TransactionEntity(
+            id = "tx-csv-1",
+            userId = "u-csv",
+            userNameSnapshot = "CsvUser",
+            timestamp = 1700000000000L,
+            type = "PURCHASE",
+            referenceTransactionId = null,
+            note = "Testing items backup",
+            totalAmount = 700L,
+            items = listOf(txItem1, txItem2),
+            userBalanceBefore = 1000L,
+            userBalanceAfter = 300L
+        )
+        db.transactionDao().insertTransaction(transaction)
+
+        val csvFolder = service.performCsvBackup(tempDir)
+        assertTrue(csvFolder.exists() && csvFolder.isDirectory)
+
+        val txFile = File(csvFolder, "transactions.csv")
+        assertTrue(txFile.exists(), "transactions.csv should exist")
+
+        val records = service.parseCsvRecords(txFile.readText())
+        assertTrue(records.size >= 2, "Should contain header and at least 1 record")
+
+        val header = records[0]
+        val itemsIndex = header.indexOf("items")
+        assertTrue(itemsIndex >= 0, "transactions.csv header must contain 'items' column")
+
+        val row = records[1]
+        val itemsValue = row[itemsIndex]
+        assertTrue(itemsValue.contains("Item One"), "items column should contain 'Item One'")
+        assertTrue(itemsValue.contains("Item Two"), "items column should contain 'Item Two'")
+    }
+
+    @Test
+    fun testExecuteRoutineBackupReturnsAllFiles() = runTest {
+        val routineBoth = BackupRoutine(
+            id = "b-both",
+            name = "Test Both",
+            isEnabled = true,
+            type = BackupType.LOCAL,
+            fileType = BackupFileType.BOTH,
+            writeMode = BackupWriteMode.CREATE_NEW_FILE,
+            scheduleConfig = BackupScheduleConfig.Timed("00:00"),
+            backupLocationPath = tempDir.absolutePath,
+            lastBackupTimestamp = 0L
+        )
+
+        val filesBoth = service.executeRoutineBackup(routineBoth)
+        assertEquals(2, filesBoth.size, "BOTH should return both DB file and CSV folder")
+        assertTrue(filesBoth.any { it.isFile && it.name.endsWith(".db") }, "Must include a .db file")
+        assertTrue(filesBoth.any { it.isDirectory && it.name.startsWith("lojinha_csv_export_") }, "Must include CSV folder")
+
+        val routineDb = routineBoth.copy(id = "b-db", fileType = BackupFileType.DB)
+        val filesDb = service.executeRoutineBackup(routineDb)
+        assertEquals(1, filesDb.size)
+        assertTrue(filesDb[0].isFile && filesDb[0].name.endsWith(".db"))
+
+        val routineCsv = routineBoth.copy(id = "b-csv", fileType = BackupFileType.CSV)
+        val filesCsv = service.executeRoutineBackup(routineCsv)
+        assertEquals(1, filesCsv.size)
+        assertTrue(filesCsv[0].isDirectory && filesCsv[0].name.startsWith("lojinha_csv_export_"))
+    }
+
+    @Test
+    fun testImportProductsAndUsersFromCsv() = runTest {
+        // Test Product import with BOM and quoted commas
+        val productsCsvFile = File(tempDir, "products_import.csv")
+        productsCsvFile.writeText(
+            "\uFEFFid,name,barcodes,basePrice,unitType,stockQuantity,customMarkupPercent,isActive\n" +
+            "p-imp-1,\"Chocolate, Dark\",123456789;Dark Bar,150,PIECE,20,0.0,true\n" +
+            "p-imp-2,\"Coffee \"\"Special\"\" Beans\",987654321,500,WEIGHT,1000,10.0,true\n"
+        )
+
+        val productResult = service.importProductsFromCsv(productsCsvFile)
+        assertEquals(2, productResult.addedCount)
+        assertEquals(2, productResult.totalProcessed)
+        assertEquals(0, productResult.errors.size)
+
+        val importedProducts = db.productDao().getAllProducts().associateBy { it.id }
+        assertEquals("Chocolate, Dark", importedProducts["p-imp-1"]?.name)
+        assertEquals("Coffee \"Special\" Beans", importedProducts["p-imp-2"]?.name)
+        assertEquals(1000L, importedProducts["p-imp-2"]?.stockQuantity)
+
+        // Test User import with BOM and PIN/barcode
+        val usersCsvFile = File(tempDir, "users_import.csv")
+        usersCsvFile.writeText(
+            "\uFEFFid,name,balance,language,secondaryCurrency,pin,userBarcode,isActive\n" +
+            "u-imp-1,\"Doe, Jane\",2500,en,USD,4321,USR999,true\n"
+        )
+
+        val userResult = service.importUsersFromCsv(usersCsvFile)
+        assertEquals(1, userResult.addedCount)
+        assertEquals(1, userResult.totalProcessed)
+        assertEquals(0, userResult.errors.size)
+
+        val importedUser = db.userDao().getUserById("u-imp-1")
+        assertNotNull(importedUser)
+        assertEquals("Doe, Jane", importedUser.name)
+        assertEquals(2500L, importedUser.balance)
+        assertEquals("4321", importedUser.pin)
     }
 }

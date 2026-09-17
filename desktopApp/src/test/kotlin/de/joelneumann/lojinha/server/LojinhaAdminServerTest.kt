@@ -25,7 +25,7 @@ class LojinhaAdminServerTest {
     private val fakeSettingsRepo = object : SettingsRepository {
         override suspend fun getSettings(): SystemSettings = dummySettings
         override fun getSettingsFlow(): Flow<SystemSettings> = flowOf(dummySettings)
-        override suspend fun updateSettings(settings: SystemSettings) {}
+        override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {}
     }
 
     private val fakeProductRepo = object : ProductRepository {

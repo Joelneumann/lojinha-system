@@ -29,48 +29,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-data class BackupFileInfo(
-    val file: File,
-    val name: String,
-    val format: String, // "DB" or "CSV"
-    val sizeBytes: Long,
-    val lastModifiedTimestamp: Long
-)
-
 class BackupRestoreService(
     private val db: AppDatabase,
     private val dbFile: File = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
 ) {
-
-    suspend fun listBackupsInDirectory(dirPath: String): List<BackupFileInfo> = withContext(Dispatchers.IO) {
-        if (dirPath.isBlank()) return@withContext emptyList()
-        val dir = File(dirPath)
-        if (!dir.exists() || !dir.isDirectory) return@withContext emptyList()
-
-        val files = dir.listFiles() ?: return@withContext emptyList()
-        files.filter { f ->
-            (f.isFile && f.name.endsWith(".db")) || (f.isDirectory && f.name.startsWith("lojinha_csv_export_"))
-        }.map { f ->
-            val format = if (f.isFile && f.name.endsWith(".db")) "DB" else "CSV"
-            val size = if (f.isFile) f.length() else (f.listFiles()?.sumOf { it.length() } ?: 0L)
-            BackupFileInfo(
-                file = f,
-                name = f.name,
-                format = format,
-                sizeBytes = size,
-                lastModifiedTimestamp = f.lastModified()
-            )
-        }.sortedByDescending { it.lastModifiedTimestamp }
-    }
-
-    suspend fun deleteBackup(file: File): Boolean = withContext(Dispatchers.IO) {
-        if (!file.exists()) return@withContext false
-        if (file.isDirectory) {
-            file.deleteRecursively()
-        } else {
-            file.delete()
-        }
-    }
 
     private fun getTimestampString(): String {
         val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
@@ -78,6 +40,9 @@ class BackupRestoreService(
     }
 
     suspend fun performDbSnapshot(targetFile: File): File = withContext(Dispatchers.IO) {
+        if (!dbFile.exists()) {
+            db.useWriterConnection { }
+        }
         require(dbFile.exists()) { "Database file not found at ${dbFile.absolutePath}" }
 
         // SQLite VACUUM INTO requires target file to not exist prior to command execution
@@ -120,16 +85,16 @@ class BackupRestoreService(
         performDbSnapshot(targetFile)
     }
 
-    suspend fun executeRoutineBackup(routine: de.joelneumann.lojinha.domain.model.BackupRoutine): File = withContext(Dispatchers.IO) {
+    suspend fun executeRoutineBackup(routine: de.joelneumann.lojinha.domain.model.BackupRoutine): List<File> = withContext(Dispatchers.IO) {
         val dir = File(routine.backupLocationPath)
         require(dir.exists() && dir.isDirectory) { "Target directory does not exist: ${dir.absolutePath}" }
         when (routine.fileType) {
-            de.joelneumann.lojinha.domain.model.BackupFileType.DB -> performDbBackup(dir, routine.writeMode)
-            de.joelneumann.lojinha.domain.model.BackupFileType.CSV -> performCsvBackup(dir, routine.writeMode)
+            de.joelneumann.lojinha.domain.model.BackupFileType.DB -> listOf(performDbBackup(dir, routine.writeMode))
+            de.joelneumann.lojinha.domain.model.BackupFileType.CSV -> listOf(performCsvBackup(dir, routine.writeMode))
             de.joelneumann.lojinha.domain.model.BackupFileType.BOTH -> {
                 val dbResult = performDbBackup(dir, routine.writeMode)
-                performCsvBackup(dir, routine.writeMode)
-                dbResult
+                val csvResult = performCsvBackup(dir, routine.writeMode)
+                listOf(dbResult, csvResult)
             }
         }
     }
@@ -149,6 +114,8 @@ class BackupRestoreService(
             exportFolder.deleteRecursively()
         }
         exportFolder.mkdirs()
+
+        val converters = Converters()
 
         // 1. Export Products
         val products = db.productDao().getAllProducts().map { it.toDomain() }
@@ -194,8 +161,9 @@ class BackupRestoreService(
         // 3. Export Transactions
         val transactions = db.transactionDao().getAllTransactions().map { it.toDomain() }
         val txCsv = File(exportFolder, "transactions.csv")
-        val txLines = mutableListOf("id,userId,userNameSnapshot,timestamp,type,referenceTransactionId,note,totalAmount,itemCount,userBalanceBefore,userBalanceAfter")
+        val txLines = mutableListOf("id,userId,userNameSnapshot,timestamp,type,referenceTransactionId,note,totalAmount,itemCount,items,userBalanceBefore,userBalanceAfter")
         transactions.forEach { t ->
+            val itemsSerialized = converters.fromTransactionItemList(t.items)
             val line = listOf(
                 escapeCsv(t.id),
                 escapeCsv(t.userId),
@@ -206,6 +174,7 @@ class BackupRestoreService(
                 escapeCsv(t.note ?: ""),
                 t.totalAmount.toString(),
                 t.items.size.toString(),
+                escapeCsv(itemsSerialized),
                 t.userBalanceBefore?.toString() ?: "",
                 t.userBalanceAfter?.toString() ?: ""
             ).joinToString(",")
@@ -605,12 +574,12 @@ class BackupRestoreService(
 
     suspend fun importProductsFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
         require(csvFile.exists() && csvFile.isFile) { "Product CSV file does not exist: ${csvFile.absolutePath}" }
-        val lines = csvFile.readLines().map { it.trim() }.filter { it.isNotEmpty() }
-        if (lines.isEmpty()) {
+        val records = parseCsvRecords(csvFile.readText())
+        if (records.isEmpty()) {
             return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("CSV file is empty."))
         }
 
-        val header = parseCsvLine(lines[0])
+        val header = records[0].map { it.trim().removePrefix("\uFEFF") }
         val idIdx = header.indexOf("id")
         val nameIdx = header.indexOf("name")
         val barcodesIdx = header.indexOf("barcodes")
@@ -637,9 +606,10 @@ class BackupRestoreService(
         var strippedBarcodesCount = 0
         val warnings = mutableListOf<String>()
         val errors = mutableListOf<String>()
+        val productsToInsert = mutableListOf<ProductEntity>()
 
-        for (i in 1 until lines.size) {
-            val cols = parseCsvLine(lines[i])
+        for (i in 1 until records.size) {
+            val cols = records[i]
             if (cols.size <= maxOf(nameIdx, priceIdx)) {
                 warnings.add("Row ${i + 1}: Skipped due to missing columns.")
                 continue
@@ -707,10 +677,16 @@ class BackupRestoreService(
                 isActive = isActive
             )
 
-            if (!dryRun) {
-                db.productDao().insertOrUpdateProduct(productEntity)
-            }
+            productsToInsert.add(productEntity)
             if (isExisting) updatedCount++ else addedCount++
+        }
+
+        if (!dryRun && productsToInsert.isNotEmpty()) {
+            db.useWriterConnection { transactor ->
+                transactor.immediateTransaction {
+                    productsToInsert.forEach { db.productDao().insertOrUpdateProduct(it) }
+                }
+            }
         }
 
         CsvImportResult(
@@ -725,12 +701,12 @@ class BackupRestoreService(
 
     suspend fun importUsersFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
         require(csvFile.exists() && csvFile.isFile) { "User CSV file does not exist: ${csvFile.absolutePath}" }
-        val lines = csvFile.readLines().map { it.trim() }.filter { it.isNotEmpty() }
-        if (lines.isEmpty()) {
+        val records = parseCsvRecords(csvFile.readText())
+        if (records.isEmpty()) {
             return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("CSV file is empty."))
         }
 
-        val header = parseCsvLine(lines[0])
+        val header = records[0].map { it.trim().removePrefix("\uFEFF") }
         val idIdx = header.indexOf("id")
         val nameIdx = header.indexOf("name")
         val balanceIdx = header.indexOf("balance")
@@ -757,9 +733,10 @@ class BackupRestoreService(
         var strippedBarcodesCount = 0
         val warnings = mutableListOf<String>()
         val errors = mutableListOf<String>()
+        val usersToInsert = mutableListOf<UserEntity>()
 
-        for (i in 1 until lines.size) {
-            val cols = parseCsvLine(lines[i])
+        for (i in 1 until records.size) {
+            val cols = records[i]
             if (cols.size <= nameIdx) {
                 warnings.add("Row ${i + 1}: Skipped due to missing columns.")
                 continue
@@ -819,10 +796,16 @@ class BackupRestoreService(
                 isActive = isActive
             )
 
-            if (!dryRun) {
-                db.userDao().insertOrUpdateUser(userEntity)
-            }
+            usersToInsert.add(userEntity)
             if (isExisting) updatedCount++ else addedCount++
+        }
+
+        if (!dryRun && usersToInsert.isNotEmpty()) {
+            db.useWriterConnection { transactor ->
+                transactor.immediateTransaction {
+                    usersToInsert.forEach { db.userDao().insertOrUpdateUser(it) }
+                }
+            }
         }
 
         CsvImportResult(
@@ -836,36 +819,64 @@ class BackupRestoreService(
     }
 
     private fun escapeCsv(value: String): String {
-        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
             val escaped = value.replace("\"", "\"\"")
             return "\"$escaped\""
         }
         return value
     }
 
-    private fun parseCsvLine(line: String): List<String> {
-        val tokens = mutableListOf<String>()
+    fun parseCsvRecords(csvText: String): List<List<String>> {
+        val cleanText = csvText.removePrefix("\uFEFF")
+        val records = mutableListOf<List<String>>()
+        val currentRecord = mutableListOf<String>()
+        val currentField = StringBuilder()
         var inQuotes = false
-        val sb = StringBuilder()
         var i = 0
-        while (i < line.length) {
-            val c = line[i]
-            if (c == '"') {
-                if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
-                    sb.append('"')
-                    i++
-                } else {
-                    inQuotes = !inQuotes
+        val len = cleanText.length
+
+        while (i < len) {
+            val c = cleanText[i]
+            when {
+                c == '"' -> {
+                    if (inQuotes && i + 1 < len && cleanText[i + 1] == '"') {
+                        currentField.append('"')
+                        i++
+                    } else {
+                        inQuotes = !inQuotes
+                    }
                 }
-            } else if (c == ',' && !inQuotes) {
-                tokens.add(sb.toString())
-                sb.clear()
-            } else {
-                sb.append(c)
+                c == ',' && !inQuotes -> {
+                    currentRecord.add(currentField.toString())
+                    currentField.clear()
+                }
+                (c == '\r' || c == '\n') && !inQuotes -> {
+                    if (c == '\r' && i + 1 < len && cleanText[i + 1] == '\n') {
+                        i++
+                    }
+                    currentRecord.add(currentField.toString())
+                    currentField.clear()
+                    if (currentRecord.size > 1 || (currentRecord.isNotEmpty() && currentRecord[0].isNotEmpty())) {
+                        records.add(currentRecord.toList())
+                    }
+                    currentRecord.clear()
+                }
+                else -> {
+                    currentField.append(c)
+                }
             }
             i++
         }
-        tokens.add(sb.toString())
-        return tokens
+        if (currentField.isNotEmpty() || currentRecord.isNotEmpty()) {
+            currentRecord.add(currentField.toString())
+            if (currentRecord.size > 1 || (currentRecord.isNotEmpty() && currentRecord[0].isNotEmpty())) {
+                records.add(currentRecord.toList())
+            }
+        }
+        return records
+    }
+
+    fun parseCsvLine(line: String): List<String> {
+        return parseCsvRecords(line).firstOrNull() ?: emptyList()
     }
 }
