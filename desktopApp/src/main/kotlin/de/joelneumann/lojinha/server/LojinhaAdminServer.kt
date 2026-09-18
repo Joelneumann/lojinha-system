@@ -89,7 +89,7 @@ class LojinhaAdminServer(
                         val req = call.receive<LoginRequest>()
                         val settings = settingsRepository.getSettings()
                         val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
-                        val matches = safeEquals(req.password, expectedPassword)
+                        val matches = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(req.password, expectedPassword)
 
                         println("[AUTH] Admin Login Attempt: success=$matches")
                         if (matches) {
@@ -445,7 +445,7 @@ class LojinhaAdminServer(
         if (authPassword != null) {
             val settings = settingsRepository.getSettings()
             val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
-            if (safeEquals(authPassword, expectedPassword)) {
+            if (de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(authPassword, expectedPassword)) {
                 return true
             }
         }

@@ -37,7 +37,7 @@ class FakeUserRepository(initialUsers: List<User> = emptyList()) : UserRepositor
 class UserSelectionViewModelTest {
 
     private val userAlice = User(id = "1", name = "Alice", pin = null)
-    private val userBobWithPin = User(id = "2", name = "Bob", pin = "1234")
+    private val userBobWithPin = User(id = "2", name = "Bob", pin = de.joelneumann.lojinha.security.PasswordHasher.hash("1234"))
     private val userCarlos = User(id = "3", name = "Carlos", pin = null)
     private val userCarlosEduardo = User(id = "4", name = "Carlos Eduardo", pin = null)
     private val userJoao = User(id = "5", name = "João", pin = null)
@@ -248,13 +248,14 @@ class UserSelectionViewModelTest {
         vm.updateAdminPassword("secret")
         assertEquals("secret", vm.adminPasswordInput.value)
 
+        val expectedHash = de.joelneumann.lojinha.security.PasswordHasher.hash("secret")
         var adminNavigated = false
         vm.submitAdminPassword("wrongPass") { adminNavigated = true }
         assertFalse(adminNavigated)
         assertEquals("admin_password_incorrect", vm.adminPasswordError.value)
         assertTrue(vm.showAdminAuthDialog.value)
 
-        vm.submitAdminPassword("secret") { adminNavigated = true }
+        vm.submitAdminPassword(expectedHash) { adminNavigated = true }
         assertTrue(adminNavigated)
         assertFalse(vm.showAdminAuthDialog.value)
         assertEquals("", vm.adminPasswordInput.value)

@@ -148,7 +148,7 @@ class BackupRestoreService(
                 u.balance.toString(),
                 u.language.code,
                 u.secondaryCurrency.name,
-                escapeCsv(u.pin ?: ""),
+                escapeCsv(u.pin?.let { if (de.joelneumann.lojinha.security.PasswordHasher.isHash(it)) it else de.joelneumann.lojinha.security.PasswordHasher.hash(it) } ?: ""),
                 escapeCsv(u.userBarcode ?: ""),
                 escapeCsv(u.userBarcodeNumber ?: ""),
                 u.isActive.toString(),
@@ -258,7 +258,10 @@ class BackupRestoreService(
                             balance = stmt.getLong(2),
                             language = stmt.getText(3),
                             secondaryCurrency = stmt.getText(4),
-                            pin = if (stmt.isNull(5)) null else stmt.getText(5),
+                            pin = if (stmt.isNull(5)) null else {
+                                val raw = stmt.getText(5)
+                                if (raw.isBlank()) null else if (de.joelneumann.lojinha.security.PasswordHasher.isHash(raw)) raw else de.joelneumann.lojinha.security.PasswordHasher.hash(raw.trim())
+                            },
                             userBarcode = if (stmt.isNull(6)) null else stmt.getText(6),
                             userBarcodeNumber = if (stmt.isNull(7)) null else stmt.getText(7),
                             isActive = stmt.getLong(8) != 0L,
@@ -381,7 +384,10 @@ class BackupRestoreService(
                     if (stmt.step()) {
                         backupSettings = SettingsEntity(
                             id = stmt.getLong(0).toInt(),
-                            adminPasswordHash = stmt.getText(1),
+                            adminPasswordHash = {
+                                val raw = stmt.getText(1)
+                                if (de.joelneumann.lojinha.security.PasswordHasher.isHash(raw)) raw else de.joelneumann.lojinha.security.PasswordHasher.hash(raw)
+                            }(),
                             globalMarkupPercent = stmt.getDouble(2),
                             usdExchangeRate = stmt.getDouble(3),
                             eurExchangeRate = stmt.getDouble(4),
@@ -561,7 +567,7 @@ class BackupRestoreService(
                 // Reset settings to initial defaults
                 val defaultSettings = SettingsEntity(
                     id = 1,
-                    adminPasswordHash = "admin",
+                    adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin"),
                     globalMarkupPercent = 0.0,
                     usdExchangeRate = 0.18,
                     eurExchangeRate = 0.16,
@@ -749,7 +755,10 @@ class BackupRestoreService(
 
             val langStr = if (langIdx != -1 && langIdx < cols.size) cols[langIdx].trim() else Language.DE.code
             val secCurrStr = if (secCurrIdx != -1 && secCurrIdx < cols.size) cols[secCurrIdx].trim() else SecondaryCurrency.NONE.name
-            val pin = if (pinIdx != -1 && pinIdx < cols.size && cols[pinIdx].trim().isNotEmpty()) cols[pinIdx].trim() else null
+            val rawPin = if (pinIdx != -1 && pinIdx < cols.size && cols[pinIdx].trim().isNotEmpty()) cols[pinIdx].trim() else null
+            val pin = rawPin?.let {
+                if (de.joelneumann.lojinha.security.PasswordHasher.isHash(it)) it else de.joelneumann.lojinha.security.PasswordHasher.hash(it)
+            }
 
             val activeStr = if (activeIdx != -1 && activeIdx < cols.size) cols[activeIdx].trim() else "true"
             val isActive = activeStr.toBooleanStrictOrNull() ?: true
@@ -784,6 +793,16 @@ class BackupRestoreService(
                 }
             }
 
+            val effectiveBarcode = if (finalUserBarcode != null && finalUserBarcodeNumber != null) {
+                finalUserBarcode to finalUserBarcodeNumber
+            } else if (finalUserBarcode != null) {
+                finalUserBarcode to finalUserBarcode
+            } else if (finalUserBarcodeNumber != null) {
+                finalUserBarcodeNumber to finalUserBarcodeNumber
+            } else {
+                null to null
+            }
+
             val userEntity = UserEntity(
                 id = userId,
                 name = name,
@@ -791,8 +810,8 @@ class BackupRestoreService(
                 language = langStr,
                 secondaryCurrency = secCurrStr,
                 pin = pin,
-                userBarcode = finalUserBarcode,
-                userBarcodeNumber = finalUserBarcodeNumber,
+                userBarcode = effectiveBarcode.first,
+                userBarcodeNumber = effectiveBarcode.second,
                 isActive = isActive
             )
 

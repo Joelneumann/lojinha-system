@@ -683,25 +683,33 @@ class DomainAndRulesTest {
 
     @Test
     fun testAdminPasswordBypassesUserPin() {
-        val userPin = "1234"
-        val customAdminPass = "adminSecret"
+        val userPinRaw = "1234"
+        val customAdminPassRaw = "adminSecret"
+        val userPinHash = de.joelneumann.lojinha.security.PasswordHasher.hash(userPinRaw)
+        val customAdminPassHash = de.joelneumann.lojinha.security.PasswordHasher.hash(customAdminPassRaw)
 
+        // Test with SHA-256 hashes (modern storage)
         // 1. Wrong PIN fails
-        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "9999", customAdminPass))
+        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "9999", customAdminPassHash))
 
         // 2. User's own PIN succeeds
-        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "1234", customAdminPass))
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "1234", customAdminPassHash))
 
         // 3. Admin password bypasses user PIN
-        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, customAdminPass, customAdminPass))
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, customAdminPassRaw, customAdminPassHash))
 
-        // 4. Default admin password ("admin") bypasses user PIN when adminPassword is empty or default
-        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "admin", ""))
-        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "admin", "admin"))
+        // 4. Default admin password ("admin") bypasses user PIN when adminPassword is empty or default hash
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "admin", ""))
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "admin", de.joelneumann.lojinha.security.PasswordHasher.hash("admin")))
 
         // 5. Old/wrong admin password does not bypass
-        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "admin", customAdminPass))
-        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPin, "wrongSecret", customAdminPass))
+        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "admin", customAdminPassHash))
+        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "wrongSecret", customAdminPassHash))
+
+        // Test backward-compatibility with legacy unhashed plain text storage
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinRaw, "1234", customAdminPassRaw))
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinRaw, customAdminPassRaw, customAdminPassRaw))
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinRaw, "admin", "admin"))
     }
 
     @Test

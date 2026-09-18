@@ -381,6 +381,7 @@ object PortugueseStrings : AppStrings {
     override val noPinSet = "Nenhum PIN definido"
     override val hide = "Ocultar"
     override val pinPlaceholder = "ex: 1234 (deixe em branco para nenhum)"
+    override val enterNewPinPlaceholder = "Digite o novo PIN (deixe em branco para manter o atual)"
     override val noBarcodeAssigned = "Nenhum código de barras atribuído"
 
     override val step1DbRestoreTitle = "Etapa 1 de 2: Confirmar Restauração do Banco de Dados"

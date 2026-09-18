@@ -163,7 +163,7 @@ fun AdminSettingsTabScreen(
                     onClick = {
                         if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid) {
                             val updatedSettings = settings.copy(
-                                adminPasswordHash = if (newPassword.isNotBlank()) newPassword else settings.adminPasswordHash,
+                                adminPasswordHash = if (newPassword.isNotBlank()) de.joelneumann.lojinha.security.PasswordHasher.hash(newPassword) else settings.adminPasswordHash,
                                 globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
                                 usdExchangeRate = parsedUsdRate ?: settings.usdExchangeRate,
                                 eurExchangeRate = parsedEurRate ?: settings.eurExchangeRate,

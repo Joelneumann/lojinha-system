@@ -71,8 +71,8 @@ fun UserSettingsModalDialog(
         dialogFocusRequester.safeRequestFocus()
     }
 
-    val newPin = if (pinInput.isBlank()) null else pinInput.trim()
-    val hasChanges = (newPin != user.pin) ||
+    val isPinChanged = pinInput.isNotBlank()
+    val hasChanges = isPinChanged ||
             (selectedLanguage != user.language) ||
             (selectedSecondaryCurrency != user.secondaryCurrency) ||
             (selectedAvatar != user.avatar)
@@ -304,7 +304,13 @@ fun UserSettingsModalDialog(
                 OutlinedTextField(
                     value = pinInput,
                     onValueChange = onPinInputChange,
-                    placeholder = { Text(strings.pinPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
+                    placeholder = {
+                        Text(
+                            if (user.pin != null) strings.enterNewPinPlaceholder else strings.pinPlaceholder,
+                            fontSize = 13.sp,
+                            color = TextSecondaryMuted
+                        )
+                    },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp),
                     visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {

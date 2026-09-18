@@ -19,7 +19,7 @@ class LojinhaAdminServerTest {
     private val client = HttpClient.newHttpClient()
 
     private val dummySettings = SystemSettings(
-        adminPasswordHash = "secretPass123"
+        adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("secretPass123")
     )
 
     private val fakeSettingsRepo = object : SettingsRepository {

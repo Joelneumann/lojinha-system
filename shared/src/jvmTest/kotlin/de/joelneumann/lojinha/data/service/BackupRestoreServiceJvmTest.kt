@@ -243,7 +243,7 @@ class BackupRestoreServiceJvmTest {
         // Verify default settings reset
         val settings = db.settingsDao().getSettings()
         assertNotNull(settings)
-        assertEquals("admin", settings.adminPasswordHash)
+        assertEquals(de.joelneumann.lojinha.security.PasswordHasher.hash("admin"), settings.adminPasswordHash)
     }
 
     @Test
@@ -397,6 +397,27 @@ class BackupRestoreServiceJvmTest {
         assertNotNull(importedUser)
         assertEquals("Doe, Jane", importedUser.name)
         assertEquals(2500L, importedUser.balance)
-        assertEquals("4321", importedUser.pin)
+        val expectedHash = de.joelneumann.lojinha.security.PasswordHasher.hash("4321")
+        assertEquals(expectedHash, importedUser.pin)
+
+        // Test performCsvBackup ensures users.csv contains hash and NOT plain text
+        val exportedFolder = service.performCsvBackup(tempDir, BackupWriteMode.CREATE_NEW_FILE)
+        val exportedUsersCsv = File(exportedFolder, "users.csv")
+        assertTrue(exportedUsersCsv.exists())
+        val csvText = exportedUsersCsv.readText()
+        assertTrue(csvText.contains(expectedHash), "Exported CSV must contain hashed PIN")
+        assertFalse(csvText.contains(",4321,"), "Exported CSV must not contain plain text PIN")
+
+        // Test User import with already hashed PIN is preserved
+        val usersCsvFileHashed = File(tempDir, "users_import_hashed.csv")
+        usersCsvFileHashed.writeText(
+            "id,name,balance,language,secondaryCurrency,pin,userBarcode,isActive\n" +
+            "u-imp-2,\"Smith, John\",1000,en,USD,$expectedHash,USR888,true\n"
+        )
+        val userResultHashed = service.importUsersFromCsv(usersCsvFileHashed)
+        assertEquals(1, userResultHashed.addedCount)
+        val importedUserHashed = db.userDao().getUserById("u-imp-2")
+        assertNotNull(importedUserHashed)
+        assertEquals(expectedHash, importedUserHashed.pin, "Pre-hashed PIN must be preserved as-is without double-hashing")
     }
 }

@@ -136,8 +136,9 @@ class UserSelectionViewModel(
 
     companion object {
         fun verifyPinOrAdminBypass(userPin: String?, inputPin: String, adminPassword: String = ""): Boolean {
-            val effectiveAdminPass = if (adminPassword.isNotBlank()) adminPassword else "admin"
-            return (userPin != null && userPin == inputPin) || inputPin == effectiveAdminPass
+            val isUserPinMatch = userPin != null && de.joelneumann.lojinha.security.PasswordHasher.verify(inputPin, userPin)
+            val isAdminBypass = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPin, adminPassword)
+            return isUserPinMatch || isAdminBypass
         }
     }
 
@@ -166,7 +167,7 @@ class UserSelectionViewModel(
     }
 
     fun submitAdminPassword(expectedPassword: String, onAdminAuthSuccess: () -> Unit) {
-        if (_adminPasswordInput.value == expectedPassword) {
+        if (de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(_adminPasswordInput.value, expectedPassword)) {
             closeAdminAuthDialog()
             onAdminAuthSuccess()
         } else {

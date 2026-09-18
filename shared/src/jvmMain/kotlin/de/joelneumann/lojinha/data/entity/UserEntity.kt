@@ -26,23 +26,34 @@ data class UserEntity(
     @ColumnInfo(defaultValue = "'#1E293B'") val avatarColor: String = "#1E293B"
 ) {
 
-    fun toDomain(): User = User(
-        id = id,
-        name = name,
-        balance = balance,
-        language = Language.fromCode(language),
-        secondaryCurrency = try { SecondaryCurrency.valueOf(secondaryCurrency) } catch (e: Exception) { SecondaryCurrency.NONE },
-        pin = pin,
-        userBarcode = userBarcode,
-        userBarcodeNumber = userBarcodeNumber,
-        isActive = isActive,
-        isDeleted = isDeleted,
-        avatar = UserAvatarConfig(
-            type = try { AvatarType.valueOf(avatarType) } catch (e: Exception) { AvatarType.INITIALS },
-            emoji = avatarEmoji,
-            colorHex = avatarColor
+    fun toDomain(): User {
+        val safeBarcode = if (userBarcode != null && userBarcodeNumber != null) {
+            userBarcode to userBarcodeNumber
+        } else if (userBarcode != null) {
+            userBarcode to userBarcode
+        } else if (userBarcodeNumber != null) {
+            userBarcodeNumber to userBarcodeNumber
+        } else {
+            null to null
+        }
+        return User(
+            id = id,
+            name = name,
+            balance = balance,
+            language = Language.fromCode(language),
+            secondaryCurrency = try { SecondaryCurrency.valueOf(secondaryCurrency) } catch (e: Exception) { SecondaryCurrency.NONE },
+            pin = pin,
+            userBarcode = safeBarcode.first,
+            userBarcodeNumber = safeBarcode.second,
+            isActive = isActive,
+            isDeleted = isDeleted,
+            avatar = UserAvatarConfig(
+                type = try { AvatarType.valueOf(avatarType) } catch (e: Exception) { AvatarType.INITIALS },
+                emoji = avatarEmoji,
+                colorHex = avatarColor
+            )
         )
-    )
+    }
 
     companion object {
         fun fromDomain(user: User): UserEntity = UserEntity(
