@@ -22,8 +22,10 @@ class RoomSettingsRepositoryImpl(
         return settingsDao.getSettings()?.toDomain() ?: SystemSettings()
     }
 
-    override suspend fun updateSettings(settings: SystemSettings) {
+    override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {
         settingsDao.insertOrUpdateSettings(SettingsEntity.fromDomain(settings))
-        onDataChanged?.invoke()
+        if (notifyDataChanged) {
+            onDataChanged?.invoke()
+        }
     }
 }

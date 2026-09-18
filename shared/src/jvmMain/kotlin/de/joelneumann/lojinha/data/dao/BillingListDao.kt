@@ -33,4 +33,16 @@ interface BillingListDao {
 
     @Query("DELETE FROM billing_list_users WHERE listId = :listId")
     suspend fun removeAllUsersFromList(listId: String)
+
+    @Query("SELECT * FROM billing_lists")
+    suspend fun getAllBillingLists(): List<BillingListEntity>
+
+    @Query("SELECT * FROM billing_list_users")
+    suspend fun getAllBillingListUsers(): List<BillingListUserEntity>
+
+    @Query("DELETE FROM billing_lists")
+    suspend fun deleteAllBillingLists()
+
+    @Query("DELETE FROM billing_list_users")
+    suspend fun deleteAllBillingListUsers()
 }

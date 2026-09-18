@@ -49,11 +49,6 @@ fun AdminSettingsTabScreen(
     var inactivityTimeout by remember(settings) { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
 
     var backupLocation by remember(settings) { mutableStateOf(settings.backupLocationPath) }
-    var autoBackupEnabled by remember(settings) { mutableStateOf(settings.autoBackupEnabled) }
-    var autoBackupFormat by remember(settings) { mutableStateOf(settings.autoBackupFormat) }
-    var autoBackupScheduleType by remember(settings) { mutableStateOf(settings.autoBackupScheduleType) }
-    var autoBackupTime by remember(settings) { mutableStateOf(settings.autoBackupTime) }
-    var autoBackupIntervalHours by remember(settings) { mutableStateOf(settings.autoBackupIntervalHours.toString()) }
     var supportEmail by remember(settings) { mutableStateOf(settings.supportEmail ?: "") }
 
     LaunchedEffect(settings) {
@@ -64,11 +59,6 @@ fun AdminSettingsTabScreen(
         eurRate = settings.eurExchangeRate.toString()
         inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
         backupLocation = settings.backupLocationPath
-        autoBackupEnabled = settings.autoBackupEnabled
-        autoBackupFormat = settings.autoBackupFormat
-        autoBackupScheduleType = settings.autoBackupScheduleType
-        autoBackupTime = settings.autoBackupTime
-        autoBackupIntervalHours = settings.autoBackupIntervalHours.toString()
         supportEmail = settings.supportEmail ?: ""
     }
 
@@ -87,7 +77,7 @@ fun AdminSettingsTabScreen(
 
     val hasFieldChanges = remember(
         settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout,
-        backupLocation, autoBackupEnabled, autoBackupFormat, autoBackupScheduleType, autoBackupTime, autoBackupIntervalHours, supportEmail
+        backupLocation, supportEmail
     ) {
         newPassword.isNotEmpty() ||
                 globalMarkup != settings.globalMarkupPercent.toString() ||
@@ -95,12 +85,7 @@ fun AdminSettingsTabScreen(
                 eurRate != settings.eurExchangeRate.toString() ||
                 inactivityTimeout != settings.inactivityTimeoutMinutes.toString() ||
                 backupLocation != settings.backupLocationPath ||
-                supportEmail != (settings.supportEmail ?: "") ||
-                autoBackupEnabled != settings.autoBackupEnabled ||
-                autoBackupFormat != settings.autoBackupFormat ||
-                autoBackupScheduleType != settings.autoBackupScheduleType ||
-                autoBackupTime != settings.autoBackupTime ||
-                autoBackupIntervalHours != settings.autoBackupIntervalHours.toString()
+                supportEmail != (settings.supportEmail ?: "")
     }
 
     LaunchedEffect(hasFieldChanges) {
@@ -153,11 +138,6 @@ fun AdminSettingsTabScreen(
                             eurRate = settings.eurExchangeRate.toString()
                             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
                             backupLocation = settings.backupLocationPath
-                            autoBackupEnabled = settings.autoBackupEnabled
-                            autoBackupFormat = settings.autoBackupFormat
-                            autoBackupScheduleType = settings.autoBackupScheduleType
-                            autoBackupTime = settings.autoBackupTime
-                            autoBackupIntervalHours = settings.autoBackupIntervalHours.toString()
                             supportEmail = settings.supportEmail ?: ""
                             onUnsavedStateChanged(false)
                         },
@@ -183,17 +163,12 @@ fun AdminSettingsTabScreen(
                     onClick = {
                         if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid) {
                             val updatedSettings = settings.copy(
-                                adminPasswordHash = if (newPassword.isNotBlank()) newPassword else settings.adminPasswordHash,
+                                adminPasswordHash = if (newPassword.isNotBlank()) de.joelneumann.lojinha.security.PasswordHasher.hash(newPassword) else settings.adminPasswordHash,
                                 globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
                                 usdExchangeRate = parsedUsdRate ?: settings.usdExchangeRate,
                                 eurExchangeRate = parsedEurRate ?: settings.eurExchangeRate,
                                 inactivityTimeoutMinutes = maxOf(2, inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes),
                                 backupLocationPath = backupLocation,
-                                autoBackupEnabled = autoBackupEnabled,
-                                autoBackupFormat = autoBackupFormat,
-                                autoBackupScheduleType = autoBackupScheduleType,
-                                autoBackupTime = autoBackupTime,
-                                autoBackupIntervalHours = autoBackupIntervalHours.toIntOrNull() ?: settings.autoBackupIntervalHours,
                                 supportEmail = supportEmail.takeIf { it.isNotBlank() }
                             )
                             viewModel.updateSystemSettings(updatedSettings)

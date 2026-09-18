@@ -381,6 +381,7 @@ object EnglishStrings : AppStrings {
     override val noPinSet = "No PIN set"
     override val hide = "Hide"
     override val pinPlaceholder = "e.g. 1234 (leave blank for none)"
+    override val enterNewPinPlaceholder = "Enter new PIN (leave blank to keep current)"
     override val noBarcodeAssigned = "No barcode assigned"
 
     override val step1DbRestoreTitle = "Step 1 of 2: Confirm Database Restore"

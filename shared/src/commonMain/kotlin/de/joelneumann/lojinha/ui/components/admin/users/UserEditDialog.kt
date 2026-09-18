@@ -83,7 +83,7 @@ fun UserEditDialog(
     val isBarcodeNumberFilled = barcodeNumber.isNotBlank()
     val isUserBarcodeIncomplete = (isBarcodeSymbolFilled && !isBarcodeNumberFilled) || (!isBarcodeSymbolFilled && isBarcodeNumberFilled)
 
-    val isPinChanged = if (isNewUser) pin.isNotBlank() else (shouldResetPin && (pin.trim().ifBlank { null } != user.pin))
+    val isPinChanged = if (isNewUser) pin.isNotBlank() else shouldResetPin
     val hasDialogChanges = name != user.name ||
             isPinChanged ||
             selectedLang != user.language ||
@@ -116,7 +116,14 @@ fun UserEditDialog(
             val bCode = barcode.trim().ifBlank { null }
             val bNum = barcodeNumber.trim().ifBlank { null }
             val userBalance = if (isNewUser) 0L else user.balance
-            val finalPin = if (isNewUser) pin.trim().ifBlank { null } else if (shouldResetPin) pin.trim().ifBlank { null } else user.pin
+            val rawNewPin = pin.trim().ifBlank { null }
+            val finalPin = if (isNewUser) {
+                rawNewPin?.let { de.joelneumann.lojinha.security.PasswordHasher.hash(it) }
+            } else if (shouldResetPin) {
+                rawNewPin?.let { de.joelneumann.lojinha.security.PasswordHasher.hash(it) }
+            } else {
+                user.pin
+            }
 
             val updated = user.copy(
                 name = name.trim(),

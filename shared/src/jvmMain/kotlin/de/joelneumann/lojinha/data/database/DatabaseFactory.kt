@@ -77,17 +77,49 @@ object DatabaseFactory {
 
     private suspend fun seedInitialData(db: AppDatabase) {
         val settingsDao = db.settingsDao()
-        if (settingsDao.getSettings() == null) {
+        val currentSettings = settingsDao.getSettings()
+        if (currentSettings == null) {
             settingsDao.insertOrUpdateSettings(
                 SettingsEntity(
                     id = 1,
-                    adminPasswordHash = "admin",
+                    adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin"),
                     globalMarkupPercent = 0.0,
                     usdExchangeRate = 0.18,
                     eurExchangeRate = 0.16,
                     inactivityTimeoutMinutes = 3
                 )
             )
+        } else {
+            // Migrate legacy plain-text admin password if not already a 64-char hash
+            if (!de.joelneumann.lojinha.security.PasswordHasher.isHash(currentSettings.adminPasswordHash)) {
+                val migratedSettings = currentSettings.copy(
+                    adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash(currentSettings.adminPasswordHash)
+                )
+                settingsDao.insertOrUpdateSettings(migratedSettings)
+            }
+        }
+
+        // Migrate any existing users with legacy plain-text PINs
+        val userDao = db.userDao()
+        val users = userDao.getAllUsers()
+        users.forEach { user ->
+            val rawPin = user.pin
+            if (!rawPin.isNullOrBlank() && !de.joelneumann.lojinha.security.PasswordHasher.isHash(rawPin)) {
+                userDao.updateUserProfile(
+                    id = user.id,
+                    name = user.name,
+                    language = user.language,
+                    secondaryCurrency = user.secondaryCurrency,
+                    pin = de.joelneumann.lojinha.security.PasswordHasher.hash(rawPin.trim()),
+                    userBarcode = user.userBarcode,
+                    userBarcodeNumber = user.userBarcodeNumber,
+                    isActive = user.isActive,
+                    isDeleted = user.isDeleted,
+                    avatarType = user.avatarType,
+                    avatarEmoji = user.avatarEmoji,
+                    avatarColor = user.avatarColor
+                )
+            }
         }
     }
 }

@@ -18,7 +18,7 @@ class FakeSettingsRepository(
     val flow = MutableStateFlow(initialSettings)
     override fun getSettingsFlow(): Flow<SystemSettings> = flow
     override suspend fun getSettings(): SystemSettings = flow.value
-    override suspend fun updateSettings(settings: SystemSettings) {
+    override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {
         flow.value = settings
     }
 }

@@ -64,18 +64,16 @@ fun App(
     DisposableEffect(autoBackupScheduler) {
         val listener = { autoBackupScheduler.triggerDataChangeBackup() }
         de.joelneumann.lojinha.data.service.DataChangeNotifier.addListener(listener)
+        autoBackupScheduler.startScheduler()
         onDispose {
             de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
+            autoBackupScheduler.stopScheduler()
         }
     }
 
     val productRepository = remember { RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), onDataChanged) }
     val userRepository = remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
     val transactionRepository = remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
-
-    LaunchedEffect(Unit) {
-        autoBackupScheduler.startScheduler()
-    }
 
     val appViewModel: AppViewModel = viewModel(
         factory = LojinhaViewModelFactory.createAppViewModelFactory(userRepository, settingsRepository)

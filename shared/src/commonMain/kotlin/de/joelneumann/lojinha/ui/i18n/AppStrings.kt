@@ -375,6 +375,7 @@ interface AppStrings {
     val noPinSet: String
     val hide: String
     val pinPlaceholder: String
+    val enterNewPinPlaceholder: String
     val noBarcodeAssigned: String
 
     val step1DbRestoreTitle: String

@@ -35,6 +35,7 @@ actual class OneDriveBackupService {
 
     actual suspend fun startPkceAuth(
         clientId: String,
+        tenant: String,
         onStatusUpdate: ((String) -> Unit)?
     ): Result<TokenResponse> = withContext(Dispatchers.IO) {
         var server: com.sun.net.httpserver.HttpServer? = null
@@ -48,7 +49,11 @@ actual class OneDriveBackupService {
             val authCodeDeferred = CompletableDeferred<String>()
 
             // Create local temporary HTTP server on port 8989 (bind to all loopback interfaces)
-            server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress(port), 0)
+            server = try {
+                com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress(port), 0)
+            } catch (e: java.net.BindException) {
+                return@withContext Result.failure(Exception("Port $port is currently in use. Please close any applications using port $port and try again."))
+            }
             server.createContext("/callback") { exchange ->
                 val query = exchange.requestURI.query ?: ""
                 val queryParams = query.split("&").associate {
@@ -99,8 +104,10 @@ actual class OneDriveBackupService {
             }
             server.start()
 
+            val safeTenant = tenant.ifBlank { "common" }
+
             // Construct 1-click authorization URL
-            val authUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?" +
+            val authUrl = "https://login.microsoftonline.com/$safeTenant/oauth2/v2.0/authorize?" +
                     "client_id=$clientId" +
                     "&response_type=code" +
                     "&redirect_uri=${java.net.URLEncoder.encode(redirectUri, "UTF-8")}" +
@@ -136,7 +143,7 @@ actual class OneDriveBackupService {
 
             onStatusUpdate?.invoke("Exchanging authorization code for tokens...")
             val tokenResp = client.submitForm(
-                url = "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+                url = "https://login.microsoftonline.com/$safeTenant/oauth2/v2.0/token",
                 formParameters = parameters {
                     append("grant_type", "authorization_code")
                     append("client_id", clientId)
@@ -160,10 +167,15 @@ actual class OneDriveBackupService {
         }
     }
 
-    actual suspend fun refreshAccessToken(clientId: String, refreshToken: String): Result<TokenResponse> = withContext(Dispatchers.IO) {
+    actual suspend fun refreshAccessToken(
+        clientId: String,
+        refreshToken: String,
+        tenant: String
+    ): Result<TokenResponse> = withContext(Dispatchers.IO) {
         try {
+            val safeTenant = tenant.ifBlank { "common" }
             val response = client.submitForm(
-                url = "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+                url = "https://login.microsoftonline.com/$safeTenant/oauth2/v2.0/token",
                 formParameters = parameters {
                     append("grant_type", "refresh_token")
                     append("client_id", clientId)
@@ -208,11 +220,12 @@ actual class OneDriveBackupService {
         try {
             val normalizedFolder = remoteFolderPath.trim().trim('/')
             val pathSegment = if (normalizedFolder.isBlank()) remoteFileName else "$normalizedFolder/$remoteFileName"
+            val encodedPath = pathSegment.split("/").joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
 
             val fileLength = file.length()
             if (fileLength <= 4 * 1024 * 1024) {
                 // Direct PUT upload for files <= 4MB
-                val url = "https://graph.microsoft.com/v1.0/me/drive/root:/$pathSegment:/content"
+                val url = "https://graph.microsoft.com/v1.0/me/drive/root:/$encodedPath:/content"
                 val response = client.put(url) {
                     header(HttpHeaders.Authorization, "Bearer $accessToken")
                     setBody(file.readBytes())
@@ -224,7 +237,7 @@ actual class OneDriveBackupService {
                 }
             } else {
                 // Chunked Upload Session for files > 4MB
-                val createSessionUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/$pathSegment:/createUploadSession"
+                val createSessionUrl = "https://graph.microsoft.com/v1.0/me/drive/root:/$encodedPath:/createUploadSession"
                 val sessionResp = client.post(createSessionUrl) {
                     header(HttpHeaders.Authorization, "Bearer $accessToken")
                 }
@@ -290,5 +303,9 @@ actual class OneDriveBackupService {
         val md = java.security.MessageDigest.getInstance("SHA-256")
         val digest = md.digest(bytes)
         return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
+    }
+
+    actual fun close() {
+        client.close()
     }
 }

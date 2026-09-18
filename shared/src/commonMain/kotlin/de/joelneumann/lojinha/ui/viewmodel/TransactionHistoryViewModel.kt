@@ -137,7 +137,7 @@ class TransactionHistoryViewModel(
     }
 
     fun openSettingsModal(user: User) {
-        _pinInput.value = user.pin ?: ""
+        _pinInput.value = ""
         _selectedLanguage.value = user.language
         _selectedSecondaryCurrency.value = user.secondaryCurrency
         _selectedAvatar.value = user.avatar
@@ -165,8 +165,13 @@ class TransactionHistoryViewModel(
     }
 
     fun saveUserSettings(user: User, onSaved: (User) -> Unit) {
+        val updatedPin = if (_pinInput.value.isNotBlank()) {
+            de.joelneumann.lojinha.security.PasswordHasher.hash(_pinInput.value.trim())
+        } else {
+            user.pin
+        }
         val updated = user.copy(
-            pin = if (_pinInput.value.isBlank()) null else _pinInput.value.trim(),
+            pin = updatedPin,
             language = _selectedLanguage.value,
             secondaryCurrency = _selectedSecondaryCurrency.value,
             avatar = _selectedAvatar.value

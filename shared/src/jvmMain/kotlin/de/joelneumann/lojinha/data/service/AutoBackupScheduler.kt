@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.service
 
 import de.joelneumann.lojinha.domain.model.BackupRoutine
 import de.joelneumann.lojinha.domain.model.BackupType
+import de.joelneumann.lojinha.domain.model.BackupWriteMode
 import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
@@ -10,6 +11,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 class AutoBackupScheduler(
@@ -20,6 +23,7 @@ class AutoBackupScheduler(
     private val oneDriveBackupService: OneDriveBackupService? = null
 ) {
     private var schedulerJob: Job? = null
+    private val executionMutex = Mutex()
 
     fun startScheduler() {
         schedulerJob?.cancel()
@@ -47,8 +51,19 @@ class AutoBackupScheduler(
         dataChangeDebounceJob?.cancel()
         dataChangeDebounceJob = externalScope.launch(Dispatchers.IO) {
             try {
-                if (debounceMs > 0) {
-                    delay(debounceMs)
+                if (backupRestoreService.isDatabaseEmpty()) return@launch
+
+                val activeRoutines = backupRepository.getAllBackups().filter {
+                    it.isEnabled && it.scheduleConfig is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange
+                }
+                if (activeRoutines.isEmpty()) return@launch
+
+                val configuredDebounce = activeRoutines.mapNotNull {
+                    (it.scheduleConfig as? de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange)?.debounceMs
+                }.minOrNull() ?: debounceMs
+
+                if (configuredDebounce > 0) {
+                    delay(configuredDebounce)
                 }
                 evaluateAndRunDataChangeRoutines()
             } catch (_: kotlinx.coroutines.CancellationException) {
@@ -92,47 +107,65 @@ class AutoBackupScheduler(
         }
     }
 
-    suspend fun executeRoutine(routine: BackupRoutine) {
+    suspend fun executeRoutine(routine: BackupRoutine) = executionMutex.withLock {
+        if (routine.writeMode == BackupWriteMode.OVERWRITE_LATEST && backupRestoreService.isDatabaseEmpty()) {
+            println("AutoBackupScheduler: Skipping OVERWRITE_LATEST backup for routine '${routine.name}' because database is empty.")
+            return@withLock
+        }
+
+        var isTempFolder = false
+        var tempFolderToDelete: File? = null
         try {
             var targetDir = File(routine.backupLocationPath)
             if (routine.type == BackupType.ONEDRIVE) {
                 if (routine.backupLocationPath.isBlank() || !targetDir.exists() || !targetDir.isDirectory) {
-                    targetDir = File(System.getProperty("java.io.tmpdir"), "lojinha_onedrive_temp").apply { mkdirs() }
+                    targetDir = File(System.getProperty("java.io.tmpdir"), "lojinha_onedrive_temp_${System.currentTimeMillis()}").apply { mkdirs() }
+                    isTempFolder = true
+                    tempFolderToDelete = targetDir
                 }
             } else {
-                if (!targetDir.exists() || !targetDir.isDirectory) return
+                if (!targetDir.exists() || !targetDir.isDirectory) return@withLock
             }
 
             val routineForBackup = routine.copy(backupLocationPath = targetDir.absolutePath)
-            val generatedFile = backupRestoreService.executeRoutineBackup(routineForBackup)
+            val generatedFiles = backupRestoreService.executeRoutineBackup(routineForBackup)
 
             if (routine.type == BackupType.ONEDRIVE) {
-                uploadToOneDriveIfConfigured(routine, generatedFile)
+                uploadToOneDriveIfConfigured(routine, generatedFiles)
             }
 
-            val updated = routine.copy(lastBackupTimestamp = System.currentTimeMillis())
-            backupRepository.saveBackupRoutine(updated)
+            // Re-fetch current routine to ensure it wasn't deleted or modified during slow backup upload
+            val currentRoutine = backupRepository.getAllBackups().find { it.id == routine.id }
+            if (currentRoutine != null) {
+                val updated = currentRoutine.copy(lastBackupTimestamp = System.currentTimeMillis())
+                backupRepository.saveBackupRoutine(updated)
+            }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
+        } finally {
+            if (isTempFolder && tempFolderToDelete != null) {
+                tempFolderToDelete.deleteRecursively()
+            }
         }
     }
 
-    private suspend fun uploadToOneDriveIfConfigured(routine: BackupRoutine, fileOrDir: File) {
-        val settings = settingsRepository?.getSettings() ?: return
-        val oneDriveService = oneDriveBackupService ?: return
-        val refreshToken = settings.oneDriveRefreshToken ?: return
-        if (refreshToken.isBlank()) return
+    private suspend fun uploadToOneDriveIfConfigured(routine: BackupRoutine, files: List<File>) {
+        val settings = settingsRepository?.getSettings() ?: error("OneDrive backup failed: SettingsRepository not configured")
+        val oneDriveService = oneDriveBackupService ?: error("OneDrive backup failed: OneDriveBackupService not configured")
+        val refreshToken = settings.oneDriveRefreshToken?.takeIf { it.isNotBlank() }
+            ?: error("OneDrive backup failed: not authenticated (missing refresh token)")
 
         val clientId = settings.oneDriveClientId.ifBlank { "202e1c94-b152-4751-b0e6-a2a4b8eb4901" }
+        val tenant = settings.oneDriveTenant.ifBlank { "common" }
 
-        val tokenRes = oneDriveService.refreshAccessToken(clientId, refreshToken)
-        val tokenData = tokenRes.getOrNull() ?: return
-        val accessToken = tokenData.accessToken ?: return
+        val tokenRes = oneDriveService.refreshAccessToken(clientId, refreshToken, tenant)
+        val tokenData = tokenRes.getOrThrow()
+        val accessToken = tokenData.accessToken ?: error("OneDrive refresh token response did not contain an access token")
 
         tokenData.refreshToken?.let { newRefresh ->
             if (newRefresh != refreshToken) {
-                settingsRepository.updateSettings(settings.copy(oneDriveRefreshToken = newRefresh))
+                settingsRepository.updateSettings(settings.copy(oneDriveRefreshToken = newRefresh), notifyDataChanged = false)
             }
         }
 
@@ -142,15 +175,17 @@ class AutoBackupScheduler(
             settings.oneDriveDefaultFolder.ifBlank { "/LojinhaBackups" }
         }
 
-        if (fileOrDir.isDirectory) {
-            val subFolder = "$remoteFolder/${fileOrDir.name}"
-            fileOrDir.listFiles()?.forEach { subFile ->
-                if (subFile.isFile) {
-                    oneDriveService.uploadFile(accessToken, subFile, subFolder)
+        for (fileOrDir in files) {
+            if (fileOrDir.isDirectory) {
+                val subFolder = "$remoteFolder/${fileOrDir.name}"
+                fileOrDir.listFiles()?.forEach { subFile ->
+                    if (subFile.isFile) {
+                        oneDriveService.uploadFile(accessToken, subFile, subFolder).getOrThrow()
+                    }
                 }
+            } else if (fileOrDir.isFile) {
+                oneDriveService.uploadFile(accessToken, fileOrDir, remoteFolder).getOrThrow()
             }
-        } else if (fileOrDir.isFile) {
-            oneDriveService.uploadFile(accessToken, fileOrDir, remoteFolder)
         }
     }
 }

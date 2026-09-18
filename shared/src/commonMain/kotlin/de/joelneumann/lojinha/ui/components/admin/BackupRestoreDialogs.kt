@@ -38,7 +38,7 @@ fun DbRestoreMultiApprovalDialog(
         if (step == 1) {
             step = 2
         } else {
-            val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
+            val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
             val isPhraseCorrect = inputPhrase.trim() == "RESTORE"
 
             if (!isPasswordCorrect) {
@@ -166,7 +166,7 @@ fun DbRestoreMultiApprovalDialog(
             } else {
                 Button(
                     onClick = {
-                        val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
+                        val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
                         val isPhraseCorrect = inputPhrase.trim() == "RESTORE"
 
                         if (!isPasswordCorrect) {
@@ -224,7 +224,7 @@ fun WipeDataMultiApprovalDialog(
         if (step == 1) {
             step = 2
         } else {
-            val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
+            val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
             val isPhraseCorrect = inputPhrase.trim() == "WIPE"
 
             if (!isPasswordCorrect) {
@@ -336,7 +336,7 @@ fun WipeDataMultiApprovalDialog(
             } else {
                 Button(
                     onClick = {
-                        val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
+                        val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
                         val isPhraseCorrect = inputPhrase.trim() == "WIPE"
 
                         if (!isPasswordCorrect) {
@@ -396,7 +396,7 @@ fun CsvImportMultiApprovalDialog(
         if (step == 1) {
             step = 2
         } else {
-            val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
+            val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
             if (!isPasswordCorrect) {
                 errorMessage = strings.incorrectAdminPassword
             } else {
@@ -543,7 +543,7 @@ fun CsvImportMultiApprovalDialog(
             } else {
                 Button(
                     onClick = {
-                        val isPasswordCorrect = inputPassword == adminPasswordHash || (adminPasswordHash == "admin" && inputPassword == "admin")
+                        val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
                         if (!isPasswordCorrect) {
                             errorMessage = strings.incorrectAdminPassword
                         } else {
