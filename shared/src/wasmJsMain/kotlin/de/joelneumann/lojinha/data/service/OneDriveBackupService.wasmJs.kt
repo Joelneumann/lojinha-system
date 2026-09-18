@@ -23,4 +23,6 @@ actual class OneDriveBackupService {
     actual suspend fun fetchUserProfile(accessToken: String): Result<UserProfileResponse> {
         return Result.failure(Exception("OneDrive user profile is managed on Desktop App."))
     }
+
+    actual fun close() {}
 }

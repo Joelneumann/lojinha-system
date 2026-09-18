@@ -33,9 +33,6 @@ class AdminSettingsViewModel(
     private val _showOneDriveAuthDialog = MutableStateFlow(false)
     val showOneDriveAuthDialog: StateFlow<Boolean> = _showOneDriveAuthDialog.asStateFlow()
 
-    private val _oneDriveDeviceCodeResponse = MutableStateFlow<DeviceCodeResponse?>(null)
-    val oneDriveDeviceCodeResponse: StateFlow<DeviceCodeResponse?> = _oneDriveDeviceCodeResponse.asStateFlow()
-
     private val _oneDriveAuthStatus = MutableStateFlow("Waiting for authorization...")
     val oneDriveAuthStatus: StateFlow<String> = _oneDriveAuthStatus.asStateFlow()
 
@@ -345,7 +342,6 @@ class AdminSettingsViewModel(
         oneDriveAuthJob?.cancel()
         oneDriveAuthJob = null
         _showOneDriveAuthDialog.value = false
-        _oneDriveDeviceCodeResponse.value = null
     }
 
     fun requestDisconnectOneDrive() {
@@ -398,5 +394,6 @@ class AdminSettingsViewModel(
         super.onCleared()
         _statusMessage.value = null
         _showRoutineDialog.value = false
+        oneDriveBackupService?.close()
     }
 }

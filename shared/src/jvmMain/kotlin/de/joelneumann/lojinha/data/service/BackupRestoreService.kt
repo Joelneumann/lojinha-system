@@ -24,6 +24,7 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import kotlin.math.round
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -55,6 +56,12 @@ class BackupRestoreService(
         val escapedPath = targetFile.absolutePath.replace("'", "''")
         val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
         try {
+            val busyStmt = connection.prepare("PRAGMA busy_timeout = 5000")
+            try {
+                busyStmt.step()
+            } finally {
+                busyStmt.close()
+            }
             val stmt = connection.prepare("VACUUM INTO '$escapedPath'")
             try {
                 stmt.step()
@@ -127,7 +134,7 @@ class BackupRestoreService(
                 escapeCsv(p.id),
                 escapeCsv(p.name),
                 escapeCsv(barcodeStr),
-                p.basePrice.toString(),
+                escapeCsv(Formatting.formatBrl(p.basePrice)),
                 p.unitType.name,
                 p.stockQuantity.toString(),
                 p.customMarkupPercent?.toString() ?: "",
@@ -140,19 +147,22 @@ class BackupRestoreService(
         // 2. Export Users
         val users = db.userDao().getAllUsers().map { it.toDomain() }
         val usersCsv = File(exportFolder, "users.csv")
-        val userLines = mutableListOf("id,name,balance,language,secondaryCurrency,pin,userBarcode,userBarcodeNumber,isActive,isDeleted")
+        val userLines = mutableListOf("id,name,balance,language,secondaryCurrency,pin,userBarcode,userBarcodeNumber,isActive,isDeleted,avatarType,avatarEmoji,avatarColor")
         users.forEach { u ->
             val line = listOf(
                 escapeCsv(u.id),
                 escapeCsv(u.name),
-                u.balance.toString(),
+                escapeCsv(Formatting.formatBrl(u.balance)),
                 u.language.code,
                 u.secondaryCurrency.name,
                 escapeCsv(u.pin?.let { if (de.joelneumann.lojinha.security.PasswordHasher.isHash(it)) it else de.joelneumann.lojinha.security.PasswordHasher.hash(it) } ?: ""),
                 escapeCsv(u.userBarcode ?: ""),
                 escapeCsv(u.userBarcodeNumber ?: ""),
                 u.isActive.toString(),
-                u.isDeleted.toString()
+                u.isDeleted.toString(),
+                escapeCsv(u.avatar.type.name),
+                escapeCsv(u.avatar.emoji),
+                escapeCsv(u.avatar.colorHex)
             ).joinToString(",")
             userLines.add(line)
         }
@@ -172,15 +182,58 @@ class BackupRestoreService(
                 t.type.name,
                 escapeCsv(t.referenceTransactionId ?: ""),
                 escapeCsv(t.note ?: ""),
-                t.totalAmount.toString(),
+                escapeCsv(Formatting.formatBrl(t.totalAmount)),
                 t.items.size.toString(),
                 escapeCsv(itemsSerialized),
-                t.userBalanceBefore?.toString() ?: "",
-                t.userBalanceAfter?.toString() ?: ""
+                t.userBalanceBefore?.let { escapeCsv(Formatting.formatBrl(it)) } ?: "",
+                t.userBalanceAfter?.let { escapeCsv(Formatting.formatBrl(it)) } ?: ""
             ).joinToString(",")
             txLines.add(line)
         }
         txCsv.writeText(txLines.joinToString("\n"))
+
+        // 4. Export Combined Billing Lists & Members (QA-05)
+        val billingLists = db.billingListDao().getAllBillingLists()
+        val billingListUsers = db.billingListDao().getAllBillingListUsers().groupBy { it.listId }
+        val usersMap = users.associateBy { it.id }
+        val blCsv = File(exportFolder, "billing_lists.csv")
+        val blLines = mutableListOf("listId,listName,type,basePrice,comment,isDeleted,userId,userName,quantity")
+        billingLists.forEach { bl ->
+            val members = billingListUsers[bl.id]
+            val priceStr = bl.basePrice?.let { Formatting.formatBrl(it) } ?: ""
+            if (members.isNullOrEmpty()) {
+                blLines.add(
+                    listOf(
+                        escapeCsv(bl.id),
+                        escapeCsv(bl.name),
+                        bl.type,
+                        escapeCsv(priceStr),
+                        escapeCsv(bl.comment ?: ""),
+                        bl.isDeleted.toString(),
+                        "",
+                        "",
+                        "0"
+                    ).joinToString(",")
+                )
+            } else {
+                members.forEach { m ->
+                    blLines.add(
+                        listOf(
+                            escapeCsv(bl.id),
+                            escapeCsv(bl.name),
+                            bl.type,
+                            escapeCsv(priceStr),
+                            escapeCsv(bl.comment ?: ""),
+                            bl.isDeleted.toString(),
+                            escapeCsv(m.userId),
+                            escapeCsv(usersMap[m.userId]?.name ?: ""),
+                            m.quantity.toString()
+                        ).joinToString(",")
+                    )
+                }
+            }
+        }
+        blCsv.writeText(blLines.joinToString("\n"))
 
         exportFolder
     }
@@ -624,29 +677,48 @@ class BackupRestoreService(
             val rawId = if (idIdx != -1 && idIdx < cols.size) cols[idIdx].trim() else ""
             val name = cols[nameIdx].trim()
             val priceStr = cols[priceIdx].trim()
-            val price = priceStr.toLongOrNull() ?: 0L
+            val parsedPrice = parseCurrencyToCents(priceStr)
+            if (parsedPrice == null) {
+                warnings.add("Row ${i + 1} ('$name'): Invalid price '$priceStr'. Row skipped.")
+                continue
+            }
+            val price = parsedPrice
 
-            val unitTypeStr = if (unitIdx != -1 && unitIdx < cols.size) cols[unitIdx].trim() else "PIECE"
-            val unitType = try { UnitType.valueOf(unitTypeStr) } catch (e: Exception) { UnitType.PIECE }
+            val productId = if (rawId.isNotEmpty()) rawId else "p-imp-${getTimestampString()}-$i"
+            val existing = existingProducts[productId]
+            val isExisting = existing != null
 
-            val stockStr = if (stockIdx != -1 && stockIdx < cols.size) cols[stockIdx].trim() else "0"
-            val stock = stockStr.toLongOrNull() ?: 0L
+            val unitTypeStr = if (unitIdx != -1 && unitIdx < cols.size) cols[unitIdx].trim() else ""
+            val unitType = if (unitTypeStr.isNotEmpty()) {
+                try { UnitType.valueOf(unitTypeStr) } catch (e: Exception) { existing?.unitType?.let { runCatching { UnitType.valueOf(it) }.getOrNull() } ?: UnitType.PIECE }
+            } else {
+                existing?.unitType?.let { runCatching { UnitType.valueOf(it) }.getOrNull() } ?: UnitType.PIECE
+            }
+
+            val stockStr = if (stockIdx != -1 && stockIdx < cols.size) cols[stockIdx].trim() else ""
+            val stock = if (stockStr.isNotEmpty()) {
+                stockStr.toLongOrNull() ?: existing?.stockQuantity ?: 0L
+            } else {
+                existing?.stockQuantity ?: 0L
+            }
 
             val markupStr = if (markupIdx != -1 && markupIdx < cols.size) cols[markupIdx].trim() else ""
             val parsedMarkup = if (markupStr.isNotEmpty()) Formatting.parsePercentageInput(markupStr) else null
             val markup = if (parsedMarkup != null && parsedMarkup in 0.0..1000.0) {
                 parsedMarkup
+            } else if (markupStr.isNotEmpty()) {
+                warnings.add("Row ${i + 1} ('$name'): Invalid custom markup '$markupStr' ignored.")
+                existing?.customMarkupPercent
             } else {
-                if (markupStr.isNotEmpty() && (parsedMarkup == null || parsedMarkup !in 0.0..1000.0)) {
-                    warnings.add("Row ${i + 1} ('$name'): Invalid custom markup '$markupStr' ignored.")
-                }
-                null
+                existing?.customMarkupPercent
             }
 
-            val activeStr = if (activeIdx != -1 && activeIdx < cols.size) cols[activeIdx].trim() else "true"
-            val isActive = activeStr.toBooleanStrictOrNull() ?: true
-
-            val productId = if (rawId.isNotEmpty()) rawId else "p-imp-${getTimestampString()}-$i"
+            val activeStr = if (activeIdx != -1 && activeIdx < cols.size) cols[activeIdx].trim() else ""
+            val isActive = if (activeStr.isNotEmpty()) {
+                activeStr.toBooleanStrictOrNull() ?: existing?.isActive ?: true
+            } else {
+                existing?.isActive ?: true
+            }
 
             // Parse Barcodes
             val rawBarcodesStr = if (barcodesIdx != -1 && barcodesIdx < cols.size) cols[barcodesIdx].trim() else ""
@@ -669,9 +741,11 @@ class BackupRestoreService(
                         }
                     }
                 }
+            } else if (isExisting && barcodesIdx == -1) {
+                // If barcodes column was omitted from CSV, preserve existing barcodes
+                parsedBarcodes.addAll(existing!!.barcodes)
             }
 
-            val isExisting = existingProducts.containsKey(productId)
             val productEntity = ProductEntity(
                 id = productId,
                 name = name,
@@ -705,6 +779,75 @@ class BackupRestoreService(
         )
     }
 
+    suspend fun isDatabaseEmpty(): Boolean = withContext(Dispatchers.IO) {
+        val activeUsers = db.userDao().getAllUsers().count { !it.isDeleted }
+        val activeProducts = db.productDao().getAllProducts().count { it.isActive }
+        val transactions = db.transactionDao().getAllTransactions().size
+        activeUsers == 0 && activeProducts == 0 && transactions == 0
+    }
+
+    fun parseCurrencyToCents(input: String): Long? {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return null
+
+        var isNegative = false
+        var s = trimmed
+        if (s.startsWith("(") && s.endsWith(")")) {
+            isNegative = true
+            s = s.substring(1, s.length - 1).trim()
+        }
+        if (s.contains("-")) {
+            isNegative = true
+            s = s.replace("-", "").trim()
+        }
+        if (s.startsWith("+")) {
+            s = s.removePrefix("+").trim()
+        }
+
+        s = s.replace("R$", "", ignoreCase = true)
+            .replace("BRL", "", ignoreCase = true)
+            .replace("$", "")
+            .replace("€", "")
+            .replace("\u00A0", " ")
+            .replace(" ", "")
+
+        if (s.isEmpty()) return null
+
+        val lastDot = s.lastIndexOf('.')
+        val lastComma = s.lastIndexOf(',')
+
+        val normalized: String
+        if (lastDot != -1 && lastComma != -1) {
+            normalized = if (lastComma > lastDot) {
+                s.replace(".", "").replace(",", ".")
+            } else {
+                s.replace(",", "")
+            }
+        } else if (lastComma != -1) {
+            val commaCount = s.count { it == ',' }
+            normalized = if (commaCount > 1) {
+                s.replace(",", "")
+            } else {
+                s.replace(",", ".")
+            }
+        } else if (lastDot != -1) {
+            val dotCount = s.count { it == '.' }
+            normalized = if (dotCount > 1) {
+                s.replace(".", "")
+            } else {
+                s
+            }
+        } else {
+            normalized = s
+        }
+
+        val doubleVal = normalized.toDoubleOrNull() ?: return null
+        if (!doubleVal.isFinite()) return null
+
+        val cents = round(doubleVal * 100.0).toLong()
+        return if (isNegative) -cents else cents
+    }
+
     suspend fun importUsersFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
         require(csvFile.exists() && csvFile.isFile) { "User CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
@@ -722,6 +865,10 @@ class BackupRestoreService(
         val userBarcodeIdx = header.indexOf("userBarcode")
         val userBarcodeNumberIdx = header.indexOf("userBarcodeNumber")
         val activeIdx = header.indexOf("isActive")
+        val isDeletedIdx = header.indexOf("isDeleted")
+        val avatarTypeIdx = header.indexOf("avatarType")
+        val avatarEmojiIdx = header.indexOf("avatarEmoji")
+        val avatarColorIdx = header.indexOf("avatarColor")
 
         if (nameIdx == -1) {
             return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("Required header 'name' missing."))
@@ -750,47 +897,105 @@ class BackupRestoreService(
 
             val rawId = if (idIdx != -1 && idIdx < cols.size) cols[idIdx].trim() else ""
             val name = cols[nameIdx].trim()
-            val balanceStr = if (balanceIdx != -1 && balanceIdx < cols.size) cols[balanceIdx].trim() else "0"
-            val balance = balanceStr.toLongOrNull() ?: 0L
 
-            val langStr = if (langIdx != -1 && langIdx < cols.size) cols[langIdx].trim() else Language.DE.code
-            val secCurrStr = if (secCurrIdx != -1 && secCurrIdx < cols.size) cols[secCurrIdx].trim() else SecondaryCurrency.NONE.name
+            val userId = if (rawId.isNotEmpty()) rawId else "u-imp-${getTimestampString()}-$i"
+            val existing = existingUsers[userId]
+            val isExisting = existing != null
+
+            // Balance parsing
+            val balanceStr = if (balanceIdx != -1 && balanceIdx < cols.size) cols[balanceIdx].trim() else ""
+            val balance = if (balanceStr.isNotEmpty()) {
+                val parsed = parseCurrencyToCents(balanceStr)
+                if (parsed != null) {
+                    parsed
+                } else {
+                    warnings.add("Row ${i + 1} ('$name'): Invalid balance '$balanceStr'. Kept existing balance or 0.")
+                    existing?.balance ?: 0L
+                }
+            } else {
+                existing?.balance ?: 0L
+            }
+
+            val langStr = if (langIdx != -1 && langIdx < cols.size && cols[langIdx].trim().isNotEmpty()) {
+                cols[langIdx].trim()
+            } else {
+                existing?.language ?: Language.DE.code
+            }
+
+            val secCurrStr = if (secCurrIdx != -1 && secCurrIdx < cols.size && cols[secCurrIdx].trim().isNotEmpty()) {
+                cols[secCurrIdx].trim()
+            } else {
+                existing?.secondaryCurrency ?: SecondaryCurrency.NONE.name
+            }
+
             val rawPin = if (pinIdx != -1 && pinIdx < cols.size && cols[pinIdx].trim().isNotEmpty()) cols[pinIdx].trim() else null
             val pin = rawPin?.let {
                 if (de.joelneumann.lojinha.security.PasswordHasher.isHash(it)) it else de.joelneumann.lojinha.security.PasswordHasher.hash(it)
+            } ?: existing?.pin
+
+            val activeStr = if (activeIdx != -1 && activeIdx < cols.size && cols[activeIdx].trim().isNotEmpty()) cols[activeIdx].trim() else ""
+            val isActive = if (activeStr.isNotEmpty()) {
+                activeStr.toBooleanStrictOrNull() ?: existing?.isActive ?: true
+            } else {
+                existing?.isActive ?: true
             }
 
-            val activeStr = if (activeIdx != -1 && activeIdx < cols.size) cols[activeIdx].trim() else "true"
-            val isActive = activeStr.toBooleanStrictOrNull() ?: true
+            val isDeletedStr = if (isDeletedIdx != -1 && isDeletedIdx < cols.size && cols[isDeletedIdx].trim().isNotEmpty()) cols[isDeletedIdx].trim() else ""
+            val isDeleted = if (isDeletedStr.isNotEmpty()) {
+                isDeletedStr.toBooleanStrictOrNull() ?: existing?.isDeleted ?: false
+            } else {
+                existing?.isDeleted ?: false
+            }
 
-            val userId = if (rawId.isNotEmpty()) rawId else "u-imp-${getTimestampString()}-$i"
-            val isExisting = existingUsers.containsKey(userId)
+            val avatarTypeStr = if (avatarTypeIdx != -1 && avatarTypeIdx < cols.size && cols[avatarTypeIdx].trim().isNotEmpty()) {
+                cols[avatarTypeIdx].trim()
+            } else {
+                existing?.avatarType ?: "INITIALS"
+            }
+
+            val avatarEmojiStr = if (avatarEmojiIdx != -1 && avatarEmojiIdx < cols.size && cols[avatarEmojiIdx].trim().isNotEmpty()) {
+                cols[avatarEmojiIdx].trim()
+            } else {
+                existing?.avatarEmoji ?: "😀"
+            }
+
+            val avatarColorStr = if (avatarColorIdx != -1 && avatarColorIdx < cols.size && cols[avatarColorIdx].trim().isNotEmpty()) {
+                cols[avatarColorIdx].trim()
+            } else {
+                existing?.avatarColor ?: "#1E293B"
+            }
 
             val rawUserBarcode = if (userBarcodeIdx != -1 && userBarcodeIdx < cols.size) cols[userBarcodeIdx].trim() else ""
             val rawUserBarcodeNumber = if (userBarcodeNumberIdx != -1 && userBarcodeNumberIdx < cols.size) cols[userBarcodeNumberIdx].trim() else ""
 
             var finalUserBarcode: String? = null
-            if (rawUserBarcode.isNotEmpty()) {
-                val assignedUserId = allExistingUserBarcodesMap[rawUserBarcode]
-                if (assignedUserId != null && assignedUserId != userId) {
-                    strippedBarcodesCount++
-                    warnings.add("Row ${i + 1} ('$name'): User barcode '$rawUserBarcode' stripped because it is already assigned to user '$assignedUserId'.")
-                } else {
-                    finalUserBarcode = rawUserBarcode
-                    allExistingUserBarcodesMap[rawUserBarcode] = userId
-                }
-            }
-
             var finalUserBarcodeNumber: String? = null
-            if (rawUserBarcodeNumber.isNotEmpty()) {
-                val assignedUserId = allExistingUserBarcodesMap[rawUserBarcodeNumber]
-                if (assignedUserId != null && assignedUserId != userId) {
-                    strippedBarcodesCount++
-                    warnings.add("Row ${i + 1} ('$name'): User barcode number '$rawUserBarcodeNumber' stripped because it is already assigned to user '$assignedUserId'.")
-                } else {
-                    finalUserBarcodeNumber = rawUserBarcodeNumber
-                    allExistingUserBarcodesMap[rawUserBarcodeNumber] = userId
+
+            if (rawUserBarcode.isNotEmpty() || rawUserBarcodeNumber.isNotEmpty()) {
+                if (rawUserBarcode.isNotEmpty()) {
+                    val assignedUserId = allExistingUserBarcodesMap[rawUserBarcode]
+                    if (assignedUserId != null && assignedUserId != userId) {
+                        strippedBarcodesCount++
+                        warnings.add("Row ${i + 1} ('$name'): User barcode '$rawUserBarcode' stripped because it is already assigned to user '$assignedUserId'.")
+                    } else {
+                        finalUserBarcode = rawUserBarcode
+                        allExistingUserBarcodesMap[rawUserBarcode] = userId
+                    }
                 }
+                if (rawUserBarcodeNumber.isNotEmpty()) {
+                    val assignedUserId = allExistingUserBarcodesMap[rawUserBarcodeNumber]
+                    if (assignedUserId != null && assignedUserId != userId) {
+                        strippedBarcodesCount++
+                        warnings.add("Row ${i + 1} ('$name'): User barcode number '$rawUserBarcodeNumber' stripped because it is already assigned to user '$assignedUserId'.")
+                    } else {
+                        finalUserBarcodeNumber = rawUserBarcodeNumber
+                        allExistingUserBarcodesMap[rawUserBarcodeNumber] = userId
+                    }
+                }
+            } else if (isExisting && userBarcodeIdx == -1 && userBarcodeNumberIdx == -1) {
+                // If barcode columns were omitted from CSV, preserve existing barcodes
+                finalUserBarcode = existing!!.userBarcode
+                finalUserBarcodeNumber = existing.userBarcodeNumber
             }
 
             val effectiveBarcode = if (finalUserBarcode != null && finalUserBarcodeNumber != null) {
@@ -812,7 +1017,11 @@ class BackupRestoreService(
                 pin = pin,
                 userBarcode = effectiveBarcode.first,
                 userBarcodeNumber = effectiveBarcode.second,
-                isActive = isActive
+                isActive = isActive,
+                isDeleted = isDeleted,
+                avatarType = avatarTypeStr,
+                avatarEmoji = avatarEmojiStr,
+                avatarColor = avatarColorStr
             )
 
             usersToInsert.add(userEntity)
@@ -838,15 +1047,34 @@ class BackupRestoreService(
     }
 
     private fun escapeCsv(value: String): String {
-        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
+        if (value.contains(",") || value.contains(";") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
             val escaped = value.replace("\"", "\"\"")
             return "\"$escaped\""
         }
         return value
     }
 
+    private fun detectDelimiter(csvText: String): Char {
+        val firstLine = csvText.lineSequence().firstOrNull { it.isNotBlank() } ?: return ','
+        var inQuotes = false
+        var commaCount = 0
+        var semicolonCount = 0
+        for (c in firstLine) {
+            if (c == '"') {
+                inQuotes = !inQuotes
+            } else if (!inQuotes) {
+                if (c == ',') commaCount++
+                else if (c == ';') semicolonCount++
+            }
+        }
+        return if (semicolonCount > commaCount) ';' else ','
+    }
+
     fun parseCsvRecords(csvText: String): List<List<String>> {
         val cleanText = csvText.removePrefix("\uFEFF")
+        if (cleanText.isBlank()) return emptyList()
+
+        val delimiter = detectDelimiter(cleanText)
         val records = mutableListOf<List<String>>()
         val currentRecord = mutableListOf<String>()
         val currentField = StringBuilder()
@@ -865,7 +1093,7 @@ class BackupRestoreService(
                         inQuotes = !inQuotes
                     }
                 }
-                c == ',' && !inQuotes -> {
+                c == delimiter && !inQuotes -> {
                     currentRecord.add(currentField.toString())
                     currentField.clear()
                 }

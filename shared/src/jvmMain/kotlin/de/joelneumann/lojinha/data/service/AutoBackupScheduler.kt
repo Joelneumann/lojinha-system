@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.service
 
 import de.joelneumann.lojinha.domain.model.BackupRoutine
 import de.joelneumann.lojinha.domain.model.BackupType
+import de.joelneumann.lojinha.domain.model.BackupWriteMode
 import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +51,8 @@ class AutoBackupScheduler(
         dataChangeDebounceJob?.cancel()
         dataChangeDebounceJob = externalScope.launch(Dispatchers.IO) {
             try {
+                if (backupRestoreService.isDatabaseEmpty()) return@launch
+
                 val activeRoutines = backupRepository.getAllBackups().filter {
                     it.isEnabled && it.scheduleConfig is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange
                 }
@@ -105,6 +108,11 @@ class AutoBackupScheduler(
     }
 
     suspend fun executeRoutine(routine: BackupRoutine) = executionMutex.withLock {
+        if (routine.writeMode == BackupWriteMode.OVERWRITE_LATEST && backupRestoreService.isDatabaseEmpty()) {
+            println("AutoBackupScheduler: Skipping OVERWRITE_LATEST backup for routine '${routine.name}' because database is empty.")
+            return@withLock
+        }
+
         var isTempFolder = false
         var tempFolderToDelete: File? = null
         try {
@@ -126,8 +134,12 @@ class AutoBackupScheduler(
                 uploadToOneDriveIfConfigured(routine, generatedFiles)
             }
 
-            val updated = routine.copy(lastBackupTimestamp = System.currentTimeMillis())
-            backupRepository.saveBackupRoutine(updated)
+            // Re-fetch current routine to ensure it wasn't deleted or modified during slow backup upload
+            val currentRoutine = backupRepository.getAllBackups().find { it.id == routine.id }
+            if (currentRoutine != null) {
+                val updated = currentRoutine.copy(lastBackupTimestamp = System.currentTimeMillis())
+                backupRepository.saveBackupRoutine(updated)
+            }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()

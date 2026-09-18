@@ -304,4 +304,8 @@ actual class OneDriveBackupService {
         val digest = md.digest(bytes)
         return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
     }
+
+    actual fun close() {
+        client.close()
+    }
 }

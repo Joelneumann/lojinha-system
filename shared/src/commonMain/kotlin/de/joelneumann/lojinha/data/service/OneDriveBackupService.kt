@@ -16,4 +16,5 @@ expect class OneDriveBackupService() {
         tenant: String = "common"
     ): Result<TokenResponse>
     suspend fun fetchUserProfile(accessToken: String): Result<UserProfileResponse>
+    fun close()
 }
