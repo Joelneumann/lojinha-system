@@ -30,6 +30,7 @@ import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_COLORS
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_EMOJIS
+import de.joelneumann.lojinha.ui.components.userselection.PlatformEmoji
 import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.components.userselection.parseHexColor
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -248,7 +249,7 @@ fun UserSettingsModalDialog(
                                                     .clickable { onAvatarSelect(selectedAvatar.copy(emoji = emoji)) },
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                Text(text = emoji, fontSize = 18.sp)
+                                                PlatformEmoji(emoji = emoji, fontSize = 18.sp)
                                             }
                                         }
                                     }

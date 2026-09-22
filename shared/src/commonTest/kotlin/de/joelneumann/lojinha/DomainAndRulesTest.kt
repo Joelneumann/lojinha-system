@@ -145,7 +145,7 @@ class DomainAndRulesTest {
     @Test
     fun testFormatMarkupDisplay() {
         assertEquals("+10%", Formatting.formatMarkupPercent(10.0))
-        assertEquals("+12.5%", Formatting.formatMarkupPercent(12.5))
+        assertEquals("+12,5%", Formatting.formatMarkupPercent(12.5))
         assertEquals("+0%", Formatting.formatMarkupPercent(0.0))
         assertEquals("+0%", Formatting.formatMarkupPercent(-5.0))
         assertEquals("+0%", Formatting.formatMarkupPercent(Double.NaN))

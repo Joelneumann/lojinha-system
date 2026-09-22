@@ -3,6 +3,7 @@ package de.joelneumann.lojinha.ui.components.history
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
@@ -179,8 +180,14 @@ fun TransactionItemCard(
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (delta > 0) ColorSuccessEmerald else ColorDangerCrimson
                             )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp),
+                                tint = TextSecondaryMuted
+                            )
                             Text(
-                                text = "➔ ${Formatting.formatBrl(finalAmount)}",
+                                text = Formatting.formatBrl(finalAmount),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextSecondaryMuted
@@ -203,8 +210,14 @@ fun TransactionItemCard(
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (cumulativeDelta > 0) ColorSuccessEmerald else ColorDangerCrimson
                             )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp),
+                                tint = if (netAmount < 0) ColorDangerCrimson else PrimaryNavy
+                            )
                             Text(
-                                text = "➔ ${Formatting.formatBrl(netAmount)}",
+                                text = Formatting.formatBrl(netAmount),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (netAmount < 0) ColorDangerCrimson else PrimaryNavy
@@ -297,7 +310,18 @@ fun TransactionItemCard(
                                     color = PrimaryNavy
                                 )
                                 Text(
-                                    text = "${Formatting.formatQuantity(prevQty, item.unitType)} ➔ ${Formatting.formatQuantity(item.quantity, item.unitType)}",
+                                    text = Formatting.formatQuantity(prevQty, item.unitType),
+                                    fontSize = 13.sp,
+                                    color = TextSecondarySubtle
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(11.dp),
+                                    tint = TextSecondarySubtle
+                                )
+                                Text(
+                                    text = Formatting.formatQuantity(item.quantity, item.unitType),
                                     fontSize = 13.sp,
                                     color = TextSecondarySubtle
                                 )
@@ -355,7 +379,7 @@ fun TransactionItemCard(
                 }
             }
 
-            // Balance Flow Banner: Before ➔ After (placed under the item list)
+            // Balance Flow Banner: Before -> After (placed under the item list)
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = SurfaceContainerHighLight,
@@ -385,10 +409,11 @@ fun TransactionItemCard(
                             color = TextSecondaryMuted
                         )
 
-                        Text(
-                            text = "➔",
-                            fontSize = 12.sp,
-                            color = TextSecondarySubtle
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = TextSecondarySubtle
                         )
 
                         Text(
