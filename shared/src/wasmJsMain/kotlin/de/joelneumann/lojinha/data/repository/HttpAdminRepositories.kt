@@ -3,6 +3,7 @@ package de.joelneumann.lojinha.data.repository
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.*
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import de.joelneumann.lojinha.util.AppLogger
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -138,7 +139,7 @@ class AdminNetworkClient(val baseUrl: String = "") {
                     LoginResult.InvalidCredentials
                 }
             } else {
-                println("Client login failed with HTTP status: ${response.status}")
+                AppLogger.warn("AdminNetworkClient", "Client login failed with HTTP status: ${response.status}")
                 LoginResult.InvalidCredentials
             }
         } catch (e: Exception) {
@@ -189,7 +190,7 @@ class AdminNetworkClient(val baseUrl: String = "") {
         try {
             jsStartEventSource(baseUrl, token)
         } catch (e: Exception) {
-            println("Failed to initialize EventSource: ${e.message}")
+            AppLogger.error("AdminNetworkClient", "Failed to initialize EventSource: ${e.message}", e)
         }
 
         syncJob?.cancel()
@@ -258,7 +259,7 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
                 throw IllegalStateException("saveProduct failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpProductRepository] saveProduct failed: ${e.message}")
+            AppLogger.error("HttpProductRepository", "saveProduct failed: ${e.message}", e)
             throw e
         }
     }
@@ -272,7 +273,7 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
                 throw IllegalStateException("deactivateProduct failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpProductRepository] deactivateProduct failed: ${e.message}")
+            AppLogger.error("HttpProductRepository", "deactivateProduct failed: ${e.message}", e)
             throw e
         }
     }
@@ -286,7 +287,7 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
                 throw IllegalStateException("hardDeleteProduct failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpProductRepository] hardDeleteProduct failed: ${e.message}")
+            AppLogger.error("HttpProductRepository", "hardDeleteProduct failed: ${e.message}", e)
             throw e
         }
     }
@@ -302,7 +303,7 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
                 throw IllegalStateException("updateStock failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpProductRepository] updateStock failed: ${e.message}")
+            AppLogger.error("HttpProductRepository", "updateStock failed: ${e.message}", e)
             throw e
         }
     }
@@ -343,7 +344,7 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
                 throw IllegalStateException("saveUser failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpUserRepository] saveUser failed: ${e.message}")
+            AppLogger.error("HttpUserRepository", "saveUser failed: ${e.message}", e)
             throw e
         }
     }
@@ -357,7 +358,7 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
                 throw IllegalStateException("deactivateUser failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpUserRepository] deactivateUser failed: ${e.message}")
+            AppLogger.error("HttpUserRepository", "deactivateUser failed: ${e.message}", e)
             throw e
         }
     }
@@ -371,7 +372,7 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
                 throw IllegalStateException("softDeleteUser failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpUserRepository] softDeleteUser failed: ${e.message}")
+            AppLogger.error("HttpUserRepository", "softDeleteUser failed: ${e.message}", e)
             throw e
         }
     }
@@ -385,7 +386,7 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
                 throw IllegalStateException("restoreUser failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpUserRepository] restoreUser failed: ${e.message}")
+            AppLogger.error("HttpUserRepository", "restoreUser failed: ${e.message}", e)
             throw e
         }
     }
@@ -408,7 +409,7 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
             }
             res.status.isSuccess()
         } catch (e: Exception) {
-            println("[HttpUserRepository] hardDeleteUser failed: ${e.message}")
+            AppLogger.error("HttpUserRepository", "hardDeleteUser failed: ${e.message}", e)
             false
         }
     }
@@ -424,7 +425,7 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
                 throw IllegalStateException("updateBalance failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpUserRepository] updateBalance failed: ${e.message}")
+            AppLogger.error("HttpUserRepository", "updateBalance failed: ${e.message}", e)
             throw e
         }
     }
@@ -462,7 +463,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 throw IllegalStateException("recordTransaction failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpTransactionRepository] recordTransaction failed: ${e.message}")
+            AppLogger.error("HttpTransactionRepository", "recordTransaction failed: ${e.message}", e)
             throw e
         }
     }
@@ -563,7 +564,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 throw IllegalStateException("executeAtomicTransaction failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpTransactionRepository] executeAtomicTransaction failed: ${e.message}")
+            AppLogger.error("HttpTransactionRepository", "executeAtomicTransaction failed: ${e.message}", e)
             throw e
         }
     }
@@ -609,7 +610,7 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
             }
             response.status.isSuccess()
         } catch (e: Exception) {
-            println("[HttpTransactionRepository] executeBatchTransactions failed: ${e.message}")
+            AppLogger.error("HttpTransactionRepository", "executeBatchTransactions failed: ${e.message}", e)
             false
         }
     }
@@ -641,7 +642,7 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
                 throw IllegalStateException("saveBillingList failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpBillingListRepository] saveBillingList failed: ${e.message}")
+            AppLogger.error("HttpBillingListRepository", "saveBillingList failed: ${e.message}", e)
             throw e
         }
     }
@@ -655,7 +656,7 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
                 throw IllegalStateException("deleteBillingList failed with status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpBillingListRepository] deleteBillingList failed: ${e.message}")
+            AppLogger.error("HttpBillingListRepository", "deleteBillingList failed: ${e.message}", e)
             throw e
         }
     }
@@ -668,10 +669,10 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
                 setBody(mapOf("lastExecutionTime" to lastExecutionTime))
             }
             if (!response.status.isSuccess()) {
-                println("[HttpBillingListRepository] updateLastExecutionTime status ${response.status}")
+                AppLogger.warn("HttpBillingListRepository", "updateLastExecutionTime status ${response.status}")
             }
         } catch (e: Exception) {
-            println("[HttpBillingListRepository] updateLastExecutionTime failed: ${e.message}")
+            AppLogger.error("HttpBillingListRepository", "updateLastExecutionTime failed: ${e.message}", e)
         }
     }
 

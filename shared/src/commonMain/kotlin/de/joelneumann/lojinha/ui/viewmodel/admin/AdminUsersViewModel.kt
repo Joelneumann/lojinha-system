@@ -10,6 +10,7 @@ import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -93,7 +94,7 @@ class AdminUsersViewModel(
                 refreshUsers()
                 closeUserModal()
             } catch (e: Exception) {
-                println("[AdminUsersViewModel] saveUser error: ${e.message}")
+                AppLogger.error("AdminUsersViewModel", "saveUser error: ${e.message}", e)
             }
         }
     }
@@ -104,7 +105,7 @@ class AdminUsersViewModel(
                 userRepository.saveUser(user.copy(isActive = !user.isActive))
                 refreshUsers()
             } catch (e: Exception) {
-                println("[AdminUsersViewModel] toggleUserActive error: ${e.message}")
+                AppLogger.error("AdminUsersViewModel", "toggleUserActive error: ${e.message}", e)
             }
         }
     }
@@ -115,7 +116,7 @@ class AdminUsersViewModel(
                 userRepository.softDeleteUser(userId)
                 refreshUsers()
             } catch (e: Exception) {
-                println("[AdminUsersViewModel] softDeleteUser error: ${e.message}")
+                AppLogger.error("AdminUsersViewModel", "softDeleteUser error: ${e.message}", e)
             }
         }
     }
@@ -126,7 +127,7 @@ class AdminUsersViewModel(
                 userRepository.restoreUser(userId)
                 refreshUsers()
             } catch (e: Exception) {
-                println("[AdminUsersViewModel] restoreUser error: ${e.message}")
+                AppLogger.error("AdminUsersViewModel", "restoreUser error: ${e.message}", e)
             }
         }
     }
@@ -182,7 +183,7 @@ class AdminUsersViewModel(
                 refreshUsers()
                 closeCustomExpenseModal()
             } catch (e: Exception) {
-                println("[AdminUsersViewModel] submitCustomExpense error: ${e.message}")
+                AppLogger.error("AdminUsersViewModel", "submitCustomExpense error: ${e.message}", e)
             }
         }
     }
@@ -234,7 +235,7 @@ class AdminUsersViewModel(
                 refreshUsers()
                 closeCustomIncomeModal()
             } catch (e: Exception) {
-                println("[AdminUsersViewModel] submitCustomIncome error: ${e.message}")
+                AppLogger.error("AdminUsersViewModel", "submitCustomIncome error: ${e.message}", e)
             }
         }
     }
@@ -267,7 +268,7 @@ class AdminUsersViewModel(
                 transactionRepository.executeAtomicTransaction(tx, centsDelta, emptyMap())
                 refreshUsers()
             } catch (e: Exception) {
-                println("[AdminUsersViewModel] adjustUserBalance error: ${e.message}")
+                AppLogger.error("AdminUsersViewModel", "adjustUserBalance error: ${e.message}", e)
             }
         }
     }

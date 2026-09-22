@@ -8,6 +8,7 @@ import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -90,7 +91,7 @@ class AdminBulkBillingViewModel(
                 _errorMessage.value = null
                 refreshData()
             } catch (e: Exception) {
-                println("[AdminBulkBillingViewModel] saveBillingList error: ${e.message}")
+                AppLogger.error("AdminBulkBillingViewModel", "saveBillingList error: ${e.message}", e)
                 _errorMessage.value = "Failed to save billing list: ${e.message}"
             }
         }
@@ -106,7 +107,7 @@ class AdminBulkBillingViewModel(
                 _errorMessage.value = null
                 refreshData()
             } catch (e: Exception) {
-                println("[AdminBulkBillingViewModel] deleteList error: ${e.message}")
+                AppLogger.error("AdminBulkBillingViewModel", "deleteList error: ${e.message}", e)
                 _errorMessage.value = "Failed to delete billing list: ${e.message}"
             }
         }
@@ -143,7 +144,7 @@ class AdminBulkBillingViewModel(
 
     fun executeCharges(list: BillingList, onComplete: ((Boolean) -> Unit)? = null) {
         if (_isExecutingCharges.value) {
-            println("[AdminBulkBillingViewModel] executeCharges rejected: execution already in progress")
+            AppLogger.warn("AdminBulkBillingViewModel", "executeCharges rejected: execution already in progress")
             return
         }
         _isExecutingCharges.value = true
@@ -232,7 +233,7 @@ class AdminBulkBillingViewModel(
                     onComplete?.invoke(false)
                 }
             } catch (e: Exception) {
-                println("[AdminBulkBillingViewModel] executeCharges error: ${e.message}")
+                AppLogger.error("AdminBulkBillingViewModel", "executeCharges error: ${e.message}", e)
                 _errorMessage.value = "Error executing charges: ${e.message}"
                 onComplete?.invoke(false)
             } finally {

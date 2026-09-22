@@ -39,11 +39,13 @@ class DiagnosticsService(
         val zipFile = File(outputDir, "lojinha-support-bundle-$timestamp.zip")
 
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-            // 1. Pack all log and crash files
-            val logFiles = FileRollingLogger.getLogFiles()
-            for (file in logFiles) {
-                if (file.exists() && file.isFile) {
-                    addFileToZip(zos, file, "logs/${file.name}")
+            // 1. Pack all log and crash files safely under lock
+            FileRollingLogger.withLogLock {
+                val logFiles = FileRollingLogger.getLogFiles()
+                for (file in logFiles) {
+                    if (file.exists() && file.isFile) {
+                        addFileToZip(zos, file, "logs/${file.name}")
+                    }
                 }
             }
 
@@ -56,33 +58,63 @@ class DiagnosticsService(
             addTextToZip(zos, dbDiagnostics, "db_diagnostics.txt")
         }
 
+        // Prune older bundles to prevent disk leaks
+        pruneOldBundles(outputDir, keepCount = 3)
+
         AppLogger.info(TAG, "Diagnostic support bundle successfully created at ${zipFile.absolutePath} (${FileRollingLogger.formatFileSize(zipFile.length())})")
         zipFile
     }
 
+    private fun pruneOldBundles(outputDir: File, keepCount: Int = 3) {
+        try {
+            val bundles = outputDir.listFiles { f ->
+                f.isFile && f.name.startsWith("lojinha-support-bundle-") && f.name.endsWith(".zip")
+            }?.sortedByDescending { it.lastModified() } ?: return
+            if (bundles.size > keepCount) {
+                bundles.drop(keepCount).forEach { it.delete() }
+            }
+        } catch (e: Exception) {
+            AppLogger.warn(TAG, "Failed to prune old support bundles: ${e.message}", e)
+        }
+    }
+
     private fun addFileToZip(zos: ZipOutputStream, file: File, entryName: String) {
+        var entryOpen = false
         try {
             val entry = ZipEntry(entryName)
             entry.time = file.lastModified()
             zos.putNextEntry(entry)
+            entryOpen = true
             FileInputStream(file).use { fis ->
                 fis.copyTo(zos)
             }
-            zos.closeEntry()
         } catch (e: Exception) {
             AppLogger.warn(TAG, "Failed to include file ${file.name} in zip: ${e.message}", e)
+        } finally {
+            if (entryOpen) {
+                try {
+                    zos.closeEntry()
+                } catch (_: Exception) {}
+            }
         }
     }
 
     private fun addTextToZip(zos: ZipOutputStream, text: String, entryName: String) {
+        var entryOpen = false
         try {
             val entry = ZipEntry(entryName)
             entry.time = System.currentTimeMillis()
             zos.putNextEntry(entry)
+            entryOpen = true
             zos.write(text.toByteArray(Charsets.UTF_8))
-            zos.closeEntry()
         } catch (e: Exception) {
             AppLogger.warn(TAG, "Failed to include entry $entryName in zip: ${e.message}", e)
+        } finally {
+            if (entryOpen) {
+                try {
+                    zos.closeEntry()
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -148,11 +180,20 @@ class DiagnosticsService(
             try {
                 val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
                 try {
+                    val timeoutStmt = connection.prepare("PRAGMA busy_timeout = 5000;")
+                    try {
+                        timeoutStmt.step()
+                    } finally {
+                        timeoutStmt.close()
+                    }
+
                     val stmt = connection.prepare("PRAGMA integrity_check;")
                     try {
-                        if (stmt.step()) {
-                            integrityResult = stmt.getText(0)
+                        val results = mutableListOf<String>()
+                        while (stmt.step()) {
+                            results.add(stmt.getText(0))
                         }
+                        integrityResult = if (results.isEmpty()) "Unknown" else results.joinToString("\n")
                     } finally {
                         stmt.close()
                     }
@@ -187,7 +228,7 @@ class DiagnosticsService(
             } catch (_: Exception) {}
 
             try {
-                transactionsCount = database.transactionDao().getAllTransactions().size
+                transactionsCount = database.transactionDao().getTransactionsCount(null, null)
             } catch (_: Exception) {}
 
             try {
@@ -222,7 +263,7 @@ class DiagnosticsService(
             val os = System.getProperty("os.name").lowercase(Locale.US)
             when {
                 os.contains("win") -> {
-                    ProcessBuilder("explorer.exe", "/select,", file.absolutePath).start()
+                    ProcessBuilder("explorer.exe", "/select,${file.absolutePath}").start()
                 }
                 os.contains("mac") -> {
                     ProcessBuilder("open", "-R", file.absolutePath).start()

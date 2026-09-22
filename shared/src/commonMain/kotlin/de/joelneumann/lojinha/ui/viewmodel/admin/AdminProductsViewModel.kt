@@ -7,6 +7,7 @@ import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
+import de.joelneumann.lojinha.util.AppLogger
 import de.joelneumann.lojinha.ui.components.admin.products.ProductSortOption
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
@@ -110,7 +111,7 @@ class AdminProductsViewModel(
                 refreshProducts()
                 closeProductModal()
             } catch (e: Exception) {
-                println("[AdminProductsViewModel] saveProduct error: ${e.message}")
+                AppLogger.error("AdminProductsViewModel", "saveProduct error: ${e.message}", e)
             }
         }
     }
@@ -121,7 +122,7 @@ class AdminProductsViewModel(
                 productRepository.saveProduct(product.copy(isActive = !product.isActive))
                 refreshProducts()
             } catch (e: Exception) {
-                println("[AdminProductsViewModel] toggleProductActive error: ${e.message}")
+                AppLogger.error("AdminProductsViewModel", "toggleProductActive error: ${e.message}", e)
             }
         }
     }
@@ -132,7 +133,7 @@ class AdminProductsViewModel(
                 productRepository.hardDeleteProduct(productId)
                 refreshProducts()
             } catch (e: Exception) {
-                println("[AdminProductsViewModel] deleteProduct error: ${e.message}")
+                AppLogger.error("AdminProductsViewModel", "deleteProduct error: ${e.message}", e)
             }
         }
     }
@@ -148,7 +149,7 @@ class AdminProductsViewModel(
                 }
                 refreshProducts()
             } catch (e: Exception) {
-                println("[AdminProductsViewModel] adjustProductStock error: ${e.message}")
+                AppLogger.error("AdminProductsViewModel", "adjustProductStock error: ${e.message}", e)
             }
         }
     }

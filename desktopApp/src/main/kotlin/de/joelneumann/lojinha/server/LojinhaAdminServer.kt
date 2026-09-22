@@ -17,6 +17,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.util.AppLogger
 import java.io.File
 import java.security.MessageDigest
@@ -29,6 +30,7 @@ class LojinhaAdminServer(
     private val transactionRepository: TransactionRepository,
     private val billingListRepository: BillingListRepository,
     private val settingsRepository: SettingsRepository,
+    private val database: AppDatabase? = null,
     private val port: Int = 8080
 ) {
     private var server: EmbeddedServer<*, *>? = null
@@ -325,7 +327,7 @@ class LojinhaAdminServer(
                     get("/diagnostics/export") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
                         try {
-                            val diagnosticsService = de.joelneumann.lojinha.data.service.DiagnosticsService()
+                            val diagnosticsService = de.joelneumann.lojinha.data.service.DiagnosticsService(db = database)
                             val bundleZip = diagnosticsService.createSupportBundle()
                             call.response.header(
                                 HttpHeaders.ContentDisposition,

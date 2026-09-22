@@ -67,4 +67,31 @@ class DiagnosticsServiceTest {
             tempOutputDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun testSupportBundlePruningLimitsToThreeBundles() = runBlocking {
+        val tempOutputDir = File(System.getProperty("java.io.tmpdir"), "lojinha_prune_test_" + System.currentTimeMillis())
+        tempOutputDir.mkdirs()
+
+        try {
+            // Create 5 dummy bundle zips with distinct modification times
+            for (i in 1..5) {
+                val dummyFile = File(tempOutputDir, "lojinha-support-bundle-2026010${i}_000000.zip")
+                dummyFile.writeText("dummy content $i")
+                dummyFile.setLastModified(1000000L + i * 10000L)
+            }
+
+            val service = DiagnosticsService()
+            service.createSupportBundle(targetFolder = tempOutputDir)
+
+            val remainingBundles = tempOutputDir.listFiles { f ->
+                f.isFile && f.name.startsWith("lojinha-support-bundle-") && f.name.endsWith(".zip")
+            } ?: emptyArray()
+
+            // Exactly 3 bundles should remain after retention pruning
+            assertEquals("Should retain at most 3 support bundles", 3, remainingBundles.size)
+        } finally {
+            tempOutputDir.deleteRecursively()
+        }
+    }
 }

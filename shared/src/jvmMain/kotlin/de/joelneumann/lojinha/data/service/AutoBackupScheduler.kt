@@ -5,6 +5,7 @@ import de.joelneumann.lojinha.domain.model.BackupType
 import de.joelneumann.lojinha.domain.model.BackupWriteMode
 import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
+import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,6 +23,10 @@ class AutoBackupScheduler(
     private val settingsRepository: SettingsRepository? = null,
     private val oneDriveBackupService: OneDriveBackupService? = null
 ) {
+    companion object {
+        private const val TAG = "AutoBackupScheduler"
+    }
+
     private var schedulerJob: Job? = null
     private val executionMutex = Mutex()
     private val failureCooldownMap = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -118,7 +123,7 @@ class AutoBackupScheduler(
 
     suspend fun executeRoutine(routine: BackupRoutine) = executionMutex.withLock {
         if (routine.writeMode == BackupWriteMode.OVERWRITE_LATEST && backupRestoreService.isDatabaseEmpty()) {
-            println("AutoBackupScheduler: Skipping OVERWRITE_LATEST backup for routine '${routine.name}' because database is empty.")
+            AppLogger.info(TAG, "Skipping OVERWRITE_LATEST backup for routine '${routine.name}' because database is empty.")
             failureCooldownMap[routine.id] = System.currentTimeMillis() + 60 * 60_000L
             return@withLock
         }
@@ -153,7 +158,7 @@ class AutoBackupScheduler(
             failureCooldownMap.remove(routine.id)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-            e.printStackTrace()
+            AppLogger.error(TAG, "Routine backup '${routine.name}' failed: ${e.message}", e)
             failureCooldownMap[routine.id] = System.currentTimeMillis() + 15 * 60_000L
         } finally {
             if (isTempFolder && tempFolderToDelete != null) {

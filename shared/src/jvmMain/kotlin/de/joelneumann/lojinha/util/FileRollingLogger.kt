@@ -6,6 +6,8 @@ import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -30,6 +32,10 @@ object FileRollingLogger {
     private val lock = Any()
 
     fun getLogDirectory(): File = logDir
+
+    fun <T> withLogLock(block: () -> T): T = synchronized(lock) {
+        block()
+    }
 
     fun getLogFiles(): List<File> {
         val dir = logDir
@@ -80,6 +86,9 @@ object FileRollingLogger {
         // Write to rolling file
         synchronized(lock) {
             try {
+                if (!logDir.exists()) {
+                    logDir.mkdirs()
+                }
                 rotateIfNeeded()
                 FileOutputStream(primaryLogFile, true).use { fos ->
                     OutputStreamWriter(fos, StandardCharsets.UTF_8).use { writer ->
@@ -98,23 +107,27 @@ object FileRollingLogger {
             return
         }
 
-        // Delete the oldest backup file if it exists
-        val oldestFile = File(logDir, "lojinha.$MAX_BACKUP_FILES.log")
-        if (oldestFile.exists()) {
-            oldestFile.delete()
-        }
-
-        // Shift existing backup files up (e.g. lojinha.4.log -> lojinha.5.log)
-        for (i in (MAX_BACKUP_FILES - 1) downTo 1) {
-            val current = File(logDir, "lojinha.$i.log")
-            if (current.exists()) {
-                val next = File(logDir, "lojinha.${i + 1}.log")
-                current.renameTo(next)
+        try {
+            // Delete the oldest backup file if it exists
+            val oldestFile = File(logDir, "lojinha.$MAX_BACKUP_FILES.log")
+            if (oldestFile.exists()) {
+                oldestFile.delete()
             }
-        }
 
-        // Rename current primary log to lojinha.1.log
-        val firstBackup = File(logDir, "lojinha.1.log")
-        primaryLogFile.renameTo(firstBackup)
+            // Shift existing backup files up (e.g. lojinha.4.log -> lojinha.5.log)
+            for (i in (MAX_BACKUP_FILES - 1) downTo 1) {
+                val current = File(logDir, "lojinha.$i.log")
+                if (current.exists()) {
+                    val next = File(logDir, "lojinha.${i + 1}.log")
+                    Files.move(current.toPath(), next.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+
+            // Rename current primary log to lojinha.1.log
+            val firstBackup = File(logDir, "lojinha.1.log")
+            Files.move(primaryLogFile.toPath(), firstBackup.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: Exception) {
+            System.err.println("FileRollingLogger failed to rotate logs: ${e.message}")
+        }
     }
 }

@@ -40,6 +40,7 @@ fun main() {
             transactionRepository = transactionRepository,
             billingListRepository = billingListRepository,
             settingsRepository = settingsRepository,
+            database = database,
             port = 8080
         )
 

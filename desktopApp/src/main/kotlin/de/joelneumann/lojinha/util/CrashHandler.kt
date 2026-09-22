@@ -34,6 +34,9 @@ object CrashHandler {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val crashFileName = "crash_$timestamp.txt"
         val logDir = FileRollingLogger.getLogDirectory()
+        if (!logDir.exists()) {
+            logDir.mkdirs()
+        }
         val crashFile = File(logDir, crashFileName)
 
         val reportContent = buildCrashReport(thread, throwable, timestamp)
@@ -41,8 +44,10 @@ object CrashHandler {
         // 1. Write dedicated crash report file
         try {
             crashFile.writeText(reportContent)
+            pruneOldCrashReports(logDir, keepCount = 10)
         } catch (e: Exception) {
             System.err.println("Failed to write crash report file: ${e.message}")
+            AppLogger.error(TAG, "Failed to write crash report file: ${e.message}", e)
         }
 
         // 2. Log via AppLogger to ensure it is in primary lojinha.log
@@ -53,6 +58,21 @@ object CrashHandler {
             showCrashDialog(crashFile, logDir)
         } catch (e: Exception) {
             System.err.println("Failed to display crash dialog: ${e.message}")
+            AppLogger.error(TAG, "Failed to display crash dialog: ${e.message}", e)
+        }
+    }
+
+    private fun pruneOldCrashReports(logDir: File, keepCount: Int = 10) {
+        try {
+            val crashFiles = logDir.listFiles { file ->
+                file.isFile && file.name.startsWith("crash_") && file.name.endsWith(".txt")
+            }?.sortedByDescending { it.lastModified() } ?: return
+
+            if (crashFiles.size > keepCount) {
+                crashFiles.drop(keepCount).forEach { it.delete() }
+            }
+        } catch (e: Exception) {
+            AppLogger.warn(TAG, "Failed to prune old crash reports: ${e.message}", e)
         }
     }
 
@@ -97,43 +117,59 @@ object CrashHandler {
     }
 
     private fun showCrashDialog(crashFile: File, logDir: File) {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            return
+        }
+
+        val latch = java.util.concurrent.CountDownLatch(1)
         val runnable = Runnable {
-            val message = """
-                An unexpected error occurred and the application cannot continue.
-                
-                Crash Report File:
-                ${crashFile.absolutePath}
-                
-                Please share this crash report with your system administrator or support.
-            """.trimIndent()
+            try {
+                val message = """
+                    An unexpected error occurred and the application cannot continue.
+                    
+                    Crash Report File:
+                    ${crashFile.absolutePath}
+                    
+                    Please share this crash report with your system administrator or support.
+                """.trimIndent()
 
-            val options = arrayOf("Open Logs Folder", "Close")
-            val choice = JOptionPane.showOptionDialog(
-                null,
-                message,
-                "Lojinha - Unexpected Error",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.ERROR_MESSAGE,
-                null,
-                options,
-                options[0]
-            )
+                val options = arrayOf("Open Logs Folder", "Close")
+                val choice = JOptionPane.showOptionDialog(
+                    null,
+                    message,
+                    "Lojinha - Unexpected Error",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.ERROR_MESSAGE,
+                    null,
+                    options,
+                    options[0]
+                )
 
-            if (choice == 0) {
-                try {
-                    if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
-                        Desktop.getDesktop().open(logDir)
+                if (choice == 0) {
+                    try {
+                        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+                            Desktop.getDesktop().open(logDir)
+                        }
+                    } catch (e: Exception) {
+                        System.err.println("Could not open log folder: ${e.message}")
+                        AppLogger.warn(TAG, "Could not open log folder: ${e.message}", e)
                     }
-                } catch (e: Exception) {
-                    System.err.println("Could not open log folder: ${e.message}")
                 }
+            } finally {
+                latch.countDown()
             }
         }
 
         if (SwingUtilities.isEventDispatchThread()) {
             runnable.run()
         } else {
-            SwingUtilities.invokeAndWait(runnable)
+            SwingUtilities.invokeLater(runnable)
+            try {
+                // Wait up to 30 seconds for user response before allowing process termination
+                latch.await(30, java.util.concurrent.TimeUnit.SECONDS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
         }
     }
 }
