@@ -54,7 +54,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "Lojinha System"
-            packageVersion = "1.0.0"
+            packageVersion = providers.gradleProperty("app.version").getOrElse("1.0.0")
 
             macOS {
                 bundleID = "de.joelneumann.lojinha"
