@@ -492,6 +492,14 @@ interface AppStrings {
     val supportEmailPlaceholder: String
     val contactSupportBtn: String
     val githubRepoBtn: String
+    val diagnosticsSectionTitle: String
+    val exportSupportBundleBtn: String
+    val exportAndEmailSupportBundleBtn: String
+    val openLogFolderBtn: String
+    val logFolderLabel: String
+    fun logSizeLabel(size: String): String
+    fun supportBundleCreatedSuccess(path: String): String
+    fun supportBundleEmailOpenedNotice(path: String): String
 
     val fieldDescription: String
     val referenceLabel: String

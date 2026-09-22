@@ -16,38 +16,47 @@ import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
 import de.joelneumann.lojinha.data.service.DataChangeNotifier
 import de.joelneumann.lojinha.server.LojinhaAdminServer
 import de.joelneumann.lojinha.ui.App
+import de.joelneumann.lojinha.util.AppLogger
+import de.joelneumann.lojinha.util.CrashHandler
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-fun main() = application {
-    val database = DatabaseFactory.createDatabase()
-    val onDataChanged = { DataChangeNotifier.notifyDataChanged() }
-    val productRepository = RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), onDataChanged)
-    val userRepository = RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged)
-    val transactionRepository = RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged)
-    val billingListRepository = RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged)
-    val settingsRepository = RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged)
+fun main() {
+    CrashHandler.install()
+    AppLogger.info("Main", "Starting Lojinha System v1.0.0 on ${System.getProperty("os.name")} ${System.getProperty("os.version")} (${System.getProperty("os.arch")})")
+    AppLogger.info("Main", "Java Runtime: ${System.getProperty("java.version")} by ${System.getProperty("java.vendor")}")
 
-    val adminServer = LojinhaAdminServer(
-        productRepository = productRepository,
-        userRepository = userRepository,
-        transactionRepository = transactionRepository,
-        billingListRepository = billingListRepository,
-        settingsRepository = settingsRepository,
-        port = 8080
-    )
+    application {
+        val database = DatabaseFactory.createDatabase()
+        val onDataChanged = { DataChangeNotifier.notifyDataChanged() }
+        val productRepository = RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), onDataChanged)
+        val userRepository = RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged)
+        val transactionRepository = RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged)
+        val billingListRepository = RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged)
+        val settingsRepository = RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged)
 
-    DisposableEffect(Unit) {
-        try {
-            adminServer.start()
-        } catch (e: Exception) {
-            println("[WARN] Failed to start admin server: ${e.message}")
-        }
-        onDispose {
+        val adminServer = LojinhaAdminServer(
+            productRepository = productRepository,
+            userRepository = userRepository,
+            transactionRepository = transactionRepository,
+            billingListRepository = billingListRepository,
+            settingsRepository = settingsRepository,
+            port = 8080
+        )
+
+        DisposableEffect(Unit) {
             try {
-                adminServer.stop()
-            } catch (e: Exception) {}
+                adminServer.start()
+            } catch (e: Exception) {
+                AppLogger.warn("Main", "Failed to start admin server: ${e.message}", e)
+            }
+            onDispose {
+                try {
+                    adminServer.stop()
+                } catch (e: Exception) {
+                    AppLogger.warn("Main", "Error stopping admin server: ${e.message}", e)
+                }
+            }
         }
-    }
 
     val windowState = rememberWindowState(placement = WindowPlacement.Fullscreen)
     @Suppress("DEPRECATION")
@@ -60,4 +69,5 @@ fun main() = application {
     ) {
         App(database = database)
     }
+}
 }

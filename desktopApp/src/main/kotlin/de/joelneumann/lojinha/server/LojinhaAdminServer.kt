@@ -17,6 +17,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import de.joelneumann.lojinha.util.AppLogger
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
@@ -74,7 +75,7 @@ class LojinhaAdminServer(
                     if (currentAttempt != null) {
                         val (count, firstAttempt) = currentAttempt
                         if (now - firstAttempt < RATE_LIMIT_WINDOW_MS && count >= MAX_LOGIN_ATTEMPTS) {
-                            println("[AUTH] Rate limit exceeded for IP: $clientIp")
+                            AppLogger.warn("LojinhaAdminServer", "Rate limit exceeded for IP: $clientIp")
                             call.respond(
                                 HttpStatusCode.TooManyRequests,
                                 LoginResponse(false, "Too many failed login attempts. Please wait a minute before retrying.")
@@ -91,7 +92,7 @@ class LojinhaAdminServer(
                         val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
                         val matches = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(req.password, expectedPassword)
 
-                        println("[AUTH] Admin Login Attempt: success=$matches")
+                        AppLogger.info("LojinhaAdminServer", "Admin Login Attempt from $clientIp: success=$matches")
                         if (matches) {
                             failedLoginAttempts.remove(clientIp)
                             val token = UUID.randomUUID().toString()
@@ -104,7 +105,7 @@ class LojinhaAdminServer(
                             call.respond(HttpStatusCode.OK, LoginResponse(false, "Invalid admin password"))
                         }
                     } catch (e: Exception) {
-                        println("[ERROR] Error processing login request: ${e.message}")
+                        AppLogger.error("LojinhaAdminServer", "Error processing login request: ${e.message}", e)
                         call.respond(HttpStatusCode.OK, LoginResponse(false, "Error processing login request"))
                     }
                 }
@@ -320,6 +321,23 @@ class LojinhaAdminServer(
                         call.respond(HttpStatusCode.OK)
                     }
 
+                    // Diagnostics Support Bundle
+                    get("/diagnostics/export") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@get
+                        try {
+                            val diagnosticsService = de.joelneumann.lojinha.data.service.DiagnosticsService()
+                            val bundleZip = diagnosticsService.createSupportBundle()
+                            call.response.header(
+                                HttpHeaders.ContentDisposition,
+                                ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, bundleZip.name).toString()
+                            )
+                            call.respondFile(bundleZip)
+                        } catch (e: Exception) {
+                            AppLogger.error("LojinhaAdminServer", "Failed to export diagnostic bundle: ${e.message}", e)
+                            call.respond(HttpStatusCode.InternalServerError, "Failed to generate diagnostic bundle")
+                        }
+                    }
+
                     // Real-Time Server-Sent Events (SSE) Stream
                     get("/events") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
@@ -428,13 +446,13 @@ class LojinhaAdminServer(
                 val s = buildServer(candidatePort)
                 s.start(wait = false)
                 server = s
-                println("[INFO] Lojinha Embedded Admin Server active on http://0.0.0.0:$candidatePort")
+                AppLogger.info("LojinhaAdminServer", "Lojinha Embedded Admin Server active on http://0.0.0.0:$candidatePort")
                 return true
             } catch (e: Exception) {
-                println("[WARN] Failed to start admin server on port $candidatePort: ${e.message}")
+                AppLogger.warn("LojinhaAdminServer", "Failed to start admin server on port $candidatePort: ${e.message}", e)
             }
         }
-        println("[ERROR] Could not bind admin server to port $port or ${port + 1}. Desktop kiosk will continue.")
+        AppLogger.error("LojinhaAdminServer", "Could not bind admin server to port $port or ${port + 1}. Desktop kiosk will continue.")
         return false
     }
 

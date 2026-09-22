@@ -24,7 +24,11 @@ class AdminSettingsViewModel(
     private val onPreviewCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
     private val onExecuteCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
     private val onExecuteDbRestore: (suspend (PlatformFile) -> Unit)? = null,
-    private val onExecuteWipeData: (suspend () -> Unit)? = null
+    private val onExecuteWipeData: (suspend () -> Unit)? = null,
+    private val onExportSupportBundle: (suspend (prepareEmail: Boolean, recipientEmail: String) -> Unit)? = null,
+    private val onOpenLogFolder: (() -> Unit)? = null,
+    val logDirectoryPath: String = "",
+    private val getLogFolderSizeFormatted: (() -> String)? = null
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(SystemSettings())
@@ -77,9 +81,40 @@ class AdminSettingsViewModel(
     private val _showOneDriveSuccessDialog = MutableStateFlow<String?>(null)
     val showOneDriveSuccessDialog: StateFlow<String?> = _showOneDriveSuccessDialog.asStateFlow()
 
+    private val _logFolderSize = MutableStateFlow("")
+    val logFolderSize: StateFlow<String> = _logFolderSize.asStateFlow()
+
     init {
         loadSettings()
         loadRoutines()
+        refreshLogSize()
+    }
+
+    fun refreshLogSize() {
+        getLogFolderSizeFormatted?.let {
+            _logFolderSize.value = it()
+        }
+    }
+
+    fun exportSupportBundle(prepareEmail: Boolean, recipientEmail: String) {
+        viewModelScope.launch {
+            try {
+                _statusMessage.value = null
+                _errorMessage.value = null
+                onExportSupportBundle?.invoke(prepareEmail, recipientEmail)
+                refreshLogSize()
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to export diagnostic bundle: ${e.message}"
+            }
+        }
+    }
+
+    fun openLogFolder() {
+        try {
+            onOpenLogFolder?.invoke()
+        } catch (e: Exception) {
+            _errorMessage.value = "Could not open log folder: ${e.message}"
+        }
     }
 
     fun loadSettings() {

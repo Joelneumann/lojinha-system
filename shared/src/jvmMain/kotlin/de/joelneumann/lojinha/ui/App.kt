@@ -47,6 +47,7 @@ fun App(
     val backupRepository = remember { de.joelneumann.lojinha.data.repository.RoomBackupRepositoryImpl(database.backupDao()) }
     val backupRestoreService = remember { de.joelneumann.lojinha.data.service.BackupRestoreService(database) }
     val oneDriveBackupService = remember { de.joelneumann.lojinha.data.service.OneDriveBackupService() }
+    val diagnosticsService = remember { de.joelneumann.lojinha.data.service.DiagnosticsService(database) }
     val coroutineScope = rememberCoroutineScope()
 
     val onDataChanged = remember { { de.joelneumann.lojinha.data.service.DataChangeNotifier.notifyDataChanged() } }
@@ -323,6 +324,22 @@ fun App(
                                 onExecuteWipeData = {
                                     backupRestoreService.wipeAllData()
                                     onDataChanged()
+                                },
+                                onExportSupportBundle = { prepareEmail, recipientEmail ->
+                                    val bundleZip = diagnosticsService.createSupportBundle()
+                                    diagnosticsService.revealInFileExplorer(bundleZip)
+                                    if (prepareEmail) {
+                                        diagnosticsService.openEmailDraft(recipientEmail, bundleZip)
+                                    }
+                                },
+                                onOpenLogFolder = {
+                                    diagnosticsService.openLogFolder()
+                                },
+                                logDirectoryPath = de.joelneumann.lojinha.util.FileRollingLogger.getLogDirectory().absolutePath,
+                                getLogFolderSizeFormatted = {
+                                    de.joelneumann.lojinha.util.FileRollingLogger.formatFileSize(
+                                        de.joelneumann.lojinha.util.FileRollingLogger.getTotalLogSizeBytes()
+                                    )
                                 }
                             )
                         }

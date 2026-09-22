@@ -38,6 +38,7 @@ fun AdminSettingsTabScreen(
     val showWipeDataDialog by viewModel.showWipeDataDialog.collectAsState()
     val csvImportPreview by viewModel.csvImportPreview.collectAsState()
     val csvImportType by viewModel.csvImportType.collectAsState()
+    val logFolderSize by viewModel.logFolderSize.collectAsState()
 
     var newPassword by remember(settings) { mutableStateOf("") }
     var confirmPassword by remember(settings) { mutableStateOf("") }
@@ -1064,6 +1065,109 @@ fun AdminSettingsTabScreen(
                                     )
                                     Text(strings.githubRepoBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
+                            }
+                        }
+
+                        HorizontalDivider(color = DividerBorder, thickness = 1.dp)
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BugReport,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.diagnosticsSectionTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+
+                        if (viewModel.logDirectoryPath.isNotBlank()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    "${strings.logFolderLabel}: ${viewModel.logDirectoryPath}",
+                                    fontSize = 12.sp,
+                                    color = AccentNavy
+                                )
+                                if (logFolderSize.isNotBlank()) {
+                                    Text(
+                                        strings.logSizeLabel(logFolderSize),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = PrimaryNavy
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: "support@example.com"
+                                    viewModel.exportSupportBundle(prepareEmail = true, recipientEmail = email)
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = null,
+                                        tint = SurfaceWhite,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.exportAndEmailSupportBundleBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.exportSupportBundle(prepareEmail = false, recipientEmail = "")
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Archive,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.exportSupportBundleBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.openLogFolder()
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(strings.openLogFolderBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                             }
                         }
                     }
