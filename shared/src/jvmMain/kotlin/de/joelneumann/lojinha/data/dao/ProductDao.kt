@@ -24,6 +24,26 @@ interface ProductDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateProduct(product: ProductEntity)
 
+    @Query("""
+        UPDATE products 
+        SET name = :name, 
+            barcodes = :barcodes, 
+            basePrice = :basePrice, 
+            unitType = :unitType, 
+            customMarkupPercent = :customMarkupPercent, 
+            isActive = :isActive 
+        WHERE id = :id
+    """)
+    suspend fun updateProductMetadata(
+        id: String,
+        name: String,
+        barcodes: List<de.joelneumann.lojinha.domain.model.Barcode>,
+        basePrice: Long,
+        unitType: String,
+        customMarkupPercent: Double?,
+        isActive: Boolean
+    )
+
     @Query("UPDATE products SET isActive = 0 WHERE id = :id")
     suspend fun deactivateProduct(id: String)
 

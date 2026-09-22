@@ -30,7 +30,7 @@ fun AdminCountPill(
         modifier = modifier
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxHeight().padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(

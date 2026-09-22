@@ -25,6 +25,26 @@ dependencies {
 
     // Room Runtime for AppDatabase reference
     implementation(libs.androidx.room.runtime)
+
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.junit)
+}
+
+val copyWasmResources by tasks.registering(Copy::class) {
+    description = "Copies production Wasm browser distribution into desktopApp resources under wasm/"
+    dependsOn(":shared:wasmJsBrowserDistribution")
+    from(project(":shared").layout.buildDirectory.dir("dist/wasmJs/productionExecutable"))
+    into(layout.buildDirectory.dir("generated/wasmResources/wasm"))
+}
+
+sourceSets {
+    named("main") {
+        resources.srcDir(copyWasmResources.map { it.destinationDir.parentFile })
+    }
+}
+
+tasks.named("processResources") {
+    dependsOn(copyWasmResources)
 }
 
 compose.desktop {
@@ -33,8 +53,27 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "de.joelneumann.lojinha"
-            packageVersion = "1.0.0"
+            packageName = "Lojinha System"
+            packageVersion = providers.gradleProperty("app.version").getOrElse("1.0.0")
+
+            macOS {
+                bundleID = "de.joelneumann.lojinha"
+                iconFile.set(project.file("src/main/resources/icon.icns"))
+            }
+            windows {
+                iconFile.set(project.file("src/main/resources/icon.ico"))
+                upgradeUuid = "d7b42fa9-e854-4a27-a681-79b8c005fa91"
+                shortcut = true
+                menu = true
+                menuGroup = "Lojinha"
+                dirChooser = true
+                perUserInstall = false
+                console = false
+            }
+            linux {
+                packageName = "lojinha-system"
+                iconFile.set(project.file("src/main/resources/icon.png"))
+            }
         }
     }
 }

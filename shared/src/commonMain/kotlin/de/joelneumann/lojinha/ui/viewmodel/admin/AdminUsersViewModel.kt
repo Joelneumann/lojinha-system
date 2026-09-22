@@ -4,14 +4,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.Transaction
+import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.TransactionType
+import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.util.AppLogger
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlin.random.Random
 
 class AdminUsersViewModel(
@@ -31,25 +37,25 @@ class AdminUsersViewModel(
     private val _showUserModal = MutableStateFlow(false)
     val showUserModal: StateFlow<Boolean> = _showUserModal.asStateFlow()
 
-    private val _depositUser = MutableStateFlow<User?>(null)
-    val depositUser: StateFlow<User?> = _depositUser.asStateFlow()
+    private val _customExpenseUser = MutableStateFlow<User?>(null)
+    val customExpenseUser: StateFlow<User?> = _customExpenseUser.asStateFlow()
 
-    private val _depositAmountInput = MutableStateFlow("")
-    val depositAmountInput: StateFlow<String> = _depositAmountInput.asStateFlow()
-
-    private val _depositNoteInput = MutableStateFlow("")
-    val depositNoteInput: StateFlow<String> = _depositNoteInput.asStateFlow()
+    private val _customIncomeUser = MutableStateFlow<User?>(null)
+    val customIncomeUser: StateFlow<User?> = _customIncomeUser.asStateFlow()
 
     private val _userDeleteErrorMessage = MutableStateFlow<String?>(null)
     val userDeleteErrorMessage: StateFlow<String?> = _userDeleteErrorMessage.asStateFlow()
+
+    private var usersJob: Job? = null
 
     init {
         loadData()
     }
 
     fun loadData() {
-        viewModelScope.launch {
-            userRepository.getUsersFlow().collect { _users.value = it }
+        usersJob?.cancel()
+        usersJob = viewModelScope.launch {
+            userRepository.getUsersFlow().collect { _users.value = it.sortedByAccentInsensitive { u -> u.name } }
         }
     }
 
@@ -59,7 +65,7 @@ class AdminUsersViewModel(
 
     fun openNewUserModal() {
         _editUser.value = User(
-            id = "u-" + de.joelneumann.lojinha.ui.utils.currentTimeMillis(),
+            id = generateUuid(),
             name = "",
             balance = 0L,
             language = Language.DE
@@ -83,30 +89,46 @@ class AdminUsersViewModel(
 
     fun saveUser(user: User) {
         viewModelScope.launch {
-            userRepository.saveUser(user)
-            refreshUsers()
-            closeUserModal()
+            try {
+                userRepository.saveUser(user)
+                refreshUsers()
+                closeUserModal()
+            } catch (e: Exception) {
+                AppLogger.error("AdminUsersViewModel", "saveUser error: ${e.message}", e)
+            }
         }
     }
 
     fun toggleUserActive(user: User) {
         viewModelScope.launch {
-            userRepository.saveUser(user.copy(isActive = !user.isActive))
-            refreshUsers()
+            try {
+                userRepository.saveUser(user.copy(isActive = !user.isActive))
+                refreshUsers()
+            } catch (e: Exception) {
+                AppLogger.error("AdminUsersViewModel", "toggleUserActive error: ${e.message}", e)
+            }
         }
     }
 
     fun softDeleteUser(userId: String) {
         viewModelScope.launch {
-            userRepository.softDeleteUser(userId)
-            refreshUsers()
+            try {
+                userRepository.softDeleteUser(userId)
+                refreshUsers()
+            } catch (e: Exception) {
+                AppLogger.error("AdminUsersViewModel", "softDeleteUser error: ${e.message}", e)
+            }
         }
     }
 
     fun restoreUser(userId: String) {
         viewModelScope.launch {
-            userRepository.restoreUser(userId)
-            refreshUsers()
+            try {
+                userRepository.restoreUser(userId)
+                refreshUsers()
+            } catch (e: Exception) {
+                AppLogger.error("AdminUsersViewModel", "restoreUser error: ${e.message}", e)
+            }
         }
     }
 
@@ -114,38 +136,33 @@ class AdminUsersViewModel(
         _userDeleteErrorMessage.value = null
     }
 
-    fun openDepositModal(user: User) {
-        _depositUser.value = user
-        _depositAmountInput.value = ""
-        _depositNoteInput.value = ""
+    fun openCustomExpenseModal(user: User) {
+        _customExpenseUser.value = user
     }
 
-    fun closeDepositModal() {
-        _depositUser.value = null
-        _depositAmountInput.value = ""
-        _depositNoteInput.value = ""
+    fun closeCustomExpenseModal() {
+        _customExpenseUser.value = null
     }
 
-    fun updateDepositAmount(amountStr: String) {
-        _depositAmountInput.value = amountStr
-    }
-
-    fun updateDepositNote(note: String) {
-        _depositNoteInput.value = note
-    }
-
-    fun submitDeposit(isDeposit: Boolean) {
-        val user = _depositUser.value ?: return
-        val rawInput = _depositAmountInput.value.replace(',', '.')
-        val valDouble = rawInput.toDoubleOrNull() ?: return
-        if (valDouble <= 0.0) return
-
-        val cents = kotlin.math.round(valDouble * 100.0).toLong()
-        val delta = if (isDeposit) cents else -cents
-        val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
-
+    fun submitCustomExpense(user: User, amountCents: Long, description: String) {
+        val absCents = kotlin.math.abs(amountCents)
+        val deltaCents = -absCents
+        val txType = TransactionType.ADMIN_WITHDRAWAL
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val txId = "tx-admin-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+        val txId = generateUuid()
+
+        val items = listOf(
+            TransactionItem(
+                productId = "custom",
+                productName = description,
+                unitType = UnitType.PIECE,
+                quantity = 1L,
+                unitPriceAtPurchase = absCents
+            )
+        )
+
+        val balBefore = user.balance
+        val balAfter = user.balance + deltaCents
 
         val tx = Transaction(
             id = txId,
@@ -153,16 +170,73 @@ class AdminUsersViewModel(
             userNameSnapshot = user.name,
             timestamp = nowMillis,
             type = txType,
-            note = _depositNoteInput.value.ifBlank { if (isDeposit) "Deposit via Admin" else "Withdrawal via Admin" },
-            totalAmount = delta,
-            items = emptyList()
+            note = description,
+            totalAmount = deltaCents,
+            items = items,
+            userBalanceBefore = balBefore,
+            userBalanceAfter = balAfter
         )
 
         viewModelScope.launch {
-            userRepository.updateBalance(user.id, delta)
-            transactionRepository.recordTransaction(tx)
-            refreshUsers()
-            closeDepositModal()
+            try {
+                transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
+                refreshUsers()
+                closeCustomExpenseModal()
+            } catch (e: Exception) {
+                AppLogger.error("AdminUsersViewModel", "submitCustomExpense error: ${e.message}", e)
+            }
+        }
+    }
+
+    fun openCustomIncomeModal(user: User) {
+        _customIncomeUser.value = user
+    }
+
+    fun closeCustomIncomeModal() {
+        _customIncomeUser.value = null
+    }
+
+    fun submitCustomIncome(user: User, amountCents: Long, comment: String) {
+        val absCents = kotlin.math.abs(amountCents)
+        val deltaCents = absCents
+        val txType = TransactionType.ADMIN_DEPOSIT
+        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
+        val txId = generateUuid()
+
+        val items = listOf(
+            TransactionItem(
+                productId = "custom",
+                productName = comment,
+                unitType = UnitType.PIECE,
+                quantity = 1L,
+                unitPriceAtPurchase = absCents
+            )
+        )
+
+        val balBefore = user.balance
+        val balAfter = user.balance + deltaCents
+
+        val tx = Transaction(
+            id = txId,
+            userId = user.id,
+            userNameSnapshot = user.name,
+            timestamp = nowMillis,
+            type = txType,
+            note = comment,
+            totalAmount = deltaCents,
+            items = items,
+            userBalanceBefore = balBefore,
+            userBalanceAfter = balAfter
+        )
+
+        viewModelScope.launch {
+            try {
+                transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
+                refreshUsers()
+                closeCustomIncomeModal()
+            } catch (e: Exception) {
+                AppLogger.error("AdminUsersViewModel", "submitCustomIncome error: ${e.message}", e)
+            }
         }
     }
 
@@ -170,23 +244,40 @@ class AdminUsersViewModel(
         val isDeposit = centsDelta > 0
         val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val txId = "tx-admin-" + nowMillis + "-" + Random.nextInt(1000, 9999)
-
-        val tx = Transaction(
-            id = txId,
-            userId = userId,
-            userNameSnapshot = userName,
-            timestamp = nowMillis,
-            type = txType,
-            note = note.ifBlank { if (isDeposit) "Deposit via Admin" else "Withdrawal via Admin" },
-            totalAmount = centsDelta,
-            items = emptyList()
-        )
+        val txId = generateUuid()
 
         viewModelScope.launch {
-            userRepository.updateBalance(userId, centsDelta)
-            transactionRepository.recordTransaction(tx)
-            refreshUsers()
+            try {
+                val user = userRepository.getUserById(userId)
+                val balBefore = user?.balance ?: 0L
+                val balAfter = balBefore + centsDelta
+
+                val tx = Transaction(
+                    id = txId,
+                    userId = userId,
+                    userNameSnapshot = userName,
+                    timestamp = nowMillis,
+                    type = txType,
+                    note = note.ifBlank { if (isDeposit) "SYSNOTE|ADMIN_DEPOSIT" else "SYSNOTE|ADMIN_DEBIT" },
+                    totalAmount = centsDelta,
+                    items = emptyList(),
+                    userBalanceBefore = balBefore,
+                    userBalanceAfter = balAfter
+                )
+
+                transactionRepository.executeAtomicTransaction(tx, centsDelta, emptyMap())
+                refreshUsers()
+            } catch (e: Exception) {
+                AppLogger.error("AdminUsersViewModel", "adjustUserBalance error: ${e.message}", e)
+            }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _users.value = emptyList()
+        _searchQuery.value = ""
+        closeCustomExpenseModal()
+        closeCustomIncomeModal()
     }
 }

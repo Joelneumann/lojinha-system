@@ -2,9 +2,15 @@ package de.joelneumann.lojinha.ui.components.general
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -32,7 +38,9 @@ fun SearchInputField(
     onSearchSubmitted: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
-    onFocusChanged: ((FocusState) -> Unit)? = null
+    onFocusChanged: ((FocusState) -> Unit)? = null,
+    onEscape: (() -> Unit)? = null,
+    onKeyDown: ((KeyEvent) -> Boolean)? = null
 ) {
     var baseModifier = modifier
         .fillMaxWidth()
@@ -49,6 +57,25 @@ fun SearchInputField(
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = TextSecondaryMuted
+            )
+        },
+        trailingIcon = if (query.isNotBlank()) {
+            {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear",
+                        tint = TextSecondaryMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        } else null,
         placeholder = {
             Text(
                 text = placeholder,
@@ -57,12 +84,28 @@ fun SearchInputField(
             )
         },
         textStyle = LocalTextStyle.current.copy(fontSize = 15.sp),
-        modifier = baseModifier.onKeyEvent { keyEvent ->
-            if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                onSearchSubmitted()
-                true
-            } else false
-        },
+        modifier = baseModifier
+            .onPreviewKeyEvent { keyEvent ->
+                if (onKeyDown != null && onKeyDown(keyEvent)) {
+                    true
+                } else if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
+                    if (query.isNotBlank()) {
+                        onQueryChange("")
+                        true
+                    } else if (onEscape != null) {
+                        onEscape()
+                        true
+                    } else {
+                        false
+                    }
+                } else false
+            }
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyUp && (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
+                    onSearchSubmitted()
+                    true
+                } else false
+            },
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = SurfaceWhite,

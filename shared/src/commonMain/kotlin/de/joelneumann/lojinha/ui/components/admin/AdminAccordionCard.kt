@@ -3,8 +3,12 @@ package de.joelneumann.lojinha.ui.components.admin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -88,11 +92,11 @@ fun AdminAccordionCard(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         headerRightContent()
-                        Text(
-                            text = if (isExpanded) "▲" else "▼",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondaryMuted
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isExpanded) "Collapse" else "Expand",
+                            tint = TextSecondaryMuted,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

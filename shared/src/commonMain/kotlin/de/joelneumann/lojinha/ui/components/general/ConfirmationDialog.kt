@@ -12,8 +12,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun ConfirmationDialog(
@@ -28,11 +30,17 @@ fun ConfirmationDialog(
 ) {
     val strings = I18n.current
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
-            modifier = modifier.width(400.dp).wrapContentHeight()
+            modifier = modifier
+                .width(400.dp)
+                .wrapContentHeight()
+                .confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirm)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),

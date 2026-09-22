@@ -8,14 +8,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.pickFolder
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 private enum class ScheduleMode { TIMED, INTERVAL, ON_DATA_CHANGE }
 
@@ -25,67 +30,54 @@ fun BackupRoutineDialog(
     onSaveRoutine: (BackupRoutine) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val strings = I18n.current
     var name by remember { mutableStateOf(initialRoutine?.name ?: "") }
     var locationPath by remember { mutableStateOf(initialRoutine?.backupLocationPath ?: "") }
+    var destinationType by remember { mutableStateOf(initialRoutine?.type ?: BackupType.LOCAL) }
     var fileType by remember { mutableStateOf(initialRoutine?.fileType ?: BackupFileType.DB) }
     var writeMode by remember { mutableStateOf(initialRoutine?.writeMode ?: BackupWriteMode.CREATE_NEW_FILE) }
-    var destinationType by remember { mutableStateOf(initialRoutine?.type ?: BackupType.LOCAL) }
 
-    var scheduleMode by remember {
-        val mode = when (initialRoutine?.scheduleConfig) {
-            is BackupScheduleConfig.Interval -> ScheduleMode.INTERVAL
-            is BackupScheduleConfig.OnDataChange -> ScheduleMode.ON_DATA_CHANGE
-            else -> ScheduleMode.TIMED
-        }
-        mutableStateOf(mode)
+    val initialScheduleMode = when (initialRoutine?.scheduleConfig) {
+        is BackupScheduleConfig.Timed -> ScheduleMode.TIMED
+        is BackupScheduleConfig.Interval -> ScheduleMode.INTERVAL
+        is BackupScheduleConfig.OnDataChange -> ScheduleMode.ON_DATA_CHANGE
+        null -> ScheduleMode.TIMED
     }
 
-    var timedTime by remember {
-        val time = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Timed)?.timeOfDay ?: "02:00"
-        mutableStateOf(time)
-    }
+    var scheduleMode by remember { mutableStateOf(initialScheduleMode) }
 
-    var intervalHours by remember {
-        val h = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Interval)?.intervalHours ?: 1
-        mutableStateOf(h.toString())
-    }
+    val initialTimedTime = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Timed)?.timeOfDay ?: "02:00"
+    var timedTime by remember { mutableStateOf(initialTimedTime) }
 
-    var intervalMinutes by remember {
-        val m = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Interval)?.intervalMinutes ?: 0
-        mutableStateOf(m.toString())
-    }
+    val initialIntervalHours = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Interval)?.intervalHours?.toString() ?: "1"
+    var intervalHours by remember { mutableStateOf(initialIntervalHours) }
+
+    val initialIntervalMinutes = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Interval)?.intervalMinutes?.toString() ?: "0"
+    var intervalMinutes by remember { mutableStateOf(initialIntervalMinutes) }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = if (initialRoutine == null) Icons.Default.Add else Icons.Default.Edit,
-                    contentDescription = null,
-                    tint = PrimaryNavy,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = if (initialRoutine == null) "Create New Backup Routine" else "Edit Routine: '${initialRoutine.name}'",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = PrimaryNavy
-                )
-            }
+            Text(
+                text = if (initialRoutine == null) strings.createNewBackupRoutineTitle else strings.editRoutineTitle(initialRoutine.name),
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = PrimaryNavy
+            )
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 if (initialRoutine != null) {
                     Surface(
-                        color = AccentNavy.copy(alpha = 0.1f),
+                        color = PrimaryNavy.copy(alpha = 0.08f),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -101,7 +93,7 @@ fun BackupRoutineDialog(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "You are editing an existing backup routine. Changes will update the active routine schedule.",
+                                text = strings.editingRoutineBannerText,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = PrimaryNavy
@@ -113,20 +105,20 @@ fun BackupRoutineDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it; errorMessage = null },
-                    label = { Text("Routine Name") },
-                    placeholder = { Text("e.g. Nightly DB Backup") },
+                    label = { Text(strings.routineNameLabel) },
+                    placeholder = { Text(strings.routineNamePlaceholder) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 // Destination Target FilterChips
                 Column {
-                    Text("Destination Target:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                    Text(strings.destinationTargetLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = destinationType == BackupType.LOCAL,
                             onClick = { destinationType = BackupType.LOCAL },
-                            label = { Text("Local Folder") }
+                            label = { Text(strings.localFolderOption) }
                         )
                         FilterChip(
                             selected = destinationType == BackupType.ONEDRIVE,
@@ -136,7 +128,19 @@ fun BackupRoutineDialog(
                                     locationPath = "/LojinhaBackups"
                                 }
                             },
-                            label = { Text("☁️ OneDrive") }
+                            label = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Cloud,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(strings.oneDriveOption)
+                                }
+                            }
                         )
                     }
                 }
@@ -150,8 +154,8 @@ fun BackupRoutineDialog(
                     OutlinedTextField(
                         value = locationPath,
                         onValueChange = { locationPath = it; errorMessage = null },
-                        label = { Text(if (destinationType == BackupType.ONEDRIVE) "OneDrive Remote Folder Path" else "Host Save Location") },
-                        placeholder = { Text(if (destinationType == BackupType.ONEDRIVE) "/LojinhaBackups" else "Select folder path...") },
+                        label = { Text(if (destinationType == BackupType.ONEDRIVE) strings.oneDriveRemotePathLabel else strings.hostSaveLocationLabel) },
+                        placeholder = { Text(if (destinationType == BackupType.ONEDRIVE) "/LojinhaBackups" else strings.specifySaveLocation) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -172,7 +176,7 @@ fun BackupRoutineDialog(
                                     tint = SurfaceWhite,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Text("Browse...")
+                                Text(strings.browseBtn)
                             }
                         }
                     }
@@ -180,61 +184,73 @@ fun BackupRoutineDialog(
 
                 // File Type FilterChips
                 Column {
-                    Text("Backup File Format:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                    Text(strings.backupFileFormatLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = fileType == BackupFileType.DB,
                             onClick = { fileType = BackupFileType.DB },
-                            label = { Text(".db File") }
+                            label = { Text(strings.dbFileOption) }
                         )
                         FilterChip(
                             selected = fileType == BackupFileType.CSV,
                             onClick = { fileType = BackupFileType.CSV },
-                            label = { Text(".csv Files") }
+                            label = { Text(strings.csvFilesOption) }
                         )
                         FilterChip(
                             selected = fileType == BackupFileType.BOTH,
                             onClick = { fileType = BackupFileType.BOTH },
-                            label = { Text("Both") }
+                            label = { Text(strings.bothOption) }
                         )
                     }
                 }
 
                 // Write Mode FilterChips
                 Column {
-                    Text("File Overwrite Strategy:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                    Text(strings.fileOverwriteStrategyLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = writeMode == BackupWriteMode.CREATE_NEW_FILE,
                             onClick = { writeMode = BackupWriteMode.CREATE_NEW_FILE },
-                            label = { Text("Timestamped (New File)") }
+                            label = { Text(strings.timestampedNewFileOption) }
                         )
                         FilterChip(
                             selected = writeMode == BackupWriteMode.OVERWRITE_LATEST,
                             onClick = { writeMode = BackupWriteMode.OVERWRITE_LATEST },
-                            label = { Text("Overwrite Single File") }
+                            label = { Text(strings.overwriteSingleFileOption) }
                         )
                     }
                 }
 
                 // Schedule Type FilterChips
                 Column {
-                    Text("Schedule Type:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                    Text(strings.scheduleTypeLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = scheduleMode == ScheduleMode.TIMED,
                             onClick = { scheduleMode = ScheduleMode.TIMED },
-                            label = { Text("Fixed Time (Daily)") }
+                            label = { Text(strings.fixedTimeDailyOption) }
                         )
                         FilterChip(
                             selected = scheduleMode == ScheduleMode.INTERVAL,
                             onClick = { scheduleMode = ScheduleMode.INTERVAL },
-                            label = { Text("Recurring Interval") }
+                            label = { Text(strings.recurringIntervalOption) }
                         )
                         FilterChip(
                             selected = scheduleMode == ScheduleMode.ON_DATA_CHANGE,
                             onClick = { scheduleMode = ScheduleMode.ON_DATA_CHANGE },
-                            label = { Text("⚡ On Real-time Change") }
+                            label = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Bolt,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(strings.onRealtimeChangeOption)
+                                }
+                            }
                         )
                     }
                 }
@@ -243,7 +259,7 @@ fun BackupRoutineDialog(
                     OutlinedTextField(
                         value = timedTime,
                         onValueChange = { timedTime = it; errorMessage = null },
-                        label = { Text("Daily Fixed Time (HH:mm 24h)") },
+                        label = { Text(strings.dailyFixedTimeLabel) },
                         placeholder = { Text("02:00") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -256,7 +272,7 @@ fun BackupRoutineDialog(
                         OutlinedTextField(
                             value = intervalHours,
                             onValueChange = { intervalHours = it; errorMessage = null },
-                            label = { Text("Hours") },
+                            label = { Text(strings.hoursLabel) },
                             placeholder = { Text("1") },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
@@ -264,7 +280,7 @@ fun BackupRoutineDialog(
                         OutlinedTextField(
                             value = intervalMinutes,
                             onValueChange = { intervalMinutes = it; errorMessage = null },
-                            label = { Text("Minutes") },
+                            label = { Text(strings.minutesLabel) },
                             placeholder = { Text("30") },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
@@ -288,7 +304,7 @@ fun BackupRoutineDialog(
                                 modifier = Modifier.size(20.dp)
                             )
                             Text(
-                                text = "Realtime Backup: A backup will automatically run in the background whenever a purchase, deposit, or data change occurs.",
+                                text = strings.realtimeBackupDesc,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = PrimaryNavy
@@ -306,19 +322,31 @@ fun BackupRoutineDialog(
             Button(
                 onClick = {
                     if (name.isBlank()) {
-                        errorMessage = "Routine name cannot be empty."
+                        errorMessage = strings.routineNameCannotBeEmpty
                         return@Button
                     }
                     if (locationPath.isBlank()) {
-                        errorMessage = "Please specify a save location path."
+                        errorMessage = strings.specifySaveLocation
                         return@Button
                     }
 
+                    val timeRegex = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
                     val scheduleConfig: BackupScheduleConfig = when (scheduleMode) {
-                        ScheduleMode.TIMED -> BackupScheduleConfig.Timed(timedTime.ifBlank { "02:00" })
+                        ScheduleMode.TIMED -> {
+                            val trimmedTime = timedTime.trim()
+                            if (!timeRegex.matches(trimmedTime)) {
+                                errorMessage = strings.invalidTimeFormat
+                                return@Button
+                            }
+                            BackupScheduleConfig.Timed(trimmedTime)
+                        }
                         ScheduleMode.INTERVAL -> {
-                            val h = intervalHours.toIntOrNull() ?: 1
-                            val m = intervalMinutes.toIntOrNull() ?: 0
+                            val h = intervalHours.trim().toIntOrNull() ?: 0
+                            val m = intervalMinutes.trim().toIntOrNull() ?: 0
+                            if (h <= 0 && m <= 0) {
+                                errorMessage = strings.invalidIntervalFormat
+                                return@Button
+                            }
                             val existingAnchor = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Interval)?.anchorStartTimestamp
                             BackupScheduleConfig.Interval(
                                 intervalHours = h,
@@ -330,7 +358,7 @@ fun BackupRoutineDialog(
                     }
 
                     val routine = BackupRoutine(
-                        id = initialRoutine?.id?.ifBlank { "rt-${currentTimeMillis()}" } ?: "rt-${currentTimeMillis()}",
+                        id = initialRoutine?.id?.ifBlank { generateUuid() } ?: generateUuid(),
                         name = name,
                         isEnabled = initialRoutine?.isEnabled ?: true,
                         type = destinationType,
@@ -338,7 +366,7 @@ fun BackupRoutineDialog(
                         writeMode = writeMode,
                         scheduleConfig = scheduleConfig,
                         backupLocationPath = locationPath,
-                        lastBackupTimestamp = initialRoutine?.lastBackupTimestamp
+                        lastBackupTimestamp = initialRoutine?.lastBackupTimestamp ?: currentTimeMillis()
                     )
 
                     onSaveRoutine(routine)
@@ -356,7 +384,7 @@ fun BackupRoutineDialog(
                         tint = SurfaceWhite,
                         modifier = Modifier.size(16.dp)
                     )
-                    Text("Save Routine", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.saveRoutineBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             }
         },
@@ -365,7 +393,7 @@ fun BackupRoutineDialog(
                 onClick = onDismiss,
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Cancel")
+                Text(strings.cancel)
             }
         }
     )
@@ -377,8 +405,13 @@ fun DeleteRoutineConfirmationDialog(
     onConfirmDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val strings = I18n.current
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirmDelete),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -391,7 +424,7 @@ fun DeleteRoutineConfirmationDialog(
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    text = "Delete Backup Routine?",
+                    text = strings.deleteBackupRoutineConfirmTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = ColorDangerCrimson
@@ -401,7 +434,7 @@ fun DeleteRoutineConfirmationDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Are you sure you want to delete this backup routine? Automated backups for this schedule will stop permanently.",
+                    text = strings.deleteBackupRoutineConfirmMsg,
                     fontSize = 13.sp,
                     color = PrimaryNavy
                 )
@@ -434,7 +467,7 @@ fun DeleteRoutineConfirmationDialog(
                         tint = SurfaceWhite,
                         modifier = Modifier.size(16.dp)
                     )
-                    Text("Delete Routine", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.deleteRoutineBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             }
         },
@@ -443,7 +476,7 @@ fun DeleteRoutineConfirmationDialog(
                 onClick = onDismiss,
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Cancel")
+                Text(strings.cancel)
             }
         }
     )
@@ -456,10 +489,15 @@ fun ToggleRoutineConfirmationDialog(
     onConfirmToggle: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val strings = I18n.current
     val actionText = if (targetState) "Activate" else "Deactivate"
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirmToggle),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -472,7 +510,7 @@ fun ToggleRoutineConfirmationDialog(
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    text = "$actionText Backup Routine?",
+                    text = if (targetState) strings.activateBackupRoutineTitle else strings.deactivateBackupRoutineTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = PrimaryNavy
@@ -483,9 +521,9 @@ fun ToggleRoutineConfirmationDialog(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = if (targetState) {
-                        "Are you sure you want to activate automated backups for '${routine.name}'?"
+                        strings.activateBackupRoutineMsg(routine.name)
                     } else {
-                        "Are you sure you want to deactivate automated backups for '${routine.name}'? Automated background runs will be paused."
+                        strings.deactivateBackupRoutineMsg(routine.name)
                     },
                     fontSize = 13.sp,
                     color = PrimaryNavy
@@ -520,7 +558,7 @@ fun ToggleRoutineConfirmationDialog(
                         tint = SurfaceWhite,
                         modifier = Modifier.size(16.dp)
                     )
-                    Text("Yes, $actionText", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.yesAction(actionText), color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             }
         },
@@ -529,7 +567,7 @@ fun ToggleRoutineConfirmationDialog(
                 onClick = onDismiss,
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Cancel")
+                Text(strings.cancel)
             }
         }
     )

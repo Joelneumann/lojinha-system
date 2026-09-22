@@ -24,6 +24,7 @@ fun AdminTopBar(
     onSearchSubmitted: () -> Unit,
     actionButtonText: String? = null,
     onActionButtonClick: (() -> Unit)? = null,
+    sortContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
@@ -43,13 +44,25 @@ fun AdminTopBar(
                 )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AdminCountPill(
-                        text = countText
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxHeight(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AdminCountPill(
+                            text = countText,
+                            modifier = Modifier.fillMaxHeight()
+                        )
+                        if (sortContent != null) {
+                            Box(modifier = Modifier.fillMaxHeight()) {
+                                sortContent()
+                            }
+                        }
+                    }
 
                     if (actionButtonText != null && onActionButtonClick != null) {
                         Button(
@@ -57,7 +70,7 @@ fun AdminTopBar(
                             colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.height(38.dp)
+                            modifier = Modifier.fillMaxHeight()
                         ) {
                             Text(actionButtonText, color = SurfaceWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
                         }
@@ -81,8 +94,15 @@ fun AdminTopBar(
                 }
 
                 AdminCountPill(
-                    text = countText
+                    text = countText,
+                    modifier = Modifier.fillMaxHeight()
                 )
+
+                if (sortContent != null) {
+                    Box(modifier = Modifier.fillMaxHeight()) {
+                        sortContent()
+                    }
+                }
 
                 if (actionButtonText != null && onActionButtonClick != null) {
                     Button(

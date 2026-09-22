@@ -1,0 +1,143 @@
+name: Build & Release Windows App
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force create release even if version tag exists'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows MSI
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enable Git long paths
+        shell: bash
+        run: git config --system core.longpaths true
+
+      - name: Read App Version
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(grep '^app.version=' gradle.properties | cut -d'=' -f2 | tr -d ' \r\n')
+          if [ -z "$VERSION" ]; then
+            echo "Error: app.version not found in gradle.properties" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected App Version: $VERSION (Tag: v$VERSION)"
+
+      - name: Check if tag exists
+        id: check_tag
+        shell: bash
+        run: |
+          TAG="${{ steps.get_version.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $TAG already exists locally."
+          elif git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $TAG already exists on remote origin."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag $TAG does not exist yet. This will trigger a new release."
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Configure WiX Toolset in PATH
+        shell: pwsh
+        run: |
+          $wixPath = "C:\Program Files (x86)\WiX Toolset v3.11\bin"
+          if (Test-Path $wixPath) {
+            Write-Host "Found WiX Toolset at $wixPath. Adding to GITHUB_PATH."
+            $wixPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          } else {
+            Write-Host "WiX Toolset v3.11 path not found directly. Checking PATH..."
+            if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
+              Write-Host "Installing WiX Toolset via choco..."
+              choco install wixtoolset --yes --no-progress
+            }
+          }
+
+      - name: Build Windows MSI Package
+        shell: cmd
+        run: gradlew.bat :desktopApp:packageMsi --stacktrace
+
+      - name: Locate MSI artifact
+        id: msi_path
+        shell: pwsh
+        run: |
+          $msiFiles = Get-Item -Path "desktopApp/build/compose/binaries/main/msi/*.msi"
+          if ($msiFiles.Count -eq 0) {
+            Write-Error "No MSI file found in desktopApp/build/compose/binaries/main/msi/"
+            exit 1
+          }
+          $msiPath = $msiFiles[0].FullName
+          Write-Host "Found MSI package: $msiPath"
+          Write-Output "path=$msiPath" >> $env:GITHUB_OUTPUT
+          Write-Output "filename=$($msiFiles[0].Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Test MSI Artifact (Manual Run)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.msi_path.outputs.filename }}
+          path: ${{ steps.msi_path.outputs.path }}
+          retention-days: 1
+
+      - name: Create GitHub Release and Upload MSI
+        if: github.ref == 'refs/heads/main' && (steps.check_tag.outputs.exists == 'false' || github.event.inputs.force_release == 'true')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Release ${{ steps.get_version.outputs.tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: ${{ steps.msi_path.outputs.path }}
+
+      - name: Notify Version Not Bumped
+        if: github.ref == 'refs/heads/main' && steps.check_tag.outputs.exists == 'true' && github.event.inputs.force_release != 'true'
+        shell: bash
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          TAG="${{ steps.get_version.outputs.tag }}"
+          echo "::warning title=Version Not Bumped::Version $VERSION is already released ($TAG exists). No new release was published. Did you forget to update app.version in gradle.properties?"
+          echo "### ⚠️ No Release Published (Version Not Bumped)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The Windows build completed successfully, but **no GitHub Release was created** because tag \`$TAG\` already exists." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Tip:** If you intended to publish a new release with this merge, please increment \`app.version\` in \`gradle.properties\`." >> $GITHUB_STEP_SUMMARY
+
+      - name: Summarize Successful Release
+        if: github.ref == 'refs/heads/main' && steps.check_tag.outputs.exists == 'false'
+        shell: bash
+        run: |
+          TAG="${{ steps.get_version.outputs.tag }}"
+          echo "### 🚀 Release $TAG Published Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Created GitHub Release **$TAG** with Windows installer \`${{ steps.msi_path.outputs.filename }}\` attached." >> $GITHUB_STEP_SUMMARY

@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,15 +15,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.Barcode
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
 import de.joelneumann.lojinha.ui.components.admin.AdminSegmentedOptionsRow
+import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.formModalKeys
 
 @Composable
 fun ProductEditDialog(
@@ -35,13 +40,36 @@ fun ProductEditDialog(
     val isNewProduct = remember(product.id) { product.id.isBlank() || product.name.isBlank() }
 
     var name by remember { mutableStateOf(product.name) }
-    var basePriceBrl by remember { mutableStateOf(if (isNewProduct) "0,00" else (product.basePrice.toDouble() / 100.0).toString().replace('.', ',')) }
+    var basePriceBrl by remember { mutableStateOf(if (isNewProduct) "0,00" else Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()) }
     var unitType by remember { mutableStateOf(product.unitType) }
     var stockQuantity by remember { mutableStateOf(if (isNewProduct) "0" else Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)) }
-    var customMarkup by remember { mutableStateOf(product.customMarkupPercent?.toString() ?: "") }
+    val initialPriceBrl = remember(product.basePrice) { Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim() }
+    val initialStockAdmin = remember(product.stockQuantity, product.unitType) { Formatting.formatStockForAdmin(product.stockQuantity, product.unitType) }
+    val initialCustomMarkup = remember(product.customMarkupPercent) { product.customMarkupPercent?.let { Formatting.formatDecimal(it) } ?: "" }
+    var customMarkup by remember { mutableStateOf(initialCustomMarkup) }
     var barcodeCode by remember { mutableStateOf("") }
     var barcodeDesc by remember { mutableStateOf("") }
     var barcodeList by remember { mutableStateOf(product.barcodes) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+
+    val hasDialogChanges = name != product.name ||
+            basePriceBrl != initialPriceBrl ||
+            unitType != product.unitType ||
+            stockQuantity != initialStockAdmin ||
+            customMarkup != initialCustomMarkup ||
+            barcodeList != product.barcodes
+
+    val isModified = if (isNewProduct) {
+        name.isNotBlank() ||
+                (basePriceBrl != "0,00" && basePriceBrl != "0" && basePriceBrl.isNotBlank()) ||
+                (stockQuantity != "0" && stockQuantity.isNotBlank()) ||
+                customMarkup.isNotBlank() ||
+                barcodeList.isNotEmpty() ||
+                barcodeCode.isNotBlank() ||
+                barcodeDesc.isNotBlank()
+    } else {
+        hasDialogChanges || barcodeCode.isNotBlank() || barcodeDesc.isNotBlank()
+    }
 
     val newBarcodeConflictProduct = remember(barcodeCode, allProducts, product.id) {
         val trimmed = barcodeCode.trim()
@@ -53,12 +81,75 @@ fun ProductEditDialog(
         allProducts.firstOrNull { p -> p.id != product.id && p.barcodes.any { b -> barcodeList.any { bl -> bl.code.equals(b.code, ignoreCase = true) } } }
     }
 
-    Dialog(onDismissRequest = onCancel) {
+    val parsedMarkup = remember(customMarkup) { Formatting.parsePercentageInput(customMarkup) }
+    val isCustomMarkupValid = remember(customMarkup, parsedMarkup) {
+        customMarkup.isBlank() || (parsedMarkup != null && parsedMarkup in 0.0..1000.0)
+    }
+
+    val canSave = name.isNotBlank() && assignedBarcodeConflictProduct == null && isCustomMarkupValid && (isNewProduct || hasDialogChanges)
+
+    val handleDismissRequest = {
+        if (isModified) {
+            showDiscardConfirm = true
+        } else {
+            onCancel()
+        }
+    }
+
+    val handleSave = {
+        if (canSave) {
+            val priceCents = kotlin.math.round((basePriceBrl.replace(',', '.').toDoubleOrNull() ?: 0.0) * 100).toLong()
+            val stock = Formatting.parseAdminStockToDb(stockQuantity, unitType) ?: 0L
+            val markup = if (customMarkup.isBlank()) null else parsedMarkup
+            val updated = product.copy(
+                name = name.trim(),
+                basePrice = priceCents,
+                unitType = unitType,
+                stockQuantity = stock,
+                customMarkupPercent = markup,
+                barcodes = barcodeList
+            )
+            onSave(updated)
+        }
+    }
+
+    val handleAddBarcode = {
+        if (barcodeCode.isNotBlank() && newBarcodeConflictProduct == null) {
+            val code = barcodeCode.trim()
+            if (barcodeList.none { it.code.equals(code, ignoreCase = true) }) {
+                barcodeList = barcodeList + Barcode(code, barcodeDesc.trim().ifBlank { null })
+                barcodeCode = ""
+                barcodeDesc = ""
+            }
+        }
+    }
+
+    Dialog(
+        onDismissRequest = handleDismissRequest,
+        properties = DialogProperties(
+            dismissOnClickOutside = true,
+            dismissOnBackPress = true
+        )
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
             shadowElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth(0.95f).widthIn(max = 660.dp).wrapContentHeight()
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .widthIn(max = 660.dp)
+                .wrapContentHeight()
+                .formModalKeys(
+                    onCancel = handleDismissRequest,
+                    onConfirm = handleSave,
+                    confirmEnabled = canSave,
+                    interceptEnter = {
+                        if (barcodeCode.isNotBlank()) {
+                            handleAddBarcode()
+                            true
+                        } else false
+                    }
+                )
         ) {
             Column(
                 modifier = Modifier
@@ -80,28 +171,28 @@ fun ProductEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AdminLabeledField(
-                        label = "Product Name",
+                        label = strings.productNameLabel,
                         value = name,
                         onValueChange = { name = it },
-                        placeholder = "Product Name",
+                        placeholder = strings.productNamePlaceholder,
                         modifier = Modifier.weight(1.5f)
                     )
 
                     AdminLabeledField(
-                        label = "Base Price (R$)",
+                        label = strings.basePriceBrlLabel,
                         value = basePriceBrl,
                         onValueChange = { basePriceBrl = it },
-                        placeholder = "0,00",
+                        placeholder = strings.zeroPricePlaceholder,
                         modifier = Modifier.weight(1f)
                     )
                 }
 
                 AdminSegmentedOptionsRow(
-                    label = "Unit Type",
+                    label = strings.unitTypeLabel,
                     options = UnitType.entries,
                     selected = unitType,
                     onSelect = { unitType = it },
-                    optionLabel = { it.name }
+                    optionLabel = { if (it == UnitType.PIECE) strings.unitPiece else strings.unitWeight }
                 )
 
                 Row(
@@ -109,30 +200,41 @@ fun ProductEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AdminLabeledField(
-                        label = if (unitType == UnitType.PIECE) "Stock Quantity (Units):" else "Stock Quantity (kg):",
+                        label = if (unitType == UnitType.PIECE) strings.stockQtyUnitsLabel else strings.stockQtyKgLabel,
                         value = stockQuantity,
                         onValueChange = { stockQuantity = it },
-                        placeholder = if (unitType == UnitType.PIECE) "e.g. 25 (Full numbers)" else "e.g. 2.500 (Decimal in kg)",
+                        placeholder = if (unitType == UnitType.PIECE) strings.stockUnitsPlaceholder else strings.stockKgPlaceholder,
                         modifier = Modifier.weight(1f)
                     )
 
-                    AdminLabeledField(
-                        label = "Custom Markup % (Optional)",
-                        value = customMarkup,
-                        onValueChange = { customMarkup = it },
-                        placeholder = "Standard",
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        AdminLabeledField(
+                            label = strings.customMarkupOptionalLabel,
+                            value = customMarkup,
+                            onValueChange = { customMarkup = it },
+                            placeholder = strings.standardPlaceholder,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (!isCustomMarkupValid) {
+                            Text(
+                                text = strings.invalidMarkupError,
+                                fontSize = 11.sp,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                            )
+                        }
+                    }
                 }
 
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("Associated Barcodes (${barcodeList.size})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                    Text(strings.associatedBarcodesTitle(barcodeList.size), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                     Spacer(modifier = Modifier.height(6.dp))
 
                     if (barcodeList.isNotEmpty()) {
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             barcodeList.forEach { b ->
                                 Surface(
@@ -152,15 +254,17 @@ fun ProductEditDialog(
                                             modifier = Modifier.size(14.dp)
                                         )
                                         Text("${b.code}${if (b.description != null) " (${b.description})" else ""}", fontSize = 12.sp, color = PrimaryNavy)
-                                        Text(
-                                            text = "✕",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = ColorDangerCrimson,
-                                            modifier = Modifier.clickable {
-                                                barcodeList = barcodeList.filter { it.code != b.code }
-                                            }
-                                        )
+                                        IconButton(
+                                            onClick = { barcodeList = barcodeList.filter { it.code != b.code } },
+                                            modifier = Modifier.size(16.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = null,
+                                                tint = ColorDangerCrimson,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -176,9 +280,17 @@ fun ProductEditDialog(
                         OutlinedTextField(
                             value = barcodeCode,
                             onValueChange = { barcodeCode = it },
-                            placeholder = { Text("Barcode Code", fontSize = 12.sp) },
+                            placeholder = { Text(strings.barcodeCodePlaceholder, fontSize = 12.sp) },
                             textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                            modifier = Modifier.weight(1f).height(56.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .onKeyEvent { event ->
+                                    if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                        handleAddBarcode()
+                                        true
+                                    } else false
+                                },
                             shape = RoundedCornerShape(8.dp),
                             singleLine = true
                         )
@@ -186,30 +298,29 @@ fun ProductEditDialog(
                         OutlinedTextField(
                             value = barcodeDesc,
                             onValueChange = { barcodeDesc = it },
-                            placeholder = { Text("Description (Optional)", fontSize = 12.sp) },
+                            placeholder = { Text(strings.descriptionOptionalPlaceholder, fontSize = 12.sp) },
                             textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                            modifier = Modifier.weight(1f).height(56.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .onKeyEvent { event ->
+                                    if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                        handleAddBarcode()
+                                        true
+                                    } else false
+                                },
                             shape = RoundedCornerShape(8.dp),
                             singleLine = true
                         )
 
                         Button(
-                            onClick = {
-                                if (barcodeCode.isNotBlank() && newBarcodeConflictProduct == null) {
-                                    val code = barcodeCode.trim()
-                                    if (barcodeList.none { it.code.equals(code, ignoreCase = true) }) {
-                                        barcodeList = barcodeList + Barcode(code, barcodeDesc.trim().ifBlank { null })
-                                        barcodeCode = ""
-                                        barcodeDesc = ""
-                                    }
-                                }
-                            },
+                            onClick = handleAddBarcode,
                             enabled = barcodeCode.isNotBlank() && newBarcodeConflictProduct == null,
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                             modifier = Modifier.height(52.dp)
                         ) {
-                            Text("+ Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(strings.addBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -226,7 +337,7 @@ fun ProductEditDialog(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "Barcode '${barcodeCode.trim()}' is already assigned to product '${newBarcodeConflictProduct.name}'!",
+                                text = strings.barcodeConflictAlreadyAssigned(barcodeCode.trim(), newBarcodeConflictProduct.name),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ColorDangerCrimson
@@ -250,7 +361,7 @@ fun ProductEditDialog(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = "Contains barcode assigned to product '${assignedBarcodeConflictProduct.name}'!",
+                            text = strings.barcodeConflictContainsAssigned(assignedBarcodeConflictProduct.name),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ColorDangerCrimson
@@ -258,21 +369,12 @@ fun ProductEditDialog(
                     }
                 }
 
-                val initialPriceBrl = Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()
-                val initialStockAdmin = Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)
-                val hasDialogChanges = name != product.name ||
-                        basePriceBrl != initialPriceBrl ||
-                        unitType != product.unitType ||
-                        stockQuantity != initialStockAdmin ||
-                        customMarkup != (product.customMarkupPercent?.toString() ?: "") ||
-                        barcodeList != product.barcodes
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onCancel,
+                        onClick = handleDismissRequest,
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -286,7 +388,7 @@ fun ProductEditDialog(
                                 basePriceBrl = initialPriceBrl
                                 unitType = product.unitType
                                 stockQuantity = Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)
-                                customMarkup = product.customMarkupPercent?.toString() ?: ""
+                                customMarkup = initialCustomMarkup
                                 barcodeList = product.barcodes
                                 barcodeCode = ""
                                 barcodeDesc = ""
@@ -299,32 +401,19 @@ fun ProductEditDialog(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Undo,
+                                    imageVector = Icons.AutoMirrored.Filled.Undo,
                                     contentDescription = null,
                                     tint = PrimaryNavy,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Text("Revert", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                                Text(strings.revertChanges, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                             }
                         }
                     }
 
                     Button(
-                        onClick = {
-                            val priceCents = kotlin.math.round((basePriceBrl.replace(',', '.').toDoubleOrNull() ?: 0.0) * 100).toLong()
-                            val stock = Formatting.parseAdminStockToDb(stockQuantity, unitType) ?: 0L
-                            val markup = customMarkup.toDoubleOrNull()
-                            val updated = product.copy(
-                                name = name.trim(),
-                                basePrice = priceCents,
-                                unitType = unitType,
-                                stockQuantity = stock,
-                                customMarkupPercent = markup,
-                                barcodes = barcodeList
-                            )
-                            onSave(updated)
-                        },
-                        enabled = name.isNotBlank() && assignedBarcodeConflictProduct == null,
+                        onClick = handleSave,
+                        enabled = canSave,
                         modifier = Modifier.weight(1f).height(44.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp)
@@ -333,6 +422,23 @@ fun ProductEditDialog(
                     }
                 }
             }
+        }
+
+        if (showDiscardConfirm) {
+            ConfirmationDialog(
+                title = strings.discardChangesTitle,
+                message = strings.discardChangesMsg,
+                confirmText = strings.discard,
+                cancelText = strings.cancel,
+                confirmButtonColor = ColorDangerCrimson,
+                onConfirm = {
+                    showDiscardConfirm = false
+                    onCancel()
+                },
+                onDismiss = {
+                    showDiscardConfirm = false
+                }
+            )
         }
     }
 }

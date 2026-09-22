@@ -34,3 +34,10 @@ enum class TransactionType {
     CANCELLATION,
     CORRECTION
 }
+
+@Serializable
+enum class AvatarType {
+    INITIALS,
+    EMOJI
+}
+

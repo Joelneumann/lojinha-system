@@ -11,29 +11,65 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
 fun InactivityWarningDialog(
     secondsRemaining: Int,
-    onStayLoggedIn: () -> Unit,
-    onLogoutNow: () -> Unit
+    onStayLoggedIn: () -> Unit
 ) {
     val strings = I18n.current
     val mins = secondsRemaining / 60
     val secs = secondsRemaining % 60
     val formattedTime = "${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}"
+    val focusRequester = remember { FocusRequester() }
 
-    Dialog(onDismissRequest = onStayLoggedIn) {
+    LaunchedEffect(Unit) {
+        focusRequester.safeRequestFocus()
+    }
+
+    Dialog(
+        onDismissRequest = onStayLoggedIn,
+        properties = DialogProperties(
+            dismissOnClickOutside = true,
+            dismissOnBackPress = true
+        )
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
             shadowElevation = 10.dp,
-            modifier = Modifier.width(420.dp).wrapContentHeight()
+            modifier = Modifier
+                .width(420.dp)
+                .wrapContentHeight()
+                .focusRequester(focusRequester)
+                .focusable()
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) {
+                    onStayLoggedIn()
+                }
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        onStayLoggedIn()
+                        true
+                    } else false
+                }
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -73,37 +109,13 @@ fun InactivityWarningDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Button(
+                    onClick = onStayLoggedIn,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                 ) {
-                    OutlinedButton(
-                        onClick = onLogoutNow,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(text = strings.logout, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Button(
-                        onClick = onStayLoggedIn,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
-                    ) {
-                        Text(text = strings.stayLoggedIn, fontWeight = FontWeight.Bold)
-                    }
+                    Text(text = strings.stayLoggedIn, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
         }

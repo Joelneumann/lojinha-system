@@ -4,12 +4,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -21,6 +24,7 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.pickFile
 import de.joelneumann.lojinha.ui.utils.pickFolder
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 
 @Composable
@@ -28,6 +32,9 @@ fun AdminSettingsTabScreen(
     viewModel: AdminSettingsViewModel,
     onUnsavedStateChanged: (Boolean) -> Unit
 ) {
+    val strings = I18n.current
+    val clipboardManager = LocalClipboardManager.current
+    var copiedUrl by remember { mutableStateOf<String?>(null) }
     val settings by viewModel.settings.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -35,57 +42,55 @@ fun AdminSettingsTabScreen(
     val showWipeDataDialog by viewModel.showWipeDataDialog.collectAsState()
     val csvImportPreview by viewModel.csvImportPreview.collectAsState()
     val csvImportType by viewModel.csvImportType.collectAsState()
+    val logFolderSize by viewModel.logFolderSize.collectAsState()
 
     var newPassword by remember(settings) { mutableStateOf("") }
     var confirmPassword by remember(settings) { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
 
-    var globalMarkup by remember(settings) { mutableStateOf(settings.globalMarkupPercent.toString()) }
-    var usdRate by remember(settings) { mutableStateOf(settings.usdExchangeRate.toString()) }
-    var eurRate by remember(settings) { mutableStateOf(settings.eurExchangeRate.toString()) }
+    var globalMarkup by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.globalMarkupPercent)) }
+    var usdRate by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.usdExchangeRate)) }
+    var eurRate by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
     var inactivityTimeout by remember(settings) { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
 
     var backupLocation by remember(settings) { mutableStateOf(settings.backupLocationPath) }
-    var autoBackupEnabled by remember(settings) { mutableStateOf(settings.autoBackupEnabled) }
-    var autoBackupFormat by remember(settings) { mutableStateOf(settings.autoBackupFormat) }
-    var autoBackupScheduleType by remember(settings) { mutableStateOf(settings.autoBackupScheduleType) }
-    var autoBackupTime by remember(settings) { mutableStateOf(settings.autoBackupTime) }
-    var autoBackupIntervalHours by remember(settings) { mutableStateOf(settings.autoBackupIntervalHours.toString()) }
+    var supportEmail by remember(settings) { mutableStateOf(settings.supportEmail ?: "") }
 
     LaunchedEffect(settings) {
         newPassword = ""
         confirmPassword = ""
-        globalMarkup = settings.globalMarkupPercent.toString()
-        usdRate = settings.usdExchangeRate.toString()
-        eurRate = settings.eurExchangeRate.toString()
+        globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
+        usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
+        eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
         inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
         backupLocation = settings.backupLocationPath
-        autoBackupEnabled = settings.autoBackupEnabled
-        autoBackupFormat = settings.autoBackupFormat
-        autoBackupScheduleType = settings.autoBackupScheduleType
-        autoBackupTime = settings.autoBackupTime
-        autoBackupIntervalHours = settings.autoBackupIntervalHours.toString()
+        supportEmail = settings.supportEmail ?: ""
     }
 
     val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
     val doPasswordsMatch = newPassword == confirmPassword
     val isPasswordValid = !isPasswordEntered || (newPassword.isNotBlank() && doPasswordsMatch)
+    val inactivityTimeoutValue = inactivityTimeout.toIntOrNull()
+    val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue >= 2
+
+    val globalMarkupValue = remember(globalMarkup) { Formatting.parsePercentageInput(globalMarkup) }
+    val isGlobalMarkupValid = globalMarkupValue != null && globalMarkupValue in 0.0..1000.0
+    val parsedUsdRate = remember(usdRate) { usdRate.trim().replace(',', '.').toDoubleOrNull() }
+    val isUsdRateValid = parsedUsdRate != null && parsedUsdRate.isFinite() && parsedUsdRate > 0.0
+    val parsedEurRate = remember(eurRate) { eurRate.trim().replace(',', '.').toDoubleOrNull() }
+    val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate > 0.0
 
     val hasFieldChanges = remember(
         settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout,
-        backupLocation, autoBackupEnabled, autoBackupFormat, autoBackupScheduleType, autoBackupTime, autoBackupIntervalHours
+        backupLocation, supportEmail
     ) {
         newPassword.isNotEmpty() ||
-                globalMarkup != settings.globalMarkupPercent.toString() ||
-                usdRate != settings.usdExchangeRate.toString() ||
-                eurRate != settings.eurExchangeRate.toString() ||
-                inactivityTimeout != settings.inactivityTimeoutMinutes.toString() ||
+                globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent) ||
+                usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate) ||
+                eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate) ||
+                inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
                 backupLocation != settings.backupLocationPath ||
-                autoBackupEnabled != settings.autoBackupEnabled ||
-                autoBackupFormat != settings.autoBackupFormat ||
-                autoBackupScheduleType != settings.autoBackupScheduleType ||
-                autoBackupTime != settings.autoBackupTime ||
-                autoBackupIntervalHours != settings.autoBackupIntervalHours.toString()
+                supportEmail != (settings.supportEmail ?: "")
     }
 
     LaunchedEffect(hasFieldChanges) {
@@ -109,7 +114,7 @@ fun AdminSettingsTabScreen(
                     modifier = Modifier.size(22.dp)
                 )
                 Text(
-                    text = "System & Admin Settings",
+                    text = strings.systemAdminSettingsTitle,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -117,7 +122,7 @@ fun AdminSettingsTabScreen(
 
                 if (hasFieldChanges) {
                     AdminStatusBadge(
-                        text = "● Unsaved Edits",
+                        text = strings.unsavedEditsBadge,
                         type = AdminBadgeType.WARNING
                     )
                 }
@@ -133,16 +138,12 @@ fun AdminSettingsTabScreen(
                         onClick = {
                             newPassword = ""
                             confirmPassword = ""
-                            globalMarkup = settings.globalMarkupPercent.toString()
-                            usdRate = settings.usdExchangeRate.toString()
-                            eurRate = settings.eurExchangeRate.toString()
+                            globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
+                            usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
+                            eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
                             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
                             backupLocation = settings.backupLocationPath
-                            autoBackupEnabled = settings.autoBackupEnabled
-                            autoBackupFormat = settings.autoBackupFormat
-                            autoBackupScheduleType = settings.autoBackupScheduleType
-                            autoBackupTime = settings.autoBackupTime
-                            autoBackupIntervalHours = settings.autoBackupIntervalHours.toString()
+                            supportEmail = settings.supportEmail ?: ""
                             onUnsavedStateChanged(false)
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -153,31 +154,27 @@ fun AdminSettingsTabScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Undo,
+                                imageVector = Icons.AutoMirrored.Filled.Undo,
                                 contentDescription = null,
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Text("Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                            Text(strings.revertChanges, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
                         }
                     }
                 }
 
                 Button(
                     onClick = {
-                        if (hasFieldChanges && isPasswordValid) {
+                        if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid) {
                             val updatedSettings = settings.copy(
-                                adminPasswordHash = if (newPassword.isNotBlank()) newPassword else settings.adminPasswordHash,
-                                globalMarkupPercent = globalMarkup.toDoubleOrNull() ?: settings.globalMarkupPercent,
-                                usdExchangeRate = usdRate.toDoubleOrNull() ?: settings.usdExchangeRate,
-                                eurExchangeRate = eurRate.toDoubleOrNull() ?: settings.eurExchangeRate,
-                                inactivityTimeoutMinutes = inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes,
+                                adminPasswordHash = if (newPassword.isNotBlank()) de.joelneumann.lojinha.security.PasswordHasher.hash(newPassword) else settings.adminPasswordHash,
+                                globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
+                                usdExchangeRate = parsedUsdRate ?: settings.usdExchangeRate,
+                                eurExchangeRate = parsedEurRate ?: settings.eurExchangeRate,
+                                inactivityTimeoutMinutes = maxOf(2, inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes),
                                 backupLocationPath = backupLocation,
-                                autoBackupEnabled = autoBackupEnabled,
-                                autoBackupFormat = autoBackupFormat,
-                                autoBackupScheduleType = autoBackupScheduleType,
-                                autoBackupTime = autoBackupTime,
-                                autoBackupIntervalHours = autoBackupIntervalHours.toIntOrNull() ?: settings.autoBackupIntervalHours
+                                supportEmail = supportEmail.takeIf { it.isNotBlank() }
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
@@ -185,7 +182,7 @@ fun AdminSettingsTabScreen(
                             onUnsavedStateChanged(false)
                         }
                     },
-                    enabled = hasFieldChanges && isPasswordValid,
+                    enabled = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentNavy,
                         disabledContainerColor = SurfaceContainerHighLight
@@ -204,7 +201,7 @@ fun AdminSettingsTabScreen(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = if (hasFieldChanges) "Save Settings" else "Saved",
+                            text = if (hasFieldChanges) strings.saveSettings else strings.saved,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = SurfaceWhite
@@ -227,7 +224,7 @@ fun AdminSettingsTabScreen(
                 ) {
                     Text(statusMessage!!, color = ColorSuccessEmerald, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     IconButton(onClick = { viewModel.clearStatusMessages() }) {
-                        Text("✕", fontSize = 12.sp, color = ColorSuccessEmerald)
+                        Icon(Icons.Default.Close, contentDescription = null, tint = ColorSuccessEmerald, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -246,7 +243,7 @@ fun AdminSettingsTabScreen(
                 ) {
                     Text(errorMessage!!, color = ColorDangerCrimson, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     IconButton(onClick = { viewModel.clearStatusMessages() }) {
-                        Text("✕", fontSize = 12.sp, color = ColorDangerCrimson)
+                        Icon(Icons.Default.Close, contentDescription = null, tint = ColorDangerCrimson, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -282,17 +279,17 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Admin Master Password", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.adminMasterPasswordTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             AdminLabeledField(
-                                label = "New Password:",
+                                label = strings.newPasswordLabel,
                                 value = newPassword,
                                 onValueChange = { newPassword = it },
-                                placeholder = "Enter new password",
+                                placeholder = strings.newPasswordPlaceholder,
                                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
                                     IconButton(onClick = { showPassword = !showPassword }) {
@@ -307,10 +304,10 @@ fun AdminSettingsTabScreen(
                             )
 
                             AdminLabeledField(
-                                label = "Confirm New Password:",
+                                label = strings.confirmNewPasswordLabel,
                                 value = confirmPassword,
                                 onValueChange = { confirmPassword = it },
-                                placeholder = "Confirm new password",
+                                placeholder = strings.confirmNewPasswordPlaceholder,
                                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
                                     IconButton(onClick = { showPassword = !showPassword }) {
@@ -337,7 +334,7 @@ fun AdminSettingsTabScreen(
                                         tint = ColorDangerCrimson,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Text("Passwords do not match", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                                    Text(strings.passwordsDoNotMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
                                 }
                             } else if (newPassword.isNotBlank()) {
                                 Row(
@@ -350,7 +347,7 @@ fun AdminSettingsTabScreen(
                                         tint = ColorSuccessEmerald,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Text("Passwords match", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
+                                    Text(strings.passwordsMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
                                 }
                             }
                         }
@@ -381,15 +378,23 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Product Pricing Rules", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.productPricingRulesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
                         AdminLabeledField(
-                            label = "Global Product Markup (%):",
+                            label = strings.globalProductMarkupLabel,
                             value = globalMarkup,
                             onValueChange = { globalMarkup = it },
-                            placeholder = "e.g. 10.0",
+                            placeholder = strings.globalProductMarkupPlaceholder,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        if (!isGlobalMarkupValid) {
+                            Text(
+                                text = strings.invalidMarkupError,
+                                fontSize = 11.sp,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -417,25 +422,25 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Currency Exchange Rates", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.currencyExchangeRatesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             AdminLabeledField(
-                                label = "USD Rate (1 BRL = X USD):",
+                                label = strings.usdRateLabel,
                                 value = usdRate,
                                 onValueChange = { usdRate = it },
-                                placeholder = "e.g. 0.18",
+                                placeholder = strings.usdRatePlaceholder,
                                 modifier = Modifier.weight(1f)
                             )
 
                             AdminLabeledField(
-                                label = "EUR Rate (1 BRL = X EUR):",
+                                label = strings.eurRateLabel,
                                 value = eurRate,
                                 onValueChange = { eurRate = it },
-                                placeholder = "e.g. 0.16",
+                                placeholder = strings.eurRatePlaceholder,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -466,15 +471,24 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Kiosk System Timers", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.kioskSystemTimersTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
                         AdminLabeledField(
-                            label = "Inactivity Timeout (Minutes):",
+                            label = strings.inactivityTimeoutLabel,
                             value = inactivityTimeout,
                             onValueChange = { inactivityTimeout = it },
-                            placeholder = "e.g. 3",
+                            placeholder = strings.inactivityTimeoutPlaceholder,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        if (!isInactivityTimeoutValid) {
+                            Text(
+                                text = strings.inactivityTimeoutMinError,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(start = 2.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -500,7 +514,13 @@ fun AdminSettingsTabScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("☁️ Microsoft OneDrive Integration", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Icon(
+                                    imageVector = Icons.Default.Cloud,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.oneDriveIntegrationTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                             }
 
                             val isConnected = !settingsState.oneDriveRefreshToken.isNullOrBlank()
@@ -509,7 +529,7 @@ fun AdminSettingsTabScreen(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text(
-                                    text = if (isConnected) "Connected" else "Disconnected",
+                                    text = if (isConnected) strings.connected else strings.disconnected,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -518,8 +538,6 @@ fun AdminSettingsTabScreen(
                             }
                         }
 
-
-
                         var clientIdInput by remember(settingsState.oneDriveClientId) { mutableStateOf(settingsState.oneDriveClientId) }
                         OutlinedTextField(
                             value = clientIdInput,
@@ -527,8 +545,8 @@ fun AdminSettingsTabScreen(
                                 clientIdInput = it
                                 viewModel.updateOneDriveClientId(it)
                             },
-                            label = { Text("Azure Application (Client) ID") },
-                            placeholder = { Text("Enter your Azure Client ID...") },
+                            label = { Text(strings.azureClientIdLabel) },
+                            placeholder = { Text(strings.azureClientIdPlaceholder) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -541,7 +559,7 @@ fun AdminSettingsTabScreen(
                             ) {
                                 Column {
                                     Text(
-                                        text = "Account: ${settingsState.oneDriveAccountEmail ?: "Microsoft Account"}",
+                                        text = strings.oneDriveAccountLabel(settingsState.oneDriveAccountEmail ?: strings.microsoftAccount),
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = PrimaryNavy
@@ -560,7 +578,7 @@ fun AdminSettingsTabScreen(
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson)
                                 ) {
-                                    Text("Disconnect")
+                                    Text(strings.disconnectOneDrive)
                                 }
                             }
                         } else {
@@ -570,7 +588,7 @@ fun AdminSettingsTabScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Connect your Microsoft account to back up database & CSV files directly to OneDrive.",
+                                    text = strings.connectOneDriveDesc,
                                     fontSize = 12.sp,
                                     color = Color.DarkGray,
                                     modifier = Modifier.weight(1f).padding(end = 12.dp)
@@ -581,7 +599,7 @@ fun AdminSettingsTabScreen(
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
                                 ) {
-                                    Text("Connect OneDrive")
+                                    Text(strings.connectOneDrive)
                                 }
                             }
                         }
@@ -616,12 +634,12 @@ fun AdminSettingsTabScreen(
                                     tint = PrimaryNavy,
                                     modifier = Modifier.size(18.dp)
                                 )
-                                Text("Configured Backup Routines", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                Text(strings.configuredBackupRoutinesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 Surface(
                                     color = PrimaryNavy.copy(alpha = 0.1f),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text("${routines.size} Routines", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.routinesCountBadge(routines.size), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
                             }
 
@@ -640,7 +658,7 @@ fun AdminSettingsTabScreen(
                                         tint = SurfaceWhite,
                                         modifier = Modifier.size(14.dp)
                                     )
-                                    Text("Create Routine", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(strings.createRoutine, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -656,8 +674,8 @@ fun AdminSettingsTabScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Text("No backup routines created yet.", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                                    Text("Click '+ Create Routine' above to add automated or manual backup schedules.", fontSize = 12.sp, color = AccentNavy)
+                                    Text(strings.noRoutinesYet, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.noRoutinesYetSub, fontSize = 12.sp, color = AccentNavy)
                                 }
                             }
                         } else {
@@ -665,18 +683,23 @@ fun AdminSettingsTabScreen(
                                 routines.forEach { routine ->
                                     val lastBackupStr = routine.lastBackupTimestamp?.let {
                                         Formatting.formatTimestamp(it)
-                                    } ?: "Never"
+                                    } ?: strings.never
 
                                     val nextDueStr = if (routine.scheduleConfig is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange) {
-                                        "On Real-time Event"
+                                        strings.onRealtimeEvent
                                     } else {
-                                        Formatting.formatTimestamp(routine.calculateNextDueTimestamp())
+                                        val nextDue = routine.calculateNextDueTimestamp()
+                                        if (nextDue == Long.MAX_VALUE) {
+                                            strings.never
+                                        } else {
+                                            Formatting.formatTimestamp(nextDue)
+                                        }
                                     }
 
                                     val scheduleBadgeText = when (val cfg = routine.scheduleConfig) {
-                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed -> "TIMED ${cfg.timeOfDay}"
-                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Interval -> "EVERY ${cfg.intervalHours}h ${cfg.intervalMinutes}m"
-                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange -> "⚡ REALTIME CHANGE"
+                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed -> strings.badgeTimed(cfg.timeOfDay)
+                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Interval -> strings.badgeInterval(cfg.intervalHours, cfg.intervalMinutes)
+                                        is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange -> strings.badgeRealtime
                                     }
 
                                     Card(
@@ -711,7 +734,7 @@ fun AdminSettingsTabScreen(
                                                          color = PrimaryNavy.copy(alpha = 0.08f),
                                                          shape = RoundedCornerShape(4.dp)
                                                      ) {
-                                                         val writeModeText = if (routine.writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) "OVERWRITE" else "NEW FILE"
+                                                         val writeModeText = if (routine.writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) strings.badgeOverwrite else strings.badgeNewFile
                                                          Text(writeModeText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                                      }
 
@@ -729,8 +752,8 @@ fun AdminSettingsTabScreen(
                                                 )
                                             }
 
-                                            Text("Target Path: ${routine.backupLocationPath}", fontSize = 11.sp, color = AccentNavy)
-                                            Text("Last Backup: $lastBackupStr  •  Next Due: $nextDueStr", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                                            Text(strings.targetPathLabel(routine.backupLocationPath), fontSize = 11.sp, color = AccentNavy)
+                                            Text(strings.lastBackupNextDueLabel(lastBackupStr, nextDueStr), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
 
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -752,7 +775,7 @@ fun AdminSettingsTabScreen(
                                                             tint = SurfaceWhite,
                                                             modifier = Modifier.size(13.dp)
                                                         )
-                                                        Text("Run Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        Text(strings.runNow, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     }
                                                 }
 
@@ -771,7 +794,7 @@ fun AdminSettingsTabScreen(
                                                             tint = PrimaryNavy,
                                                             modifier = Modifier.size(13.dp)
                                                         )
-                                                        Text("Edit", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                                        Text(strings.edit, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                                     }
                                                 }
 
@@ -791,7 +814,7 @@ fun AdminSettingsTabScreen(
                                                             tint = ColorDangerCrimson,
                                                             modifier = Modifier.size(13.dp)
                                                         )
-                                                        Text("Delete", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        Text(strings.delete, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     }
                                                 }
                                             }
@@ -827,7 +850,7 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Database Restore (.db) & Reset", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.databaseRestoreResetTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
 
                         Row(
@@ -836,7 +859,7 @@ fun AdminSettingsTabScreen(
                         ) {
                             Button(
                                 onClick = {
-                                    pickFile("Select .db Database Backup File", ".db") { selectedFile ->
+                                    pickFile(strings.selectDbBackupFile, ".db") { selectedFile ->
                                         viewModel.setRestoreDbFile(selectedFile)
                                     }
                                 },
@@ -854,7 +877,7 @@ fun AdminSettingsTabScreen(
                                         tint = SurfaceWhite,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Text("Restore Database (.db)...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                    Text(strings.restoreDatabaseBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                                 }
                             }
 
@@ -876,7 +899,7 @@ fun AdminSettingsTabScreen(
                                         tint = SurfaceWhite,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Text("Wipe All Data (Factory Reset)...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                    Text(strings.factoryResetBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                                 }
                             }
                         }
@@ -907,9 +930,9 @@ fun AdminSettingsTabScreen(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text("Import Data from CSV Files", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.importCsvDataTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
-                        Text("Import Products or Users into the database (Add / Update Mode). Existing matching IDs will be updated; user barcodes will be cleared to prevent collisions.", fontSize = 12.sp, color = AccentNavy)
+                        Text(strings.importCsvDataDesc, fontSize = 12.sp, color = AccentNavy)
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -917,7 +940,7 @@ fun AdminSettingsTabScreen(
                         ) {
                             OutlinedButton(
                                 onClick = {
-                                    pickFile("Select Products CSV File", ".csv") { selectedFile ->
+                                    pickFile(strings.selectProductsCsvFile, ".csv") { selectedFile ->
                                         viewModel.prepareCsvImport(selectedFile, "Products")
                                     }
                                 },
@@ -934,13 +957,13 @@ fun AdminSettingsTabScreen(
                                         tint = PrimaryNavy,
                                         modifier = Modifier.size(15.dp)
                                     )
-                                    Text("Import Products CSV...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.importProductsCsvBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
                             }
 
                             OutlinedButton(
                                 onClick = {
-                                    pickFile("Select Users CSV File", ".csv") { selectedFile ->
+                                    pickFile(strings.selectUsersCsvFile, ".csv") { selectedFile ->
                                         viewModel.prepareCsvImport(selectedFile, "Users")
                                     }
                                 },
@@ -957,14 +980,371 @@ fun AdminSettingsTabScreen(
                                         tint = PrimaryNavy,
                                         modifier = Modifier.size(15.dp)
                                     )
-                                    Text("Import Users CSV...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.importUsersCsvBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
                             }
                         }
                     }
                 }
             }
+
+            // CARD 8: SUPPORT CONTACT
+            item(key = "support-contact-card") {
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ContactSupport,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.supportContactTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+
+                        AdminLabeledField(
+                            label = strings.supportEmailLabel,
+                            value = supportEmail,
+                            onValueChange = { supportEmail = it },
+                            placeholder = strings.supportEmailPlaceholder,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: "support@example.com"
+                                    uriHandler.openUri("mailto:$email")
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.contactSupportBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    uriHandler.openUri("https://github.com/TODO_YOUR_PROJECT")
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Code,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.githubRepoBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = DividerBorder, thickness = 1.dp)
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BugReport,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.diagnosticsSectionTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+
+                        if (viewModel.logDirectoryPath.isNotBlank()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    "${strings.logFolderLabel}: ${viewModel.logDirectoryPath}",
+                                    fontSize = 12.sp,
+                                    color = AccentNavy
+                                )
+                                if (logFolderSize.isNotBlank()) {
+                                    Text(
+                                        strings.logSizeLabel(logFolderSize),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = PrimaryNavy
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: "support@example.com"
+                                    viewModel.exportSupportBundle(prepareEmail = true, recipientEmail = email)
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = null,
+                                        tint = SurfaceWhite,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.exportAndEmailSupportBundleBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.exportSupportBundle(prepareEmail = false, recipientEmail = "")
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Archive,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.exportSupportBundleBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.openLogFolder()
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(strings.openLogFolderBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // CARD 7: REMOTE WEB ADMINISTRATION (LAN)
+            if (viewModel.serverUrls.isNotEmpty()) {
+                item(key = "remote-admin-card") {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SurfaceWhite,
+                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Language,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.remoteAdminTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+
+                            Text(
+                                strings.remoteAdminSubtitle,
+                                fontSize = 13.sp,
+                                color = TextSecondaryMuted
+                            )
+
+                            viewModel.serverUrls.forEach { url ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SurfaceContainerLight,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = url,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AccentNavy
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                clipboardManager.setText(AnnotatedString(url))
+                                                copiedUrl = url
+                                            },
+                                            shape = RoundedCornerShape(6.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (copiedUrl == url) ColorSuccessEmerald else PrimaryNavy
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (copiedUrl == url) Icons.Default.Check else Icons.Default.ContentCopy,
+                                                    contentDescription = null,
+                                                    tint = SurfaceWhite,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Text(
+                                                    text = if (copiedUrl == url) strings.urlCopiedToast else strings.copyUrlBtn,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SurfaceWhite
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text(
+                                strings.remoteAdminFirewallNotice,
+                                fontSize = 12.sp,
+                                color = TextSecondaryMuted
+                            )
+                        }
+                    }
+                }
+            }
+
+            // CARD 8: SYSTEM & KIOSK ACTIONS
+            item(key = "kiosk-actions-card") {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PowerSettingsNew,
+                                contentDescription = null,
+                                tint = ColorDangerCrimson,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.kioskActionsTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+
+                        Button(
+                            onClick = { viewModel.openExitConfirmationDialog() },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                    contentDescription = null,
+                                    tint = SurfaceWhite,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(strings.exitKioskBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                            }
+                        }
+                    }
+                }
+            }
         }
+
+    val showExitConfirmationDialog by viewModel.showExitConfirmationDialog.collectAsState()
+    if (showExitConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissExitConfirmationDialog() },
+            title = { Text(strings.exitKioskConfirmTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
+            text = { Text(strings.exitKioskConfirmMessage, color = PrimaryNavy) },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.confirmExitApplication() },
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
+                ) {
+                    Text(strings.exitConfirmBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { viewModel.dismissExitConfirmationDialog() }
+                ) {
+                    Text(strings.cancel, color = PrimaryNavy)
+                }
+            },
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(12.dp)
+        )
     }
 
     // MULTI-APPROVAL DIALOG TRIGGERS
@@ -1077,4 +1457,5 @@ fun AdminSettingsTabScreen(
             onDismiss = { viewModel.dismissOneDriveSuccessDialog() }
         )
     }
+}
 }

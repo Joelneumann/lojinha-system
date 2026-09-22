@@ -1,41 +1,64 @@
 package de.joelneumann.lojinha.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon
+import de.joelneumann.lojinha.ui.theme.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.input.key.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.data.repository.LoginResult
+import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import kotlinx.coroutines.launch
 
 @Composable
 fun AdminWebLoginScreen(
-    onLoginSubmit: suspend (String) -> Boolean,
+    onLoginSubmit: suspend (String) -> LoginResult,
     onLoginSuccess: () -> Unit
 ) {
+    val strings = I18n.current
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun handleSubmit() {
-        if (password.isBlank()) return
+        if (isLoading || password.isBlank()) return
         isLoading = true
         errorMessage = null
         scope.launch {
-            val success = onLoginSubmit(password)
+            val result = onLoginSubmit(password)
             isLoading = false
-            if (success) {
-                onLoginSuccess()
-            } else {
-                errorMessage = "Invalid admin password. Access denied."
+            when (result) {
+                is LoginResult.Success -> {
+                    onLoginSuccess()
+                }
+                is LoginResult.RateLimited -> {
+                    errorMessage = result.message
+                }
+                is LoginResult.InvalidCredentials -> {
+                    errorMessage = strings.invalidAdminPassword
+                }
+                is LoginResult.NetworkError -> {
+                    errorMessage = result.message
+                }
             }
         }
     }
@@ -49,7 +72,7 @@ fun AdminWebLoginScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
-                .widthIn(max = 420.dp)
+                .widthIn(max = 440.dp)
                 .padding(vertical = 16.dp),
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
@@ -60,6 +83,49 @@ fun AdminWebLoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Language Switcher Row (Aligned to the left side)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Language.entries.forEach { lang ->
+                            val isSelected = lang == LanguageManager.currentLanguage
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
+                                    .border(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        color = if (isSelected) AccentBlue else DividerBorder,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        LanguageManager.setLanguage(lang)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    LanguageFlagIcon(language = lang, width = 18.dp, height = 13.dp)
+                                    Text(
+                                        text = lang.code.uppercase(),
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) SurfaceWhite else PrimaryNavy
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -71,7 +137,7 @@ fun AdminWebLoginScreen(
                         modifier = Modifier.size(26.dp)
                     )
                     Text(
-                        text = "Admin Console",
+                        text = strings.adminConsoleWebTitle,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -79,7 +145,7 @@ fun AdminWebLoginScreen(
                 }
 
                 Text(
-                    text = "Please enter the admin password to manage settings, products, and users over the network.",
+                    text = strings.adminConsoleWebDesc,
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -90,11 +156,27 @@ fun AdminWebLoginScreen(
                         password = it
                         errorMessage = null
                     },
-                    label = { Text("Admin Password") },
+                    label = { Text(strings.adminPasswordLabelWeb) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     isError = errorMessage != null,
-                    modifier = Modifier.fillMaxWidth()
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = { handleSubmit() }
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onKeyEvent { keyEvent ->
+                            if (keyEvent.type == KeyEventType.KeyDown && 
+                                (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
+                                handleSubmit()
+                                true
+                            } else {
+                                false
+                            }
+                        }
                 )
 
                 if (errorMessage != null) {
@@ -121,7 +203,7 @@ fun AdminWebLoginScreen(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(strings.loginBtn, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

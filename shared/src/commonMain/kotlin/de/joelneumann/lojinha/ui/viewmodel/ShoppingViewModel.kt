@@ -7,6 +7,10 @@ import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
+import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +56,9 @@ class ShoppingViewModel(
     private val _showCheckoutConfirmation = MutableStateFlow(false)
     val showCheckoutConfirmation: StateFlow<Boolean> = _showCheckoutConfirmation.asStateFlow()
 
+    private val _completedPurchase = MutableStateFlow<Transaction?>(null)
+    val completedPurchase: StateFlow<Transaction?> = _completedPurchase.asStateFlow()
+
     init {
         loadProducts()
     }
@@ -59,7 +66,7 @@ class ShoppingViewModel(
     fun loadProducts() {
         viewModelScope.launch {
             productRepository.getProductsFlow().collect { list ->
-                _products.value = list.filter { it.isActive }
+                _products.value = list.filter { it.isActive }.sortedByAccentInsensitive { it.name }
             }
         }
     }
@@ -72,22 +79,9 @@ class ShoppingViewModel(
         val query = _searchQuery.value.trim()
         if (query.isBlank()) return
 
-        // 1. Try matching product by barcode first
-        val productByBarcode = _products.value.firstOrNull { p ->
-            p.barcodes.any { b -> b.code.equals(query, ignoreCase = true) }
-        }
-        if (productByBarcode != null) {
-            onProductSelected(productByBarcode, globalMarkup)
-            _searchQuery.value = ""
-            return
-        }
-
-        // 2. Otherwise check filtered product list by name
-        val filtered = _products.value.filter { p ->
-            p.name.contains(query, ignoreCase = true)
-        }
-        if (filtered.size == 1) {
-            onProductSelected(filtered.first(), globalMarkup)
+        val ranked = _products.value.filterAndRankProducts(query)
+        if (ranked.isNotEmpty()) {
+            onProductSelected(ranked.first(), globalMarkup)
             _searchQuery.value = ""
         }
     }
@@ -109,7 +103,11 @@ class ShoppingViewModel(
         val existingIndex = currentList.indexOfFirst { it.product.id == product.id }
         if (existingIndex >= 0) {
             val item = currentList[existingIndex]
-            currentList[existingIndex] = item.copy(quantity = item.quantity + 1)
+            currentList[existingIndex] = item.copy(
+                product = product,
+                quantity = item.quantity + 1,
+                unitPriceWithMarkup = unitPrice
+            )
         } else {
             currentList.add(CartItem(product = product, quantity = 1, unitPriceWithMarkup = unitPrice))
         }
@@ -131,7 +129,11 @@ class ShoppingViewModel(
             val existingIndex = currentList.indexOfFirst { it.product.id == product.id }
             if (existingIndex >= 0) {
                 val item = currentList[existingIndex]
-                currentList[existingIndex] = item.copy(quantity = item.quantity + grams)
+                currentList[existingIndex] = item.copy(
+                    product = product,
+                    quantity = item.quantity + grams,
+                    unitPriceWithMarkup = unitPrice
+                )
             } else {
                 currentList.add(CartItem(product = product, quantity = grams, unitPriceWithMarkup = unitPrice))
             }
@@ -165,6 +167,9 @@ class ShoppingViewModel(
 
     fun clearCart() {
         _cartItems.value = emptyList()
+        _searchQuery.value = ""
+        closeWeightDialog()
+        closeCheckoutConfirmation()
     }
 
     fun openCheckoutConfirmation() {
@@ -177,13 +182,17 @@ class ShoppingViewModel(
         _showCheckoutConfirmation.value = false
     }
 
-    fun completePurchase(user: User, onPurchaseComplete: () -> Unit) {
+    fun dismissCompletedPurchase() {
+        _completedPurchase.value = null
+    }
+
+    fun completePurchase(user: User, onPurchaseFinalized: () -> Unit = {}) {
         val cart = _cartItems.value
         if (cart.isEmpty()) return
 
         val totalCents = cart.sumOf { it.lineTotal }
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val txId = "tx-" + nowMillis + "-" + Random.nextInt(1000, 9999)
+        val txId = generateUuid()
 
         val txItems = cart.map { item ->
             TransactionItem(
@@ -195,6 +204,9 @@ class ShoppingViewModel(
             )
         }
 
+        val balBefore = user.balance
+        val balAfter = user.balance - totalCents
+
         val tx = Transaction(
             id = txId,
             userId = user.id,
@@ -202,22 +214,29 @@ class ShoppingViewModel(
             timestamp = nowMillis,
             type = TransactionType.PURCHASE,
             totalAmount = -totalCents, // Negative for purchase
-            items = txItems
+            items = txItems,
+            userBalanceBefore = balBefore,
+            userBalanceAfter = balAfter
         )
 
         viewModelScope.launch {
-            // Deduct user balance
-            userRepository.updateBalance(user.id, -totalCents)
-            // Deduct stock for products
-            cart.forEach { item ->
-                productRepository.updateStock(item.product.id, -item.quantity)
-            }
-            // Record immutable transaction
-            transactionRepository.recordTransaction(tx)
+            val stockDeltas = cart.associate { it.product.id to -it.quantity }
+            transactionRepository.executeAtomicTransaction(
+                transaction = tx,
+                balanceDelta = -totalCents,
+                stockDeltas = stockDeltas
+            )
 
             clearCart()
             closeCheckoutConfirmation()
-            onPurchaseComplete()
+            _completedPurchase.value = tx
+            onPurchaseFinalized()
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        clearCart()
+        dismissCompletedPurchase()
     }
 }

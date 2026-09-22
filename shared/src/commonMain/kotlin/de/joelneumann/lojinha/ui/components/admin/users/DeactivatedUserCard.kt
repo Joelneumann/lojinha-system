@@ -12,11 +12,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FlashOn
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.utils.Formatting
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun DeactivatedUserCard(
@@ -24,6 +30,7 @@ fun DeactivatedUserCard(
     onActivateUser: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = I18n.current
     var showActivateConfirm by remember { mutableStateOf(false) }
 
     Surface(
@@ -45,20 +52,11 @@ fun DeactivatedUserCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(ColorWarningAmber.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = user.initials,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorWarningAmber
-                    )
-                }
+                UserAvatar(
+                    user = user,
+                    modifier = Modifier.size(40.dp),
+                    fontSize = 15.sp
+                )
 
                 Column {
                     Row(
@@ -72,12 +70,12 @@ fun DeactivatedUserCard(
                             color = PrimaryNavy
                         )
                         AdminStatusBadge(
-                            text = "Deactivated",
+                            text = strings.deactivated,
                             type = AdminBadgeType.WARNING
                         )
                     }
                     Text(
-                        text = "Balance: ${Formatting.formatBrl(user.balance)}" +
+                        text = "${strings.balance}: ${Formatting.formatBrl(user.balance)}" +
                                 if (user.userBarcodeNumber != null) " • ID: ${user.userBarcodeNumber}" else "",
                         fontSize = 13.sp,
                         color = TextSecondaryMuted
@@ -91,30 +89,48 @@ fun DeactivatedUserCard(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.height(38.dp)
             ) {
-                Text("⚡ Activate Account", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FlashOn,
+                        contentDescription = null,
+                        tint = SurfaceWhite,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(strings.activateUser, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                }
             }
         }
     }
 
     if (showActivateConfirm) {
+        val dismissDialog = { showActivateConfirm = false }
+        val confirmActivate = {
+            onActivateUser()
+            showActivateConfirm = false
+        }
+
         AlertDialog(
-            onDismissRequest = { showActivateConfirm = false },
-            title = { Text("Confirm Account Activation", fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
-            text = { Text("Are you sure you want to activate user account '${user.name}'?\n\nThis will move the account back into the active users list.") },
+            onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmActivate),
+            title = { Text(strings.confirmUserActivationTitle, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
+            text = { Text(strings.confirmUserActivationMsg(user.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onActivateUser()
-                        showActivateConfirm = false
-                    },
+                    onClick = confirmActivate,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)
                 ) {
-                    Text("Yes, Activate User", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.yesActivateUser, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showActivateConfirm = false }) {
-                    Text("Cancel")
+                OutlinedButton(onClick = dismissDialog) {
+                    Text(strings.cancel)
                 }
             }
         )

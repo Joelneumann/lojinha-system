@@ -1,23 +1,28 @@
 package de.joelneumann.lojinha.data.repository
 
 import de.joelneumann.lojinha.data.dao.ProductDao
+import de.joelneumann.lojinha.data.dao.TransactionDao
 import de.joelneumann.lojinha.data.entity.ProductEntity
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.repository.ProductRepository
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class RoomProductRepositoryImpl(
     private val productDao: ProductDao,
+    private val transactionDao: TransactionDao? = null,
     private val onDataChanged: (() -> Unit)? = null
 ) : ProductRepository {
 
     override fun getProductsFlow(): Flow<List<Product>> {
-        return productDao.getProductsFlow().map { entities -> entities.map { it.toDomain() } }
+        return productDao.getProductsFlow().map { entities ->
+            entities.map { it.toDomain() }.sortedByAccentInsensitive { it.name }
+        }
     }
 
     override suspend fun getAllProducts(): List<Product> {
-        return productDao.getAllProducts().map { it.toDomain() }
+        return productDao.getAllProducts().map { it.toDomain() }.sortedByAccentInsensitive { it.name }
     }
 
     override suspend fun getProductById(id: String): Product? {
@@ -32,7 +37,21 @@ class RoomProductRepositoryImpl(
     }
 
     override suspend fun saveProduct(product: Product) {
-        productDao.insertOrUpdateProduct(ProductEntity.fromDomain(product))
+        val existing = productDao.getProductById(product.id)
+        if (existing != null) {
+            val entity = ProductEntity.fromDomain(product)
+            productDao.updateProductMetadata(
+                id = entity.id,
+                name = entity.name,
+                barcodes = entity.barcodes,
+                basePrice = entity.basePrice,
+                unitType = entity.unitType,
+                customMarkupPercent = entity.customMarkupPercent,
+                isActive = entity.isActive
+            )
+        } else {
+            productDao.insertOrUpdateProduct(ProductEntity.fromDomain(product))
+        }
         onDataChanged?.invoke()
     }
 
@@ -42,7 +61,12 @@ class RoomProductRepositoryImpl(
     }
 
     override suspend fun hardDeleteProduct(id: String) {
-        productDao.deleteProduct(id)
+        val txCount = transactionDao?.getTransactionCountForProduct(id) ?: 0
+        if (txCount > 0) {
+            productDao.deactivateProduct(id)
+        } else {
+            productDao.deleteProduct(id)
+        }
         onDataChanged?.invoke()
     }
 

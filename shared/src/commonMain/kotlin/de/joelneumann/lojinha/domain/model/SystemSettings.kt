@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SystemSettings(
-    val adminPasswordHash: String = "admin",
+    val adminPasswordHash: String = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918", // SHA-256 of "admin"
     val globalMarkupPercent: Double = 0.0,
     val usdExchangeRate: Double = 0.18,
     val eurExchangeRate: Double = 0.16,
@@ -21,5 +21,6 @@ data class SystemSettings(
     val oneDriveAccountEmail: String? = null,
     val oneDriveAccountName: String? = null,
     val oneDriveDefaultFolder: String = "/LojinhaBackups",
-    val oneDriveTenant: String = "common"
+    val oneDriveTenant: String = "common",
+    val supportEmail: String? = null
 )

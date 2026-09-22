@@ -2,8 +2,6 @@ package de.joelneumann.lojinha.ui.components.admin.users
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -11,102 +9,51 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.joelneumann.lojinha.domain.model.Language
-import de.joelneumann.lojinha.domain.model.SecondaryCurrency
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.admin.*
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
-
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun AdminUserAccordionCard(
     user: User,
-    allUsers: List<User>,
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
-    onSaveUser: (User) -> Unit,
+    onEditUser: (User) -> Unit,
+    onCustomExpense: (User) -> Unit,
+    onCustomIncome: (User) -> Unit,
     onAdjustBalance: (User, Long, String, Boolean) -> Unit,
     onToggleActive: (User) -> Unit,
     onDeleteUser: (User) -> Unit,
-    onUnsavedStateChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
-
-    var draftName by remember(user.id, user.name) { mutableStateOf(user.name) }
-    var shouldResetPin by remember(user.id) { mutableStateOf(false) }
-    var draftPin by remember(user.id) { mutableStateOf("") }
-    var isPinVisible by remember { mutableStateOf(false) }
-
-    var draftUserBarcode by remember(user.id, user.userBarcode) { mutableStateOf(user.userBarcode ?: "") }
-    var draftUserBarcodeNumber by remember(user.id, user.userBarcodeNumber) { mutableStateOf(user.userBarcodeNumber ?: "") }
-    var draftLanguage by remember(user.id, user.language) { mutableStateOf(user.language) }
-    var draftSecondaryCurrency by remember(user.id, user.secondaryCurrency) { mutableStateOf(user.secondaryCurrency) }
-
-    val barcodeToCheck = remember(draftUserBarcode, draftUserBarcodeNumber) {
-        val b1 = draftUserBarcode.trim()
-        val b2 = draftUserBarcodeNumber.trim()
-        if (b2.isNotBlank()) b2 else b1
-    }
-
-    val duplicateUser = remember(barcodeToCheck, allUsers, user.id) {
-        if (barcodeToCheck.isBlank()) null
-        else allUsers.firstOrNull { u ->
-            !u.isDeleted && u.id != user.id && (
-                (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(barcodeToCheck, ignoreCase = true)) ||
-                (u.userBarcode != null && u.userBarcode.equals(barcodeToCheck, ignoreCase = true))
-            )
-        }
-    }
-
-    val isBarcodeSymbolFilled = draftUserBarcode.isNotBlank()
-    val isBarcodeNumberFilled = draftUserBarcodeNumber.isNotBlank()
-    val isUserBarcodeIncomplete = (isBarcodeSymbolFilled && !isBarcodeNumberFilled) || (!isBarcodeSymbolFilled && isBarcodeNumberFilled)
 
     var moneyInput by remember(user.id) { mutableStateOf("") }
     var pendingBalanceAdjustment by remember { mutableStateOf<Long?>(null) }
     var showToggleActiveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    val hasUnsaved = remember(
-        draftName, shouldResetPin, draftPin, draftUserBarcode, draftUserBarcodeNumber, draftLanguage, draftSecondaryCurrency, user
-    ) {
-        draftName != user.name ||
-                shouldResetPin ||
-                draftUserBarcode != (user.userBarcode ?: "") ||
-                draftUserBarcodeNumber != (user.userBarcodeNumber ?: "") ||
-                draftLanguage != user.language ||
-                draftSecondaryCurrency != user.secondaryCurrency
-    }
-
-    LaunchedEffect(hasUnsaved, isExpanded) {
-        if (isExpanded) {
-            onUnsavedStateChanged(hasUnsaved)
-        }
-    }
-
     AdminAccordionCard(
         title = user.name,
         isExpanded = isExpanded,
         onExpandToggle = onExpandToggle,
-        hasUnsaved = hasUnsaved,
+        hasUnsaved = false,
         modifier = modifier,
         headerBadges = {
             if (!user.isActive) {
                 AdminStatusBadge(
-                    text = "Deactivated",
+                    text = strings.deactivated,
                     type = AdminBadgeType.DANGER
                 )
             }
         },
         headerRightContent = {
             Text(
-                text = "Balance: ${Formatting.formatBrl(user.balance)}",
+                text = "${strings.balance}: ${Formatting.formatBrl(user.balance)}",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (user.balance >= 0) ColorSuccessEmerald else ColorDangerCrimson
@@ -126,7 +73,7 @@ fun AdminUserAccordionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "💵 Balance Change (+/-):",
+                    text = strings.balanceChangeLabel,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -135,7 +82,7 @@ fun AdminUserAccordionCard(
                 OutlinedTextField(
                     value = moneyInput,
                     onValueChange = { moneyInput = it },
-                    placeholder = { Text("e.g. 20 or -20", fontSize = 13.sp, color = TextSecondaryMuted) },
+                    placeholder = { Text(strings.amountPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(8.dp),
@@ -161,218 +108,16 @@ fun AdminUserAccordionCard(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(44.dp)
                 ) {
-                    Text("💵 Adjust Balance", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                    Text(strings.adjustBalanceBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                 }
             }
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            AdminLabeledField(
-                label = "User Name",
-                value = draftName,
-                onValueChange = { draftName = it },
-                modifier = Modifier.weight(1f)
-            )
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { shouldResetPin = !shouldResetPin }
-                ) {
-                    Checkbox(
-                        checked = shouldResetPin,
-                        onCheckedChange = { shouldResetPin = it }
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Reset PIN / Password",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = PrimaryNavy
-                    )
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-
-                if (shouldResetPin) {
-                    OutlinedTextField(
-                        value = draftPin,
-                        onValueChange = { draftPin = it },
-                        placeholder = { Text("New PIN (or blank for none)", fontSize = 13.sp, color = TextSecondaryMuted) },
-                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                        visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { isPinVisible = !isPinVisible }) {
-                                Icon(
-                                    imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle PIN Visibility",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                } else {
-                    OutlinedTextField(
-                        value = if (user.pin != null) "••••••••" else "No PIN set",
-                        onValueChange = {},
-                        enabled = false,
-                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            disabledContainerColor = SurfaceContainerHighLight,
-                            disabledTextColor = TextSecondaryMuted,
-                            disabledBorderColor = DividerBorder
-                        )
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            AdminLabeledField(
-                label = "Barcode Symbol",
-                value = draftUserBarcode,
-                onValueChange = {
-                    draftUserBarcode = it
-                    if (draftUserBarcodeNumber.isBlank()) draftUserBarcodeNumber = it
-                },
-                placeholder = "e.g. USR-001",
-                modifier = Modifier.weight(1f)
-            )
-
-            AdminLabeledField(
-                label = "Barcode Number (ID)",
-                value = draftUserBarcodeNumber,
-                onValueChange = { draftUserBarcodeNumber = it },
-                placeholder = "e.g. 100000000001",
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            AdminSegmentedOptionsRow(
-                label = strings.preferredLanguage,
-                options = Language.entries,
-                selected = draftLanguage,
-                onSelect = { draftLanguage = it },
-                optionContent = { lang ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon(language = lang, width = 16.dp, height = 11.dp)
-                        Text(lang.code.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            )
-
-            AdminSegmentedOptionsRow(
-                label = strings.secondaryCurrency,
-                options = SecondaryCurrency.entries,
-                selected = draftSecondaryCurrency,
-                onSelect = { draftSecondaryCurrency = it },
-                optionLabel = { curr ->
-                    when (curr) {
-                        SecondaryCurrency.NONE -> "None"
-                        SecondaryCurrency.USD -> "USD ($)"
-                        SecondaryCurrency.EUR -> "EUR (€)"
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        if (isUserBarcodeIncomplete) {
-            val missingMsg = if (isBarcodeSymbolFilled) "Barcode Number (ID) is missing!" else "Barcode Symbol is missing!"
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(top = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = ColorWarningAmber,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = "$missingMsg Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty.",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorWarningAmber
-                )
-            }
-        }
-
-        if (duplicateUser != null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(top = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Error,
-                    contentDescription = null,
-                    tint = ColorDangerCrimson,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = "Barcode '${barcodeToCheck}' is already assigned to user '${duplicateUser.name}'!",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorDangerCrimson
-                )
-            }
-        }
-
-        HorizontalDivider(color = DividerBorder)
 
         AdminCardActionsRow(
-            hasUnsaved = hasUnsaved,
-            onSave = {
-                val bCode = draftUserBarcode.trim().ifBlank { null }
-                val bNum = draftUserBarcodeNumber.trim().ifBlank { null }
-                val finalPin = if (shouldResetPin) draftPin.trim().ifBlank { null } else user.pin
-                val updatedUser = user.copy(
-                    name = draftName.trim(),
-                    pin = finalPin,
-                    userBarcode = if (bCode != null && bNum != null) bCode else null,
-                    userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
-                    language = draftLanguage,
-                    secondaryCurrency = draftSecondaryCurrency
-                )
-                onSaveUser(updatedUser)
-                shouldResetPin = false
-                draftPin = ""
-                onUnsavedStateChanged(false)
-            },
-            onRevert = {
-                draftName = user.name
-                shouldResetPin = false
-                draftPin = ""
-                draftUserBarcode = user.userBarcode ?: ""
-                draftUserBarcodeNumber = user.userBarcodeNumber ?: ""
-                draftLanguage = user.language
-                draftSecondaryCurrency = user.secondaryCurrency
-                moneyInput = ""
-                onUnsavedStateChanged(false)
-            },
-            saveEnabled = hasUnsaved && draftName.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete,
-            toggleStatusText = if (user.isActive) "Deactivate" else "Activate",
+            onEdit = { onEditUser(user) },
+            onCustomExpense = { onCustomExpense(user) },
+            onCustomIncome = { onCustomIncome(user) },
+            toggleStatusText = if (user.isActive) strings.deactivate else strings.activate,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = user.isActive,
             onDelete = { showDeleteConfirm = true }
@@ -384,29 +129,37 @@ fun AdminUserAccordionCard(
         val isDeposit = cents > 0
         val absCents = kotlin.math.abs(cents)
         val formattedAmount = Formatting.formatBrl(absCents)
-        val actionText = if (isDeposit) "add $formattedAmount to" else "deduct $formattedAmount from"
+        val dismissDialog = { pendingBalanceAdjustment = null }
+        val confirmAdjustment = {
+            val note = ""
+            onAdjustBalance(user, absCents, note, isDeposit)
+            pendingBalanceAdjustment = null
+            moneyInput = ""
+        }
 
         AlertDialog(
-            onDismissRequest = { pendingBalanceAdjustment = null },
-            title = { Text("Confirm Balance Adjustment", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to $actionText ${user.name}'s account balance?") },
+            onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
+            properties = DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            ),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmAdjustment),
+            title = { Text(strings.confirmBalanceAdjustmentTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
+            text = { Text(strings.confirmBalanceAdjustmentMsg(isDeposit, formattedAmount, user.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        val note = if (isDeposit) "Deposit via Admin" else "Withdrawal via Admin"
-                        onAdjustBalance(user, absCents, note, isDeposit)
-                        pendingBalanceAdjustment = null
-                        moneyInput = ""
-                    },
+                    onClick = confirmAdjustment,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isDeposit) ColorSuccessEmerald else ColorDangerCrimson
                     )
                 ) {
-                    Text("Confirm", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.confirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { pendingBalanceAdjustment = null }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }
@@ -414,26 +167,35 @@ fun AdminUserAccordionCard(
     }
 
     if (showToggleActiveConfirm) {
-        val actionText = if (user.isActive) "deactivate" else "activate"
+        val dismissDialog = { showToggleActiveConfirm = false }
+        val confirmToggle = {
+            onToggleActive(user)
+            showToggleActiveConfirm = false
+        }
+
         AlertDialog(
-            onDismissRequest = { showToggleActiveConfirm = false },
-            title = { Text("Confirm Account Status Change", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to $actionText account '${user.name}'?") },
+            onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
+            properties = DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            ),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmToggle),
+            title = { Text(strings.confirmUserStatusChangeTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
+            text = { Text(strings.confirmUserStatusChangeMsg(user.isActive, user.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onToggleActive(user)
-                        showToggleActiveConfirm = false
-                    },
+                    onClick = confirmToggle,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (user.isActive) ColorWarningAmber else ColorSuccessEmerald
                     )
                 ) {
-                    Text("Confirm", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.confirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showToggleActiveConfirm = false }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }
@@ -441,23 +203,33 @@ fun AdminUserAccordionCard(
     }
 
     if (showDeleteConfirm) {
+        val dismissDialog = { showDeleteConfirm = false }
+        val confirmDelete = {
+            onDeleteUser(user)
+            showDeleteConfirm = false
+        }
+
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Confirm Delete Account", fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
-            text = { Text("Are you sure you want to delete user account '${user.name}'?\n\nThe user account will be soft-deleted and moved to the 'Deleted Users' section at the bottom of the page.") },
+            onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
+            properties = DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            ),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmDelete),
+            title = { Text(strings.confirmDeleteUserTitle, fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },
+            text = { Text(strings.confirmDeleteUserMsg(user.name)) },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onDeleteUser(user)
-                        showDeleteConfirm = false
-                    },
+                    onClick = confirmDelete,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
-                    Text("Yes, Delete User", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.yesDeleteUser, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showDeleteConfirm = false }) {
+                OutlinedButton(onClick = dismissDialog) {
                     Text(strings.cancel)
                 }
             }

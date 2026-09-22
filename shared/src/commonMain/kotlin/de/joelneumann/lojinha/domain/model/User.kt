@@ -3,6 +3,13 @@ package de.joelneumann.lojinha.domain.model
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class UserAvatarConfig(
+    val type: AvatarType = AvatarType.INITIALS,
+    val emoji: String = "😀",
+    val colorHex: String = "#1E293B"
+)
+
+@Serializable
 data class User(
     val id: String,
     val name: String,
@@ -13,7 +20,8 @@ data class User(
     val userBarcode: String? = null,
     val userBarcodeNumber: String? = null,
     val isActive: Boolean = true,
-    val isDeleted: Boolean = false
+    val isDeleted: Boolean = false,
+    val avatar: UserAvatarConfig = UserAvatarConfig()
 ) {
     init {
         require((userBarcode == null && userBarcodeNumber == null) || (userBarcode != null && userBarcodeNumber != null)) {

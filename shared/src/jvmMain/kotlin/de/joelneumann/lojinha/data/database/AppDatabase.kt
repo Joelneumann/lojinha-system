@@ -7,8 +7,16 @@ import de.joelneumann.lojinha.data.dao.*
 import de.joelneumann.lojinha.data.entity.*
 
 @Database(
-    entities = [UserEntity::class, ProductEntity::class, TransactionEntity::class, SettingsEntity::class, BackupEntity::class],
-    version = 6,
+    entities = [
+        UserEntity::class, 
+        ProductEntity::class, 
+        TransactionEntity::class, 
+        SettingsEntity::class, 
+        BackupEntity::class,
+        BillingListEntity::class,
+        BillingListUserEntity::class
+    ],
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -18,4 +26,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun settingsDao(): SettingsDao
     abstract fun backupDao(): BackupDao
+    abstract fun billingListDao(): BillingListDao
 }

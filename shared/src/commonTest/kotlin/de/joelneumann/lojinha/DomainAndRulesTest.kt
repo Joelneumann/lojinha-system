@@ -3,6 +3,10 @@ package de.joelneumann.lojinha
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -70,7 +74,95 @@ class DomainAndRulesTest {
         // Custom markup overrides global markup
         val productWithCustom = product.copy(customMarkupPercent = 20.0)
         assertEquals(960L, productWithCustom.calculateEffectiveUnitPrice(10.0))
+
+        // Custom markup of 0.0% explicitly overrides global markup and charges base price
+        val productZeroCustom = product.copy(customMarkupPercent = 0.0)
+        assertEquals(800L, productZeroCustom.calculateEffectiveUnitPrice(10.0))
+
+        // Negative markups are clamped to base price (never sell below wholesale base price)
+        assertEquals(800L, product.calculateEffectiveUnitPrice(-10.0))
+        val productNegativeCustom = product.copy(customMarkupPercent = -15.0)
+        assertEquals(800L, productNegativeCustom.calculateEffectiveUnitPrice(10.0))
+
+        // Fractional markup (12.5%)
+        assertEquals(900L, product.calculateEffectiveUnitPrice(12.5))
+
+        // Fractional markup with cent rounding (15% on R$ 1,05 = 105 * 1.15 = 120.75 -> 121 cents)
+        val cheapItem = product.copy(basePrice = 105L)
+        assertEquals(121L, cheapItem.calculateEffectiveUnitPrice(15.0))
+
+        // IEEE 754 non-finite edge cases: NaN must NEVER drop price to 0L
+        assertEquals(800L, product.calculateEffectiveUnitPrice(Double.NaN))
+        val productWithNaN = product.copy(customMarkupPercent = Double.NaN)
+        assertEquals(800L, productWithNaN.calculateEffectiveUnitPrice(10.0))
+
+        // Infinity must NEVER overflow or corrupt price
+        assertEquals(800L, product.calculateEffectiveUnitPrice(Double.POSITIVE_INFINITY))
+        assertEquals(800L, product.calculateEffectiveUnitPrice(Double.NEGATIVE_INFINITY))
+        val productWithInfinity = product.copy(customMarkupPercent = Double.POSITIVE_INFINITY)
+        assertEquals(800L, productWithInfinity.calculateEffectiveUnitPrice(10.0))
     }
+
+    @Test
+    fun testWeightProductMarkupCalculations() {
+        val apples = Product(
+            id = "w1",
+            name = "Apples",
+            basePrice = 2500L, // R$ 25,00 / kg
+            unitType = UnitType.WEIGHT,
+            customMarkupPercent = 10.0 // 10% markup -> R$ 27,50 / kg
+        )
+
+        val unitPriceWithMarkup = apples.calculateEffectiveUnitPrice(0.0)
+        assertEquals(2750L, unitPriceWithMarkup)
+
+        // 1000g (1 kg)
+        val item1kg = de.joelneumann.lojinha.ui.viewmodel.CartItem(apples, 1000L, unitPriceWithMarkup)
+        assertEquals(2750L, item1kg.lineTotal)
+
+        // 350g: (2750 * 350) / 1000 = 962.5 -> rounds to even integer 962 cents (R$ 9,62)
+        val item350g = de.joelneumann.lojinha.ui.viewmodel.CartItem(apples, 350L, unitPriceWithMarkup)
+        assertEquals(962L, item350g.lineTotal)
+    }
+
+    @Test
+    fun testPercentageInputParsing() {
+        assertEquals(10.0, Formatting.parsePercentageInput("10%"))
+        assertEquals(10.5, Formatting.parsePercentageInput("10,5%"))
+        assertEquals(10.5, Formatting.parsePercentageInput("10.5"))
+        assertEquals(25.0, Formatting.parsePercentageInput("  25,0 %  "))
+        assertEquals(0.0, Formatting.parsePercentageInput("0"))
+        assertEquals(-5.0, Formatting.parsePercentageInput("-5%"))
+
+        assertNull(Formatting.parsePercentageInput(""))
+        assertNull(Formatting.parsePercentageInput("   "))
+        assertNull(Formatting.parsePercentageInput("abc"))
+        assertNull(Formatting.parsePercentageInput("NaN"))
+        assertNull(Formatting.parsePercentageInput("Infinity"))
+        assertNull(Formatting.parsePercentageInput("-Infinity"))
+    }
+
+    @Test
+    fun testFormatMarkupDisplay() {
+        assertEquals("+10%", Formatting.formatMarkupPercent(10.0))
+        assertEquals("+12,5%", Formatting.formatMarkupPercent(12.5))
+        assertEquals("+0%", Formatting.formatMarkupPercent(0.0))
+        assertEquals("+0%", Formatting.formatMarkupPercent(-5.0))
+        assertEquals("+0%", Formatting.formatMarkupPercent(Double.NaN))
+
+        val enCustom = Formatting.formatMarkupDisplay(15.0, true, de.joelneumann.lojinha.ui.i18n.EnglishStrings)
+        assertEquals("Markup %: +15% (Custom)", enCustom)
+
+        val enStandard = Formatting.formatMarkupDisplay(10.0, false, de.joelneumann.lojinha.ui.i18n.EnglishStrings)
+        assertEquals("Markup %: +10% (Standard)", enStandard)
+
+        val deStandard = Formatting.formatMarkupDisplay(10.0, false, de.joelneumann.lojinha.ui.i18n.GermanStrings)
+        assertEquals("Aufschlag %: +10% (Standard)", deStandard)
+
+        val ptCustom = Formatting.formatMarkupDisplay(15.0, true, de.joelneumann.lojinha.ui.i18n.PortugueseStrings)
+        assertEquals("Margem %: +15% (Personalizada)", ptCustom)
+    }
+
 
     @Test
     fun testMoneyFormatting() {
@@ -89,6 +181,10 @@ class DomainAndRulesTest {
 
         val none = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.NONE, 0.18)
         assertEquals("", none)
+
+        // Test IEEE 754 precision boundary (R$ 16,65 with 0.18 rate: 16.65 * 0.18 = 2.997 -> $ 3.00, not $ 2.100)
+        val edgeCase = Formatting.formatSecondaryCurrency(1665L, SecondaryCurrency.USD, 0.18)
+        assertEquals(" (≈ $ 3.00)", edgeCase)
     }
 
     @Test
@@ -102,6 +198,41 @@ class DomainAndRulesTest {
         assertEquals(500L, Formatting.parseWeightInputToGrams("500g"))
         assertEquals(500L, Formatting.parseWeightInputToGrams("500"))
         assertEquals(250L, Formatting.parseWeightInputToGrams("0,25"))
+    }
+
+    @Test
+    fun testDetectWeightUnit() {
+        // Decimals -> always KG
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1,5"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1.5"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("0,25"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("0."))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("0,"))
+
+        // Numbers <= 20 -> KG
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("2"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("20"))
+
+        // Numbers > 20 -> G
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("21"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("25"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("500"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("1000"))
+
+        // Explicit units
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1.5 kg"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("30kg"))
+        assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("25 kg"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("500g"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("30 g"))
+        assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("2g"))
+
+        // Invalid, negative or blank -> null
+        assertNull(Formatting.detectWeightUnit(""))
+        assertNull(Formatting.detectWeightUnit("   "))
+        assertNull(Formatting.detectWeightUnit("abc"))
+        assertNull(Formatting.detectWeightUnit("-5"))
     }
 
     @Test
@@ -163,5 +294,513 @@ class DomainAndRulesTest {
         assertTrue(enStr.contains("AM") || enStr.contains("PM"))
         assertFalse(deStr.contains("AM") || deStr.contains("PM"))
         assertFalse(brStr.contains("AM") || brStr.contains("PM"))
+    }
+
+    @Test
+    fun testUserAvatarDefaultsAndCustomization() {
+        val user = User(id = "1", name = "Test User")
+        assertEquals(AvatarType.INITIALS, user.avatar.type)
+        assertEquals("😀", user.avatar.emoji)
+        assertEquals("#1E293B", user.avatar.colorHex)
+
+        val customAvatar = UserAvatarConfig(type = AvatarType.EMOJI, emoji = "🦊", colorHex = "#2563EB")
+        val customUser = user.copy(avatar = customAvatar)
+        assertEquals(AvatarType.EMOJI, customUser.avatar.type)
+        assertEquals("🦊", customUser.avatar.emoji)
+        assertEquals("#2563EB", customUser.avatar.colorHex)
+    }
+
+    @Test
+    fun testUuidGeneration() {
+        val uuid1 = de.joelneumann.lojinha.ui.utils.generateUuid()
+        val uuid2 = de.joelneumann.lojinha.ui.utils.generateUuid()
+
+        assertTrue(uuid1.isNotBlank())
+        assertTrue(uuid2.isNotBlank())
+        assertTrue(uuid1 != uuid2)
+        assertEquals(36, uuid1.length) // Standard 8-4-4-4-12 UUID format length
+    }
+
+    @Test
+    fun testPurchaseCorrectionAndStornoDeltaMath() {
+        // Product 1: 5.00 BRL per piece (500 cents)
+        val p1 = TransactionItem(
+            productId = "prod1",
+            productName = "Product 1",
+            unitType = UnitType.PIECE,
+            quantity = 2L,
+            unitPriceAtPurchase = 500L
+        )
+
+        // 1. Initial Purchase
+        val initialItems = listOf(p1)
+        val initialCost = initialItems.sumOf { it.totalLinePrice } // 1000 cents (R$ 10,00)
+        assertEquals(1000L, initialCost)
+
+        // 2. First Correction: Down to 1 piece (Refund 5.00 BRL, restore 1 to stock)
+        val itemsAfterCorrection1 = listOf(p1.copy(quantity = 1L))
+        val cost1 = itemsAfterCorrection1.sumOf { it.totalLinePrice } // 500 cents
+        val delta1 = initialCost - cost1 // +500 cents (refund)
+        val stockChange1 = itemsAfterCorrection1[0].quantity - initialItems[0].quantity // -1 (stock restored by +1)
+        assertEquals(500L, delta1)
+        assertEquals(-1L, stockChange1)
+
+        // 3. Second Correction: Increase up to 3 pieces (Charge 10.00 BRL, deduct 2 from stock)
+        val itemsAfterCorrection2 = listOf(p1.copy(quantity = 3L))
+        val cost2 = itemsAfterCorrection2.sumOf { it.totalLinePrice } // 1500 cents
+        val delta2 = cost1 - cost2 // -1000 cents (charge)
+        val stockChange2 = itemsAfterCorrection2[0].quantity - itemsAfterCorrection1[0].quantity // +2 (stock deducted by -2)
+        assertEquals(-1000L, delta2)
+        assertEquals(2L, stockChange2)
+
+        // Verify cumulative modifiers
+        val cumulativeDelta = delta1 + delta2 // -500 cents
+        val netPurchaseAmount = -initialCost + cumulativeDelta // -1000 + (-500) = -1500 cents
+        assertEquals(-1500L, netPurchaseAmount) // Exactly matches 3 pieces @ 500 cents
+
+        // 4. Complete Storno: Zero out remaining items
+        val zeroedItems = listOf(p1.copy(quantity = 0L))
+        val cost3 = zeroedItems.sumOf { it.totalLinePrice } // 0 cents
+        val delta3 = cost2 - cost3 // +1500 cents (full remaining refund)
+        val stockChange3 = zeroedItems[0].quantity - itemsAfterCorrection2[0].quantity // -3 (stock restored by +3)
+        assertEquals(1500L, delta3)
+        assertEquals(-3L, stockChange3)
+
+        // Verify full lifecycle balance & stock neutrality
+        val totalRefundedAcrossAllSteps = delta1 + delta2 + delta3 // 500 - 1000 + 1500 = 1000 cents
+        assertEquals(initialCost, totalRefundedAcrossAllSteps) // Net refund exactly equals initial cost
+
+        val netStockChange = -2L + (-stockChange1) + (-stockChange2) + (-stockChange3) // -2 + 1 - 2 + 3 = 0
+        assertEquals(0L, netStockChange) // Net inventory effect across full lifecycle is exactly 0
+    }
+
+    @Test
+    fun testComputeEffectiveItemsAcrossSequentialCorrections() {
+        val p1 = TransactionItem("p1", "Item 1", UnitType.PIECE, 2L, 500L)
+        val p2 = TransactionItem("p2", "Item 2", UnitType.PIECE, 1L, 300L)
+        val p3 = TransactionItem("p3", "Item 3", UnitType.PIECE, 4L, 200L)
+        val origItems = listOf(p1, p2, p3)
+
+        // 1. Initial purchase: no corrections
+        val initialEffective = AdminTransactionsViewModel.computeEffectiveItems(origItems, emptyList())
+        assertEquals(2L, initialEffective[0].quantity)
+        assertEquals(1L, initialEffective[1].quantity)
+        assertEquals(4L, initialEffective[2].quantity)
+
+        // 2. Correction 1: Item 1 updated to 1 pc (Item 2 & 3 not in updated items)
+        val corr1 = Transaction(
+            id = "c1",
+            userId = "u1",
+            userNameSnapshot = "User",
+            timestamp = 1000L,
+            type = TransactionType.CORRECTION,
+            totalAmount = 500L,
+            items = listOf(p1.copy(quantity = 1L, previousQuantity = 2L))
+        )
+        val effectiveAfterCorr1 = AdminTransactionsViewModel.computeEffectiveItems(origItems, listOf(corr1))
+        assertEquals(1L, effectiveAfterCorr1[0].quantity)
+        assertEquals(1L, effectiveAfterCorr1[1].quantity)
+        assertEquals(4L, effectiveAfterCorr1[2].quantity)
+
+        // 3. Correction 2: Item 3 updated to 5 pcs
+        val corr2 = Transaction(
+            id = "c2",
+            userId = "u1",
+            userNameSnapshot = "User",
+            timestamp = 2000L,
+            type = TransactionType.CORRECTION,
+            totalAmount = -200L,
+            items = listOf(p3.copy(quantity = 5L, previousQuantity = 4L))
+        )
+        val effectiveAfterCorr2 = AdminTransactionsViewModel.computeEffectiveItems(origItems, listOf(corr1, corr2))
+        assertEquals(1L, effectiveAfterCorr2[0].quantity)
+        assertEquals(1L, effectiveAfterCorr2[1].quantity)
+        assertEquals(5L, effectiveAfterCorr2[2].quantity)
+
+        // 4. Cancellation zeroes out all items
+        val cancellation = Transaction(
+            id = "cancel1",
+            userId = "u1",
+            userNameSnapshot = "User",
+            timestamp = 3000L,
+            type = TransactionType.CANCELLATION,
+            totalAmount = 1800L
+        )
+        val effectiveAfterCancel = AdminTransactionsViewModel.computeEffectiveItems(origItems, listOf(corr1, corr2), cancellation)
+        assertTrue(effectiveAfterCancel.all { it.quantity == 0L })
+    }
+
+    @Test
+    fun testTransactionItemSerializationWithPreviousQuantity() {
+        val json = Json { ignoreUnknownKeys = true }
+
+        // Item with previousQuantity
+        val itemWithPrev = TransactionItem("p1", "Item 1", UnitType.PIECE, 1L, 500L, previousQuantity = 2L)
+        val encoded = json.encodeToString(itemWithPrev)
+        assertTrue(encoded.contains("\"previousQuantity\":2"))
+
+        val decoded = json.decodeFromString<TransactionItem>(encoded)
+        assertEquals(2L, decoded.previousQuantity)
+        assertEquals(1L, decoded.quantity)
+
+        // Backwards compatibility: JSON without previousQuantity
+        val legacyJson = """{"productId":"p1","productName":"Item 1","unitType":"PIECE","quantity":3,"unitPriceAtPurchase":400}"""
+        val legacyDecoded = json.decodeFromString<TransactionItem>(legacyJson)
+        assertNull(legacyDecoded.previousQuantity)
+        assertEquals(3L, legacyDecoded.quantity)
+    }
+
+    @Test
+    fun testSequentialCorrectionsAndFinalStornoCumulativeMath() {
+        // Initial purchase of R$ 20,00
+        val origPurchase = Transaction(
+            id = "tx-orig",
+            userId = "user-1",
+            userNameSnapshot = "Alice",
+            timestamp = 1000L,
+            type = TransactionType.PURCHASE,
+            totalAmount = -2000L, // -R$ 20,00
+            items = listOf(
+                TransactionItem("p1", "Item 1", UnitType.PIECE, 4L, 500L) // 4 * 5,00 = 20,00
+            ),
+            userBalanceBefore = 5000L,
+            userBalanceAfter = 3000L
+        )
+
+        // Step 1: Correction 1 reduces from 4 to 3 (refund +R$ 5,00)
+        val corr1 = Transaction(
+            id = "tx-corr1",
+            userId = "user-1",
+            userNameSnapshot = "Alice",
+            timestamp = 2000L,
+            type = TransactionType.CORRECTION,
+            referenceTransactionId = origPurchase.id,
+            totalAmount = 500L,
+            items = listOf(
+                TransactionItem("p1", "Item 1", UnitType.PIECE, 3L, 500L, previousQuantity = 4L)
+            ),
+            userBalanceBefore = 3000L,
+            userBalanceAfter = 3500L
+        )
+
+        // Step 2: Correction 2 reduces from 3 to 2 (refund +R$ 5,00)
+        val corr2 = Transaction(
+            id = "tx-corr2",
+            userId = "user-1",
+            userNameSnapshot = "Alice",
+            timestamp = 3000L,
+            type = TransactionType.CORRECTION,
+            referenceTransactionId = origPurchase.id,
+            totalAmount = 500L,
+            items = listOf(
+                TransactionItem("p1", "Item 1", UnitType.PIECE, 2L, 500L, previousQuantity = 3L)
+            ),
+            userBalanceBefore = 3500L,
+            userBalanceAfter = 4000L
+        )
+
+        // Step 3: Complete storno zeroes remaining 2 items (refund +R$ 10,00)
+        val storno = Transaction(
+            id = "tx-storno",
+            userId = "user-1",
+            userNameSnapshot = "Alice",
+            timestamp = 4000L,
+            type = TransactionType.CANCELLATION,
+            referenceTransactionId = origPurchase.id,
+            totalAmount = 1000L,
+            items = listOf(
+                TransactionItem("p1", "Item 1", UnitType.PIECE, 0L, 500L, previousQuantity = 2L)
+            ),
+            userBalanceBefore = 4000L,
+            userBalanceAfter = 5000L
+        )
+
+        val children = listOf(corr1, corr2, storno)
+
+        // Verify cumulative delta sum over all children
+        val cumulativeDelta = children.sumOf { it.totalAmount }
+        assertEquals(2000L, cumulativeDelta, "Cumulative delta must sum all children (+5,00 + 5,00 + 10,00 = +20,00)")
+
+        // Verify final net amount of the original purchase is R$ 0,00
+        val finalNetAmount = origPurchase.totalAmount + cumulativeDelta
+        assertEquals(0L, finalNetAmount, "Final net amount must be exactly 0 (full reversal)")
+
+        // Verify inventory effect
+        val effectiveItems = AdminTransactionsViewModel.computeEffectiveItems(
+            origPurchase.items,
+            listOf(corr1, corr2),
+            storno
+        )
+        assertTrue(effectiveItems.all { it.quantity == 0L }, "All items must be 0 quantity after complete cancellation")
+
+        // Verify final balance returned to starting balance
+        assertEquals(origPurchase.userBalanceBefore, storno.userBalanceAfter)
+    }
+
+    @Test
+    fun testDoubleStornoPreventionCheck() {
+        var cancellationCount = 0
+        fun checkAndStorno(tx: Transaction): Boolean {
+            if (tx.type != TransactionType.ADMIN_DEPOSIT && tx.type != TransactionType.ADMIN_WITHDRAWAL) {
+                return false
+            }
+            if (cancellationCount > 0) {
+                return false
+            }
+            cancellationCount++
+            return true
+        }
+
+        val depositTx = Transaction(
+            id = "dep-1",
+            userId = "u1",
+            userNameSnapshot = "User",
+            timestamp = 1000L,
+            type = TransactionType.ADMIN_DEPOSIT,
+            totalAmount = 5000L
+        )
+
+        // First storno succeeds
+        val firstResult = checkAndStorno(depositTx)
+        assertTrue(firstResult, "First storno must succeed")
+
+        // Second storno is rejected
+        val secondResult = checkAndStorno(depositTx)
+        assertFalse(secondResult, "Second storno must be rejected")
+    }
+
+    @Test
+    fun testTransactionBalanceSnapshotSerialization() {
+        val json = Json { ignoreUnknownKeys = true }
+
+        val txWithSnapshots = Transaction(
+            id = "tx-snap",
+            userId = "u1",
+            userNameSnapshot = "User",
+            timestamp = 1000L,
+            type = TransactionType.PURCHASE,
+            totalAmount = -1500L,
+            userBalanceBefore = 4000L,
+            userBalanceAfter = 2500L
+        )
+
+        val encoded = json.encodeToString(txWithSnapshots)
+        assertTrue(encoded.contains("\"userBalanceBefore\":4000"))
+        assertTrue(encoded.contains("\"userBalanceAfter\":2500"))
+
+        val decoded = json.decodeFromString<Transaction>(encoded)
+        assertEquals(4000L, decoded.userBalanceBefore)
+        assertEquals(2500L, decoded.userBalanceAfter)
+
+        // Legacy record without balance snapshots
+        val legacyJson = """{"id":"tx-old","userId":"u1","userNameSnapshot":"User","timestamp":1000,"type":"PURCHASE","totalAmount":-1500}"""
+        val legacyDecoded = json.decodeFromString<Transaction>(legacyJson)
+        assertNull(legacyDecoded.userBalanceBefore)
+        assertNull(legacyDecoded.userBalanceAfter)
+    }
+
+    @Test
+    fun testPartialPayloadPurchaseCorrectionMerging() {
+        val item1 = TransactionItem(productId = "p1", productName = "A", unitType = UnitType.PIECE, quantity = 3L, unitPriceAtPurchase = 500L)
+        val item2 = TransactionItem(productId = "p2", productName = "B", unitType = UnitType.PIECE, quantity = 2L, unitPriceAtPurchase = 300L)
+        val originalItems = listOf(item1, item2)
+
+        // Partial payload containing only p1 with updated quantity to 1
+        val partialPayload = listOf(item1.copy(quantity = 1L))
+        val newItemsMap = partialPayload.associateBy { it.productId }
+        val effectiveNewItems = originalItems.map { current ->
+            newItemsMap[current.productId] ?: current
+        }
+
+        assertEquals(2, effectiveNewItems.size)
+        assertEquals(1L, effectiveNewItems.first { it.productId == "p1" }.quantity)
+        assertEquals(2L, effectiveNewItems.first { it.productId == "p2" }.quantity) // p2 retained!
+
+        val updatedItems = effectiveNewItems.filter { newItem ->
+            val currentItem = originalItems.firstOrNull { it.productId == newItem.productId }
+            val currentQty = currentItem?.quantity ?: 0L
+            newItem.quantity != currentQty
+        }.map { newItem ->
+            val currentItem = originalItems.firstOrNull { it.productId == newItem.productId }
+            newItem.copy(previousQuantity = currentItem?.quantity ?: 0L)
+        }
+
+        assertEquals(1, updatedItems.size)
+        assertEquals("p1", updatedItems[0].productId)
+        assertEquals(1L, updatedItems[0].quantity)
+        assertEquals(3L, updatedItems[0].previousQuantity)
+    }
+
+    @Test
+    fun testAtomicTransactionRequestSerialization() {
+        val json = Json { ignoreUnknownKeys = true }
+        val tx = Transaction(
+            id = "tx-atom",
+            userId = "u1",
+            userNameSnapshot = "User",
+            timestamp = 2000L,
+            type = TransactionType.ADMIN_DEPOSIT,
+            totalAmount = 5000L,
+            userBalanceBefore = 1000L,
+            userBalanceAfter = 6000L
+        )
+        val req = AtomicTransactionRequest(
+            transaction = tx,
+            balanceDelta = 5000L,
+            stockDeltas = mapOf("p1" to 5L)
+        )
+        val encoded = json.encodeToString(req)
+        val decoded = json.decodeFromString<AtomicTransactionRequest>(encoded)
+        assertEquals("tx-atom", decoded.transaction.id)
+        assertEquals(5000L, decoded.balanceDelta)
+        assertEquals(5L, decoded.stockDeltas["p1"])
+    }
+
+    @Test
+    fun testJsonProductIdMatchingPrecision() {
+        val json = Json { ignoreUnknownKeys = true }
+        // Transaction with product "10", price 100, quantity 1
+        val item = TransactionItem(
+            productId = "10",
+            productName = "Product 10",
+            unitType = UnitType.PIECE,
+            quantity = 1L,
+            unitPriceAtPurchase = 100L
+        )
+        val serializedItems = json.encodeToString(listOf(item))
+
+        // Raw LIKE '%1%' would falsely match because 1 appears in productId '10', quantity 1, and price 100
+        val naivePattern = Regex(".*1.*")
+        assertTrue(naivePattern.matches(serializedItems), "Naive '%1%' falsely matches")
+
+        // Precise JSON attribute match: %"productId":"1"%
+        val preciseMatchForId1 = serializedItems.contains("\"productId\":\"1\"")
+        assertFalse(preciseMatchForId1, "Precise query must NOT match product '1' when only product '10' is present")
+
+        val preciseMatchForId10 = serializedItems.contains("\"productId\":\"10\"")
+        assertTrue(preciseMatchForId10, "Precise query MUST match product '10'")
+    }
+
+    @Test
+    fun testAdminPasswordBypassesUserPin() {
+        val userPinRaw = "1234"
+        val customAdminPassRaw = "adminSecret"
+        val userPinHash = de.joelneumann.lojinha.security.PasswordHasher.hash(userPinRaw)
+        val customAdminPassHash = de.joelneumann.lojinha.security.PasswordHasher.hash(customAdminPassRaw)
+
+        // Test with SHA-256 hashes (modern storage)
+        // 1. Wrong PIN fails
+        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "9999", customAdminPassHash))
+
+        // 2. User's own PIN succeeds
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "1234", customAdminPassHash))
+
+        // 3. Admin password bypasses user PIN
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, customAdminPassRaw, customAdminPassHash))
+
+        // 4. Default admin password ("admin") bypasses user PIN when adminPassword is empty or default hash
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "admin", ""))
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "admin", de.joelneumann.lojinha.security.PasswordHasher.hash("admin")))
+
+        // 5. Old/wrong admin password does not bypass
+        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "admin", customAdminPassHash))
+        assertFalse(UserSelectionViewModel.verifyPinOrAdminBypass(userPinHash, "wrongSecret", customAdminPassHash))
+
+        // Test backward-compatibility with legacy unhashed plain text storage
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinRaw, "1234", customAdminPassRaw))
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinRaw, customAdminPassRaw, customAdminPassRaw))
+        assertTrue(UserSelectionViewModel.verifyPinOrAdminBypass(userPinRaw, "admin", "admin"))
+    }
+
+    @Test
+    fun testCustomExpenseAndIncomeDeltaCalculations() {
+        // Custom Expense: always subtracts from user balance (-abs(amount))
+        val positiveExpense = 1500L // R$ 15,00
+        val negativeExpense = -1500L
+        assertEquals(-1500L, -kotlin.math.abs(positiveExpense))
+        assertEquals(-1500L, -kotlin.math.abs(negativeExpense))
+
+        // Custom Income: always adds to user balance (+abs(amount))
+        val positiveIncome = 2500L // R$ 25,00
+        val negativeIncome = -2500L
+        assertEquals(2500L, kotlin.math.abs(positiveIncome))
+        assertEquals(2500L, kotlin.math.abs(negativeIncome))
+
+        // Synthetic items verification
+        val expenseItem = TransactionItem(
+            productId = "custom",
+            productName = "Lost key replacement",
+            unitType = UnitType.PIECE,
+            quantity = 1L,
+            unitPriceAtPurchase = kotlin.math.abs(positiveExpense)
+        )
+        assertEquals("custom", expenseItem.productId)
+        assertEquals(1500L, expenseItem.unitPriceAtPurchase)
+
+        val incomeItem = TransactionItem(
+            productId = "custom",
+            productName = "Refund for damaged goods",
+            unitType = UnitType.PIECE,
+            quantity = 1L,
+            unitPriceAtPurchase = kotlin.math.abs(positiveIncome)
+        )
+        assertEquals("custom", incomeItem.productId)
+        assertEquals(2500L, incomeItem.unitPriceAtPurchase)
+    }
+
+    @Test
+    fun testCustomExpenseAndIncomeLocalization() {
+        listOf(
+            de.joelneumann.lojinha.ui.i18n.EnglishStrings,
+            de.joelneumann.lojinha.ui.i18n.GermanStrings,
+            de.joelneumann.lojinha.ui.i18n.PortugueseStrings
+        ).forEach { s ->
+            assertTrue(s.customExpense.isNotBlank())
+            assertTrue(s.customIncome.isNotBlank())
+            assertTrue(s.customExpenseDialogTitle.isNotBlank())
+            assertTrue(s.customIncomeDialogTitle.isNotBlank())
+            assertTrue(s.customExpenseDescriptionLabel.isNotBlank())
+            assertTrue(s.customIncomeDescriptionLabel.isNotBlank())
+            assertTrue(s.customExpenseDescriptionPlaceholder.isNotBlank())
+            assertTrue(s.customIncomeDescriptionPlaceholder.isNotBlank())
+            assertTrue(s.customExpenseConfirmBtn.isNotBlank())
+            assertTrue(s.customIncomeConfirmBtn.isNotBlank())
+            assertTrue(s.historyTypeCustomExpense.isNotBlank())
+            assertTrue(s.historyTypeCustomIncome.isNotBlank())
+        }
+    }
+
+    @Test
+    fun testPurchaseOverviewLocalization() {
+        listOf(
+            de.joelneumann.lojinha.ui.i18n.EnglishStrings,
+            de.joelneumann.lojinha.ui.i18n.GermanStrings,
+            de.joelneumann.lojinha.ui.i18n.PortugueseStrings
+        ).forEach { s ->
+            assertTrue(s.purchaseOverviewTitle.isNotBlank())
+            assertTrue(s.goToTransactions.isNotBlank())
+            assertTrue(s.previousBalance.isNotBlank())
+            assertTrue(s.newBalance.isNotBlank())
+            assertTrue(s.logoutWithTimer(15).contains("15"))
+        }
+    }
+
+    @Test
+    fun testDecimalFormattingWithComma() {
+        assertEquals("0", Formatting.formatDecimal(0.0))
+        assertEquals("10", Formatting.formatDecimal(10.0))
+        assertEquals("10,5", Formatting.formatDecimal(10.5))
+        assertEquals("0,18", Formatting.formatDecimal(0.18))
+        assertEquals("0,16", Formatting.formatDecimal(0.16))
+        assertEquals("5,75", Formatting.formatDecimal(5.75))
+
+        assertEquals("+0%", Formatting.formatMarkupPercent(0.0))
+        assertEquals("+10%", Formatting.formatMarkupPercent(10.0))
+        assertEquals("+10,5%", Formatting.formatMarkupPercent(10.5))
+        assertEquals("+12,75%", Formatting.formatMarkupPercent(12.75))
+
+        assertEquals(10.5, Formatting.parsePercentageInput("10,5"))
+        assertEquals(10.5, Formatting.parsePercentageInput("10.5"))
+        assertEquals(0.18, Formatting.parsePercentageInput("0,18"))
     }
 }

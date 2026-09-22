@@ -16,13 +16,18 @@ import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
 import de.joelneumann.lojinha.ui.components.admin.users.AdminUserAccordionCard
 import de.joelneumann.lojinha.ui.components.admin.users.DeactivatedUserCard
 import de.joelneumann.lojinha.ui.components.admin.users.DeletedUserCard
-import de.joelneumann.lojinha.ui.components.admin.users.DepositDialog
+import de.joelneumann.lojinha.ui.components.admin.users.UserCustomExpenseDialog
+import de.joelneumann.lojinha.ui.components.admin.users.UserCustomIncomeDialog
 import de.joelneumann.lojinha.ui.components.admin.users.UserEditDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
 import de.joelneumann.lojinha.ui.theme.ColorWarningAmber
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
+import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun AdminUsersTabScreen(
@@ -37,42 +42,45 @@ fun AdminUsersTabScreen(
 
     val showUserModal by viewModel.showUserModal.collectAsState()
     val editUser by viewModel.editUser.collectAsState()
-    val depositUser by viewModel.depositUser.collectAsState()
-    val depositAmountInput by viewModel.depositAmountInput.collectAsState()
-    val depositNoteInput by viewModel.depositNoteInput.collectAsState()
+    val customExpenseUser by viewModel.customExpenseUser.collectAsState()
+    val customIncomeUser by viewModel.customIncomeUser.collectAsState()
     val userDeleteError by viewModel.userDeleteErrorMessage.collectAsState()
 
     val strings = I18n.current
 
-    val activeUsers = remember(users) { users.filter { it.isActive && !it.isDeleted } }
-    val deactivatedUsers = remember(users) { users.filter { !it.isActive && !it.isDeleted } }
-    val deletedUsers = remember(users) { users.filter { it.isDeleted } }
+    LaunchedEffect(Unit) {
+        onUnsavedStateChanged(false)
+    }
+
+    val activeUsers = remember(users) { users.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name } }
+    val deactivatedUsers = remember(users) { users.filter { !it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name } }
+    val deletedUsers = remember(users) { users.filter { it.isDeleted }.sortedByAccentInsensitive { it.name } }
 
     val filteredActiveUsers = remember(activeUsers, searchQuery) {
         if (searchQuery.isBlank()) activeUsers
         else activeUsers.filter { u ->
-            u.name.contains(searchQuery, ignoreCase = true) ||
+            u.name.containsIgnoreAccents(searchQuery) ||
                     (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
                     (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
-        }
+        }.sortedByAccentInsensitive { it.name }
     }
 
     val filteredDeactivatedUsers = remember(deactivatedUsers, searchQuery) {
         if (searchQuery.isBlank()) deactivatedUsers
         else deactivatedUsers.filter { u ->
-            u.name.contains(searchQuery, ignoreCase = true) ||
+            u.name.containsIgnoreAccents(searchQuery) ||
                     (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
                     (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
-        }
+        }.sortedByAccentInsensitive { it.name }
     }
 
     val filteredDeletedUsers = remember(deletedUsers, searchQuery) {
         if (searchQuery.isBlank()) deletedUsers
         else deletedUsers.filter { u ->
-            u.name.contains(searchQuery, ignoreCase = true) ||
+            u.name.containsIgnoreAccents(searchQuery) ||
                     (u.userBarcodeNumber != null && u.userBarcodeNumber.contains(searchQuery, ignoreCase = true)) ||
                     (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
-        }
+        }.sortedByAccentInsensitive { it.name }
     }
 
     val totalMatches = filteredActiveUsers.size + filteredDeactivatedUsers.size + filteredDeletedUsers.size
@@ -87,8 +95,8 @@ fun AdminUsersTabScreen(
         AdminTopBar(
             searchQuery = searchQuery,
             onQueryChange = viewModel::updateSearchQuery,
-            placeholder = "🔍 Search account by name or barcode...",
-            countText = if (searchQuery.isBlank()) "${activeUsers.size} Accounts" else "${filteredActiveUsers.size} / ${activeUsers.size} Accounts",
+            placeholder = strings.searchAccountAdminPlaceholder,
+            countText = if (searchQuery.isBlank()) strings.accountsCountText(activeUsers.size) else strings.accountsCountText(filteredActiveUsers.size, activeUsers.size),
             onSearchSubmitted = openFirstResult,
             actionButtonText = strings.addUser,
             onActionButtonClick = viewModel::openNewUserModal
@@ -107,7 +115,7 @@ fun AdminUsersTabScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No matching user accounts found.", color = TextSecondaryMuted)
+                        Text(strings.noMatchingAccounts, color = TextSecondaryMuted)
                     }
                 }
             } else {
@@ -115,17 +123,17 @@ fun AdminUsersTabScreen(
                     val isExpanded = expandedUserId == user.id
                     AdminUserAccordionCard(
                         user = user,
-                        allUsers = users,
                         isExpanded = isExpanded,
                         onExpandToggle = { onRequestToggleExpand(user.id) },
-                        onSaveUser = viewModel::saveUser,
+                        onEditUser = { viewModel.openEditUserModal(it) },
+                        onCustomExpense = { viewModel.openCustomExpenseModal(it) },
+                        onCustomIncome = { viewModel.openCustomIncomeModal(it) },
                         onAdjustBalance = { u, absCents, note, isDeposit ->
                             val delta = if (isDeposit) absCents else -absCents
                             viewModel.adjustUserBalance(u.id, u.name, delta, note)
                         },
                         onToggleActive = viewModel::toggleUserActive,
-                        onDeleteUser = { viewModel.softDeleteUser(it.id) },
-                        onUnsavedStateChanged = onUnsavedStateChanged
+                        onDeleteUser = { viewModel.softDeleteUser(it.id) }
                     )
                 }
             }
@@ -134,11 +142,11 @@ fun AdminUsersTabScreen(
                 item(key = "deactivated-users-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
-                        title = "Deactivated Users",
-                        countText = "${filteredDeactivatedUsers.size} ${if (filteredDeactivatedUsers.size == 1) "User" else "Users"}",
+                        title = strings.deactivatedUsers,
+                        countText = strings.accountsCountText(filteredDeactivatedUsers.size),
                         accentColor = ColorWarningAmber,
-                        showLabel = "Show Deactivated Users",
-                        hideLabel = "Hide Deactivated Users"
+                        showLabel = strings.showDeactivatedUsers,
+                        hideLabel = strings.hideDeactivatedUsers
                     ) {
                         filteredDeactivatedUsers.forEach { user ->
                             DeactivatedUserCard(
@@ -154,11 +162,11 @@ fun AdminUsersTabScreen(
                 item(key = "deleted-users-section") {
                     Spacer(modifier = Modifier.height(16.dp))
                     AdminExpandableSection(
-                        title = "Deleted Users",
-                        countText = "${filteredDeletedUsers.size} ${if (filteredDeletedUsers.size == 1) "User" else "Users"}",
+                        title = strings.deletedUsers,
+                        countText = strings.accountsCountText(filteredDeletedUsers.size),
                         accentColor = ColorDangerCrimson,
-                        showLabel = "Show Deleted Users",
-                        hideLabel = "Hide Deleted Users"
+                        showLabel = strings.showDeletedUsers,
+                        hideLabel = strings.hideDeletedUsers
                     ) {
                         filteredDeletedUsers.forEach { user ->
                             DeletedUserCard(
@@ -181,26 +189,47 @@ fun AdminUsersTabScreen(
         )
     }
 
-    if (depositUser != null) {
-        DepositDialog(
-            user = depositUser!!,
-            amountInput = depositAmountInput,
-            noteInput = depositNoteInput,
-            onAmountChange = viewModel::updateDepositAmount,
-            onNoteChange = viewModel::updateDepositNote,
-            onSubmit = viewModel::submitDeposit,
-            onDismiss = viewModel::closeDepositModal
+    if (customExpenseUser != null) {
+        val targetUser = customExpenseUser!!
+        UserCustomExpenseDialog(
+            user = targetUser,
+            onSubmit = { deltaCents, description ->
+                viewModel.submitCustomExpense(targetUser, deltaCents, description)
+            },
+            onDismiss = { viewModel.closeCustomExpenseModal() }
+        )
+    }
+
+    if (customIncomeUser != null) {
+        val targetUser = customIncomeUser!!
+        UserCustomIncomeDialog(
+            user = targetUser,
+            onSubmit = { amountCents, description ->
+                viewModel.submitCustomIncome(targetUser, amountCents, description)
+            },
+            onDismiss = { viewModel.closeCustomIncomeModal() }
         )
     }
 
     if (userDeleteError != null) {
         AlertDialog(
             onDismissRequest = { viewModel.clearUserDeleteError() },
-            title = { Text("Audit Ledger Enforcement", fontWeight = FontWeight.Bold) },
-            text = { Text(userDeleteError!!) },
+            containerColor = de.joelneumann.lojinha.ui.theme.SurfaceWhite,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(
+                onCancel = { viewModel.clearUserDeleteError() },
+                onConfirm = { viewModel.clearUserDeleteError() }
+            ),
+            title = { Text(strings.auditLedgerTitle, fontWeight = FontWeight.Bold, color = de.joelneumann.lojinha.ui.theme.PrimaryNavy) },
+            text = { Text(userDeleteError!!, color = de.joelneumann.lojinha.ui.theme.PrimaryNavy) },
             confirmButton = {
-                Button(onClick = { viewModel.clearUserDeleteError() }) {
-                    Text("OK")
+                Button(
+                    onClick = { viewModel.clearUserDeleteError() },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = de.joelneumann.lojinha.ui.theme.AccentNavy)
+                ) {
+                    Text(strings.ok, color = de.joelneumann.lojinha.ui.theme.SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             }
         )

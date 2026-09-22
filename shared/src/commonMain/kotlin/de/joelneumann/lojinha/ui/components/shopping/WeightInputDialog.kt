@@ -23,8 +23,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.formModalKeys
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
 fun WeightInputDialog(
@@ -39,16 +43,27 @@ fun WeightInputDialog(
     val strings = I18n.current
     val weightFocusRequester = remember { FocusRequester() }
     var showWeightTooltip by remember { mutableStateOf(false) }
+    val canSubmit = weightError == null && weightInput.isNotBlank()
 
     LaunchedEffect(Unit) {
-        weightFocusRequester.requestFocus()
+        weightFocusRequester.safeRequestFocus()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
-            modifier = modifier.width(420.dp).wrapContentHeight()
+            modifier = modifier
+                .width(420.dp)
+                .wrapContentHeight()
+                .formModalKeys(
+                    onCancel = onDismiss,
+                    onConfirm = { if (canSubmit) onSubmit() },
+                    confirmEnabled = canSubmit
+                )
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -72,52 +87,83 @@ fun WeightInputDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = weightInput,
-                    onValueChange = onWeightInputChange,
-                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                    singleLine = true,
-                    isError = weightError != null,
-                    shape = RoundedCornerShape(12.dp),
-                    trailingIcon = {
-                        IconButton(
-                            onClick = { showWeightTooltip = !showWeightTooltip },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (showWeightTooltip) PrimaryNavy else Color.Transparent,
-                                border = BorderStroke(
-                                    width = 1.5.dp,
-                                    color = if (showWeightTooltip) PrimaryNavy else TextSecondaryMuted
-                                ),
-                                modifier = Modifier.size(22.dp)
+                val detectedUnit = Formatting.detectWeightUnit(weightInput)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = weightInput,
+                        onValueChange = onWeightInputChange,
+                        textStyle = LocalTextStyle.current.copy(fontSize = 15.sp),
+                        singleLine = true,
+                        isError = weightError != null,
+                        shape = RoundedCornerShape(12.dp),
+                        trailingIcon = {
+                            IconButton(
+                                onClick = { showWeightTooltip = !showWeightTooltip },
+                                modifier = Modifier.size(36.dp)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = "i",
-                                        color = if (showWeightTooltip) SurfaceWhite else TextSecondaryMuted,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        style = TextStyle(fontFamily = FontFamily.Serif)
-                                    )
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (showWeightTooltip) PrimaryNavy else Color.Transparent,
+                                    border = BorderStroke(
+                                        width = 1.5.dp,
+                                        color = if (showWeightTooltip) PrimaryNavy else TextSecondaryMuted
+                                    ),
+                                    modifier = Modifier.size(22.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = "i",
+                                            color = if (showWeightTooltip) SurfaceWhite else TextSecondaryMuted,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            style = TextStyle(fontFamily = FontFamily.Serif)
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .focusRequester(weightFocusRequester)
-                        .onKeyEvent { keyEvent ->
-                            if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Enter) {
-                                onSubmit()
-                                true
-                            } else false
                         },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { onSubmit() })
-                )
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .focusRequester(weightFocusRequester)
+                            .onKeyEvent { keyEvent ->
+                                if (keyEvent.type == KeyEventType.KeyDown && (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
+                                    if (canSubmit) {
+                                        onSubmit()
+                                    }
+                                    true
+                                } else false
+                            },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { if (canSubmit) onSubmit() })
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (detectedUnit != null) AccentNavy.copy(alpha = 0.12f) else SurfaceContainerLight,
+                        border = BorderStroke(
+                            width = if (detectedUnit != null) 1.5.dp else 1.dp,
+                            color = if (detectedUnit != null) AccentNavy else DividerBorder
+                        ),
+                        modifier = Modifier
+                            .width(68.dp)
+                            .height(56.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = detectedUnit?.symbol ?: "—",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (detectedUnit != null) PrimaryNavy else TextSecondaryMuted
+                            )
+                        }
+                    }
+                }
 
                 if (showWeightTooltip) {
                     Spacer(modifier = Modifier.height(10.dp))
@@ -158,6 +204,7 @@ fun WeightInputDialog(
 
                     Button(
                         onClick = onSubmit,
+                        enabled = canSubmit,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)

@@ -8,7 +8,8 @@ data class TransactionItem(
     val productName: String,
     val unitType: UnitType = UnitType.PIECE,
     val quantity: Long,
-    val unitPriceAtPurchase: Long
+    val unitPriceAtPurchase: Long,
+    val previousQuantity: Long? = null
 ) {
     val totalLinePrice: Long
         get() = when (unitType) {
@@ -27,5 +28,7 @@ data class Transaction(
     val referenceTransactionId: String? = null,
     val note: String? = null,
     val totalAmount: Long,
-    val items: List<TransactionItem> = emptyList()
+    val items: List<TransactionItem> = emptyList(),
+    val userBalanceBefore: Long? = null,
+    val userBalanceAfter: Long? = null
 )

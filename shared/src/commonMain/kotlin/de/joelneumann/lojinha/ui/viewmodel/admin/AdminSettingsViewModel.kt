@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.data.service.OneDriveBackupService
 import de.joelneumann.lojinha.domain.model.DeviceCodeResponse
-import de.joelneumann.lojinha.domain.model.BackupFileInfo
 import de.joelneumann.lojinha.domain.model.BackupRoutine
 import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.SystemSettings
@@ -21,7 +20,17 @@ class AdminSettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val backupRepository: BackupRepository? = null,
     private val onRunRoutineNow: (suspend (BackupRoutine) -> Unit)? = null,
-    private val oneDriveBackupService: OneDriveBackupService? = null
+    private val oneDriveBackupService: OneDriveBackupService? = null,
+    private val onPreviewCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
+    private val onExecuteCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
+    private val onExecuteDbRestore: (suspend (PlatformFile) -> Unit)? = null,
+    private val onExecuteWipeData: (suspend () -> Unit)? = null,
+    private val onExportSupportBundle: (suspend (prepareEmail: Boolean, recipientEmail: String) -> Unit)? = null,
+    private val onOpenLogFolder: (() -> Unit)? = null,
+    val logDirectoryPath: String = "",
+    private val getLogFolderSizeFormatted: (() -> String)? = null,
+    val serverUrls: List<String> = emptyList(),
+    private val onExitApplication: (() -> Unit)? = null
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(SystemSettings())
@@ -29,9 +38,6 @@ class AdminSettingsViewModel(
 
     private val _showOneDriveAuthDialog = MutableStateFlow(false)
     val showOneDriveAuthDialog: StateFlow<Boolean> = _showOneDriveAuthDialog.asStateFlow()
-
-    private val _oneDriveDeviceCodeResponse = MutableStateFlow<DeviceCodeResponse?>(null)
-    val oneDriveDeviceCodeResponse: StateFlow<DeviceCodeResponse?> = _oneDriveDeviceCodeResponse.asStateFlow()
 
     private val _oneDriveAuthStatus = MutableStateFlow("Waiting for authorization...")
     val oneDriveAuthStatus: StateFlow<String> = _oneDriveAuthStatus.asStateFlow()
@@ -71,18 +77,62 @@ class AdminSettingsViewModel(
     private val _csvImportType = MutableStateFlow("Products") // "Products" or "Users"
     val csvImportType: StateFlow<String> = _csvImportType.asStateFlow()
 
-    private val _detectedBackups = MutableStateFlow<List<BackupFileInfo>>(emptyList())
-    val detectedBackups: StateFlow<List<BackupFileInfo>> = _detectedBackups.asStateFlow()
-
     private val _showOneDriveDisconnectDialog = MutableStateFlow(false)
     val showOneDriveDisconnectDialog: StateFlow<Boolean> = _showOneDriveDisconnectDialog.asStateFlow()
 
     private val _showOneDriveSuccessDialog = MutableStateFlow<String?>(null)
     val showOneDriveSuccessDialog: StateFlow<String?> = _showOneDriveSuccessDialog.asStateFlow()
 
+    private val _logFolderSize = MutableStateFlow("")
+    val logFolderSize: StateFlow<String> = _logFolderSize.asStateFlow()
+
     init {
         loadSettings()
         loadRoutines()
+        refreshLogSize()
+    }
+
+    fun refreshLogSize() {
+        getLogFolderSizeFormatted?.let {
+            _logFolderSize.value = it()
+        }
+    }
+
+    fun exportSupportBundle(prepareEmail: Boolean, recipientEmail: String) {
+        viewModelScope.launch {
+            try {
+                _statusMessage.value = null
+                _errorMessage.value = null
+                onExportSupportBundle?.invoke(prepareEmail, recipientEmail)
+                refreshLogSize()
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to export diagnostic bundle: ${e.message}"
+            }
+        }
+    }
+
+    fun openLogFolder() {
+        try {
+            onOpenLogFolder?.invoke()
+        } catch (e: Exception) {
+            _errorMessage.value = "Could not open log folder: ${e.message}"
+        }
+    }
+
+    private val _showExitConfirmationDialog = MutableStateFlow(false)
+    val showExitConfirmationDialog: StateFlow<Boolean> = _showExitConfirmationDialog.asStateFlow()
+
+    fun openExitConfirmationDialog() {
+        _showExitConfirmationDialog.value = true
+    }
+
+    fun dismissExitConfirmationDialog() {
+        _showExitConfirmationDialog.value = false
+    }
+
+    fun confirmExitApplication() {
+        _showExitConfirmationDialog.value = false
+        onExitApplication?.invoke()
     }
 
     fun loadSettings() {
@@ -105,7 +155,7 @@ class AdminSettingsViewModel(
     fun updateSystemSettings(newSettings: SystemSettings) {
         viewModelScope.launch {
             settingsRepository.updateSettings(newSettings)
-            _statusMessage.value = "✓ System settings updated successfully."
+            _statusMessage.value = "System settings updated successfully."
         }
     }
 
@@ -144,7 +194,7 @@ class AdminSettingsViewModel(
                 _routines.value = currentList
             }
             closeRoutineDialog()
-            _statusMessage.value = "✓ Backup routine saved: '${routine.name}'"
+            _statusMessage.value = "Backup routine saved: '${routine.name}'"
         }
     }
 
@@ -161,7 +211,7 @@ class AdminSettingsViewModel(
                 _routines.value = _routines.value.filter { it.id != target.id }
             }
             _routineToDelete.value = null
-            _statusMessage.value = "✓ Backup routine '${target.name}' removed."
+            _statusMessage.value = "Backup routine '${target.name}' removed."
         }
     }
 
@@ -187,7 +237,7 @@ class AdminSettingsViewModel(
                 }
             }
             _routineToToggle.value = null
-            _statusMessage.value = "✓ Backup routine '${routine.name}' ${if (targetState) "enabled" else "disabled"}."
+            _statusMessage.value = "Backup routine '${routine.name}' ${if (targetState) "enabled" else "disabled"}."
         }
     }
 
@@ -199,7 +249,7 @@ class AdminSettingsViewModel(
         viewModelScope.launch {
             try {
                 onRunRoutineNow?.invoke(routine)
-                _statusMessage.value = "✓ Triggered routine '${routine.name}'."
+                _statusMessage.value = "Triggered routine '${routine.name}'."
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to run routine '${routine.name}': ${e.message}"
             }
@@ -216,31 +266,80 @@ class AdminSettingsViewModel(
 
     fun prepareCsvImport(file: PlatformFile, type: String) {
         _csvImportType.value = type
-        val previewResult = CsvImportResult(
-            totalProcessed = 1,
-            addedCount = 1,
-            updatedCount = 0,
-            strippedBarcodesCount = 0,
-            errors = emptyList(),
-            warnings = emptyList()
-        )
-        _csvImportPreview.value = file to previewResult
+        viewModelScope.launch {
+            try {
+                val previewResult = if (onPreviewCsvImport != null) {
+                    onPreviewCsvImport.invoke(file, type)
+                } else {
+                    CsvImportResult(
+                        totalProcessed = 0,
+                        addedCount = 0,
+                        updatedCount = 0,
+                        strippedBarcodesCount = 0,
+                        errors = listOf("CSV import preview not supported."),
+                        warnings = emptyList()
+                    )
+                }
+                _csvImportPreview.value = file to previewResult
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to preview CSV: ${e.message}"
+            }
+        }
     }
 
     fun executeCsvImport() {
         val preview = _csvImportPreview.value ?: return
+        val file = preview.first
+        val type = _csvImportType.value
         _csvImportPreview.value = null
-        _statusMessage.value = "✓ Import executed for ${preview.first.name}."
+        viewModelScope.launch {
+            try {
+                if (onExecuteCsvImport != null) {
+                    val result = onExecuteCsvImport.invoke(file, type)
+                    if (result.errors.isNotEmpty()) {
+                        _errorMessage.value = "Import finished with errors: ${result.errors.joinToString(", ")}"
+                    } else {
+                        _statusMessage.value = "Successfully imported ${result.totalProcessed} $type (${result.addedCount} added, ${result.updatedCount} updated)."
+                    }
+                } else {
+                    _statusMessage.value = "Import executed for ${file.name}."
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Import failed: ${e.message}"
+            }
+        }
     }
 
     fun executeDbRestore(file: PlatformFile) {
         _activeRestoreDbFile.value = null
-        _statusMessage.value = "✓ Database restore requested for ${file.name}."
+        viewModelScope.launch {
+            try {
+                if (onExecuteDbRestore != null) {
+                    onExecuteDbRestore.invoke(file)
+                    _statusMessage.value = "Database restored successfully from ${file.name}."
+                } else {
+                    _statusMessage.value = "Database restore requested for ${file.name}."
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Restore failed: ${e.message}"
+            }
+        }
     }
 
     fun executeWipeData() {
         _showWipeDataDialog.value = false
-        _statusMessage.value = "✓ Factory Reset completed."
+        viewModelScope.launch {
+            try {
+                if (onExecuteWipeData != null) {
+                    onExecuteWipeData.invoke()
+                    _statusMessage.value = "Factory Reset completed."
+                } else {
+                    _statusMessage.value = "Factory Reset completed."
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Factory Reset failed: ${e.message}"
+            }
+        }
     }
 
     fun clearCsvImportPreview() {
@@ -254,6 +353,8 @@ class AdminSettingsViewModel(
         }
         val clientId = _settings.value.oneDriveClientId.ifBlank { "202e1c94-b152-4751-b0e6-a2a4b8eb4901" }
 
+        val tenant = _settings.value.oneDriveTenant.ifBlank { "common" }
+
         _showOneDriveAuthDialog.value = true
         _oneDriveAuthStatus.value = "Initializing browser login..."
 
@@ -261,6 +362,7 @@ class AdminSettingsViewModel(
         oneDriveAuthJob = viewModelScope.launch {
             val tokenRes = service.startPkceAuth(
                 clientId = clientId,
+                tenant = tenant,
                 onStatusUpdate = { status -> _oneDriveAuthStatus.value = status }
             )
 
@@ -293,7 +395,6 @@ class AdminSettingsViewModel(
         oneDriveAuthJob?.cancel()
         oneDriveAuthJob = null
         _showOneDriveAuthDialog.value = false
-        _oneDriveDeviceCodeResponse.value = null
     }
 
     fun requestDisconnectOneDrive() {
@@ -340,5 +441,12 @@ class AdminSettingsViewModel(
             settingsRepository.updateSettings(updatedSettings)
             _settings.value = updatedSettings
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _statusMessage.value = null
+        _showRoutineDialog.value = false
+        oneDriveBackupService?.close()
     }
 }

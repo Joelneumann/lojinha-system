@@ -12,8 +12,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.DeviceCodeResponse
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.AccentNavy
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
+import de.joelneumann.lojinha.ui.theme.SurfaceWhite
+import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
+
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
 fun OneDriveAuthDialog(
@@ -22,11 +28,16 @@ fun OneDriveAuthDialog(
     onDismiss: () -> Unit,
     onOpenBrowser: ((String) -> Unit)? = null
 ) {
+    val strings = I18n.current
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onDismiss),
         title = {
             Text(
-                text = "Connect Microsoft OneDrive",
+                text = strings.connectOneDriveTitle,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = PrimaryNavy
@@ -45,7 +56,7 @@ fun OneDriveAuthDialog(
                 )
 
                 Text(
-                    text = statusMessage.ifBlank { "Opening browser for Microsoft sign-in..." },
+                    text = statusMessage.ifBlank { strings.oneDriveAuthOpeningBrowser },
                     fontSize = 13.sp,
                     color = PrimaryNavy,
                     fontWeight = FontWeight.Medium,
@@ -53,9 +64,9 @@ fun OneDriveAuthDialog(
                 )
 
                 Text(
-                    text = "Please complete sign-in in your opened web browser tab. Lojinha will automatically connect once authorized.",
+                    text = strings.oneDriveAuthCompleteInstruction,
                     fontSize = 12.sp,
-                    color = Color.DarkGray,
+                    color = TextSecondaryMuted,
                     textAlign = TextAlign.Center
                 )
             }
@@ -63,7 +74,7 @@ fun OneDriveAuthDialog(
         confirmButton = {},
         dismissButton = {
             OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
-                Text("Cancel")
+                Text(strings.cancel)
             }
         }
     )

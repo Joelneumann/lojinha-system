@@ -18,11 +18,41 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id = :id")
     suspend fun getUserById(id: String): UserEntity?
 
-    @Query("SELECT * FROM users WHERE userBarcode = :barcode OR userBarcodeNumber = :barcode LIMIT 1")
+    @Query("SELECT * FROM users WHERE userBarcode = :barcode COLLATE NOCASE OR userBarcodeNumber = :barcode COLLATE NOCASE LIMIT 1")
     suspend fun getUserByBarcode(barcode: String): UserEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateUser(user: UserEntity)
+
+    @Query("""
+        UPDATE users 
+        SET name = :name, 
+            language = :language, 
+            secondaryCurrency = :secondaryCurrency, 
+            pin = :pin, 
+            userBarcode = :userBarcode, 
+            userBarcodeNumber = :userBarcodeNumber, 
+            isActive = :isActive, 
+            isDeleted = :isDeleted, 
+            avatarType = :avatarType, 
+            avatarEmoji = :avatarEmoji, 
+            avatarColor = :avatarColor 
+        WHERE id = :id
+    """)
+    suspend fun updateUserProfile(
+        id: String,
+        name: String,
+        language: String,
+        secondaryCurrency: String,
+        pin: String?,
+        userBarcode: String?,
+        userBarcodeNumber: String?,
+        isActive: Boolean,
+        isDeleted: Boolean,
+        avatarType: String,
+        avatarEmoji: String,
+        avatarColor: String
+    )
 
     @Query("UPDATE users SET isDeleted = 1, isActive = 0 WHERE id = :id")
     suspend fun softDeleteUser(id: String)

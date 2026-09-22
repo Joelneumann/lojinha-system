@@ -3,6 +3,7 @@ package de.joelneumann.lojinha.ui.components.admin
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -11,20 +12,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
 @Composable
 fun AdminCardActionsRow(
-    hasUnsaved: Boolean,
-    onSave: () -> Unit,
-    onRevert: () -> Unit,
-    saveEnabled: Boolean,
+    onEdit: () -> Unit,
     toggleStatusText: String,
     onToggleStatus: () -> Unit,
     isStatusActive: Boolean,
     onDelete: () -> Unit,
+    onCustomExpense: (() -> Unit)? = null,
+    onCustomIncome: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val strings = I18n.current
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -35,49 +38,84 @@ fun AdminCardActionsRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Button(
-                onClick = onSave,
-                enabled = saveEnabled,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AccentNavy,
-                    disabledContainerColor = SurfaceContainerHighLight
-                ),
+                onClick = onEdit,
+                colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(42.dp)
+                modifier = Modifier.height(40.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
-                        imageVector = if (hasUnsaved) Icons.Default.Save else Icons.Default.Check,
+                        imageVector = Icons.Default.Edit,
                         contentDescription = null,
+                        tint = SurfaceWhite,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = if (hasUnsaved) "Save Changes" else "Saved",
+                        text = strings.edit,
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = SurfaceWhite
                     )
                 }
             }
 
-            if (hasUnsaved) {
+            if (onCustomExpense != null) {
                 OutlinedButton(
-                    onClick = onRevert,
+                    onClick = onCustomExpense,
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(42.dp)
+                    modifier = Modifier.height(40.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = PrimaryNavy
+                    )
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Undo,
+                            imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
                             contentDescription = null,
                             tint = PrimaryNavy,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text("Revert Changes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Text(
+                            text = strings.customExpense,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryNavy
+                        )
+                    }
+                }
+            }
+
+            if (onCustomIncome != null) {
+                OutlinedButton(
+                    onClick = onCustomIncome,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(40.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = PrimaryNavy
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddCircle,
+                            contentDescription = null,
+                            tint = PrimaryNavy,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = strings.customIncome,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryNavy
+                        )
                     }
                 }
             }
@@ -90,7 +128,7 @@ fun AdminCardActionsRow(
             OutlinedButton(
                 onClick = onToggleStatus,
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(42.dp)
+                modifier = Modifier.height(40.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -115,7 +153,7 @@ fun AdminCardActionsRow(
                 onClick = onDelete,
                 colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(42.dp)
+                modifier = Modifier.height(40.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -128,7 +166,7 @@ fun AdminCardActionsRow(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "Delete",
+                        text = strings.delete,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = SurfaceWhite
@@ -138,3 +176,4 @@ fun AdminCardActionsRow(
         }
     }
 }
+

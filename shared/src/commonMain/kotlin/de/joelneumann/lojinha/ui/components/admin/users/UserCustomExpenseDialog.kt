@@ -1,0 +1,298 @@
+package de.joelneumann.lojinha.ui.components.admin.users
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
+import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
+import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.formModalKeys
+
+@Composable
+private fun CustomAmountDialog(
+    title: String,
+    descriptionLabel: String,
+    descriptionPlaceholder: String,
+    confirmButtonText: String,
+    confirmButtonColor: Color,
+    user: User,
+    onSubmit: (amountCents: Long, description: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val strings = I18n.current
+
+    var description by remember { mutableStateOf("") }
+    var amountBrl by remember { mutableStateOf("") }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+
+    val parsedDouble = remember(amountBrl) {
+        amountBrl.replace(',', '.').trim().toDoubleOrNull()
+    }
+    val cents = remember(parsedDouble) {
+        if (parsedDouble != null && parsedDouble > 0.0) {
+            kotlin.math.round(parsedDouble * 100.0).toLong()
+        } else {
+            0L
+        }
+    }
+    val canSubmit = remember(description, cents) {
+        description.isNotBlank() && cents > 0L
+    }
+    val isModified = remember(description, amountBrl) {
+        description.isNotBlank() || amountBrl.isNotBlank()
+    }
+
+    val handleDismissRequest = {
+        if (isModified) {
+            showDiscardConfirm = true
+        } else {
+            onDismiss()
+        }
+    }
+
+    val handleSubmit = {
+        if (canSubmit) {
+            onSubmit(cents, description.trim())
+        }
+    }
+
+    Dialog(
+        onDismissRequest = handleDismissRequest,
+        properties = DialogProperties(
+            dismissOnClickOutside = true,
+            dismissOnBackPress = true
+        )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = SurfaceWhite,
+            shadowElevation = 8.dp,
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .widthIn(max = 480.dp)
+                .wrapContentHeight()
+                .formModalKeys(
+                    onCancel = handleDismissRequest,
+                    onConfirm = handleSubmit,
+                    confirmEnabled = canSubmit
+                )
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy
+                )
+
+                // User Snapshot Pill
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = SurfaceContainerHighLight,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        UserAvatar(
+                            user = user,
+                            modifier = Modifier.size(38.dp),
+                            fontSize = 16.sp
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = user.name,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryNavy
+                            )
+                            Text(
+                                text = "${strings.balance}: ${Formatting.formatBrl(user.balance)}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (user.balance >= 0) ColorSuccessEmerald else ColorDangerCrimson
+                            )
+                        }
+                    }
+                }
+
+                // Description / Reason
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = descriptionLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy
+                    )
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        placeholder = {
+                            Text(
+                                text = descriptionPlaceholder,
+                                fontSize = 13.sp,
+                                color = TextSecondaryMuted
+                            )
+                        },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = SurfaceWhite,
+                            unfocusedContainerColor = SurfaceWhite,
+                            focusedBorderColor = AccentNavy,
+                            unfocusedBorderColor = DividerBorder
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                // Amount
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = strings.amountBrlLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy
+                    )
+                    OutlinedTextField(
+                        value = amountBrl,
+                        onValueChange = { input ->
+                            val sanitized = input.filter { it.isDigit() || it == '.' || it == ',' }
+                            if (sanitized.count { it == '.' || it == ',' } <= 1) {
+                                amountBrl = sanitized
+                            }
+                        },
+                        placeholder = {
+                            Text(
+                                text = strings.amountPlaceholder,
+                                fontSize = 13.sp,
+                                color = TextSecondaryMuted
+                            )
+                        },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = SurfaceWhite,
+                            unfocusedContainerColor = SurfaceWhite,
+                            focusedBorderColor = AccentNavy,
+                            unfocusedBorderColor = DividerBorder
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                HorizontalDivider(color = DividerBorder)
+
+                // Bottom Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = handleDismissRequest,
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(strings.cancel, fontSize = 14.sp)
+                    }
+
+                    Button(
+                        onClick = handleSubmit,
+                        enabled = canSubmit,
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = confirmButtonColor
+                        )
+                    ) {
+                        Text(
+                            text = confirmButtonText,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showDiscardConfirm) {
+            ConfirmationDialog(
+                title = strings.discardChangesTitle,
+                message = strings.discardChangesMsg,
+                confirmText = strings.discard,
+                cancelText = strings.cancel,
+                confirmButtonColor = ColorDangerCrimson,
+                onConfirm = {
+                    showDiscardConfirm = false
+                    onDismiss()
+                },
+                onDismiss = {
+                    showDiscardConfirm = false
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun UserCustomExpenseDialog(
+    user: User,
+    onSubmit: (amountCents: Long, description: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val strings = I18n.current
+    CustomAmountDialog(
+        title = strings.customExpenseDialogTitle,
+        descriptionLabel = strings.customExpenseDescriptionLabel,
+        descriptionPlaceholder = strings.customExpenseDescriptionPlaceholder,
+        confirmButtonText = strings.customExpenseConfirmBtn,
+        confirmButtonColor = ColorDangerCrimson,
+        user = user,
+        onSubmit = onSubmit,
+        onDismiss = onDismiss
+    )
+}
+
+@Composable
+fun UserCustomIncomeDialog(
+    user: User,
+    onSubmit: (amountCents: Long, description: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val strings = I18n.current
+    CustomAmountDialog(
+        title = strings.customIncomeDialogTitle,
+        descriptionLabel = strings.customIncomeDescriptionLabel,
+        descriptionPlaceholder = strings.customIncomeDescriptionPlaceholder,
+        confirmButtonText = strings.customIncomeConfirmBtn,
+        confirmButtonColor = ColorSuccessEmerald,
+        user = user,
+        onSubmit = onSubmit,
+        onDismiss = onDismiss
+    )
+}

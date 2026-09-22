@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,10 +28,16 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
+
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 enum class AdminTab {
     PRODUCTS,
     USERS,
+    BULK_BILLING,
     TRANSACTIONS,
     SETTINGS
 }
@@ -40,7 +47,8 @@ fun AdminScreen(
     productsViewModel: AdminProductsViewModel,
     usersViewModel: AdminUsersViewModel,
     transactionsViewModel: AdminTransactionsViewModel,
-    settingsViewModel: AdminSettingsViewModel,
+    bulkBillingViewModel: AdminBulkBillingViewModel? = null,
+    settingsViewModel: AdminSettingsViewModel? = null,
     onExitAdmin: () -> Unit
 ) {
     val strings = I18n.current
@@ -75,7 +83,26 @@ fun AdminScreen(
         }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(SurfaceContainerLight)) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(SurfaceContainerLight)
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                    if (pendingTabSwitch != null || isExitAdminPending) {
+                        false
+                    } else if (expandedProductId != null || expandedUserId != null || expandedTransactionId != null) {
+                        expandedProductId = null
+                        expandedUserId = null
+                        expandedTransactionId = null
+                        true
+                    } else {
+                        handleExitAdminRequest()
+                        true
+                    }
+                } else false
+            }
+    ) {
         val isMobile = maxWidth < 600.dp
 
         Column(modifier = Modifier.fillMaxSize()) {
@@ -93,16 +120,21 @@ fun AdminScreen(
                     .fillMaxWidth()
                     .background(SurfaceWhite)
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = if (isMobile) 10.dp else 20.dp, vertical = 10.dp),
+                    .padding(horizontal = if (isMobile) 10.dp else ScreenPadding, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val tabItems = listOf(
-                    Triple(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts),
-                    Triple(AdminTab.USERS, Icons.Default.People, strings.tabUsers),
-                    Triple(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions),
-                    Triple(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings)
-                )
+                val tabItems = buildList {
+                    add(Triple(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts))
+                    add(Triple(AdminTab.USERS, Icons.Default.People, strings.tabUsers))
+                    if (bulkBillingViewModel != null) {
+                        add(Triple(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling))
+                    }
+                    add(Triple(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions))
+                    if (settingsViewModel != null) {
+                        add(Triple(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings))
+                    }
+                }
 
                 tabItems.forEach { item ->
                     val tab = item.first
@@ -151,7 +183,7 @@ fun AdminScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(if (isMobile) 10.dp else 20.dp)
+                    .padding(if (isMobile) 10.dp else ScreenPadding)
             ) {
                 when (currentTab) {
                     AdminTab.PRODUCTS -> {
@@ -189,11 +221,22 @@ fun AdminScreen(
                         )
                     }
 
+                    AdminTab.BULK_BILLING -> {
+                        if (bulkBillingViewModel != null) {
+                            AdminBulkBillingTabScreen(
+                                viewModel = bulkBillingViewModel,
+                                onNavigateToTransactions = { handleTabSwitchRequest(AdminTab.TRANSACTIONS) }
+                            )
+                        }
+                    }
+
                     AdminTab.SETTINGS -> {
-                        AdminSettingsTabScreen(
-                            viewModel = settingsViewModel,
-                            onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
-                        )
+                        if (settingsViewModel != null) {
+                            AdminSettingsTabScreen(
+                                viewModel = settingsViewModel,
+                                onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
+                            )
+                        }
                     }
                 }
             }
@@ -202,11 +245,30 @@ fun AdminScreen(
 
     if (pendingTabSwitch != null || isExitAdminPending) {
         val targetName = if (isExitAdminPending) "Main Screen" else pendingTabSwitch?.name ?: ""
-        AlertDialog(
-            onDismissRequest = {
-                pendingTabSwitch = null
+        val dismissDialog = {
+            pendingTabSwitch = null
+            isExitAdminPending = false
+        }
+        val confirmDiscard = {
+            hasUnsavedChanges = false
+            if (isExitAdminPending) {
                 isExitAdminPending = false
-            },
+                onExitAdmin()
+            } else if (pendingTabSwitch != null) {
+                currentTab = pendingTabSwitch!!
+                pendingTabSwitch = null
+                expandedProductId = null
+                expandedUserId = null
+                expandedTransactionId = null
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmDiscard),
             title = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -219,7 +281,7 @@ fun AdminScreen(
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
-                        text = "Unsaved Changes Warning",
+                        text = strings.unsavedChangesTitle,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = ColorWarningAmber
@@ -228,39 +290,22 @@ fun AdminScreen(
             },
             text = {
                 Text(
-                    text = "You have unsaved changes on this page. If you leave to $targetName, your unsaved changes will be discarded.\n\nAre you sure you want to discard changes and continue?",
+                    text = strings.unsavedChangesMsg(targetName),
                     fontSize = 14.sp,
                     color = TextSecondarySubtle
                 )
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        hasUnsavedChanges = false
-                        if (isExitAdminPending) {
-                            isExitAdminPending = false
-                            onExitAdmin()
-                        } else if (pendingTabSwitch != null) {
-                            currentTab = pendingTabSwitch!!
-                            pendingTabSwitch = null
-                            expandedProductId = null
-                            expandedUserId = null
-                            expandedTransactionId = null
-                        }
-                    },
+                    onClick = confirmDiscard,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
-                    Text("Discard & Switch", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    Text(strings.discardAndSwitch, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(
-                    onClick = {
-                        pendingTabSwitch = null
-                        isExitAdminPending = false
-                    }
-                ) {
-                    Text("Keep Editing")
+                OutlinedButton(onClick = dismissDialog) {
+                    Text(strings.keepEditing)
                 }
             }
         )

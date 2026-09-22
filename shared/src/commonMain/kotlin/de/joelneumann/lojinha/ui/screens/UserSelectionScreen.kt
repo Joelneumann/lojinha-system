@@ -17,8 +17,13 @@ import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.ui.components.userselection.UserGrid
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun UserSelectionScreen(
@@ -50,7 +55,7 @@ fun UserSelectionScreen(
         onSearchSubmitted = { viewModel.onSearchSubmitted(onUserLoggedIn) },
         onUserClick = { user -> viewModel.onUserCardClicked(user, onUserLoggedIn) },
         onPinChange = viewModel::updatePinInput,
-        onPinSubmit = { viewModel.submitPin(onUserLoggedIn) },
+        onPinSubmit = { viewModel.submitPin(settings.adminPasswordHash, onUserLoggedIn) },
         onPinDismiss = viewModel::cancelPinDialog,
         onAdminPasswordChange = viewModel::updateAdminPassword,
         onAdminPasswordSubmit = { viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin) },
@@ -81,21 +86,27 @@ fun UserSelectionContent(
 ) {
     val strings = I18n.current
     val focusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(selectedUserForPin, showAdminAuthDialog) {
+    LaunchedEffect(selectedUserForPin, showAdminAuthDialog, LanguageManager.currentLanguage) {
         if (selectedUserForPin == null && !showAdminAuthDialog) {
-            focusRequester.requestFocus()
+            focusRequester.safeRequestFocus()
         }
     }
 
     val filteredUsers = remember(users, searchQuery) {
         if (searchQuery.isBlank()) users
-        else users.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        else users.filter { it.name.containsIgnoreAccents(searchQuery) }.sortedByAccentInsensitive { it.name }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
         HeaderBar(
-            title = "Lojinha",
+            title = strings.appTitle,
+            onLanguageClick = {
+                coroutineScope.launch {
+                    focusRequester.safeRequestFocus()
+                }
+            },
             actions = {
                 Button(
                     onClick = onOpenAdminAuthDialog,
@@ -117,7 +128,7 @@ fun UserSelectionContent(
             modifier = Modifier
                 .fillMaxSize()
                 .background(SurfaceContainerLight)
-                .padding(24.dp)
+                .padding(ScreenPadding)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 SearchInputField(
@@ -125,19 +136,17 @@ fun UserSelectionContent(
                     onQueryChange = onSearchQueryChange,
                     placeholder = strings.searchUserPlaceholder,
                     onSearchSubmitted = onSearchSubmitted,
-                    focusRequester = focusRequester,
-                    onFocusChanged = { focusState ->
-                        if (!focusState.isFocused && selectedUserForPin == null && !showAdminAuthDialog) {
-                            focusRequester.requestFocus()
-                        }
-                    }
+                    focusRequester = focusRequester
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 UserGrid(
                     users = filteredUsers,
-                    onUserClick = onUserClick
+                    onUserClick = onUserClick,
+                    emptyText = strings.noUsersFound,
+                    isSearchActive = searchQuery.isNotBlank(),
+                    onOpenAdminSetup = onOpenAdminAuthDialog
                 )
             }
 

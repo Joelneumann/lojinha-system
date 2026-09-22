@@ -7,6 +7,8 @@ import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.generateUuid
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,108 +30,194 @@ class AdminTransactionsViewModel(
     private val _selectedTypeFilter = MutableStateFlow<TransactionType?>(null)
     val selectedTypeFilter: StateFlow<TransactionType?> = _selectedTypeFilter.asStateFlow()
 
+    private val _currentPage = MutableStateFlow(0)
+    val currentPage: StateFlow<Int> = _currentPage.asStateFlow()
+
+    private val _pageSize = MutableStateFlow(25)
+    val pageSize: StateFlow<Int> = _pageSize.asStateFlow()
+
+    private val _totalCount = MutableStateFlow(0)
+    val totalCount: StateFlow<Int> = _totalCount.asStateFlow()
+
+    private val _totalPages = MutableStateFlow(1)
+    val totalPages: StateFlow<Int> = _totalPages.asStateFlow()
+
+    private val _relatedChildrenMap = MutableStateFlow<Map<String, List<Transaction>>>(emptyMap())
+    val relatedChildrenMap: StateFlow<Map<String, List<Transaction>>> = _relatedChildrenMap.asStateFlow()
+
+    private val _referencedParentsMap = MutableStateFlow<Map<String, Transaction>>(emptyMap())
+    val referencedParentsMap: StateFlow<Map<String, Transaction>> = _referencedParentsMap.asStateFlow()
+
+    private val _correctionTarget = MutableStateFlow<Pair<Transaction, List<TransactionItem>>?>(null)
+    val correctionTarget: StateFlow<Pair<Transaction, List<TransactionItem>>?> = _correctionTarget.asStateFlow()
+
+    private val _isSubmitting = MutableStateFlow(false)
+    val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
+
     init {
         loadData()
+        observeTransactions()
+    }
+
+    private fun observeTransactions() {
+        viewModelScope.launch {
+            transactionRepository.getTransactionsFlow().collect {
+                fetchPagedTransactions()
+            }
+        }
     }
 
     fun loadData() {
-        viewModelScope.launch {
-            transactionRepository.getTransactionsFlow().collect { _transactions.value = it }
-        }
+        fetchPagedTransactions()
     }
 
     fun updateSearchFilter(query: String) {
         _searchFilter.value = query
+        _currentPage.value = 0
+        fetchPagedTransactions()
     }
 
     fun updateTypeFilter(type: TransactionType?) {
         _selectedTypeFilter.value = type
+        _currentPage.value = 0
+        fetchPagedTransactions()
     }
 
-    private suspend fun refreshTransactions() {
-        _transactions.value = transactionRepository.getAllTransactions()
+    fun setPage(page: Int) {
+        if (page >= 0 && page < _totalPages.value) {
+            _currentPage.value = page
+            fetchPagedTransactions()
+        }
     }
 
-    fun stornoPurchaseWithUpdatedItems(originalTx: Transaction, updatedItems: List<TransactionItem>) {
-        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val isAllZero = updatedItems.all { it.quantity == 0L }
+    fun setPageSize(size: Int) {
+        _pageSize.value = size
+        _currentPage.value = 0
+        fetchPagedTransactions()
+    }
 
-        val originalCost = kotlin.math.abs(originalTx.totalAmount)
-        val updatedCost = updatedItems.sumOf { item ->
-            when (item.unitType) {
-                UnitType.PIECE -> item.unitPriceAtPurchase * item.quantity
-                UnitType.WEIGHT -> kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
+    fun openCorrectionModal(originalTx: Transaction, currentEffectiveItems: List<TransactionItem>) {
+        _correctionTarget.value = originalTx to currentEffectiveItems
+    }
+
+    fun closeCorrectionModal() {
+        _correctionTarget.value = null
+    }
+
+    private var fetchJob: Job? = null
+
+    private fun fetchPagedTransactions() {
+        fetchJob?.cancel()
+        fetchJob = viewModelScope.launch {
+            try {
+                val paged = transactionRepository.getTransactionsPaged(
+                    page = _currentPage.value,
+                    pageSize = _pageSize.value,
+                    searchQuery = _searchFilter.value,
+                    typeFilter = _selectedTypeFilter.value
+                )
+                val items = paged.items
+                val parentIds = items.map { it.id }
+                val refIds = items.mapNotNull { it.referenceTransactionId }
+                val allParentIds = (parentIds + refIds).distinct()
+                val children = transactionRepository.getTransactionsByReferenceIds(allParentIds)
+                val parents = transactionRepository.getTransactionsByIds(refIds)
+
+                _relatedChildrenMap.value = children.groupBy { it.referenceTransactionId!! }
+                _referencedParentsMap.value = parents.associateBy { it.id }
+                _transactions.value = items
+                _totalCount.value = paged.totalCount
+                _totalPages.value = paged.totalPages
+                _currentPage.value = paged.page
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Normal cancellation when filter or page changes rapidly
+            } catch (e: Exception) {
+                // Ignore or log error
             }
         }
-        val costDifference = updatedCost - originalCost
-        val balanceDelta = -costDifference
+    }
 
-        val dateStr = Formatting.formatTimestamp(originalTx.timestamp, Language.EN)
-        val origAmountStr = Formatting.formatBrl(originalCost)
-        val humanNote = if (isAllZero) {
-            "Complete Storno of Purchase ($dateStr - $origAmountStr)"
-        } else {
-            "Item quantity correction for Purchase ($dateStr - Original $origAmountStr)"
-        }
+    fun refreshTransactions() {
+        fetchPagedTransactions()
+    }
 
-        val stornoId = "tx-storno-" + nowMillis + "-" + Random.nextInt(1000, 9999)
-        val stornoTx = Transaction(
-            id = stornoId,
-            userId = originalTx.userId,
-            userNameSnapshot = originalTx.userNameSnapshot,
-            timestamp = nowMillis,
-            type = if (isAllZero) TransactionType.CANCELLATION else TransactionType.CORRECTION,
-            referenceTransactionId = originalTx.id,
-            note = humanNote,
-            totalAmount = balanceDelta,
-            items = updatedItems
-        )
+    fun applyPurchaseCorrection(
+        originalTx: Transaction,
+        currentItems: List<TransactionItem>,
+        newItems: List<TransactionItem>
+    ) {
+        if (_isSubmitting.value) return
+        _isSubmitting.value = true
 
         viewModelScope.launch {
-            userRepository.updateBalance(originalTx.userId, balanceDelta)
-
-            updatedItems.forEach { updatedItem ->
-                val originalItem = originalTx.items.firstOrNull { it.productId == updatedItem.productId }
-                val originalQty = originalItem?.quantity ?: 0L
-                val qtyChange = updatedItem.quantity - originalQty
-                if (qtyChange != 0L) {
-                    val p = productRepository.getProductById(updatedItem.productId)
-                    if (p != null) {
-                        productRepository.updateStock(updatedItem.productId, -qtyChange)
-                    }
+            try {
+                val success = transactionRepository.applyPurchaseCorrection(originalTx.id, newItems)
+                if (success) {
+                    closeCorrectionModal()
+                    fetchPagedTransactions()
                 }
+            } catch (e: Exception) {
+                // Log or handle error
+            } finally {
+                _isSubmitting.value = false
             }
-
-            transactionRepository.recordTransaction(stornoTx)
-            refreshTransactions()
         }
     }
 
     fun stornoNonPurchaseTransaction(tx: Transaction) {
-        if (tx.type == TransactionType.CANCELLATION) return
-        val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val cancellationId = "tx-storno-" + nowMillis + "-" + Random.nextInt(1000, 9999)
-
-        val refundAmount = -tx.totalAmount
-        val dateStr = Formatting.formatTimestamp(tx.timestamp, Language.EN)
-        val amountStr = Formatting.formatBrl(tx.totalAmount)
-
-        val stornoTx = Transaction(
-            id = cancellationId,
-            userId = tx.userId,
-            userNameSnapshot = tx.userNameSnapshot,
-            timestamp = nowMillis,
-            type = TransactionType.CANCELLATION,
-            referenceTransactionId = tx.id,
-            note = "Storno of ${tx.type.name} ($dateStr - $amountStr)",
-            totalAmount = refundAmount,
-            items = emptyList()
-        )
+        if (tx.type != TransactionType.ADMIN_DEPOSIT && tx.type != TransactionType.ADMIN_WITHDRAWAL) return
+        if (_isSubmitting.value) return
+        _isSubmitting.value = true
 
         viewModelScope.launch {
-            userRepository.updateBalance(tx.userId, refundAmount)
-            transactionRepository.recordTransaction(stornoTx)
-            refreshTransactions()
+            try {
+                if (transactionRepository.getCancellationCountForReference(tx.id) > 0) {
+                    return@launch
+                }
+                val success = transactionRepository.stornoNonPurchase(tx.id)
+                if (success) {
+                    fetchPagedTransactions()
+                }
+            } catch (e: Exception) {
+                // Log or handle error
+            } finally {
+                _isSubmitting.value = false
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _transactions.value = emptyList()
+        _relatedChildrenMap.value = emptyMap()
+        _referencedParentsMap.value = emptyMap()
+        _correctionTarget.value = null
+        _searchFilter.value = ""
+        _selectedTypeFilter.value = null
+    }
+
+    companion object {
+        fun computeEffectiveItems(
+            originalItems: List<TransactionItem>,
+            corrections: List<Transaction>,
+            cancellation: Transaction? = null
+        ): List<TransactionItem> {
+            if (cancellation != null) {
+                return originalItems.map { it.copy(quantity = 0L) }
+            }
+            if (corrections.isEmpty()) return originalItems
+
+            val itemsMap = originalItems.associateBy { it.productId }.toMutableMap()
+            val sortedCorrections = corrections.sortedBy { it.timestamp }
+            for (corr in sortedCorrections) {
+                for (item in corr.items) {
+                    val existing = itemsMap[item.productId]
+                    if (existing != null) {
+                        itemsMap[item.productId] = existing.copy(quantity = item.quantity)
+                    }
+                }
+            }
+            return originalItems.map { itemsMap[it.productId] ?: it }
         }
     }
 }

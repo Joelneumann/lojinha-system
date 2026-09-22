@@ -24,7 +24,8 @@ data class SettingsEntity(
     val oneDriveAccountEmail: String? = null,
     val oneDriveAccountName: String? = null,
     val oneDriveDefaultFolder: String = "/LojinhaBackups",
-    val oneDriveTenant: String = "common"
+    val oneDriveTenant: String = "common",
+    val supportEmail: String? = null
 ) {
     fun toDomain(): SystemSettings = SystemSettings(
         adminPasswordHash = adminPasswordHash,
@@ -44,7 +45,8 @@ data class SettingsEntity(
         oneDriveAccountEmail = oneDriveAccountEmail,
         oneDriveAccountName = oneDriveAccountName,
         oneDriveDefaultFolder = oneDriveDefaultFolder,
-        oneDriveTenant = oneDriveTenant
+        oneDriveTenant = oneDriveTenant,
+        supportEmail = supportEmail
     )
 
     companion object {
@@ -67,7 +69,8 @@ data class SettingsEntity(
             oneDriveAccountEmail = settings.oneDriveAccountEmail,
             oneDriveAccountName = settings.oneDriveAccountName,
             oneDriveDefaultFolder = settings.oneDriveDefaultFolder,
-            oneDriveTenant = settings.oneDriveTenant
+            oneDriveTenant = settings.oneDriveTenant,
+            supportEmail = settings.supportEmail
         )
     }
 }
