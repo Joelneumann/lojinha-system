@@ -69,8 +69,8 @@ fun UserAvatar(
         contentAlignment = Alignment.Center
     ) {
         if (avatar.type == AvatarType.EMOJI) {
-            Text(
-                text = avatar.emoji.ifBlank { "😀" },
+            PlatformEmoji(
+                emoji = avatar.emoji.ifBlank { "😀" },
                 fontSize = fontSize
             )
         } else {

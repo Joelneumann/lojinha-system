@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import de.joelneumann.lojinha.domain.model.AvatarType
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_COLORS
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_EMOJIS
+import de.joelneumann.lojinha.ui.components.userselection.PlatformEmoji
 import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.components.userselection.parseHexColor
 
@@ -366,7 +367,7 @@ fun UserEditDialog(
                                             .clickable { selectedAvatar = selectedAvatar.copy(emoji = emoji) },
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text(text = emoji, fontSize = 16.sp)
+                                        PlatformEmoji(emoji = emoji, fontSize = 16.sp)
                                     }
                                 }
                             }

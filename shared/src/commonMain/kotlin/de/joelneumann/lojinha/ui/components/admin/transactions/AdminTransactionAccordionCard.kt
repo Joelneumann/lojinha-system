@@ -11,6 +11,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Edit
 import de.joelneumann.lojinha.domain.model.Transaction
@@ -122,8 +123,14 @@ fun AdminTransactionAccordionCard(
                         fontWeight = FontWeight.SemiBold,
                         color = if (delta > 0) ColorSuccessEmerald else ColorDangerCrimson
                     )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp),
+                        tint = TextSecondaryMuted
+                    )
                     Text(
-                        text = "➔ ${Formatting.formatBrl(finalAmount)}",
+                        text = Formatting.formatBrl(finalAmount),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextSecondaryMuted
@@ -146,8 +153,14 @@ fun AdminTransactionAccordionCard(
                         fontWeight = FontWeight.SemiBold,
                         color = if (cumulativeDelta > 0) ColorSuccessEmerald else ColorDangerCrimson
                     )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp),
+                        tint = if (netAmount < 0) ColorDangerCrimson else PrimaryNavy
+                    )
                     Text(
-                        text = "➔ ${Formatting.formatBrl(netAmount)}",
+                        text = Formatting.formatBrl(netAmount),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (netAmount < 0) ColorDangerCrimson else PrimaryNavy
