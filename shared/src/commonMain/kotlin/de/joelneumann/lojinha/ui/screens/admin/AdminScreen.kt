@@ -265,6 +265,8 @@ fun AdminScreen(
 
         AlertDialog(
             onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
             modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmDiscard),
             title = {

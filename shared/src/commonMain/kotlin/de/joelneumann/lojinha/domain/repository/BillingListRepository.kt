@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 interface BillingListRepository {
     fun getActiveBillingListsFlow(): Flow<List<BillingList>>
     suspend fun saveBillingList(list: BillingList)
+    suspend fun updateLastExecutionTime(id: String, lastExecutionTime: Long?)
     suspend fun deleteBillingList(id: String)
     suspend fun addUserToList(user: BillingListUser)
     suspend fun removeUserFromList(listId: String, userId: String)

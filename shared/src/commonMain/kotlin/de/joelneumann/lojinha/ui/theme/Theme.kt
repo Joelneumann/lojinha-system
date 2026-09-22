@@ -45,7 +45,16 @@ private val LightColorScheme = lightColorScheme(
     onSurface = PrimaryNavy,
     onSurfaceVariant = TextSecondaryMuted,
     outline = DividerBorder,
-    error = ColorDangerCrimson
+    outlineVariant = DividerBorder,
+    error = ColorDangerCrimson,
+    onError = SurfaceWhite,
+    surfaceContainer = SurfaceWhite,
+    surfaceContainerHigh = SurfaceContainerHighLight,
+    surfaceContainerHighest = SurfaceContainerHighLight,
+    surfaceContainerLow = SurfaceWhite,
+    surfaceContainerLowest = SurfaceWhite,
+    surfaceBright = SurfaceWhite,
+    surfaceDim = SurfaceContainerLight
 )
 
 @Composable

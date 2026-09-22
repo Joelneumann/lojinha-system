@@ -57,6 +57,8 @@ fun DbRestoreMultiApprovalDialog(
     AlertDialog(
         onDismissRequest = handleDismiss,
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = handleDismiss, onConfirm = handleConfirm),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -243,6 +245,8 @@ fun WipeDataMultiApprovalDialog(
     AlertDialog(
         onDismissRequest = handleDismiss,
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = handleDismiss, onConfirm = handleConfirm),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -411,6 +415,8 @@ fun CsvImportMultiApprovalDialog(
     AlertDialog(
         onDismissRequest = handleDismiss,
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = handleDismiss, onConfirm = handleConfirm),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

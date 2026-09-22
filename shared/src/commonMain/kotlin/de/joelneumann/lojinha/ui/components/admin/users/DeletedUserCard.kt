@@ -108,6 +108,8 @@ fun DeletedUserCard(
     if (showRestoreConfirm) {
         AlertDialog(
             onDismissRequest = { showRestoreConfirm = false },
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
             modifier = Modifier.confirmationDialogKeys(
                 onCancel = { showRestoreConfirm = false },

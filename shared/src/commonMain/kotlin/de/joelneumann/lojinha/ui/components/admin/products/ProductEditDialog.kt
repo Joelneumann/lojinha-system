@@ -43,19 +43,20 @@ fun ProductEditDialog(
     var basePriceBrl by remember { mutableStateOf(if (isNewProduct) "0,00" else Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()) }
     var unitType by remember { mutableStateOf(product.unitType) }
     var stockQuantity by remember { mutableStateOf(if (isNewProduct) "0" else Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)) }
-    var customMarkup by remember { mutableStateOf(product.customMarkupPercent?.toString() ?: "") }
+    val initialPriceBrl = remember(product.basePrice) { Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim() }
+    val initialStockAdmin = remember(product.stockQuantity, product.unitType) { Formatting.formatStockForAdmin(product.stockQuantity, product.unitType) }
+    val initialCustomMarkup = remember(product.customMarkupPercent) { product.customMarkupPercent?.let { Formatting.formatDecimal(it) } ?: "" }
+    var customMarkup by remember { mutableStateOf(initialCustomMarkup) }
     var barcodeCode by remember { mutableStateOf("") }
     var barcodeDesc by remember { mutableStateOf("") }
     var barcodeList by remember { mutableStateOf(product.barcodes) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
 
-    val initialPriceBrl = remember(product.basePrice) { Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim() }
-    val initialStockAdmin = remember(product.stockQuantity, product.unitType) { Formatting.formatStockForAdmin(product.stockQuantity, product.unitType) }
     val hasDialogChanges = name != product.name ||
             basePriceBrl != initialPriceBrl ||
             unitType != product.unitType ||
             stockQuantity != initialStockAdmin ||
-            customMarkup != (product.customMarkupPercent?.toString() ?: "") ||
+            customMarkup != initialCustomMarkup ||
             barcodeList != product.barcodes
 
     val isModified = if (isNewProduct) {
@@ -387,7 +388,7 @@ fun ProductEditDialog(
                                 basePriceBrl = initialPriceBrl
                                 unitType = product.unitType
                                 stockQuantity = Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)
-                                customMarkup = product.customMarkupPercent?.toString() ?: ""
+                                customMarkup = initialCustomMarkup
                                 barcodeList = product.barcodes
                                 barcodeCode = ""
                                 barcodeDesc = ""

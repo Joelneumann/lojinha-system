@@ -784,4 +784,23 @@ class DomainAndRulesTest {
             assertTrue(s.logoutWithTimer(15).contains("15"))
         }
     }
+
+    @Test
+    fun testDecimalFormattingWithComma() {
+        assertEquals("0", Formatting.formatDecimal(0.0))
+        assertEquals("10", Formatting.formatDecimal(10.0))
+        assertEquals("10,5", Formatting.formatDecimal(10.5))
+        assertEquals("0,18", Formatting.formatDecimal(0.18))
+        assertEquals("0,16", Formatting.formatDecimal(0.16))
+        assertEquals("5,75", Formatting.formatDecimal(5.75))
+
+        assertEquals("+0%", Formatting.formatMarkupPercent(0.0))
+        assertEquals("+10%", Formatting.formatMarkupPercent(10.0))
+        assertEquals("+10,5%", Formatting.formatMarkupPercent(10.5))
+        assertEquals("+12,75%", Formatting.formatMarkupPercent(12.75))
+
+        assertEquals(10.5, Formatting.parsePercentageInput("10,5"))
+        assertEquals(10.5, Formatting.parsePercentageInput("10.5"))
+        assertEquals(0.18, Formatting.parsePercentageInput("0,18"))
+    }
 }

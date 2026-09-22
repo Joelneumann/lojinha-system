@@ -22,82 +22,6 @@ import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable
-fun CreateBillingListDialog(
-    onDismiss: () -> Unit,
-    onSubmit: (name: String, type: BillingListType, basePrice: Long?) -> Unit
-) {
-    val strings = I18n.current
-    var name by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(BillingListType.FIXED) }
-    var priceInput by remember { mutableStateOf("") }
-
-    val confirm = {
-        val price = if (type == BillingListType.FIXED) {
-            priceInput.replace(',', '.').toDoubleOrNull()?.let { kotlin.math.round(it * 100).toLong() }
-        } else null
-        onSubmit(name, type, price)
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
-        modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = confirm),
-        title = { Text(strings.createNewList, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(strings.listNameLabel) },
-                    placeholder = { Text(strings.listNamePlaceholder) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(strings.listTypeLabel, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = type == BillingListType.FIXED,
-                        onClick = { type = BillingListType.FIXED },
-                        label = { Text(strings.listTypeFixed) }
-                    )
-                    FilterChip(
-                        selected = type == BillingListType.VARIABLE,
-                        onClick = { type = BillingListType.VARIABLE },
-                        label = { Text(strings.listTypeVariable) }
-                    )
-                }
-
-                if (type == BillingListType.FIXED) {
-                    OutlinedTextField(
-                        value = priceInput,
-                        onValueChange = { priceInput = it },
-                        label = { Text(strings.basePriceBrlLabel) },
-                        placeholder = { Text(strings.amountPlaceholder) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = confirm,
-                enabled = name.isNotBlank() && (type != BillingListType.FIXED || priceInput.isNotBlank()),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
-            ) {
-                Text(strings.save, color = SurfaceWhite, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text(strings.cancel)
-            }
-        }
-    )
-}
-
-@Composable
 fun DeleteBillingListDialog(
     listName: String,
     onDismiss: () -> Unit,
@@ -107,6 +31,8 @@ fun DeleteBillingListDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
         modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirm),
         title = {
@@ -136,27 +62,42 @@ fun DeleteBillingListDialog(
 fun ExecuteChargesDialog(
     count: Int,
     totalFormatted: String,
+    isExecuting: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
     val strings = I18n.current
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
-        modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirm),
+        onDismissRequest = { if (!isExecuting) onDismiss() },
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
+        properties = DialogProperties(dismissOnBackPress = !isExecuting, dismissOnClickOutside = !isExecuting),
+        modifier = Modifier.confirmationDialogKeys(onCancel = { if (!isExecuting) onDismiss() }, onConfirm = { if (!isExecuting) onConfirm() }),
         title = { Text(strings.executeChargesBtn, fontWeight = FontWeight.Bold) },
         text = { Text(strings.confirmExecuteChargesMsg(count, totalFormatted)) },
         confirmButton = {
             Button(
                 onClick = onConfirm,
+                enabled = !isExecuting,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
             ) {
-                Text(strings.confirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                if (isExecuting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = SurfaceWhite,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(strings.confirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
+            OutlinedButton(
+                onClick = onDismiss,
+                enabled = !isExecuting
+            ) {
                 Text(strings.cancel)
             }
         }

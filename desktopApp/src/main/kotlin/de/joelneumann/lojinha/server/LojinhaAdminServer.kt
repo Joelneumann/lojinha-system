@@ -293,20 +293,30 @@ class LojinhaAdminServer(
                         val list = call.receive<BillingList>()
                         val isNew = list.id.isBlank()
                         val idToSave = if (isNew) UUID.randomUUID().toString() else list.id
-                        val listToSave = list.copy(id = idToSave)
+                        val listToSave = list.copy(
+                            id = idToSave,
+                            users = list.users.map { u ->
+                                u.copy(
+                                    id = if (u.id.isBlank()) UUID.randomUUID().toString() else u.id,
+                                    listId = idToSave
+                                )
+                            }
+                        )
                         billingListRepository.saveBillingList(listToSave)
-                        billingListRepository.removeAllUsersFromList(idToSave)
-                        for (u in listToSave.users) {
-                            billingListRepository.addUserToList(
-                                u.copy(id = UUID.randomUUID().toString(), listId = idToSave)
-                            )
-                        }
                         call.respond(HttpStatusCode.OK, mapOf("id" to idToSave))
                     }
                     delete("/billing-lists/{id}") {
                         if (!call.checkAdminAuth(settingsRepository)) return@delete
                         val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
                         billingListRepository.deleteBillingList(id)
+                        call.respond(HttpStatusCode.OK)
+                    }
+                    patch("/billing-lists/{id}/last-execution") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@patch
+                        val id = call.parameters["id"] ?: return@patch call.respond(HttpStatusCode.BadRequest)
+                        val body = call.receive<Map<String, Long?>>()
+                        val timestamp = body["lastExecutionTime"]
+                        billingListRepository.updateLastExecutionTime(id, timestamp)
                         call.respond(HttpStatusCode.OK)
                     }
 

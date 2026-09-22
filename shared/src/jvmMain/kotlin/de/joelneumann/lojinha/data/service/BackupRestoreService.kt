@@ -523,10 +523,12 @@ class BackupRestoreService(
 
                 val hasComment = listCols.contains("comment")
                 val hasIsDeleted = listCols.contains("isdeleted")
+                val hasLastExecution = listCols.contains("lastexecutiontime")
                 val listQuery = buildString {
                     append("SELECT id, name, type, basePrice")
                     if (hasComment) append(", comment") else append(", NULL")
                     if (hasIsDeleted) append(", isDeleted") else append(", 0")
+                    if (hasLastExecution) append(", lastExecutionTime") else append(", NULL")
                     append(" FROM billing_lists")
                 }
 
@@ -536,13 +538,15 @@ class BackupRestoreService(
                         val basePrice = if (stmt.isNull(3)) null else stmt.getLong(3)
                         val comment = if (stmt.isNull(4)) null else stmt.getText(4)
                         val isDel = stmt.getLong(5) != 0L
+                        val lastExecution = if (stmt.isNull(6)) null else stmt.getLong(6)
                         val bl = BillingListEntity(
                             id = stmt.getText(0),
                             name = stmt.getText(1),
                             type = stmt.getText(2),
                             basePrice = basePrice,
                             comment = comment,
-                            isDeleted = isDel
+                            isDeleted = isDel,
+                            lastExecutionTime = lastExecution
                         )
                         backupBillingLists.add(bl)
                     }

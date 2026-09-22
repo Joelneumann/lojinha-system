@@ -37,6 +37,7 @@ class RoomBillingListRepositoryImpl(
                             basePrice = listEntity.basePrice,
                             comment = listEntity.comment,
                             isDeleted = listEntity.isDeleted,
+                            lastExecutionTime = listEntity.lastExecutionTime,
                             users = userEntities.map {
                                 BillingListUser(
                                     id = it.id,
@@ -53,16 +54,29 @@ class RoomBillingListRepositoryImpl(
     }
 
     override suspend fun saveBillingList(list: BillingList) {
-        dao.insertOrUpdateBillingList(
-            BillingListEntity(
-                id = list.id,
-                name = list.name,
-                type = list.type.name,
-                basePrice = list.basePrice,
-                comment = list.comment,
-                isDeleted = list.isDeleted
-            )
+        val listEntity = BillingListEntity(
+            id = list.id,
+            name = list.name,
+            type = list.type.name,
+            basePrice = list.basePrice,
+            comment = list.comment,
+            isDeleted = list.isDeleted,
+            lastExecutionTime = list.lastExecutionTime
         )
+        val userEntities = list.users.map { u ->
+            BillingListUserEntity(
+                id = if (u.id.isBlank()) de.joelneumann.lojinha.ui.utils.generateUuid() else u.id,
+                listId = list.id,
+                userId = u.userId,
+                quantity = u.quantity
+            )
+        }
+        dao.saveBillingListWithUsers(listEntity, userEntities)
+        onDataChanged()
+    }
+
+    override suspend fun updateLastExecutionTime(id: String, lastExecutionTime: Long?) {
+        dao.updateLastExecutionTime(id, lastExecutionTime)
         onDataChanged()
     }
 

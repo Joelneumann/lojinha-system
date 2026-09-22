@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
+import de.joelneumann.lojinha.ui.theme.SurfaceWhite
+import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
@@ -27,6 +29,8 @@ fun OneDriveDisconnectDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirm),
         title = {
             Text(
@@ -49,7 +53,7 @@ fun OneDriveDisconnectDialog(
                 Text(
                     text = strings.disconnectOneDriveWarningMsg,
                     fontSize = 12.sp,
-                    color = Color.DarkGray
+                    color = TextSecondaryMuted
                 )
             }
         },
@@ -59,7 +63,7 @@ fun OneDriveDisconnectDialog(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
             ) {
-                Text(strings.disconnectBtn)
+                Text(strings.disconnectBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

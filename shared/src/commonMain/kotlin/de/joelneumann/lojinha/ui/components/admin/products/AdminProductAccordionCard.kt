@@ -57,8 +57,10 @@ fun AdminProductAccordionCard(
             val effectivePrice = product.calculateEffectiveUnitPrice(globalMarkup)
             val isCustom = product.customMarkupPercent != null
             val activeMarkup = product.customMarkupPercent ?: globalMarkup
+            val markupPercentStr = Formatting.formatMarkupPercent(activeMarkup)
+            val markupTag = if (isCustom) "$markupPercentStr • ${strings.markupCustomSuffix}" else markupPercentStr
 
-            Column(horizontalAlignment = Alignment.End) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = "${strings.basePrice}: ${Formatting.formatBrl(product.basePrice)}",
                     fontSize = 13.sp,
@@ -66,13 +68,7 @@ fun AdminProductAccordionCard(
                     color = PrimaryNavy
                 )
                 Text(
-                    text = Formatting.formatMarkupDisplay(activeMarkup, isCustom, strings),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isCustom) AccentNavy else TextSecondaryMuted
-                )
-                Text(
-                    text = "${strings.sellingPriceLabel}: ${Formatting.formatBrl(effectivePrice)}",
+                    text = "${strings.sellingPriceLabel}: ${Formatting.formatBrl(effectivePrice)} ($markupTag)",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = AccentNavy
@@ -243,6 +239,8 @@ fun AdminProductAccordionCard(
 
         AlertDialog(
             onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
             modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmDelete),
             title = { Text(strings.confirmDeleteProductTitle, fontWeight = FontWeight.Bold, color = ColorDangerCrimson) },

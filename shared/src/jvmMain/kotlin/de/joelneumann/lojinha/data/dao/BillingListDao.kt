@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import de.joelneumann.lojinha.data.entity.BillingListEntity
 import de.joelneumann.lojinha.data.entity.BillingListUserEntity
 import kotlinx.coroutines.flow.Flow
@@ -16,13 +17,28 @@ interface BillingListDao {
     @Query("SELECT * FROM billing_list_users WHERE listId = :listId")
     fun getUsersForListFlow(listId: String): Flow<List<BillingListUserEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertOrUpdateBillingList(list: BillingListEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBillingListUsers(users: List<BillingListUserEntity>)
+
+    @androidx.room.Transaction
+    suspend fun saveBillingListWithUsers(list: BillingListEntity, users: List<BillingListUserEntity>) {
+        insertOrUpdateBillingList(list)
+        removeAllUsersFromList(list.id)
+        if (users.isNotEmpty()) {
+            insertBillingListUsers(users)
+        }
+    }
+
+    @Query("UPDATE billing_lists SET lastExecutionTime = :lastExecutionTime WHERE id = :id")
+    suspend fun updateLastExecutionTime(id: String, lastExecutionTime: Long?)
 
     @Query("UPDATE billing_lists SET isDeleted = 1 WHERE id = :id")
     suspend fun softDeleteBillingList(id: String)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertBillingListUser(user: BillingListUserEntity)
 
     @Query("DELETE FROM billing_list_users WHERE listId = :listId AND userId = :userId")

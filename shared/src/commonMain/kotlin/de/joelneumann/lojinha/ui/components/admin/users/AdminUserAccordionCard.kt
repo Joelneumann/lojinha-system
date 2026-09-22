@@ -139,12 +139,14 @@ fun AdminUserAccordionCard(
 
         AlertDialog(
             onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(
                 dismissOnClickOutside = true,
                 dismissOnBackPress = true
             ),
             modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmAdjustment),
-            title = { Text(strings.confirmBalanceAdjustmentTitle, fontWeight = FontWeight.Bold) },
+            title = { Text(strings.confirmBalanceAdjustmentTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
             text = { Text(strings.confirmBalanceAdjustmentMsg(isDeposit, formattedAmount, user.name)) },
             confirmButton = {
                 Button(
@@ -173,12 +175,14 @@ fun AdminUserAccordionCard(
 
         AlertDialog(
             onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(
                 dismissOnClickOutside = true,
                 dismissOnBackPress = true
             ),
             modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmToggle),
-            title = { Text(strings.confirmUserStatusChangeTitle, fontWeight = FontWeight.Bold) },
+            title = { Text(strings.confirmUserStatusChangeTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
             text = { Text(strings.confirmUserStatusChangeMsg(user.isActive, user.name)) },
             confirmButton = {
                 Button(
@@ -207,6 +211,8 @@ fun AdminUserAccordionCard(
 
         AlertDialog(
             onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(
                 dismissOnClickOutside = true,
                 dismissOnBackPress = true

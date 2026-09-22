@@ -18,7 +18,8 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.AccentNavy
 import de.joelneumann.lojinha.ui.theme.ColorSuccessEmerald
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
-
+import de.joelneumann.lojinha.ui.theme.SurfaceWhite
+import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
@@ -30,6 +31,8 @@ fun OneDriveSuccessDialog(
     val strings = I18n.current
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
         modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onDismiss),
         title = {
@@ -73,7 +76,7 @@ fun OneDriveSuccessDialog(
                 Text(
                     text = strings.oneDriveConnectedDesc,
                     fontSize = 12.sp,
-                    color = Color.DarkGray,
+                    color = TextSecondaryMuted,
                     textAlign = TextAlign.Center
                 )
             }
@@ -84,7 +87,7 @@ fun OneDriveSuccessDialog(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
             ) {
-                Text(strings.greatBtn)
+                Text(strings.greatBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
             }
         }
     )

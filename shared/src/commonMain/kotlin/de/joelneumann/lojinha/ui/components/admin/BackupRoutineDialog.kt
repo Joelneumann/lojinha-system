@@ -59,6 +59,9 @@ fun BackupRoutineDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         title = {
             Text(
                 text = if (initialRoutine == null) strings.createNewBackupRoutineTitle else strings.editRoutineTitle(initialRoutine.name),
@@ -394,6 +397,8 @@ fun DeleteRoutineConfirmationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirmDelete),
         title = {
             Row(
@@ -478,6 +483,8 @@ fun ToggleRoutineConfirmationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onConfirmToggle),
         title = {
             Row(

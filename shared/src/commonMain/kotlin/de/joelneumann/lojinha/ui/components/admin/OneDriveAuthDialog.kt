@@ -15,6 +15,8 @@ import de.joelneumann.lojinha.domain.model.DeviceCodeResponse
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.AccentNavy
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
+import de.joelneumann.lojinha.ui.theme.SurfaceWhite
+import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
@@ -30,6 +32,8 @@ fun OneDriveAuthDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = onDismiss, onConfirm = onDismiss),
         title = {
             Text(
@@ -62,7 +66,7 @@ fun OneDriveAuthDialog(
                 Text(
                     text = strings.oneDriveAuthCompleteInstruction,
                     fontSize = 12.sp,
-                    color = Color.DarkGray,
+                    color = TextSecondaryMuted,
                     textAlign = TextAlign.Center
                 )
             }

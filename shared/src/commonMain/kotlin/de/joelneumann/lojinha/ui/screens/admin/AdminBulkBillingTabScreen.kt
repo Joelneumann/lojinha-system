@@ -17,10 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.BillingList
 import de.joelneumann.lojinha.domain.model.BillingListType
+import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
+import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.admin.bulk.*
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
@@ -38,6 +42,7 @@ fun AdminBulkBillingTabScreen(
     val activeUsers by viewModel.activeUsers.collectAsState()
     val variableAmounts by viewModel.variableAmounts.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isExecutingCharges by viewModel.isExecutingCharges.collectAsState()
 
     var editingList by remember { mutableStateOf<BillingList?>(null) }
     var isCreatingNew by remember { mutableStateOf(false) }
@@ -84,13 +89,33 @@ fun AdminBulkBillingTabScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(list.name, fontWeight = FontWeight.Bold, color = if (isSelected) AccentNavy else PrimaryNavy)
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(
-                                    if (list.type == BillingListType.FIXED) strings.listTypeFixed else strings.listTypeVariable,
-                                    fontSize = 12.sp,
-                                    color = TextSecondaryMuted
+                                    text = list.name,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) AccentNavy else PrimaryNavy,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
+                                val listTypeWithPrice = if (list.type == BillingListType.FIXED) {
+                                    "${strings.listTypeFixed} (${Formatting.formatBrl(list.basePrice ?: 0L)})"
+                                } else strings.listTypeVariable
+                                Text(
+                                    text = listTypeWithPrice,
+                                    fontSize = 12.sp,
+                                    color = TextSecondaryMuted,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                if (list.lastExecutionTime != null) {
+                                    Text(
+                                        text = "${strings.lastExecutionTimeLabel} ${Formatting.formatTimestamp(list.lastExecutionTime)}",
+                                        fontSize = 11.sp,
+                                        color = TextSecondaryMuted,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
                             }
                             Row {
                                 IconButton(onClick = { editingList = list }, modifier = Modifier.size(24.dp)) {
@@ -147,11 +172,23 @@ fun AdminBulkBillingTabScreen(
                 val typeText = if (selectedList.type == BillingListType.FIXED) {
                     "${strings.listTypeFixed} (${Formatting.formatBrl(selectedList.basePrice ?: 0L)})"
                 } else strings.listTypeVariable
-                Text(typeText, fontSize = 14.sp, color = TextSecondaryMuted)
+                Text(typeText, fontSize = 14.sp, color = TextSecondaryMuted, maxLines = 1, softWrap = false)
 
                 if (!selectedList.comment.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("${strings.billingListCommentLabel}: ${selectedList.comment}", fontSize = 14.sp, color = TextSecondaryMuted)
+                }
+
+                if (selectedList.lastExecutionTime != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${strings.lastExecutionTimeLabel} ${Formatting.formatTimestamp(selectedList.lastExecutionTime)}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextSecondaryMuted,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -160,10 +197,12 @@ fun AdminBulkBillingTabScreen(
                     activeUsers.find { it.id == listUser.userId }?.let { it to listUser }
                 }.sortedBy { it.first.name.lowercase() }
 
+                val chargeableUsers = sortedUsers.filter { it.first.isActive && !it.first.isDeleted }
+
                 val totalExpectedAmount = if (selectedList.type == BillingListType.FIXED) {
-                    sortedUsers.sumOf { it.second.quantity * (selectedList.basePrice ?: 0L) }
+                    chargeableUsers.sumOf { it.second.quantity.coerceAtLeast(0) * (selectedList.basePrice ?: 0L).coerceAtLeast(0L) }
                 } else {
-                    sortedUsers.sumOf { variableAmounts[it.first.id] ?: 0L }
+                    chargeableUsers.sumOf { viewModel.getVariableAmount(selectedList.id, it.first.id).coerceAtLeast(0L) }
                 }
 
                 LazyColumn(
@@ -176,30 +215,76 @@ fun AdminBulkBillingTabScreen(
                         }
                     } else {
                         items(sortedUsers, key = { it.first.id }) { (user, listUser) ->
+                            val isChargeable = user.isActive && !user.isDeleted
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(user.name, modifier = Modifier.weight(1f))
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = user.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isChargeable) PrimaryNavy else TextSecondaryMuted
+                                    )
+                                    if (user.isDeleted) {
+                                        AdminStatusBadge(text = strings.deleted, type = AdminBadgeType.DANGER)
+                                    } else if (!user.isActive) {
+                                        AdminStatusBadge(text = strings.deactivated, type = AdminBadgeType.WARNING)
+                                    }
+                                }
                                 
                                 if (selectedList.type == BillingListType.FIXED) {
-                                    val lineTotal = listUser.quantity * (selectedList.basePrice ?: 0L)
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("${listUser.quantity}x", modifier = Modifier.width(40.dp))
-                                        Text(Formatting.formatBrl(lineTotal), modifier = Modifier.width(100.dp).padding(start = 8.dp))
+                                    val lineTotal = if (isChargeable) listUser.quantity * (selectedList.basePrice ?: 0L) else 0L
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "${listUser.quantity}x",
+                                            modifier = Modifier.widthIn(min = 32.dp),
+                                            textAlign = TextAlign.End,
+                                            fontSize = 13.sp,
+                                            color = TextSecondaryMuted
+                                        )
+                                        Text(
+                                            text = Formatting.formatBrl(lineTotal),
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp,
+                                            color = if (isChargeable) PrimaryNavy else TextSecondaryMuted,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            textAlign = TextAlign.End,
+                                            modifier = Modifier.widthIn(min = 100.dp)
+                                        )
                                     }
                                 } else {
-                                    val currentAmount = variableAmounts[user.id] ?: 0L
+                                    val currentAmount = if (isChargeable) viewModel.getVariableAmount(selectedList.id, user.id) else 0L
                                     var amountStr by remember(selectedList.id, user.id) { 
                                         mutableStateOf(if (currentAmount == 0L) "" else (currentAmount.toDouble() / 100.0).toString()) 
                                     }
+                                    LaunchedEffect(currentAmount) {
+                                        if (currentAmount == 0L && amountStr.isNotBlank()) {
+                                            amountStr = ""
+                                        }
+                                    }
                                     OutlinedTextField(
-                                        value = amountStr,
-                                        onValueChange = { amountStr = it; 
-                                            val cents = it.replace(',', '.').toDoubleOrNull()?.let { v -> kotlin.math.round(v * 100).toLong() } ?: 0L
-                                            viewModel.setVariableAmount(user.id, cents)
+                                        value = if (isChargeable) amountStr else "",
+                                        onValueChange = { 
+                                            if (isChargeable) {
+                                                val sanitized = it.filter { c -> c.isDigit() || c == '.' || c == ',' }
+                                                amountStr = sanitized
+                                                val cents = sanitized.replace(',', '.').toDoubleOrNull()
+                                                    ?.let { v -> kotlin.math.round(v * 100).toLong().coerceAtLeast(0L) } ?: 0L
+                                                viewModel.setVariableAmount(selectedList.id, user.id, cents)
+                                            }
                                         },
+                                        enabled = isChargeable && !isExecutingCharges,
                                         modifier = Modifier.width(120.dp),
                                         label = { Text(strings.amount, fontSize = 10.sp) },
                                         singleLine = true
@@ -217,13 +302,20 @@ fun AdminBulkBillingTabScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("${strings.total}: ${Formatting.formatBrl(totalExpectedAmount)}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(
+                        text = "${strings.total}: ${Formatting.formatBrl(totalExpectedAmount)}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = PrimaryNavy,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                     Button(
                         onClick = { showExecuteDialogFor = selectedList },
                         colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
-                        enabled = selectedList.users.isNotEmpty() && totalExpectedAmount > 0
+                        enabled = !isExecutingCharges && chargeableUsers.isNotEmpty() && totalExpectedAmount > 0
                     ) {
-                        Text(strings.executeChargesBtn, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                        Text(strings.executeChargesBtn, fontWeight = FontWeight.Bold, color = SurfaceWhite, maxLines = 1)
                     }
                 }
             }
@@ -275,24 +367,29 @@ fun AdminBulkBillingTabScreen(
 
     if (showExecuteDialogFor != null) {
         val list = showExecuteDialogFor!!
-        var total = 0L
-        if (list.type == BillingListType.FIXED) {
-            total = list.users.sumOf { it.quantity * (list.basePrice ?: 0L) }
-        } else {
-            total = list.users.sumOf { variableAmounts[it.userId] ?: 0L }
+        val chargeableListUsers = list.users.filter { u ->
+            val usr = activeUsers.find { it.id == u.userId }
+            usr != null && usr.isActive && !usr.isDeleted
         }
+        val total = if (list.type == BillingListType.FIXED) {
+            chargeableListUsers.sumOf { it.quantity.coerceAtLeast(0) * (list.basePrice ?: 0L).coerceAtLeast(0L) }
+        } else {
+            chargeableListUsers.sumOf { viewModel.getVariableAmount(list.id, it.userId).coerceAtLeast(0L) }
+        }
+        val eligibleCount = chargeableListUsers.filter { 
+            if (list.type == BillingListType.FIXED) it.quantity > 0 
+            else viewModel.getVariableAmount(list.id, it.userId) > 0 
+        }.size
         
         ExecuteChargesDialog(
-            count = list.users.filter { 
-                if (list.type == BillingListType.FIXED) it.quantity > 0 
-                else (variableAmounts[it.userId] ?: 0L) > 0 
-            }.size,
+            count = eligibleCount,
             totalFormatted = Formatting.formatBrl(total),
+            isExecuting = isExecutingCharges,
             onDismiss = { showExecuteDialogFor = null },
             onConfirm = {
                 val targetList = list
-                showExecuteDialogFor = null
                 viewModel.executeCharges(targetList) { success ->
+                    showExecuteDialogFor = null
                     if (success) {
                         onNavigateToTransactions()
                     }
@@ -304,11 +401,13 @@ fun AdminBulkBillingTabScreen(
     if (errorMessage != null) {
         AlertDialog(
             onDismissRequest = { viewModel.clearErrorMessage() },
-            title = { Text(strings.deleteListTitle.substringBefore(" ")) },
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
+            title = { Text(strings.deleteListTitle.substringBefore(" "), fontWeight = FontWeight.Bold, color = PrimaryNavy) },
             text = { Text(errorMessage ?: "") },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearErrorMessage() }) {
-                    Text(strings.ok)
+                    Text(strings.ok, color = AccentNavy, fontWeight = FontWeight.Bold)
                 }
             }
         )

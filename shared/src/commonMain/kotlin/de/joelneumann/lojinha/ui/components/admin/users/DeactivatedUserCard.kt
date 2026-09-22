@@ -114,6 +114,8 @@ fun DeactivatedUserCard(
 
         AlertDialog(
             onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
             modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmActivate),
             title = { Text(strings.confirmUserActivationTitle, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },

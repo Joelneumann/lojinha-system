@@ -76,6 +76,7 @@ class LojinhaAdminServerTest {
     private val fakeBillingListRepo = object : BillingListRepository {
         override fun getActiveBillingListsFlow(): Flow<List<BillingList>> = flowOf(emptyList())
         override suspend fun saveBillingList(list: BillingList) {}
+        override suspend fun updateLastExecutionTime(id: String, lastExecutionTime: Long?) {}
         override suspend fun deleteBillingList(id: String) {}
         override suspend fun addUserToList(user: BillingListUser) {}
         override suspend fun removeUserFromList(listId: String, userId: String) {}

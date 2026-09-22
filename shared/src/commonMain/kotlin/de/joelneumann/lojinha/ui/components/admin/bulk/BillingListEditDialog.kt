@@ -73,6 +73,7 @@ fun BillingListEditDialog(
                 type = type,
                 basePrice = price,
                 comment = comment.trim().ifBlank { null },
+                lastExecutionTime = initialList?.lastExecutionTime,
                 users = selectedUsers.map { (uid, qty) -> 
                     BillingListUser(id = "", listId = "", userId = uid, quantity = qty)
                 }

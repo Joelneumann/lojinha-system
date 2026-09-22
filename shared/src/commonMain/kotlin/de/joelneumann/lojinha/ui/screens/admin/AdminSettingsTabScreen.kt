@@ -43,9 +43,9 @@ fun AdminSettingsTabScreen(
     var confirmPassword by remember(settings) { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
 
-    var globalMarkup by remember(settings) { mutableStateOf(settings.globalMarkupPercent.toString()) }
-    var usdRate by remember(settings) { mutableStateOf(settings.usdExchangeRate.toString()) }
-    var eurRate by remember(settings) { mutableStateOf(settings.eurExchangeRate.toString()) }
+    var globalMarkup by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.globalMarkupPercent)) }
+    var usdRate by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.usdExchangeRate)) }
+    var eurRate by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
     var inactivityTimeout by remember(settings) { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
 
     var backupLocation by remember(settings) { mutableStateOf(settings.backupLocationPath) }
@@ -54,9 +54,9 @@ fun AdminSettingsTabScreen(
     LaunchedEffect(settings) {
         newPassword = ""
         confirmPassword = ""
-        globalMarkup = settings.globalMarkupPercent.toString()
-        usdRate = settings.usdExchangeRate.toString()
-        eurRate = settings.eurExchangeRate.toString()
+        globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
+        usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
+        eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
         inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
         backupLocation = settings.backupLocationPath
         supportEmail = settings.supportEmail ?: ""
@@ -80,10 +80,10 @@ fun AdminSettingsTabScreen(
         backupLocation, supportEmail
     ) {
         newPassword.isNotEmpty() ||
-                globalMarkup != settings.globalMarkupPercent.toString() ||
-                usdRate != settings.usdExchangeRate.toString() ||
-                eurRate != settings.eurExchangeRate.toString() ||
-                inactivityTimeout != settings.inactivityTimeoutMinutes.toString() ||
+                globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent) ||
+                usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate) ||
+                eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate) ||
+                inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
                 backupLocation != settings.backupLocationPath ||
                 supportEmail != (settings.supportEmail ?: "")
     }
@@ -133,9 +133,9 @@ fun AdminSettingsTabScreen(
                         onClick = {
                             newPassword = ""
                             confirmPassword = ""
-                            globalMarkup = settings.globalMarkupPercent.toString()
-                            usdRate = settings.usdExchangeRate.toString()
-                            eurRate = settings.eurExchangeRate.toString()
+                            globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
+                            usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
+                            eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
                             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
                             backupLocation = settings.backupLocationPath
                             supportEmail = settings.supportEmail ?: ""

@@ -57,8 +57,16 @@ class AdminViewModelsTest {
     private class TestBillingListRepository(
         var lists: List<BillingList> = emptyList()
     ) : BillingListRepository {
+        var updatedExecutionTimes = mutableMapOf<String, Long?>()
+
         override fun getActiveBillingListsFlow(): Flow<List<BillingList>> = flowOf(lists)
         override suspend fun saveBillingList(list: BillingList) {}
+        override suspend fun updateLastExecutionTime(id: String, lastExecutionTime: Long?) {
+            updatedExecutionTimes[id] = lastExecutionTime
+            lists = lists.map {
+                if (it.id == id) it.copy(lastExecutionTime = lastExecutionTime) else it
+            }
+        }
         override suspend fun deleteBillingList(id: String) {}
         override suspend fun addUserToList(user: BillingListUser) {}
         override suspend fun removeUserFromList(listId: String, userId: String) {}
@@ -208,6 +216,8 @@ class AdminViewModelsTest {
         assertTrue(completedSuccess == true, "onComplete should receive true on batch success")
         assertNull(viewModel.errorMessage.value, "Error message must be null on success")
         assertEquals(1, txRepo.recordedBatchRequests.size)
+        assertNotNull(listRepo.updatedExecutionTimes["list-1"], "lastExecutionTime must be recorded on batch success")
+        assertEquals(1, listRepo.lists.first().users.size, "Users must NOT be removed from the list upon charge execution")
 
         val batch = txRepo.recordedBatchRequests.first()
         assertEquals(1, batch.size)
@@ -217,5 +227,177 @@ class AdminViewModelsTest {
         assertEquals(1, req.transaction.items.size)
         assertEquals(2L, req.transaction.items.first().quantity)
         assertEquals(1500L, req.transaction.items.first().unitPriceAtPurchase)
+    }
+
+    @Test
+    fun testBulkBilling_variableAmountsScopedToListId() = runTest {
+        val user1 = User(id = "user-1", name = "Alice", balance = 5000, isActive = true)
+        val listA = BillingList(
+            id = "list-A",
+            name = "Variable A",
+            type = BillingListType.VARIABLE,
+            users = listOf(BillingListUser(id = "blu-1", listId = "list-A", userId = "user-1", quantity = 1))
+        )
+        val listB = BillingList(
+            id = "list-B",
+            name = "Variable B",
+            type = BillingListType.VARIABLE,
+            users = listOf(BillingListUser(id = "blu-2", listId = "list-B", userId = "user-1", quantity = 1))
+        )
+        val userRepo = TestUserRepository(listOf(user1))
+        val listRepo = TestBillingListRepository(listOf(listA, listB))
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+
+        // Set variable amount for user-1 in list-A
+        viewModel.setVariableAmount("list-A", "user-1", 1200L)
+        assertEquals(1200L, viewModel.getVariableAmount("list-A", "user-1"))
+        // list-B should NOT have any amount for user-1
+        assertEquals(0L, viewModel.getVariableAmount("list-B", "user-1"))
+
+        // Set variable amount for list-B
+        viewModel.setVariableAmount("list-B", "user-1", 3400L)
+        assertEquals(1200L, viewModel.getVariableAmount("list-A", "user-1"))
+        assertEquals(3400L, viewModel.getVariableAmount("list-B", "user-1"))
+
+        // Execute list-A: only list-A's amount should be cleared, list-B retained
+        viewModel.executeCharges(listA)
+        assertEquals(0L, viewModel.getVariableAmount("list-A", "user-1"))
+        assertEquals(3400L, viewModel.getVariableAmount("list-B", "user-1"))
+    }
+
+    @Test
+    fun testBulkBilling_zeroChargesAbortsWithoutUpdatingExecutionTime() = runTest {
+        val user1 = User(id = "user-1", name = "Alice", balance = 5000, isActive = true)
+        val billingList = BillingList(
+            id = "list-zero",
+            name = "Variable Zero",
+            type = BillingListType.VARIABLE,
+            lastExecutionTime = 1000L,
+            users = listOf(BillingListUser(id = "blu-1", listId = "list-zero", userId = "user-1", quantity = 1))
+        )
+        val userRepo = TestUserRepository(listOf(user1))
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+
+        var completedSuccess: Boolean? = null
+        // No variable amounts entered -> zero charges
+        viewModel.executeCharges(billingList) { success ->
+            completedSuccess = success
+        }
+
+        assertFalse(completedSuccess ?: true, "Execution should fail when batch is empty")
+        assertNotNull(viewModel.errorMessage.value)
+        assertEquals(0, txRepo.recordedBatchRequests.size, "No transactions should be recorded")
+        assertNull(listRepo.updatedExecutionTimes["list-zero"], "lastExecutionTime must not be updated")
+    }
+
+    @Test
+    fun testBulkBilling_skipsInactiveAndDeletedUsers() = runTest {
+        val userActive = User(id = "u-active", name = "Active", balance = 5000, isActive = true, isDeleted = false)
+        val userInactive = User(id = "u-inactive", name = "Inactive", balance = 5000, isActive = false, isDeleted = false)
+        val userDeleted = User(id = "u-deleted", name = "Deleted", balance = 5000, isActive = true, isDeleted = true)
+
+        val billingList = BillingList(
+            id = "list-mixed",
+            name = "Mixed Status List",
+            type = BillingListType.FIXED,
+            basePrice = 2000L,
+            users = listOf(
+                BillingListUser(id = "blu-1", listId = "list-mixed", userId = "u-active", quantity = 1),
+                BillingListUser(id = "blu-2", listId = "list-mixed", userId = "u-inactive", quantity = 1),
+                BillingListUser(id = "blu-3", listId = "list-mixed", userId = "u-deleted", quantity = 1)
+            )
+        )
+
+        val userRepo = TestUserRepository(listOf(userActive, userInactive, userDeleted))
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+
+        var completedSuccess: Boolean? = null
+        viewModel.executeCharges(billingList) { success ->
+            completedSuccess = success
+        }
+
+        assertTrue(completedSuccess == true)
+        assertEquals(1, txRepo.recordedBatchRequests.size)
+        val batch = txRepo.recordedBatchRequests.first()
+        // Only the active user should be charged
+        assertEquals(1, batch.size)
+        assertEquals("u-active", batch.first().transaction.userId)
+        assertEquals(-2000L, batch.first().balanceDelta)
+    }
+
+    @Test
+    fun testBulkBilling_skipsUsersWithZeroOrNegativeQuantity() = runTest {
+        val user1 = User(id = "user-1", name = "Alice", balance = 5000, isActive = true)
+        val user2 = User(id = "user-2", name = "Bob", balance = 5000, isActive = true)
+
+        val billingList = BillingList(
+            id = "list-qty-test",
+            name = "Qty Test List",
+            type = BillingListType.FIXED,
+            basePrice = 1000L,
+            users = listOf(
+                BillingListUser(id = "blu-1", listId = "list-qty-test", userId = "user-1", quantity = 0),
+                BillingListUser(id = "blu-2", listId = "list-qty-test", userId = "user-2", quantity = 2)
+            )
+        )
+
+        val userRepo = TestUserRepository(listOf(user1, user2))
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+
+        var completedSuccess: Boolean? = null
+        viewModel.executeCharges(billingList) { success ->
+            completedSuccess = success
+        }
+
+        assertTrue(completedSuccess == true)
+        assertEquals(1, txRepo.recordedBatchRequests.size)
+        val batch = txRepo.recordedBatchRequests.first()
+        // user-1 with quantity=0 must be skipped, only user-2 charged
+        assertEquals(1, batch.size)
+        assertEquals("user-2", batch.first().transaction.userId)
+        assertEquals(-2000L, batch.first().balanceDelta)
+    }
+
+    @Test
+    fun testBulkBilling_clampsNegativeVariableAmounts() = runTest {
+        val user1 = User(id = "user-1", name = "Alice", balance = 5000, isActive = true)
+        val billingList = BillingList(
+            id = "list-neg-var",
+            name = "Negative Var List",
+            type = BillingListType.VARIABLE,
+            users = listOf(
+                BillingListUser(id = "blu-1", listId = "list-neg-var", userId = "user-1", quantity = 1)
+            )
+        )
+
+        val userRepo = TestUserRepository(listOf(user1))
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+
+        // Attempt to set a negative amount
+        viewModel.setVariableAmount("list-neg-var", "user-1", -5000L)
+        assertEquals(0L, viewModel.getVariableAmount("list-neg-var", "user-1"))
+
+        // Attempt to execute charges with zero amount should fail without recording transactions
+        var completedSuccess: Boolean? = null
+        viewModel.executeCharges(billingList) { success ->
+            completedSuccess = success
+        }
+
+        assertFalse(completedSuccess ?: true)
+        assertEquals(0, txRepo.recordedBatchRequests.size)
     }
 }

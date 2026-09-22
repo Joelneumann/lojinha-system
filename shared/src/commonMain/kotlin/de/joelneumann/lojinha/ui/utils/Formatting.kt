@@ -167,10 +167,16 @@ object Formatting {
         return if (value.isFinite()) value else null
     }
 
+    fun formatDecimal(value: Double): String {
+        if (!value.isFinite()) return "0"
+        val isWhole = value == kotlin.math.floor(value)
+        return if (isWhole) value.toLong().toString() else value.toString().replace('.', ',')
+    }
+
     fun formatMarkupPercent(markup: Double): String {
         if (!markup.isFinite() || markup < 0.0) return "+0%"
         val isWhole = markup == kotlin.math.floor(markup) && !markup.isInfinite()
-        val formatted = if (isWhole) markup.toLong().toString() else markup.toString()
+        val formatted = if (isWhole) markup.toLong().toString() else markup.toString().replace('.', ',')
         return "+$formatted%"
     }
 

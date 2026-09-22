@@ -214,16 +214,22 @@ fun AdminUsersTabScreen(
     if (userDeleteError != null) {
         AlertDialog(
             onDismissRequest = { viewModel.clearUserDeleteError() },
+            containerColor = de.joelneumann.lojinha.ui.theme.SurfaceWhite,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
             modifier = Modifier.confirmationDialogKeys(
                 onCancel = { viewModel.clearUserDeleteError() },
                 onConfirm = { viewModel.clearUserDeleteError() }
             ),
-            title = { Text(strings.auditLedgerTitle, fontWeight = FontWeight.Bold) },
-            text = { Text(userDeleteError!!) },
+            title = { Text(strings.auditLedgerTitle, fontWeight = FontWeight.Bold, color = de.joelneumann.lojinha.ui.theme.PrimaryNavy) },
+            text = { Text(userDeleteError!!, color = de.joelneumann.lojinha.ui.theme.PrimaryNavy) },
             confirmButton = {
-                Button(onClick = { viewModel.clearUserDeleteError() }) {
-                    Text(strings.ok)
+                Button(
+                    onClick = { viewModel.clearUserDeleteError() },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = de.joelneumann.lojinha.ui.theme.AccentNavy)
+                ) {
+                    Text(strings.ok, color = de.joelneumann.lojinha.ui.theme.SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             }
         )

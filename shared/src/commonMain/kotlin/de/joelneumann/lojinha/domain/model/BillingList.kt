@@ -16,7 +16,8 @@ data class BillingList(
     val basePrice: Long? = null,
     val comment: String? = null,
     val isDeleted: Boolean = false,
-    val users: List<BillingListUser> = emptyList()
+    val users: List<BillingListUser> = emptyList(),
+    val lastExecutionTime: Long? = null
 )
 
 @Serializable

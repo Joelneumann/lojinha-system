@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,49 +75,75 @@ fun PaginationBar(
                     )
 
                     Box {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(SurfaceContainerLight)
-                                .border(1.dp, DividerBorder, RoundedCornerShape(6.dp))
-                                .clickable { pageSizeDropdownExpanded = true }
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        Surface(
+                            onClick = { pageSizeDropdownExpanded = true },
+                            shape = RoundedCornerShape(8.dp),
+                            color = SurfaceWhite,
+                            border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
+                            shadowElevation = 1.dp
                         ) {
-                            Text(
-                                text = "$pageSize",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PrimaryNavy
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = PrimaryNavy
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = "$pageSize",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryNavy
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = PrimaryNavy
+                                )
+                            }
                         }
 
                         DropdownMenu(
                             expanded = pageSizeDropdownExpanded,
-                            onDismissRequest = { pageSizeDropdownExpanded = false }
+                            onDismissRequest = { pageSizeDropdownExpanded = false },
+                            containerColor = SurfaceWhite,
+                            modifier = Modifier
+                                .background(SurfaceWhite)
+                                .border(1.dp, DividerBorder, RoundedCornerShape(8.dp))
                         ) {
                             pageSizeOptions.forEach { option ->
+                                val isSelected = option == pageSize
                                 DropdownMenuItem(
                                     text = {
                                         Text(
                                             text = "$option",
-                                            fontWeight = if (option == pageSize) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (option == pageSize) PrimaryNavy else PrimaryNavy
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) AccentNavy else PrimaryNavy
                                         )
                                     },
+                                    leadingIcon = {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = AccentNavy,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        } else {
+                                            Spacer(modifier = Modifier.size(16.dp))
+                                        }
+                                    },
+                                    colors = MenuDefaults.itemColors(
+                                        textColor = PrimaryNavy,
+                                        leadingIconColor = AccentNavy
+                                    ),
                                     onClick = {
                                         pageSizeDropdownExpanded = false
                                         if (option != pageSize) {
                                             onPageSizeChange(option)
                                         }
-                                    }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                                 )
                             }
                         }

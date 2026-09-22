@@ -583,4 +583,37 @@ class BackupRestoreServiceJvmTest {
         service.wipeAllData()
         assertTrue(service.isDatabaseEmpty(), "Wiped database must report empty")
     }
+
+    @Test
+    fun testRestoreDbPreservesBillingListLastExecutionTime() = runTest {
+        // Seed a billing list with lastExecutionTime
+        val list = BillingListEntity(
+            id = "bl-exec",
+            name = "Executed List",
+            type = "FIXED",
+            basePrice = 1000L,
+            comment = "Test execution time",
+            isDeleted = false,
+            lastExecutionTime = 1726000000000L
+        )
+        db.billingListDao().insertOrUpdateBillingList(list)
+
+        // Perform DB backup
+        val backupFile = service.performDbBackup(tempDir, BackupWriteMode.CREATE_NEW_FILE)
+        assertTrue(backupFile.exists())
+
+        // Wipe data
+        service.wipeAllData()
+        assertEquals(0, db.billingListDao().getAllBillingLists().size)
+
+        // Restore DB from backup
+        service.restoreDbFromBackup(backupFile)
+
+        val restoredLists = db.billingListDao().getAllBillingLists()
+        assertEquals(1, restoredLists.size)
+        val restored = restoredLists.first()
+        assertEquals("bl-exec", restored.id)
+        assertEquals("Executed List", restored.name)
+        assertEquals(1726000000000L, restored.lastExecutionTime, "lastExecutionTime must be preserved across DB restore")
+    }
 }

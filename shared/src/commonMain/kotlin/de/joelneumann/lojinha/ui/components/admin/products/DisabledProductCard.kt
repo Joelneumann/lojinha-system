@@ -102,6 +102,8 @@ fun DisabledProductCard(
 
         AlertDialog(
             onDismissRequest = dismissDialog,
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
             modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmEnable),
             title = { Text(strings.confirmProductActivationTitle, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },

@@ -468,6 +468,8 @@ fun PurchaseCorrectionDialog(
     if (showStornoAllConfirm) {
         AlertDialog(
             onDismissRequest = { showStornoAllConfirm = false },
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
             modifier = Modifier.confirmationDialogKeys(
                 onCancel = { showStornoAllConfirm = false },

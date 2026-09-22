@@ -498,4 +498,5 @@ interface AppStrings {
     val markupCustomSuffix: String
     val markupStandardSuffix: String
     val invalidMarkupError: String
+    val lastExecutionTimeLabel: String
 }

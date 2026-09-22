@@ -660,6 +660,21 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
         }
     }
 
+    override suspend fun updateLastExecutionTime(id: String, lastExecutionTime: Long?) {
+        try {
+            val response = client.httpClient.patch(client.resolveUrl("/api/admin/billing-lists/$id/last-execution")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(mapOf("lastExecutionTime" to lastExecutionTime))
+            }
+            if (!response.status.isSuccess()) {
+                println("[HttpBillingListRepository] updateLastExecutionTime status ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("[HttpBillingListRepository] updateLastExecutionTime failed: ${e.message}")
+        }
+    }
+
     override suspend fun addUserToList(user: BillingListUser) {
         // Managed through saveBillingList
     }

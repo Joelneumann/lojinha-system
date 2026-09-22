@@ -11,7 +11,8 @@ data class BillingListEntity(
     val type: String,
     val basePrice: Long?,
     val comment: String?,
-    val isDeleted: Boolean = false
+    val isDeleted: Boolean = false,
+    val lastExecutionTime: Long? = null
 )
 
 @Entity(
