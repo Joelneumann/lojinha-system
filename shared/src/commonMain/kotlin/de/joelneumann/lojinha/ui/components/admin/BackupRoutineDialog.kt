@@ -330,11 +330,23 @@ fun BackupRoutineDialog(
                         return@Button
                     }
 
+                    val timeRegex = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
                     val scheduleConfig: BackupScheduleConfig = when (scheduleMode) {
-                        ScheduleMode.TIMED -> BackupScheduleConfig.Timed(timedTime.ifBlank { "02:00" })
+                        ScheduleMode.TIMED -> {
+                            val trimmedTime = timedTime.trim()
+                            if (!timeRegex.matches(trimmedTime)) {
+                                errorMessage = strings.invalidTimeFormat
+                                return@Button
+                            }
+                            BackupScheduleConfig.Timed(trimmedTime)
+                        }
                         ScheduleMode.INTERVAL -> {
-                            val h = intervalHours.toIntOrNull() ?: 1
-                            val m = intervalMinutes.toIntOrNull() ?: 0
+                            val h = intervalHours.trim().toIntOrNull() ?: 0
+                            val m = intervalMinutes.trim().toIntOrNull() ?: 0
+                            if (h <= 0 && m <= 0) {
+                                errorMessage = strings.invalidIntervalFormat
+                                return@Button
+                            }
                             val existingAnchor = (initialRoutine?.scheduleConfig as? BackupScheduleConfig.Interval)?.anchorStartTimestamp
                             BackupScheduleConfig.Interval(
                                 intervalHours = h,
@@ -354,7 +366,7 @@ fun BackupRoutineDialog(
                         writeMode = writeMode,
                         scheduleConfig = scheduleConfig,
                         backupLocationPath = locationPath,
-                        lastBackupTimestamp = initialRoutine?.lastBackupTimestamp
+                        lastBackupTimestamp = initialRoutine?.lastBackupTimestamp ?: currentTimeMillis()
                     )
 
                     onSaveRoutine(routine)

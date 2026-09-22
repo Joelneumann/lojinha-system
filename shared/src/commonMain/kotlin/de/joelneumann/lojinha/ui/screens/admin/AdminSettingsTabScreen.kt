@@ -683,7 +683,12 @@ fun AdminSettingsTabScreen(
                                     val nextDueStr = if (routine.scheduleConfig is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange) {
                                         strings.onRealtimeEvent
                                     } else {
-                                        Formatting.formatTimestamp(routine.calculateNextDueTimestamp())
+                                        val nextDue = routine.calculateNextDueTimestamp()
+                                        if (nextDue == Long.MAX_VALUE) {
+                                            strings.never
+                                        } else {
+                                            Formatting.formatTimestamp(nextDue)
+                                        }
                                     }
 
                                     val scheduleBadgeText = when (val cfg = routine.scheduleConfig) {

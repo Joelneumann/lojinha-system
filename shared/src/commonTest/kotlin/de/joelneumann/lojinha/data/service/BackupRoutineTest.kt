@@ -85,14 +85,99 @@ class BackupRoutineTest {
             lastBackupTimestamp = null // Has not executed today
         )
 
-        val nextDue = routine.calculateNextDueTimestamp()
+        val nextDue = routine.calculateNextDueTimestamp(nowInstant)
         val nowMs = nowInstant.toEpochMilliseconds()
 
         if (nowLdt.hour > 0) {
-            // Target was earlier today, so it MUST be due now!
-            assertTrue(nowMs >= nextDue, "Expected nowMs ($nowMs) >= nextDue ($nextDue) for routine scheduled earlier today")
+            // Target was earlier today, so it MUST be due now for catch-up!
+            assertTrue(nowMs >= nextDue, "Expected nowMs ($nowMs) >= nextDue ($nextDue) for routine missed earlier today")
         } else {
             assertTrue(nextDue > 0L)
+        }
+    }
+
+    @Test
+    fun testTimedScheduleDoesNotRunAgainIfAlreadyMadeToday() {
+        val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val nowInstant = kotlinx.datetime.Clock.System.now()
+        val nowLdt = nowInstant.toLocalDateTime(tz)
+        val nowMs = nowInstant.toEpochMilliseconds()
+
+        // Routine scheduled earlier today
+        val targetHour = if (nowLdt.hour > 0) nowLdt.hour - 1 else 0
+        val timeStr = "${targetHour.toString().padStart(2, '0')}:00"
+
+        val routine = BackupRoutine(
+            id = "rt-test-already-made",
+            name = "Daily Timed Routine Already Ran",
+            isEnabled = true,
+            type = BackupType.LOCAL,
+            fileType = BackupFileType.BOTH,
+            scheduleConfig = BackupScheduleConfig.Timed(timeStr),
+            backupLocationPath = "/tmp/backups",
+            lastBackupTimestamp = nowMs // Already executed today
+        )
+
+        val nextDue = routine.calculateNextDueTimestamp(nowInstant)
+        assertTrue(nextDue > nowMs, "Expected nextDue ($nextDue) > nowMs ($nowMs) when backup already ran today")
+    }
+
+    @Test
+    fun testEveningTimedScheduleMissedOvernightCatchesUpNextMorning() {
+        val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val nowInstant = kotlinx.datetime.Clock.System.now()
+        val nowLdt = nowInstant.toLocalDateTime(tz)
+        val nowMs = nowInstant.toEpochMilliseconds()
+
+        // Scheduled for 2 hours in the future today (e.g. evening)
+        val targetHour = (nowLdt.hour + 2) % 24
+        val timeStr = "${targetHour.toString().padStart(2, '0')}:00"
+
+        // Last backup ran 3 days ago -> yesterday's evening run was missed while down!
+        val threeDaysAgo = nowMs - (3 * 24 * 3600 * 1000L)
+        val routine = BackupRoutine(
+            id = "rt-test-evening-catchup",
+            name = "Evening Routine Missed Overnight",
+            isEnabled = true,
+            type = BackupType.LOCAL,
+            fileType = BackupFileType.BOTH,
+            scheduleConfig = BackupScheduleConfig.Timed(timeStr),
+            backupLocationPath = "/tmp/backups",
+            lastBackupTimestamp = threeDaysAgo
+        )
+
+        val nextDue = routine.calculateNextDueTimestamp(nowInstant)
+        // Must catch up yesterday's missed run
+        assertTrue(nowMs >= nextDue, "Expected nowMs ($nowMs) >= nextDue ($nextDue) to catch up yesterday's missed run")
+    }
+
+    @Test
+    fun testNewlyCreatedRoutineWaitsForNextSlot() {
+        val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
+        val nowInstant = kotlinx.datetime.Clock.System.now()
+        val nowLdt = nowInstant.toLocalDateTime(tz)
+        val nowMs = nowInstant.toEpochMilliseconds()
+
+        // Scheduled 1 hour in the past today
+        val targetHour = if (nowLdt.hour > 0) nowLdt.hour - 1 else 0
+        val timeStr = "${targetHour.toString().padStart(2, '0')}:00"
+
+        // New routine created right now with lastBackupTimestamp = creation time (nowMs)
+        val routine = BackupRoutine(
+            id = "rt-test-new-routine",
+            name = "Newly Created Routine",
+            isEnabled = true,
+            type = BackupType.LOCAL,
+            fileType = BackupFileType.BOTH,
+            scheduleConfig = BackupScheduleConfig.Timed(timeStr),
+            backupLocationPath = "/tmp/backups",
+            lastBackupTimestamp = nowMs
+        )
+
+        val nextDue = routine.calculateNextDueTimestamp(nowInstant)
+        // Should wait for tomorrow's occurrence, not trigger immediately upon creation
+        if (nowLdt.hour > 0) {
+            assertTrue(nextDue > nowMs, "Newly created routine must wait for next slot instead of triggering on creation")
         }
     }
 

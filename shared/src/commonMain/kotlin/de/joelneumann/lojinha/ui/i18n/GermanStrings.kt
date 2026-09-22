@@ -309,6 +309,8 @@ object GermanStrings : AppStrings {
     override val realtimeBackupDesc = "Echtzeit-Backup: Ein Backup wird automatisch im Hintergrund ausgeführt, wenn ein Kauf, eine Einzahlung oder eine Datenänderung erfolgt."
     override val routineNameCannotBeEmpty = "Routinenname darf nicht leer sein."
     override val specifySaveLocation = "Bitte geben Sie einen Speicherortpfad an."
+    override val invalidTimeFormat = "Bitte Zeit im 24h-Format eingeben (HH:mm, z.B. 02:00 oder 14:30)."
+    override val invalidIntervalFormat = "Intervall muss größer als 0 Minuten sein."
     override val saveRoutineBtn = "Routine speichern"
     override val deleteBackupRoutineConfirmTitle = "Backup-Routine löschen?"
     override val deleteBackupRoutineConfirmMsg = "Möchten Sie diese Backup-Routine wirklich löschen?"

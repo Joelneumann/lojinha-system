@@ -24,6 +24,7 @@ class AutoBackupScheduler(
 ) {
     private var schedulerJob: Job? = null
     private val executionMutex = Mutex()
+    private val failureCooldownMap = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     fun startScheduler() {
         schedulerJob?.cancel()
@@ -94,15 +95,23 @@ class AutoBackupScheduler(
         val now = System.currentTimeMillis()
 
         for (routine in activeRoutines) {
-            if (routine.type == BackupType.LOCAL) {
-                if (routine.backupLocationPath.isBlank()) continue
-                val dir = File(routine.backupLocationPath)
-                if (!dir.exists() || !dir.isDirectory) continue
-            }
+            try {
+                val nextRetry = failureCooldownMap[routine.id] ?: 0L
+                if (now < nextRetry) continue
 
-            val nextDue = routine.calculateNextDueTimestamp()
-            if (now >= nextDue) {
-                executeRoutine(routine)
+                if (routine.type == BackupType.LOCAL) {
+                    if (routine.backupLocationPath.isBlank()) continue
+                    val dir = File(routine.backupLocationPath)
+                    if (!dir.exists() || !dir.isDirectory) continue
+                }
+
+                val nextDue = routine.calculateNextDueTimestamp()
+                if (now >= nextDue) {
+                    executeRoutine(routine)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                e.printStackTrace()
             }
         }
     }
@@ -110,6 +119,7 @@ class AutoBackupScheduler(
     suspend fun executeRoutine(routine: BackupRoutine) = executionMutex.withLock {
         if (routine.writeMode == BackupWriteMode.OVERWRITE_LATEST && backupRestoreService.isDatabaseEmpty()) {
             println("AutoBackupScheduler: Skipping OVERWRITE_LATEST backup for routine '${routine.name}' because database is empty.")
+            failureCooldownMap[routine.id] = System.currentTimeMillis() + 60 * 60_000L
             return@withLock
         }
 
@@ -140,9 +150,11 @@ class AutoBackupScheduler(
                 val updated = currentRoutine.copy(lastBackupTimestamp = System.currentTimeMillis())
                 backupRepository.saveBackupRoutine(updated)
             }
+            failureCooldownMap.remove(routine.id)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
+            failureCooldownMap[routine.id] = System.currentTimeMillis() + 15 * 60_000L
         } finally {
             if (isTempFolder && tempFolderToDelete != null) {
                 tempFolderToDelete.deleteRecursively()
