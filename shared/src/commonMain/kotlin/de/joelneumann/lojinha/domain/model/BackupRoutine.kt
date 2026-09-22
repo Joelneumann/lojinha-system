@@ -61,8 +61,8 @@ data class BackupRoutine(
     val backupLocationPath: String = "",
     val lastBackupTimestamp: Long? = null
 ) {
-    fun calculateNextDueTimestamp(): Long {
-        val nowInstant = Clock.System.now()
+    fun calculateNextDueTimestamp(clockNow: kotlinx.datetime.Instant = Clock.System.now()): Long {
+        val nowInstant = clockNow
         val nowEpochMs = nowInstant.toEpochMilliseconds()
 
         return when (val config = scheduleConfig) {
@@ -83,15 +83,42 @@ data class BackupRoutine(
                     second = 0,
                     nanosecond = 0
                 )
-                val todayTargetInstant = todayTargetLdt.toInstant(tz)
+                val todayTargetInstant = try {
+                    todayTargetLdt.toInstant(tz)
+                } catch (_: Exception) {
+                    val safeHour = (targetHour + 1).coerceAtMost(23)
+                    LocalDateTime(
+                        year = nowLdt.year,
+                        month = nowLdt.month,
+                        dayOfMonth = nowLdt.dayOfMonth,
+                        hour = safeHour,
+                        minute = targetMinute,
+                        second = 0,
+                        nanosecond = 0
+                    ).toInstant(tz)
+                }
                 val todayTargetMs = todayTargetInstant.toEpochMilliseconds()
 
-                val last = lastBackupTimestamp?.takeIf { it <= nowEpochMs } ?: 0L
+                val isTargetTodayPassed = nowEpochMs >= todayTargetMs
 
-                if (last >= todayTargetMs) {
+                val mostRecentSlotMs = if (isTargetTodayPassed) {
+                    todayTargetMs
+                } else {
+                    todayTargetInstant.plus(-1, DateTimeUnit.DAY, tz).toEpochMilliseconds()
+                }
+
+                val nextUpcomingSlotMs = if (isTargetTodayPassed) {
                     todayTargetInstant.plus(1, DateTimeUnit.DAY, tz).toEpochMilliseconds()
                 } else {
                     todayTargetMs
+                }
+
+                val last = lastBackupTimestamp?.takeIf { it <= nowEpochMs } ?: 0L
+
+                if (last >= mostRecentSlotMs) {
+                    nextUpcomingSlotMs
+                } else {
+                    mostRecentSlotMs
                 }
             }
             is BackupScheduleConfig.Interval -> {

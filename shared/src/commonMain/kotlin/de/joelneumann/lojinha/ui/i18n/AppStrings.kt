@@ -303,6 +303,8 @@ interface AppStrings {
     val realtimeBackupDesc: String
     val routineNameCannotBeEmpty: String
     val specifySaveLocation: String
+    val invalidTimeFormat: String
+    val invalidIntervalFormat: String
     val saveRoutineBtn: String
     val deleteBackupRoutineConfirmTitle: String
     val deleteBackupRoutineConfirmMsg: String

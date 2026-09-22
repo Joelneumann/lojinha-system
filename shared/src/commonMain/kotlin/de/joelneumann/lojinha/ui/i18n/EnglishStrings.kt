@@ -309,6 +309,8 @@ object EnglishStrings : AppStrings {
     override val realtimeBackupDesc = "Realtime Backup: A backup will automatically run in the background whenever a purchase, deposit, or data change occurs."
     override val routineNameCannotBeEmpty = "Routine name cannot be empty."
     override val specifySaveLocation = "Please specify a save location path."
+    override val invalidTimeFormat = "Please enter time in 24h format (HH:mm, e.g. 02:00 or 14:30)."
+    override val invalidIntervalFormat = "Interval must be greater than 0 minutes."
     override val saveRoutineBtn = "Save Routine"
     override val deleteBackupRoutineConfirmTitle = "Delete Backup Routine?"
     override val deleteBackupRoutineConfirmMsg = "Are you sure you want to delete this backup routine? Automated backups for this schedule will stop permanently."

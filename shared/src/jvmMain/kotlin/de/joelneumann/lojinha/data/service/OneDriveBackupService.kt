@@ -162,8 +162,11 @@ actual class OneDriveBackupService {
                 Result.failure(Exception(parsed.errorDescription ?: parsed.error ?: "Token exchange failed"))
             }
         } catch (e: Exception) {
-            server?.stop(0)
             Result.failure(e)
+        } finally {
+            try {
+                server?.stop(0)
+            } catch (_: Exception) {}
         }
     }
 
