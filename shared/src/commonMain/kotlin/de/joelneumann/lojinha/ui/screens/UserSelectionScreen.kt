@@ -144,7 +144,9 @@ fun UserSelectionContent(
                 UserGrid(
                     users = filteredUsers,
                     onUserClick = onUserClick,
-                    emptyText = strings.noUsersFound
+                    emptyText = strings.noUsersFound,
+                    isSearchActive = searchQuery.isNotBlank(),
+                    onOpenAdminSetup = onOpenAdminAuthDialog
                 )
             }
 

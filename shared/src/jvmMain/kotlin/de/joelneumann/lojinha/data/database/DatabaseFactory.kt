@@ -63,6 +63,17 @@ object DatabaseFactory {
         val dbFile = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
         dbFile.parentFile?.mkdirs()
 
+        // 1. Safety snapshot before Room initializes to guard against unexpected migration issues
+        if (dbFile.exists()) {
+            try {
+                val startupBackup = File(dbFile.parentFile, "lojinha_room.db.startup_backup")
+                dbFile.copyTo(startupBackup, overwrite = true)
+                de.joelneumann.lojinha.util.AppLogger.info("DatabaseFactory", "Created pre-startup safety backup at ${startupBackup.absolutePath}")
+            } catch (e: Exception) {
+                de.joelneumann.lojinha.util.AppLogger.warn("DatabaseFactory", "Could not create pre-startup DB backup: ${e.message}", e)
+            }
+        }
+
         val builder = Room.databaseBuilder<AppDatabase>(
             name = dbFile.absolutePath,
             factory = { AppDatabase_Impl() }
@@ -70,11 +81,25 @@ object DatabaseFactory {
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
         builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
-        builder.fallbackToDestructiveMigration(true)
+        // Strictly disable destructive migration in production to prevent data loss
+        builder.fallbackToDestructiveMigration(false)
         val db = builder.build()
 
-        // Seed initial data if database is new/empty
+        // 2. Configure SQLite WAL Mode & Concurrency Pragmas
         runBlocking(Dispatchers.IO) {
+            try {
+                val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
+                try {
+                    connection.execSQL("PRAGMA journal_mode = WAL;")
+                    connection.execSQL("PRAGMA synchronous = NORMAL;")
+                    connection.execSQL("PRAGMA busy_timeout = 5000;")
+                } finally {
+                    connection.close()
+                }
+            } catch (e: Exception) {
+                de.joelneumann.lojinha.util.AppLogger.warn("DatabaseFactory", "Failed to configure WAL pragmas: ${e.message}", e)
+            }
+
             seedInitialData(db)
         }
 
@@ -126,6 +151,33 @@ object DatabaseFactory {
                     avatarColor = user.avatarColor
                 )
             }
+        }
+
+        // Seed a default automated local backup routine if no routines currently exist
+        try {
+            val backupDao = db.backupDao()
+            val existingRoutines = backupDao.getAllBackups()
+            if (existingRoutines.isEmpty()) {
+                val defaultBackupDir = File(System.getProperty("user.home"), ".lojinha/backups")
+                if (!defaultBackupDir.exists()) {
+                    defaultBackupDir.mkdirs()
+                }
+                val defaultRoutine = de.joelneumann.lojinha.data.entity.BackupEntity(
+                    id = java.util.UUID.randomUUID().toString(),
+                    name = "Default Daily Local Backup",
+                    isEnabled = true,
+                    type = de.joelneumann.lojinha.domain.model.BackupType.LOCAL.name,
+                    fileType = de.joelneumann.lojinha.domain.model.BackupFileType.DB.name,
+                    writeMode = de.joelneumann.lojinha.domain.model.BackupWriteMode.CREATE_NEW_FILE.name,
+                    scheduleConfig = de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed(timeOfDay = "02:00"),
+                    backupLocationPath = defaultBackupDir.absolutePath,
+                    lastBackupTimestamp = null
+                )
+                backupDao.insertOrUpdateBackup(defaultRoutine)
+                de.joelneumann.lojinha.util.AppLogger.info("DatabaseFactory", "Seeded default automated local backup routine to ${defaultBackupDir.absolutePath}")
+            }
+        } catch (e: Exception) {
+            de.joelneumann.lojinha.util.AppLogger.warn("DatabaseFactory", "Failed to seed default backup routine: ${e.message}", e)
         }
     }
 }

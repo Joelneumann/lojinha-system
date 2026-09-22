@@ -11,6 +11,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -31,6 +33,8 @@ fun AdminSettingsTabScreen(
     onUnsavedStateChanged: (Boolean) -> Unit
 ) {
     val strings = I18n.current
+    val clipboardManager = LocalClipboardManager.current
+    var copiedUrl by remember { mutableStateOf<String?>(null) }
     val settings by viewModel.settings.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -1173,7 +1177,175 @@ fun AdminSettingsTabScreen(
                     }
                 }
             }
+
+            // CARD 7: REMOTE WEB ADMINISTRATION (LAN)
+            if (viewModel.serverUrls.isNotEmpty()) {
+                item(key = "remote-admin-card") {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SurfaceWhite,
+                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Language,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.remoteAdminTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+
+                            Text(
+                                strings.remoteAdminSubtitle,
+                                fontSize = 13.sp,
+                                color = TextSecondaryMuted
+                            )
+
+                            viewModel.serverUrls.forEach { url ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SurfaceContainerLight,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = url,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AccentNavy
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                clipboardManager.setText(AnnotatedString(url))
+                                                copiedUrl = url
+                                            },
+                                            shape = RoundedCornerShape(6.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (copiedUrl == url) ColorSuccessEmerald else PrimaryNavy
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (copiedUrl == url) Icons.Default.Check else Icons.Default.ContentCopy,
+                                                    contentDescription = null,
+                                                    tint = SurfaceWhite,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Text(
+                                                    text = if (copiedUrl == url) strings.urlCopiedToast else strings.copyUrlBtn,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SurfaceWhite
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text(
+                                strings.remoteAdminFirewallNotice,
+                                fontSize = 12.sp,
+                                color = TextSecondaryMuted
+                            )
+                        }
+                    }
+                }
+            }
+
+            // CARD 8: SYSTEM & KIOSK ACTIONS
+            item(key = "kiosk-actions-card") {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PowerSettingsNew,
+                                contentDescription = null,
+                                tint = ColorDangerCrimson,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.kioskActionsTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+
+                        Button(
+                            onClick = { viewModel.openExitConfirmationDialog() },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                    contentDescription = null,
+                                    tint = SurfaceWhite,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(strings.exitKioskBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                            }
+                        }
+                    }
+                }
+            }
         }
+
+    val showExitConfirmationDialog by viewModel.showExitConfirmationDialog.collectAsState()
+    if (showExitConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissExitConfirmationDialog() },
+            title = { Text(strings.exitKioskConfirmTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
+            text = { Text(strings.exitKioskConfirmMessage, color = PrimaryNavy) },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.confirmExitApplication() },
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
+                ) {
+                    Text(strings.exitConfirmBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { viewModel.dismissExitConfirmationDialog() }
+                ) {
+                    Text(strings.cancel, color = PrimaryNavy)
+                }
+            },
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
 
     // MULTI-APPROVAL DIALOG TRIGGERS
     if (activeRestoreDbFile != null) {

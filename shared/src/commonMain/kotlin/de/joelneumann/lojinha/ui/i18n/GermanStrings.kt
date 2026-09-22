@@ -520,4 +520,18 @@ object GermanStrings : AppStrings {
     override val markupStandardSuffix = "Standard"
     override val invalidMarkupError = "Muss ein Prozentsatz zwischen 0 und 1000 sein"
     override val lastExecutionTimeLabel = "Letzte Ausführung:"
+
+    override val remoteAdminTitle = "Web-Fernverwaltung (LAN)"
+    override val remoteAdminSubtitle = "Administratoren im selben lokalen Netzwerk (WLAN/LAN) können über diese URLs auf die Verwaltungskonsole zugreifen:"
+    override val remoteAdminFirewallNotice = "Hinweis: Stellen Sie sicher, dass die Windows-Firewall eingehende Verbindungen auf diesem Port in privaten Netzwerken zulässt."
+    override val copyUrlBtn = "URL kopieren"
+    override val urlCopiedToast = "URL in die Zwischenablage kopiert!"
+    override val kioskActionsTitle = "System- & Kiosk-Steuerung"
+    override val exitKioskBtn = "Kassen-App beenden"
+    override val exitKioskConfirmTitle = "Anwendung beenden"
+    override val exitKioskConfirmMessage = "Möchten Sie das Lojinha POS-System wirklich beenden?"
+    override val exitConfirmBtn = "Beenden"
+    override val firstRunTitle = "Willkommen bei Lojinha POS!"
+    override val firstRunMessage = "Es wurden noch keine Benutzer oder Produkte eingerichtet. Melden Sie sich als Administrator an, um Ihren Laden zu konfigurieren, Produkte anzulegen und Kunden hinzuzufügen."
+    override val firstRunAdminLoginBtn = "Admin-Login öffnen"
 }

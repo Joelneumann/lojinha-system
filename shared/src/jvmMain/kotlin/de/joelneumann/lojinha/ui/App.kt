@@ -42,8 +42,27 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.*
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
 fun App(
-    database: de.joelneumann.lojinha.data.database.AppDatabase = remember { DatabaseFactory.createDatabase() }
+    database: de.joelneumann.lojinha.data.database.AppDatabase = remember { DatabaseFactory.createDatabase() },
+    serverPort: Int = 8080,
+    onExitApplication: (() -> Unit)? = null
 ) {
+    val candidateUrls = remember(serverPort) {
+        val urls = mutableListOf("http://localhost:$serverPort")
+        try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            if (interfaces != null) {
+                for (iface in interfaces.asSequence()) {
+                    if (iface.isLoopback || !iface.isUp) continue
+                    for (addr in iface.inetAddresses.asSequence()) {
+                        if (addr is java.net.Inet4Address && !addr.isLoopbackAddress) {
+                            urls.add("http://${addr.hostAddress}:$serverPort")
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        urls.distinct()
+    }
     val backupRepository = remember { de.joelneumann.lojinha.data.repository.RoomBackupRepositoryImpl(database.backupDao()) }
     val backupRestoreService = remember { de.joelneumann.lojinha.data.service.BackupRestoreService(database) }
     val oneDriveBackupService = remember { de.joelneumann.lojinha.data.service.OneDriveBackupService() }
@@ -340,7 +359,9 @@ fun App(
                                     de.joelneumann.lojinha.util.FileRollingLogger.formatFileSize(
                                         de.joelneumann.lojinha.util.FileRollingLogger.getTotalLogSizeBytes()
                                     )
-                                }
+                                },
+                                serverUrls = candidateUrls,
+                                onExitApplication = onExitApplication
                             )
                         }
 

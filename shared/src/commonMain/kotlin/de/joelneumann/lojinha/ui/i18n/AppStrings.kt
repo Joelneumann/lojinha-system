@@ -509,4 +509,18 @@ interface AppStrings {
     val markupStandardSuffix: String
     val invalidMarkupError: String
     val lastExecutionTimeLabel: String
+
+    val remoteAdminTitle: String
+    val remoteAdminSubtitle: String
+    val remoteAdminFirewallNotice: String
+    val copyUrlBtn: String
+    val urlCopiedToast: String
+    val kioskActionsTitle: String
+    val exitKioskBtn: String
+    val exitKioskConfirmTitle: String
+    val exitKioskConfirmMessage: String
+    val exitConfirmBtn: String
+    val firstRunTitle: String
+    val firstRunMessage: String
+    val firstRunAdminLoginBtn: String
 }

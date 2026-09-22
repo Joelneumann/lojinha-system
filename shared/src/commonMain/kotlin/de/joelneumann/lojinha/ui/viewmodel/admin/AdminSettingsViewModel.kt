@@ -28,7 +28,9 @@ class AdminSettingsViewModel(
     private val onExportSupportBundle: (suspend (prepareEmail: Boolean, recipientEmail: String) -> Unit)? = null,
     private val onOpenLogFolder: (() -> Unit)? = null,
     val logDirectoryPath: String = "",
-    private val getLogFolderSizeFormatted: (() -> String)? = null
+    private val getLogFolderSizeFormatted: (() -> String)? = null,
+    val serverUrls: List<String> = emptyList(),
+    private val onExitApplication: (() -> Unit)? = null
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(SystemSettings())
@@ -115,6 +117,22 @@ class AdminSettingsViewModel(
         } catch (e: Exception) {
             _errorMessage.value = "Could not open log folder: ${e.message}"
         }
+    }
+
+    private val _showExitConfirmationDialog = MutableStateFlow(false)
+    val showExitConfirmationDialog: StateFlow<Boolean> = _showExitConfirmationDialog.asStateFlow()
+
+    fun openExitConfirmationDialog() {
+        _showExitConfirmationDialog.value = true
+    }
+
+    fun dismissExitConfirmationDialog() {
+        _showExitConfirmationDialog.value = false
+    }
+
+    fun confirmExitApplication() {
+        _showExitConfirmationDialog.value = false
+        onExitApplication?.invoke()
     }
 
     fun loadSettings() {

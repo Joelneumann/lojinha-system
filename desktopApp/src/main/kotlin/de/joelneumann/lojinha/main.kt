@@ -68,7 +68,11 @@ fun main() {
         state = windowState,
         icon = appIcon
     ) {
-        App(database = database)
+        App(
+            database = database,
+            serverPort = adminServer.getActualPort(),
+            onExitApplication = ::exitApplication
+        )
     }
 }
 }

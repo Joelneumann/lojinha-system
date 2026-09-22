@@ -62,6 +62,13 @@ compose.desktop {
             }
             windows {
                 iconFile.set(project.file("src/main/resources/icon.ico"))
+                upgradeUuid = "d7b42fa9-e854-4a27-a681-79b8c005fa91"
+                shortcut = true
+                menu = true
+                menuGroup = "Lojinha"
+                dirChooser = true
+                perUserInstall = false
+                console = false
             }
             linux {
                 packageName = "lojinha-system"
