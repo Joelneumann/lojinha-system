@@ -82,6 +82,7 @@ class UserSessionViewModel(
     }
 
     private fun tick() {
+        if (isLoggingOut) return
         val now = clock()
         if (now < lastActivityTimestampMs) {
             // Clock stepped backward (NTP, daylight saving, manual change); align to prevent freeze
@@ -107,35 +108,18 @@ class UserSessionViewModel(
     }
 
     private fun recalculateTimerOnSettingsChange() {
+        if (isLoggingOut) return
         val timeoutSecs = maxOf(2, _settings.value.inactivityTimeoutMinutes) * 60
         if (isPaused) {
             // While paused, do not compute elapsed time to prevent spurious premature auto-logouts
             _inactivitySecondsRemaining.value = timeoutSecs
-            return
-        }
-
-        val now = clock()
-        if (now < lastActivityTimestampMs) {
-            lastActivityTimestampMs = now
-        }
-
-        val timeoutMs = timeoutSecs * 1000L
-        val elapsedMs = maxOf(0L, now - lastActivityTimestampMs)
-        val remainingMs = maxOf(0L, timeoutMs - elapsedMs)
-        val remainingSecs = minOf(timeoutSecs, maxOf(0, ceil(remainingMs / 1000.0).toInt()))
-
-        _inactivitySecondsRemaining.value = remainingSecs
-        if (remainingSecs <= 0) {
-            _showInactivityWarning.value = false
-            requestLogout()
-        } else if (remainingSecs <= 60) {
-            _showInactivityWarning.value = true
         } else {
-            _showInactivityWarning.value = false
+            tick()
         }
     }
 
     fun onUserInteracted(force: Boolean = false) {
+        if (isLoggingOut) return
         if (_showInactivityWarning.value && !force) {
             // While the inactivity warning is visible, passive interactions (such as
             // background pointer moves or window exit events) must not dismiss the warning.
@@ -145,11 +129,12 @@ class UserSessionViewModel(
     }
 
     fun stayLoggedIn() {
+        if (isLoggingOut) return
         resetInactivityTimer()
     }
 
     fun resetInactivityTimer() {
-        isLoggingOut = false
+        if (isLoggingOut) return
         lastActivityTimestampMs = clock()
         _showInactivityWarning.value = false
         val timeoutSecs = maxOf(2, _settings.value.inactivityTimeoutMinutes) * 60
@@ -163,17 +148,22 @@ class UserSessionViewModel(
     }
 
     fun pauseInactivityTimer() {
+        if (isLoggingOut) return
         isPaused = true
         _showInactivityWarning.value = false
     }
 
     fun resumeInactivityTimer() {
+        if (isLoggingOut) return
         if (isPaused) {
             lastActivityTimestampMs = clock()
             isPaused = false
             val timeoutSecs = maxOf(2, _settings.value.inactivityTimeoutMinutes) * 60
             _inactivitySecondsRemaining.value = timeoutSecs
             _showInactivityWarning.value = false
+            if (tickerJob == null || tickerJob?.isActive == false) {
+                startTicker()
+            }
         }
     }
 

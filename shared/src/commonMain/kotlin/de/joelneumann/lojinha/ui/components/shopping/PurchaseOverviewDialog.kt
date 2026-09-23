@@ -69,9 +69,12 @@ fun PurchaseOverviewDialog(
         }
     }
 
+    LaunchedEffect(Unit) {
+        focusRequester.safeRequestFocus()
+    }
+
     // 15-second countdown timer (independent of inactivity timer, resets on interaction)
     LaunchedEffect(lastInteractionTime) {
-        focusRequester.safeRequestFocus()
         val totalDurationSecs = 15
         val startTime = lastInteractionTime
         secondsRemaining = totalDurationSecs

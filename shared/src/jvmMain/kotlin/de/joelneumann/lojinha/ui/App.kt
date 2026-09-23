@@ -279,7 +279,10 @@ fun App(
                                     val inactivitySecondsRemaining by userSessionViewModel.inactivitySecondsRemaining.collectAsState()
                                     InactivityWarningDialog(
                                         secondsRemaining = inactivitySecondsRemaining,
-                                        onStayLoggedIn = { userSessionViewModel.stayLoggedIn() }
+                                        onStayLoggedIn = {
+                                            showAbandonCartGuardDialog = false
+                                            userSessionViewModel.stayLoggedIn()
+                                        }
                                     )
                                 }
                             }

@@ -450,10 +450,12 @@ fun ShoppingContent(
                             event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown -> {
                                 if (filteredProducts.isNotEmpty()) {
                                     highlightedProductIndex = (highlightedProductIndex + 1).coerceAtMost(filteredProducts.size - 1)
+                                    onUserInteracted(true)
                                     true
                                 } else if (cartItems.isNotEmpty()) {
                                     selectedCartIndex = 0
                                     highlightedProductIndex = -1
+                                    onUserInteracted(true)
                                     true
                                 } else false
                             }
@@ -461,9 +463,11 @@ fun ShoppingContent(
                                 if (filteredProducts.isNotEmpty()) {
                                     if (highlightedProductIndex > 0) {
                                         highlightedProductIndex -= 1
+                                        onUserInteracted(true)
                                         true
                                     } else if (highlightedProductIndex == 0) {
                                         highlightedProductIndex = -1
+                                        onUserInteracted(true)
                                         true
                                     } else false
                                 } else false
@@ -472,6 +476,7 @@ fun ShoppingContent(
                                 if (cartItems.isNotEmpty()) {
                                     selectedCartIndex = 0
                                     highlightedProductIndex = -1
+                                    onUserInteracted(true)
                                     true
                                 } else false
                             }
