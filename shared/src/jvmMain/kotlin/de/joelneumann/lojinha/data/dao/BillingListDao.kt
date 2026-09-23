@@ -43,6 +43,9 @@ interface BillingListDao {
 
     @Query("DELETE FROM billing_list_users WHERE listId = :listId AND userId = :userId")
     suspend fun removeUserFromList(listId: String, userId: String)
+
+    @Query("DELETE FROM billing_list_users WHERE userId = :userId")
+    suspend fun removeUserFromAllLists(userId: String)
     
     @Query("UPDATE billing_list_users SET quantity = :quantity WHERE listId = :listId AND userId = :userId")
     suspend fun updateUserQuantity(listId: String, userId: String, quantity: Int)

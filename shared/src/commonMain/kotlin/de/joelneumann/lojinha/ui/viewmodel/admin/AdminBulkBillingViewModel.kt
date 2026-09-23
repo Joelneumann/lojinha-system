@@ -104,6 +104,7 @@ class AdminBulkBillingViewModel(
                 if (_selectedListId.value == id) {
                     _selectedListId.value = null
                 }
+                _variableAmounts.value = _variableAmounts.value.filterKeys { !it.startsWith("${id}:") }
                 _errorMessage.value = null
                 refreshData()
             } catch (e: Exception) {
@@ -154,8 +155,9 @@ class AdminBulkBillingViewModel(
                 val nowMillis = currentTimeMillis()
                 val allUsers = activeUsers.value.associateBy { it.id }
                 val batchRequests = mutableListOf<de.joelneumann.lojinha.domain.model.AtomicTransactionRequest>()
+                val uniqueUsers = list.users.distinctBy { it.userId }
 
-                for (listUser in list.users) {
+                for (listUser in uniqueUsers) {
                     val user = allUsers[listUser.userId] ?: continue
                     if (!user.isActive || user.isDeleted) continue
 

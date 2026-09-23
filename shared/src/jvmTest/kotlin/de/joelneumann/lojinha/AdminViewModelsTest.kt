@@ -400,4 +400,98 @@ class AdminViewModelsTest {
         assertFalse(completedSuccess ?: true)
         assertEquals(0, txRepo.recordedBatchRequests.size)
     }
+
+    @Test
+    fun testBulkBilling_deduplicatesUsersInBatchExecution() = runTest {
+        val user1 = User(id = "user-1", name = "Alice", balance = 5000, isActive = true)
+        val billingList = BillingList(
+            id = "list-dedup",
+            name = "Duplicate Members List",
+            type = BillingListType.FIXED,
+            basePrice = 1000L,
+            users = listOf(
+                BillingListUser(id = "blu-1", listId = "list-dedup", userId = "user-1", quantity = 1),
+                BillingListUser(id = "blu-2", listId = "list-dedup", userId = "user-1", quantity = 1)
+            )
+        )
+
+        val userRepo = TestUserRepository(listOf(user1))
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+
+        var completedSuccess: Boolean? = null
+        viewModel.executeCharges(billingList) { success ->
+            completedSuccess = success
+        }
+
+        assertTrue(completedSuccess == true)
+        assertEquals(1, txRepo.recordedBatchRequests.size)
+        val batch = txRepo.recordedBatchRequests.first()
+        // Deduplication must ensure only 1 transaction request is produced for user-1
+        assertEquals(1, batch.size)
+        assertEquals("user-1", batch.first().transaction.userId)
+        assertEquals(-1000L, batch.first().balanceDelta)
+    }
+
+    @Test
+    fun testBulkBilling_reactivatingUserMakesThemEligibleForCharges() = runTest {
+        val user1 = User(id = "user-1", name = "Alice", balance = 5000, isActive = false)
+        val billingList = BillingList(
+            id = "list-reactivate",
+            name = "Reactivate List",
+            type = BillingListType.FIXED,
+            basePrice = 1500L,
+            users = listOf(
+                BillingListUser(id = "blu-1", listId = "list-reactivate", userId = "user-1", quantity = 1)
+            )
+        )
+
+        val userRepo = TestUserRepository(listOf(user1))
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+
+        // While deactivated, charges abort with no valid charges
+        var completedDeactivated: Boolean? = null
+        viewModel.executeCharges(billingList) { success ->
+            completedDeactivated = success
+        }
+        assertFalse(completedDeactivated ?: true)
+        assertEquals(0, txRepo.recordedBatchRequests.size)
+
+        // Reactivate user in repository
+        userRepo.users = listOf(user1.copy(isActive = true))
+        viewModel.refreshData()
+
+        // Now charges succeed and charge the user
+        var completedActive: Boolean? = null
+        viewModel.executeCharges(billingList) { success ->
+            completedActive = success
+        }
+        assertTrue(completedActive == true)
+        assertEquals(1, txRepo.recordedBatchRequests.size)
+        assertEquals("user-1", txRepo.recordedBatchRequests.first().first().transaction.userId)
+    }
+
+    @Test
+    fun testBulkBilling_deleteListPurgesVariableAmounts() = runTest {
+        val billingList = BillingList(
+            id = "list-to-delete",
+            name = "Delete Me",
+            type = BillingListType.VARIABLE
+        )
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val userRepo = TestUserRepository()
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+        viewModel.setVariableAmount("list-to-delete", "user-1", 5000L)
+        assertEquals(5000L, viewModel.getVariableAmount("list-to-delete", "user-1"))
+
+        viewModel.deleteList("list-to-delete")
+        assertEquals(0L, viewModel.getVariableAmount("list-to-delete", "user-1"))
+    }
 }

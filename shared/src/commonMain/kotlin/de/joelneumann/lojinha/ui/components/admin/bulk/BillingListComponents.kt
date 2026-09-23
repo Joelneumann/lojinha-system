@@ -3,7 +3,6 @@ package de.joelneumann.lojinha.ui.components.admin.bulk
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,12 +12,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import de.joelneumann.lojinha.domain.model.BillingListType
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.AccentNavy
 import de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
-import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 
 @Composable

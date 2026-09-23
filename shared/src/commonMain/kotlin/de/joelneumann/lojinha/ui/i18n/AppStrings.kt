@@ -530,4 +530,5 @@ interface AppStrings {
     val firstRunTitle: String
     val firstRunMessage: String
     val firstRunAdminLoginBtn: String
+    val errorTitle: String
 }

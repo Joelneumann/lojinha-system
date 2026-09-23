@@ -542,4 +542,5 @@ object GermanStrings : AppStrings {
     override val firstRunTitle = "Willkommen bei Lojinha POS!"
     override val firstRunMessage = "Es wurden noch keine Benutzer oder Produkte eingerichtet. Melden Sie sich als Administrator an, um Ihren Laden zu konfigurieren, Produkte anzulegen und Kunden hinzuzufügen."
     override val firstRunAdminLoginBtn = "Admin-Login öffnen"
+    override val errorTitle = "Fehler"
 }

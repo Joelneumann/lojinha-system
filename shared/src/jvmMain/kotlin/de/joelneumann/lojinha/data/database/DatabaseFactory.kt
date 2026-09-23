@@ -93,6 +93,9 @@ object DatabaseFactory {
                     connection.execSQL("PRAGMA journal_mode = WAL;")
                     connection.execSQL("PRAGMA synchronous = NORMAL;")
                     connection.execSQL("PRAGMA busy_timeout = 5000;")
+                    try {
+                        connection.execSQL("DELETE FROM billing_list_users WHERE userId NOT IN (SELECT id FROM users WHERE isDeleted = 0);")
+                    } catch (_: Exception) {}
                 } finally {
                     connection.close()
                 }
