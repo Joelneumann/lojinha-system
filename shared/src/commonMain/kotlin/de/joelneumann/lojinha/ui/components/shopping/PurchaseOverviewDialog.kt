@@ -204,7 +204,7 @@ fun PurchaseOverviewDialog(
                                 modifier = Modifier.weight(1.8f)
                             )
                             Text(
-                                text = strings.stock.let { strings.headerQtyWeight },
+                                text = strings.headerQtyWeight,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextSecondaryMuted,

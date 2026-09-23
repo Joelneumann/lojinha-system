@@ -32,7 +32,8 @@ fun CartPanel(
     onCompletePurchase: () -> Unit,
     onSelectCartItem: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
-    selectedCartIndex: Int = -1
+    selectedCartIndex: Int = -1,
+    isProcessing: Boolean = false
 ) {
     val strings = I18n.current
 
@@ -149,7 +150,7 @@ fun CartPanel(
             // Complete Purchase Button
             Button(
                 onClick = onCompletePurchase,
-                enabled = cartItems.isNotEmpty(),
+                enabled = cartItems.isNotEmpty() && !isProcessing,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald)

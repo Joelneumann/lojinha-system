@@ -93,12 +93,16 @@ object Formatting {
         val valDouble = normalized.toDoubleOrNull() ?: return null
         if (valDouble <= 0.0) return null
 
-        return when {
+        val grams = when {
             hasKg -> round(valDouble * 1000.0).toLong()
             hasG -> round(valDouble).toLong()
             normalized.contains('.') || valDouble <= 20.0 -> round(valDouble * 1000.0).toLong()
             else -> round(valDouble).toLong()
         }
+
+        // Sanity limit: max 100 kg (100,000 g) per weighted item to prevent barcode scanner overflow
+        if (grams <= 0L || grams > 100_000L) return null
+        return grams
     }
 
     enum class WeightUnitDisplay(val symbol: String) {
@@ -113,21 +117,29 @@ object Formatting {
         val hasKg = trimmed.contains("kg")
         val hasG = !hasKg && trimmed.contains("g")
 
-        if (hasKg) return WeightUnitDisplay.KG
-        if (hasG) return WeightUnitDisplay.G
-
-        val cleaned = trimmed
-            .replace("kg", "")
-            .replace("g", "")
-            .trim()
-
-        if (cleaned.isBlank()) return null
-        if (cleaned.contains(',') || cleaned.contains('.')) {
+        if (hasKg) {
+            val numStr = trimmed.replace("kg", "").trim().replace(',', '.')
+            val kgVal = numStr.toDoubleOrNull() ?: return null
+            if (kgVal <= 0.0 || kgVal > 100.0) return null
             return WeightUnitDisplay.KG
         }
+        if (hasG) {
+            val numStr = trimmed.replace("g", "").trim().replace(',', '.')
+            val gVal = numStr.toDoubleOrNull() ?: return null
+            if (gVal <= 0.0 || gVal > 100_000.0) return null
+            return WeightUnitDisplay.G
+        }
 
-        val valDouble = cleaned.toDoubleOrNull() ?: return null
-        if (valDouble <= 0.0) return null
+        val cleaned = trimmed.trim()
+        if (cleaned.isBlank()) return null
+        val normalized = cleaned.replace(',', '.')
+        val valDouble = normalized.toDoubleOrNull() ?: return null
+        if (valDouble <= 0.0 || valDouble > 100_000.0) return null
+
+        if (cleaned.contains(',') || cleaned.contains('.')) {
+            if (valDouble > 100.0) return null
+            return WeightUnitDisplay.KG
+        }
 
         return if (valDouble <= 20.0) WeightUnitDisplay.KG else WeightUnitDisplay.G
     }

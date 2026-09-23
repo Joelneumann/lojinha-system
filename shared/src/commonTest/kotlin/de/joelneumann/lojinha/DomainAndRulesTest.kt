@@ -198,6 +198,10 @@ class DomainAndRulesTest {
         assertEquals(500L, Formatting.parseWeightInputToGrams("500g"))
         assertEquals(500L, Formatting.parseWeightInputToGrams("500"))
         assertEquals(250L, Formatting.parseWeightInputToGrams("0,25"))
+        assertEquals(100000L, Formatting.parseWeightInputToGrams("100kg")) // Exactly 100 kg is allowed
+        assertNull(Formatting.parseWeightInputToGrams("100.1kg")) // Over 100 kg is rejected
+        assertNull(Formatting.parseWeightInputToGrams("100001g")) // Over 100 kg is rejected
+        assertNull(Formatting.parseWeightInputToGrams("7891234567890")) // 13-digit barcode scan is rejected
     }
 
     @Test
@@ -228,11 +232,13 @@ class DomainAndRulesTest {
         assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("30 g"))
         assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("2g"))
 
-        // Invalid, negative or blank -> null
+        // Invalid, negative, blank or exceeding 100kg -> null
         assertNull(Formatting.detectWeightUnit(""))
         assertNull(Formatting.detectWeightUnit("   "))
         assertNull(Formatting.detectWeightUnit("abc"))
         assertNull(Formatting.detectWeightUnit("-5"))
+        assertNull(Formatting.detectWeightUnit("105kg"))
+        assertNull(Formatting.detectWeightUnit("7891234567890")) // barcode
     }
 
     @Test
