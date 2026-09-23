@@ -375,10 +375,15 @@ interface AppStrings {
     val userNameLabel: String
     val userNamePlaceholder: String
     val resetPin: String
+    val removePin: String
     val noPinSet: String
     val hide: String
     val pinPlaceholder: String
     val enterNewPinPlaceholder: String
+    val confirmPinPlaceholder: String
+    val pinMismatchError: String
+    val pinWillBeRemovedNotice: String
+    val pinRemovedWarningDesc: String
     val noBarcodeAssigned: String
 
     val step1DbRestoreTitle: String

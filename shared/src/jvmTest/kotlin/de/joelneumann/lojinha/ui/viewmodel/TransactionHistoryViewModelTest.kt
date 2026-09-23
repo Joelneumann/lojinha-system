@@ -185,6 +185,41 @@ class TransactionHistoryViewModelTest {
     }
 
     @Test
+    fun testSaveUserSettings_removePinSetsPinToNull() = runBlocking {
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val txRepo = FakeTransactionRepository()
+        val userRepo = TxFakeUserRepository()
+
+        val vm = TransactionHistoryViewModel(txRepo, userRepo, testScope)
+        val userWithPin = User(
+            id = "user-2",
+            name = "Protected User",
+            pin = de.joelneumann.lojinha.security.PasswordHasher.hash("9999"),
+            balance = 500,
+            language = Language.EN
+        )
+
+        try {
+            vm.openSettingsModal(userWithPin)
+            assertEquals(true, vm.showSettingsModal.value)
+
+            var callbackInvoked = false
+            var returnedUser: User? = null
+
+            vm.saveUserSettings(userWithPin, removePin = true) { updated ->
+                callbackInvoked = true
+                returnedUser = updated
+            }
+
+            assertEquals(true, callbackInvoked)
+            assertEquals(false, vm.showSettingsModal.value)
+            assertNull(returnedUser?.pin)
+        } finally {
+            testScope.cancel()
+        }
+    }
+
+    @Test
     fun testFetchPage_handlesExceptionGracefully() = runBlocking {
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val failingRepo = object : FakeTransactionRepository() {
