@@ -34,9 +34,13 @@ class RoomUserRepositoryImpl(
     }
 
     override suspend fun saveUser(user: User) {
-        val existing = userDao.getUserById(user.id)
+        val trimmedName = user.name.trim()
+        require(trimmedName.isNotBlank()) { "User name cannot be blank" }
+        val sanitizedUser = user.copy(name = trimmedName)
+
+        val existing = userDao.getUserById(sanitizedUser.id)
         if (existing != null) {
-            val entity = UserEntity.fromDomain(user)
+            val entity = UserEntity.fromDomain(sanitizedUser)
             userDao.updateUserProfile(
                 id = entity.id,
                 name = entity.name,
@@ -52,7 +56,9 @@ class RoomUserRepositoryImpl(
                 avatarColor = entity.avatarColor
             )
         } else {
-            userDao.insertOrUpdateUser(UserEntity.fromDomain(user))
+            // New user must always start with 0L balance
+            val newUser = sanitizedUser.copy(balance = 0L)
+            userDao.insertOrUpdateUser(UserEntity.fromDomain(newUser))
         }
         onDataChanged?.invoke()
     }
@@ -68,6 +74,23 @@ class RoomUserRepositoryImpl(
     }
 
     override suspend fun restoreUser(id: String) {
+        val userToRestore = userDao.getUserById(id)
+        if (userToRestore != null) {
+            val barcode = userToRestore.userBarcode
+            val barcodeNumber = userToRestore.userBarcodeNumber
+            if (barcode != null || barcodeNumber != null) {
+                val allUsers = userDao.getAllUsers()
+                val hasCollision = allUsers.any { other ->
+                    !other.isDeleted && other.id != id && (
+                        (barcode != null && (other.userBarcode.equals(barcode, ignoreCase = true) || other.userBarcodeNumber.equals(barcode, ignoreCase = true))) ||
+                        (barcodeNumber != null && (other.userBarcode.equals(barcodeNumber, ignoreCase = true) || other.userBarcodeNumber.equals(barcodeNumber, ignoreCase = true)))
+                    )
+                }
+                if (hasCollision) {
+                    userDao.clearUserBarcode(id)
+                }
+            }
+        }
         userDao.restoreUser(id)
         onDataChanged?.invoke()
     }

@@ -28,10 +28,23 @@ import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 fun DeletedUserCard(
     user: User,
     onRestoreUser: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    allUsers: List<User> = emptyList()
 ) {
     val strings = I18n.current
     var showRestoreConfirm by remember { mutableStateOf(false) }
+
+    val hasBarcodeCollision = remember(user, allUsers) {
+        val b = user.userBarcode
+        val bn = user.userBarcodeNumber
+        if (b == null && bn == null) false
+        else allUsers.any { other ->
+            !other.isDeleted && other.id != user.id && (
+                (b != null && (other.userBarcode.equals(b, ignoreCase = true) || other.userBarcodeNumber.equals(b, ignoreCase = true))) ||
+                (bn != null && (other.userBarcode.equals(bn, ignoreCase = true) || other.userBarcodeNumber.equals(bn, ignoreCase = true)))
+            )
+        }
+    }
 
     Surface(
         shape = RoundedCornerShape(10.dp),
@@ -119,7 +132,19 @@ fun DeletedUserCard(
                 }
             ),
             title = { Text(strings.confirmUserRestorationTitle, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald) },
-            text = { Text(strings.confirmUserRestorationMsg(user.name)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(strings.confirmUserRestorationMsg(user.name))
+                    if (hasBarcodeCollision) {
+                        Text(
+                            text = strings.restoredUserBarcodeCollisionNotice,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ColorWarningAmber
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {

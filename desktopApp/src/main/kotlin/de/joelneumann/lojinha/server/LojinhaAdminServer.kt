@@ -160,6 +160,10 @@ class LojinhaAdminServer(
                     post("/users") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val user = call.receive<User>()
+                        if (user.name.isBlank()) {
+                            call.respond(HttpStatusCode.BadRequest, "User name cannot be blank")
+                            return@post
+                        }
                         userRepository.saveUser(user)
                         call.respond(HttpStatusCode.OK)
                     }

@@ -901,6 +901,10 @@ class BackupRestoreService(
 
             val rawId = if (idIdx != -1 && idIdx < cols.size) cols[idIdx].trim() else ""
             val name = cols[nameIdx].trim()
+            if (name.isBlank()) {
+                warnings.add("Row ${i + 1}: Skipped user because name is blank.")
+                continue
+            }
 
             val userId = if (rawId.isNotEmpty()) rawId else "u-imp-${getTimestampString()}-$i"
             val existing = existingUsers[userId]

@@ -41,10 +41,11 @@ fun AdminUsersTabScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
 
     val showUserModal by viewModel.showUserModal.collectAsState()
+    val isSavingUser by viewModel.isSavingUser.collectAsState()
     val editUser by viewModel.editUser.collectAsState()
     val customExpenseUser by viewModel.customExpenseUser.collectAsState()
     val customIncomeUser by viewModel.customIncomeUser.collectAsState()
-    val userDeleteError by viewModel.userDeleteErrorMessage.collectAsState()
+    val userErrorMessage by viewModel.userErrorMessage.collectAsState()
 
     val strings = I18n.current
 
@@ -82,8 +83,6 @@ fun AdminUsersTabScreen(
                     (u.userBarcode != null && u.userBarcode.contains(searchQuery, ignoreCase = true))
         }.sortedByAccentInsensitive { it.name }
     }
-
-    val totalMatches = filteredActiveUsers.size + filteredDeactivatedUsers.size + filteredDeletedUsers.size
 
     Column(modifier = Modifier.fillMaxSize()) {
         val openFirstResult = {
@@ -171,7 +170,8 @@ fun AdminUsersTabScreen(
                         filteredDeletedUsers.forEach { user ->
                             DeletedUserCard(
                                 user = user,
-                                onRestoreUser = { viewModel.restoreUser(user.id) }
+                                onRestoreUser = { viewModel.restoreUser(user.id) },
+                                allUsers = users
                             )
                         }
                     }
@@ -185,7 +185,8 @@ fun AdminUsersTabScreen(
             user = editUser!!,
             allUsers = users,
             onSave = { viewModel.saveUser(it) },
-            onCancel = { viewModel.closeUserModal() }
+            onCancel = { viewModel.closeUserModal() },
+            isSaving = isSavingUser
         )
     }
 
@@ -211,21 +212,21 @@ fun AdminUsersTabScreen(
         )
     }
 
-    if (userDeleteError != null) {
+    if (userErrorMessage != null) {
         AlertDialog(
-            onDismissRequest = { viewModel.clearUserDeleteError() },
+            onDismissRequest = { viewModel.clearUserError() },
             containerColor = de.joelneumann.lojinha.ui.theme.SurfaceWhite,
             shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
             modifier = Modifier.confirmationDialogKeys(
-                onCancel = { viewModel.clearUserDeleteError() },
-                onConfirm = { viewModel.clearUserDeleteError() }
+                onCancel = { viewModel.clearUserError() },
+                onConfirm = { viewModel.clearUserError() }
             ),
             title = { Text(strings.auditLedgerTitle, fontWeight = FontWeight.Bold, color = de.joelneumann.lojinha.ui.theme.PrimaryNavy) },
-            text = { Text(userDeleteError!!, color = de.joelneumann.lojinha.ui.theme.PrimaryNavy) },
+            text = { Text(userErrorMessage!!, color = de.joelneumann.lojinha.ui.theme.PrimaryNavy) },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.clearUserDeleteError() },
+                    onClick = { viewModel.clearUserError() },
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                     colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = de.joelneumann.lojinha.ui.theme.AccentNavy)
                 ) {

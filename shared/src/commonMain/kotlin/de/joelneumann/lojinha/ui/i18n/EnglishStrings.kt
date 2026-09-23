@@ -467,6 +467,8 @@ object EnglishStrings : AppStrings {
         "Barcode '$code' is already assigned to user '$userName'!"
     override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
         "${if (isSymbolFilled) "Barcode Number (ID)" else "Barcode Symbol"} is missing! Both Barcode Symbol and Barcode Number (ID) must be filled together, or leave both empty."
+    override val restoredUserBarcodeCollisionNotice =
+        "Note: This user's barcode is currently assigned to another active user and will be reset upon restoration."
 
     // --- Custom Expense & Custom Income Modals ---
     override val customExpense = "Custom Expense"

@@ -454,6 +454,7 @@ interface AppStrings {
     val debitViaAdmin: String
     fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String): String
     fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean): String
+    val restoredUserBarcodeCollisionNotice: String
 
     // --- Custom Expense & Custom Income Modals ---
     val customExpense: String

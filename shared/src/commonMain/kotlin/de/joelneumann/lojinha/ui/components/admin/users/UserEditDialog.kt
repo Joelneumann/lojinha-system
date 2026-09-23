@@ -43,42 +43,57 @@ import de.joelneumann.lojinha.ui.components.userselection.PlatformEmoji
 import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.components.userselection.parseHexColor
 
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+
 @Composable
 fun UserEditDialog(
     user: User,
     allUsers: List<User>,
     onSave: (User) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    isSaving: Boolean = false
 ) {
     val strings = I18n.current
-    val isNewUser = remember(user.id) { user.id.isBlank() || user.name.isBlank() }
+    val isNewUser = remember(user.id, allUsers) { allUsers.none { it.id == user.id } }
 
-    var name by remember { mutableStateOf(user.name) }
-    var shouldResetPin by remember { mutableStateOf(false) }
-    var pin by remember { mutableStateOf("") }
-    var isPinVisible by remember { mutableStateOf(false) }
+    var name by remember(user.id) { mutableStateOf(user.name) }
+    var shouldResetPin by remember(user.id) { mutableStateOf(false) }
+    var pin by remember(user.id) { mutableStateOf("") }
+    var isPinVisible by remember(user.id) { mutableStateOf(false) }
 
-    var barcode by remember { mutableStateOf(user.userBarcode ?: "") }
-    var barcodeNumber by remember { mutableStateOf(user.userBarcodeNumber ?: "") }
-    var selectedLang by remember { mutableStateOf(user.language) }
-    var selectedSecondaryCurrency by remember { mutableStateOf(user.secondaryCurrency) }
+    var barcode by remember(user.id) { mutableStateOf(user.userBarcode ?: "") }
+    var barcodeNumber by remember(user.id) { mutableStateOf(user.userBarcodeNumber ?: "") }
+    var selectedLang by remember(user.id) { mutableStateOf(user.language) }
+    var selectedSecondaryCurrency by remember(user.id) { mutableStateOf(user.secondaryCurrency) }
     var selectedAvatar by remember(user.id, user.avatar) { mutableStateOf(user.avatar) }
 
-    val barcodeToCheck = remember(barcode, barcodeNumber) {
-        val b1 = barcode.trim()
-        val b2 = barcodeNumber.trim()
-        if (b2.isNotBlank()) b2 else b1
-    }
+    val trimmedBarcode = remember(barcode) { barcode.trim() }
+    val trimmedBarcodeNumber = remember(barcodeNumber) { barcodeNumber.trim() }
 
-    val duplicateUser = remember(barcodeToCheck, allUsers, user.id) {
-        if (barcodeToCheck.isBlank()) null
+    val duplicateBarcodeUser = remember(trimmedBarcode, allUsers, user.id) {
+        if (trimmedBarcode.isBlank()) null
         else allUsers.firstOrNull { u ->
-            !u.isDeleted && u.id != user.id && (
-                (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(barcodeToCheck, ignoreCase = true)) ||
-                (u.userBarcode != null && u.userBarcode.equals(barcodeToCheck, ignoreCase = true))
+            u.id != user.id && (
+                (u.userBarcode != null && u.userBarcode.equals(trimmedBarcode, ignoreCase = true)) ||
+                (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(trimmedBarcode, ignoreCase = true))
             )
         }
     }
+
+    val duplicateNumberUser = remember(trimmedBarcodeNumber, allUsers, user.id) {
+        if (trimmedBarcodeNumber.isBlank()) null
+        else allUsers.firstOrNull { u ->
+            u.id != user.id && (
+                (u.userBarcode != null && u.userBarcode.equals(trimmedBarcodeNumber, ignoreCase = true)) ||
+                (u.userBarcodeNumber != null && u.userBarcodeNumber.equals(trimmedBarcodeNumber, ignoreCase = true))
+            )
+        }
+    }
+
+    val duplicateConflict = duplicateBarcodeUser?.let { trimmedBarcode to it }
+        ?: duplicateNumberUser?.let { trimmedBarcodeNumber to it }
 
     val isBarcodeSymbolFilled = barcode.isNotBlank()
     val isBarcodeNumberFilled = barcodeNumber.isNotBlank()
@@ -103,14 +118,16 @@ fun UserEditDialog(
     var showDiscardConfirm by remember { mutableStateOf(false) }
 
     val handleDismissRequest = {
-        if (isModified) {
-            showDiscardConfirm = true
-        } else {
-            onCancel()
+        if (!isSaving) {
+            if (isModified) {
+                showDiscardConfirm = true
+            } else {
+                onCancel()
+            }
         }
     }
 
-    val canSave = name.isNotBlank() && duplicateUser == null && !isUserBarcodeIncomplete && (isNewUser || hasDialogChanges)
+    val canSave = !isSaving && name.isNotBlank() && duplicateConflict == null && !isUserBarcodeIncomplete && (isNewUser || hasDialogChanges)
 
     val handleSave = {
         if (canSave) {
@@ -167,12 +184,41 @@ fun UserEditDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(
-                    text = if (isNewUser) strings.addUser else strings.editUser,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isNewUser) strings.addUser else strings.editUser,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
+                    )
+
+                    if (!isNewUser && hasDialogChanges) {
+                        IconButton(
+                            onClick = {
+                                name = user.name
+                                selectedLang = user.language
+                                selectedSecondaryCurrency = user.secondaryCurrency
+                                selectedAvatar = user.avatar
+                                shouldResetPin = false
+                                pin = ""
+                                barcode = user.userBarcode ?: ""
+                                barcodeNumber = user.userBarcodeNumber ?: ""
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Undo,
+                                contentDescription = strings.revertChanges,
+                                tint = AccentNavy,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
 
                 HorizontalDivider(color = DividerBorder)
 
@@ -278,11 +324,18 @@ fun UserEditDialog(
                         label = strings.barcodeSymbolLabel,
                         value = barcode,
                         onValueChange = {
+                            val prev = barcode
                             barcode = it
-                            if (barcodeNumber.isBlank()) barcodeNumber = it
+                            if (barcodeNumber.isBlank() || barcodeNumber == prev) {
+                                barcodeNumber = it
+                            }
                         },
                         placeholder = strings.barcodeSymbolPlaceholder,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .onPreviewKeyEvent {
+                                it.key == Key.Enter || it.key == Key.NumPadEnter
+                            }
                     )
 
                     AdminLabeledField(
@@ -290,7 +343,11 @@ fun UserEditDialog(
                         value = barcodeNumber,
                         onValueChange = { barcodeNumber = it },
                         placeholder = strings.barcodeNumberIdPlaceholder,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .onPreviewKeyEvent {
+                                it.key == Key.Enter || it.key == Key.NumPadEnter
+                            }
                     )
                 }
 
@@ -306,7 +363,7 @@ fun UserEditDialog(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         UserAvatar(
-                            user = user,
+                            user = user.copy(name = name),
                             customAvatar = selectedAvatar,
                             modifier = Modifier.size(52.dp),
                             fontSize = 22.sp
@@ -460,7 +517,8 @@ fun UserEditDialog(
                     }
                 }
 
-                if (duplicateUser != null) {
+                if (duplicateConflict != null) {
+                    val (conflictingCode, conflictingUser) = duplicateConflict
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -473,7 +531,7 @@ fun UserEditDialog(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = strings.barcodeConflictAlreadyAssignedToUser(barcodeToCheck, duplicateUser.name),
+                            text = strings.barcodeConflictAlreadyAssignedToUser(conflictingCode, conflictingUser.name),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ColorDangerCrimson
@@ -489,40 +547,11 @@ fun UserEditDialog(
                 ) {
                     OutlinedButton(
                         onClick = handleDismissRequest,
+                        enabled = !isSaving,
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(strings.cancel, fontSize = 14.sp)
-                    }
-
-                    if (!isNewUser && hasDialogChanges) {
-                        OutlinedButton(
-                            onClick = {
-                                name = user.name
-                                selectedLang = user.language
-                                selectedSecondaryCurrency = user.secondaryCurrency
-                                selectedAvatar = user.avatar
-                                shouldResetPin = false
-                                pin = ""
-                                barcode = user.userBarcode ?: ""
-                                barcodeNumber = user.userBarcodeNumber ?: ""
-                            },
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Undo,
-                                    contentDescription = null,
-                                    tint = PrimaryNavy,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(strings.revertChanges, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                            }
-                        }
                     }
 
                     Button(
@@ -532,7 +561,15 @@ fun UserEditDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(if (isNewUser) strings.addUser else strings.save, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        if (isSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = SurfaceWhite,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(if (isNewUser) strings.addUser else strings.save, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

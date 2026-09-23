@@ -37,14 +37,18 @@ class AdminUsersViewModel(
     private val _showUserModal = MutableStateFlow(false)
     val showUserModal: StateFlow<Boolean> = _showUserModal.asStateFlow()
 
+    private val _isSavingUser = MutableStateFlow(false)
+    val isSavingUser: StateFlow<Boolean> = _isSavingUser.asStateFlow()
+
     private val _customExpenseUser = MutableStateFlow<User?>(null)
     val customExpenseUser: StateFlow<User?> = _customExpenseUser.asStateFlow()
 
     private val _customIncomeUser = MutableStateFlow<User?>(null)
     val customIncomeUser: StateFlow<User?> = _customIncomeUser.asStateFlow()
 
-    private val _userDeleteErrorMessage = MutableStateFlow<String?>(null)
-    val userDeleteErrorMessage: StateFlow<String?> = _userDeleteErrorMessage.asStateFlow()
+    private val _userErrorMessage = MutableStateFlow<String?>(null)
+    val userErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
+    val userDeleteErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
 
     private var usersJob: Job? = null
 
@@ -88,13 +92,18 @@ class AdminUsersViewModel(
     }
 
     fun saveUser(user: User) {
+        if (_isSavingUser.value) return
         viewModelScope.launch {
+            _isSavingUser.value = true
             try {
                 userRepository.saveUser(user)
                 refreshUsers()
                 closeUserModal()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "saveUser error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: "Failed to save user."
+            } finally {
+                _isSavingUser.value = false
             }
         }
     }
@@ -106,6 +115,7 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "toggleUserActive error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: "Failed to update user status."
             }
         }
     }
@@ -117,6 +127,7 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "softDeleteUser error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: "Failed to delete user."
             }
         }
     }
@@ -128,12 +139,17 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "restoreUser error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: "Failed to restore user."
             }
         }
     }
 
     fun clearUserDeleteError() {
-        _userDeleteErrorMessage.value = null
+        _userErrorMessage.value = null
+    }
+
+    fun clearUserError() {
+        _userErrorMessage.value = null
     }
 
     fun openCustomExpenseModal(user: User) {

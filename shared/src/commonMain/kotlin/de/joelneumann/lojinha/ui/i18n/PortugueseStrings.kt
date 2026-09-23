@@ -467,6 +467,8 @@ object PortugueseStrings : AppStrings {
         "O código de barras '$code' já está atribuído ao usuário '$userName'!"
     override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
         "${if (isSymbolFilled) "O Número do Código de Barras (ID)" else "O Símbolo do Código de Barras"} está faltando! O Símbolo do Código de Barras e o Número do Código de Barras (ID) devem ser preenchidos juntos, ou deixe ambos vazios."
+    override val restoredUserBarcodeCollisionNotice =
+        "Nota: O código de barras deste usuário está atualmente atribuído a outro usuário ativo e será redefinido após a restauração."
 
     // --- Custom Expense & Custom Income Modals ---
     override val customExpense = "Despesa Avulsa"

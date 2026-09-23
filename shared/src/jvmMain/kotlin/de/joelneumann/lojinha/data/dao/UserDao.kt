@@ -20,8 +20,9 @@ interface UserDao {
 
     @Query("""
         SELECT * FROM users 
-        WHERE userBarcode = :barcode COLLATE NOCASE OR userBarcodeNumber = :barcode COLLATE NOCASE 
-        ORDER BY isDeleted ASC, isActive DESC 
+        WHERE (userBarcode = :barcode COLLATE NOCASE OR userBarcodeNumber = :barcode COLLATE NOCASE)
+          AND isDeleted = 0 
+        ORDER BY isActive DESC 
         LIMIT 1
     """)
     suspend fun getUserByBarcode(barcode: String): UserEntity?
@@ -64,6 +65,9 @@ interface UserDao {
 
     @Query("UPDATE users SET isDeleted = 0, isActive = 1 WHERE id = :id")
     suspend fun restoreUser(id: String)
+
+    @Query("UPDATE users SET userBarcode = NULL, userBarcodeNumber = NULL WHERE id = :id")
+    suspend fun clearUserBarcode(id: String)
 
     @Query("UPDATE users SET isActive = 0 WHERE id = :id")
     suspend fun deactivateUser(id: String)
