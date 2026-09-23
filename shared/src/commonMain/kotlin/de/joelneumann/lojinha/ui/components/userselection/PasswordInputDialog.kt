@@ -96,15 +96,7 @@ fun PasswordInputDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
-                        .focusRequester(inputFocusRequester)
-                        .onKeyEvent { keyEvent ->
-                            if (keyEvent.type == KeyEventType.KeyDown && (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
-                                if (canSubmit) {
-                                    onSubmit()
-                                }
-                                true
-                            } else false
-                        },
+                        .focusRequester(inputFocusRequester),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
                         if (canSubmit) onSubmit()

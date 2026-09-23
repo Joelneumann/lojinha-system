@@ -1,6 +1,8 @@
 package de.joelneumann.lojinha.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -94,9 +96,14 @@ fun UserSelectionContent(
         }
     }
 
-    val filteredUsers = remember(users, searchQuery) {
-        if (searchQuery.isBlank()) users
-        else users.filter { it.name.containsIgnoreAccents(searchQuery) }.sortedByAccentInsensitive { it.name }
+    val trimmedQuery = remember(searchQuery) { searchQuery.trim() }
+    val filteredUsers = remember(users, trimmedQuery) {
+        if (trimmedQuery.isBlank()) users
+        else users.filter { user ->
+            user.name.containsIgnoreAccents(trimmedQuery) ||
+            user.userBarcode?.contains(trimmedQuery, ignoreCase = true) == true ||
+            user.userBarcodeNumber?.contains(trimmedQuery, ignoreCase = true) == true
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -128,6 +135,14 @@ fun UserSelectionContent(
             modifier = Modifier
                 .fillMaxSize()
                 .background(SurfaceContainerLight)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    coroutineScope.launch {
+                        focusRequester.safeRequestFocus()
+                    }
+                }
                 .padding(ScreenPadding)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
