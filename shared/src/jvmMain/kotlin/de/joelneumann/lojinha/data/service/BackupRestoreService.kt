@@ -680,6 +680,10 @@ class BackupRestoreService(
 
             val rawId = if (idIdx != -1 && idIdx < cols.size) cols[idIdx].trim() else ""
             val name = cols[nameIdx].trim()
+            if (name.isBlank()) {
+                warnings.add("Row ${i + 1}: Skipped product because name is blank.")
+                continue
+            }
             val priceStr = cols[priceIdx].trim()
             val parsedPrice = parseCurrencyToCents(priceStr)
             if (parsedPrice == null) {

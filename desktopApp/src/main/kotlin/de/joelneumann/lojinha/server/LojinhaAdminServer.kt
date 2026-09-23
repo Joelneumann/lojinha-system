@@ -130,7 +130,16 @@ class LojinhaAdminServer(
                     post("/products") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val product = call.receive<Product>()
-                        productRepository.saveProduct(product)
+                        if (product.name.isBlank()) {
+                            call.respond(HttpStatusCode.BadRequest, "Product name cannot be blank")
+                            return@post
+                        }
+                        if (product.basePrice < 0) {
+                            call.respond(HttpStatusCode.BadRequest, "Product base price cannot be negative")
+                            return@post
+                        }
+                        val productToSave = if (product.id.isBlank()) product.copy(id = UUID.randomUUID().toString()) else product
+                        productRepository.saveProduct(productToSave)
                         call.respond(HttpStatusCode.OK)
                     }
                     post("/products/stock") {

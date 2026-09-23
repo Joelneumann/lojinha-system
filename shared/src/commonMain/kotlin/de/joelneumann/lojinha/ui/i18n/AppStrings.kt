@@ -515,6 +515,8 @@ interface AppStrings {
     val markupCustomSuffix: String
     val markupStandardSuffix: String
     val invalidMarkupError: String
+    val invalidPriceError: String
+    val invalidStockError: String
     val lastExecutionTimeLabel: String
 
     val remoteAdminTitle: String

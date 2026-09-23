@@ -527,6 +527,8 @@ object PortugueseStrings : AppStrings {
     override val markupCustomSuffix = "Personalizada"
     override val markupStandardSuffix = "Padrão"
     override val invalidMarkupError = "Deve ser uma porcentagem entre 0 e 1000"
+    override val invalidPriceError = "Preço base inválido"
+    override val invalidStockError = "Quantidade de estoque inválida"
     override val lastExecutionTimeLabel = "Última Execução:"
 
     override val remoteAdminTitle = "Administração Web Remota (LAN)"

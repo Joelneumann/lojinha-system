@@ -36,13 +36,22 @@ class AdminViewModelsTest {
     ) : ProductRepository {
         var recordedStockDeltas = mutableListOf<Pair<String, Long>>()
         var savedProducts = mutableListOf<Product>()
+        var shouldThrowOnSave: Boolean = false
 
         override fun getProductsFlow(): Flow<List<Product>> = flowOf(products)
         override suspend fun getAllProducts(): List<Product> = products
         override suspend fun getProductById(id: String): Product? = products.find { it.id == id }
         override suspend fun getProductByBarcode(barcode: String): Product? = null
         override suspend fun saveProduct(product: Product) {
+            if (shouldThrowOnSave) {
+                throw RuntimeException("Database error saving product")
+            }
             savedProducts.add(product)
+            products = if (products.any { it.id == product.id }) {
+                products.map { if (it.id == product.id) product else it }
+            } else {
+                products + product
+            }
         }
         override suspend fun deactivateProduct(id: String) {}
         override suspend fun hardDeleteProduct(id: String) {}
@@ -158,6 +167,107 @@ class AdminViewModelsTest {
 
         assertEquals(1, productRepo.recordedStockDeltas.size)
         assertEquals("prod-2" to -3L, productRepo.recordedStockDeltas.first())
+    }
+
+    @Test
+    fun testSaveProduct_newProduct_doesNotCallUpdateStockAndSetsInitialStockCorrectly() = runTest {
+        val productRepo = TestProductRepository(emptyList())
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openNewProductModal()
+        assertEquals(true, viewModel.showProductModal.value)
+        assertEquals("", viewModel.editProduct.value?.id)
+
+        val newProduct = Product(
+            id = "",
+            name = "Fresh Apples",
+            barcodes = emptyList(),
+            basePrice = 450,
+            unitType = UnitType.WEIGHT,
+            stockQuantity = 25000 // 25 kg in grams
+        )
+
+        viewModel.saveProduct(newProduct)
+
+        // Must save the product directly with the initial stock
+        assertEquals(1, productRepo.savedProducts.size)
+        val saved = productRepo.savedProducts.first()
+        assertEquals("Fresh Apples", saved.name)
+        assertEquals(25000L, saved.stockQuantity)
+        assertTrue(saved.id.isNotBlank())
+
+        // P0 FIX: updateStock must NOT be called for new products (preventing doubled stock)
+        assertTrue(productRepo.recordedStockDeltas.isEmpty())
+
+        // Modal closed and saving state reset
+        assertFalse(viewModel.showProductModal.value)
+        assertNull(viewModel.editProduct.value)
+        assertFalse(viewModel.isSavingProduct.value)
+    }
+
+    @Test
+    fun testSaveProduct_existingProduct_calculatesDeltaAndCallsUpdateStock() = runTest {
+        val existingProduct = Product(
+            id = "prod-existing",
+            name = "Juice Box",
+            barcodes = emptyList(),
+            basePrice = 300,
+            unitType = UnitType.PIECE,
+            stockQuantity = 10
+        )
+        val productRepo = TestProductRepository(listOf(existingProduct))
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openEditProductModal(existingProduct)
+        assertEquals(true, viewModel.showProductModal.value)
+        assertEquals("prod-existing", viewModel.editProduct.value?.id)
+
+        // Admin updates name and increases stock from 10 to 14 (+4)
+        val modifiedProduct = existingProduct.copy(
+            name = "Juice Box Orange",
+            stockQuantity = 14
+        )
+        viewModel.saveProduct(modifiedProduct)
+
+        assertEquals(1, productRepo.savedProducts.size)
+        assertEquals("Juice Box Orange", productRepo.savedProducts.first().name)
+
+        // Delta (+4) must be applied via updateStock
+        assertEquals(1, productRepo.recordedStockDeltas.size)
+        assertEquals("prod-existing" to 4L, productRepo.recordedStockDeltas.first())
+
+        // Modal closed and saving state reset
+        assertFalse(viewModel.showProductModal.value)
+        assertNull(viewModel.editProduct.value)
+        assertFalse(viewModel.isSavingProduct.value)
+    }
+
+    @Test
+    fun testSaveProduct_handlesExceptionAndSetsProductErrorMessage() = runTest {
+        val productRepo = TestProductRepository().apply {
+            shouldThrowOnSave = true
+        }
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openNewProductModal()
+        val product = Product(
+            id = "",
+            name = "Failure Product",
+            barcodes = emptyList(),
+            basePrice = 100,
+            unitType = UnitType.PIECE,
+            stockQuantity = 5
+        )
+
+        viewModel.saveProduct(product)
+
+        // Error message set and isSavingProduct reset
+        assertNotNull(viewModel.productErrorMessage.value)
+        assertFalse(viewModel.isSavingProduct.value)
+
+        // Dismiss error
+        viewModel.clearProductError()
+        assertNull(viewModel.productErrorMessage.value)
     }
 
     // --- Tests for AdminBulkBillingViewModel (QA-02 & QA-08) ---

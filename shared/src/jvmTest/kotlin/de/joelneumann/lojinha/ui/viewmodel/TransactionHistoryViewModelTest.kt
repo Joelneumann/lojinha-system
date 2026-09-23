@@ -10,7 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-private class FakeTransactionRepository : TransactionRepository {
+private open class FakeTransactionRepository : TransactionRepository {
     val transactions = mutableListOf<Transaction>()
     var lastSearchQuery: String? = null
     var lastTypeFilter: TransactionType? = null

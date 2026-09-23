@@ -37,9 +37,17 @@ class RoomProductRepositoryImpl(
     }
 
     override suspend fun saveProduct(product: Product) {
-        val existing = productDao.getProductById(product.id)
+        val trimmedName = product.name.trim()
+        require(trimmedName.isNotBlank()) { "Product name cannot be blank" }
+        require(product.basePrice >= 0L) { "Product base price cannot be negative" }
+        val sanitizedProduct = product.copy(
+            name = trimmedName,
+            stockQuantity = product.stockQuantity.coerceAtLeast(0L)
+        )
+
+        val existing = productDao.getProductById(sanitizedProduct.id)
         if (existing != null) {
-            val entity = ProductEntity.fromDomain(product)
+            val entity = ProductEntity.fromDomain(sanitizedProduct)
             productDao.updateProductMetadata(
                 id = entity.id,
                 name = entity.name,
@@ -50,7 +58,7 @@ class RoomProductRepositoryImpl(
                 isActive = entity.isActive
             )
         } else {
-            productDao.insertOrUpdateProduct(ProductEntity.fromDomain(product))
+            productDao.insertOrUpdateProduct(ProductEntity.fromDomain(sanitizedProduct))
         }
         onDataChanged?.invoke()
     }

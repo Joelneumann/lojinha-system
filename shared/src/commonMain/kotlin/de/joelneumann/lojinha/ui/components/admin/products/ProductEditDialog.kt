@@ -33,6 +33,7 @@ import de.joelneumann.lojinha.ui.utils.formModalKeys
 fun ProductEditDialog(
     product: Product,
     allProducts: List<Product>,
+    isSaving: Boolean = false,
     onSave: (Product) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -86,30 +87,38 @@ fun ProductEditDialog(
         customMarkup.isBlank() || (parsedMarkup != null && parsedMarkup in 0.0..1000.0)
     }
 
-    val canSave = name.isNotBlank() && assignedBarcodeConflictProduct == null && isCustomMarkupValid && (isNewProduct || hasDialogChanges)
+    val parsedPriceCents = remember(basePriceBrl) {
+        val clean = basePriceBrl.trim().removePrefix("R$").trim()
+        val normalized = if (clean.contains('.') && clean.contains(',')) {
+            if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) clean.replace(".", "").replace(',', '.')
+            else clean.replace(",", "")
+        } else {
+            clean.replace(',', '.')
+        }
+        val d = normalized.toDoubleOrNull()
+        if (d != null && d.isFinite() && d >= 0.0 && d <= 100_000.0) kotlin.math.round(d * 100.0).toLong() else null
+    }
+    val isPriceValid = remember(basePriceBrl, parsedPriceCents) { basePriceBrl.isNotBlank() && parsedPriceCents != null }
+
+    val parsedStock = remember(stockQuantity, unitType) { Formatting.parseAdminStockToDb(stockQuantity, unitType) }
+    val isStockValid = remember(stockQuantity, parsedStock) { stockQuantity.isBlank() || (parsedStock != null && parsedStock >= 0L) }
+
+    val canSave = !isSaving &&
+            name.isNotBlank() &&
+            isPriceValid &&
+            isStockValid &&
+            assignedBarcodeConflictProduct == null &&
+            newBarcodeConflictProduct == null &&
+            isCustomMarkupValid &&
+            (isNewProduct || hasDialogChanges)
 
     val handleDismissRequest = {
-        if (isModified) {
-            showDiscardConfirm = true
-        } else {
-            onCancel()
-        }
-    }
-
-    val handleSave = {
-        if (canSave) {
-            val priceCents = kotlin.math.round((basePriceBrl.replace(',', '.').toDoubleOrNull() ?: 0.0) * 100).toLong()
-            val stock = Formatting.parseAdminStockToDb(stockQuantity, unitType) ?: 0L
-            val markup = if (customMarkup.isBlank()) null else parsedMarkup
-            val updated = product.copy(
-                name = name.trim(),
-                basePrice = priceCents,
-                unitType = unitType,
-                stockQuantity = stock,
-                customMarkupPercent = markup,
-                barcodes = barcodeList
-            )
-            onSave(updated)
+        if (!isSaving) {
+            if (isModified) {
+                showDiscardConfirm = true
+            } else {
+                onCancel()
+            }
         }
     }
 
@@ -121,6 +130,31 @@ fun ProductEditDialog(
                 barcodeCode = ""
                 barcodeDesc = ""
             }
+        }
+    }
+
+    val handleSave = {
+        if (canSave) {
+            val priceCents = parsedPriceCents ?: 0L
+            val stock = parsedStock ?: 0L
+            val markup = if (customMarkup.isBlank()) null else parsedMarkup
+
+            val finalBarcodes = if (barcodeCode.isNotBlank()) {
+                val code = barcodeCode.trim()
+                if (barcodeList.none { it.code.equals(code, ignoreCase = true) }) {
+                    barcodeList + Barcode(code, barcodeDesc.trim().ifBlank { null })
+                } else barcodeList
+            } else barcodeList
+
+            val updated = product.copy(
+                name = name.trim(),
+                basePrice = priceCents,
+                unitType = unitType,
+                stockQuantity = stock,
+                customMarkupPercent = markup,
+                barcodes = finalBarcodes
+            )
+            onSave(updated)
         }
     }
 
@@ -157,12 +191,41 @@ fun ProductEditDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(
-                    text = if (isNewProduct) strings.addProduct else strings.editProduct,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isNewProduct) strings.addProduct else strings.editProduct,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
+                    )
+
+                    if (!isNewProduct && hasDialogChanges) {
+                        IconButton(
+                            onClick = {
+                                name = product.name
+                                basePriceBrl = initialPriceBrl
+                                unitType = product.unitType
+                                stockQuantity = Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)
+                                customMarkup = initialCustomMarkup
+                                barcodeList = product.barcodes
+                                barcodeCode = ""
+                                barcodeDesc = ""
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Undo,
+                                contentDescription = strings.revertChanges,
+                                tint = AccentNavy,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
 
                 HorizontalDivider(color = DividerBorder)
 
@@ -178,13 +241,23 @@ fun ProductEditDialog(
                         modifier = Modifier.weight(1.5f)
                     )
 
-                    AdminLabeledField(
-                        label = strings.basePriceBrlLabel,
-                        value = basePriceBrl,
-                        onValueChange = { basePriceBrl = it },
-                        placeholder = strings.zeroPricePlaceholder,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        AdminLabeledField(
+                            label = strings.basePriceBrlLabel,
+                            value = basePriceBrl,
+                            onValueChange = { basePriceBrl = it },
+                            placeholder = strings.zeroPricePlaceholder,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (!isPriceValid && basePriceBrl.isNotBlank()) {
+                            Text(
+                                text = strings.invalidPriceError,
+                                fontSize = 11.sp,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(top = 2.dp, start = 2.dp)
+                            )
+                        }
+                    }
                 }
 
                 AdminSegmentedOptionsRow(
@@ -199,13 +272,23 @@ fun ProductEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    AdminLabeledField(
-                        label = if (unitType == UnitType.PIECE) strings.stockQtyUnitsLabel else strings.stockQtyKgLabel,
-                        value = stockQuantity,
-                        onValueChange = { stockQuantity = it },
-                        placeholder = if (unitType == UnitType.PIECE) strings.stockUnitsPlaceholder else strings.stockKgPlaceholder,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        AdminLabeledField(
+                            label = if (unitType == UnitType.PIECE) strings.stockQtyUnitsLabel else strings.stockQtyKgLabel,
+                            value = stockQuantity,
+                            onValueChange = { stockQuantity = it },
+                            placeholder = if (unitType == UnitType.PIECE) strings.stockUnitsPlaceholder else strings.stockKgPlaceholder,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (!isStockValid && stockQuantity.isNotBlank()) {
+                            Text(
+                                text = strings.invalidStockError,
+                                fontSize = 11.sp,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(top = 2.dp, start = 2.dp)
+                            )
+                        }
+                    }
 
                     Column(modifier = Modifier.weight(1f)) {
                         AdminLabeledField(
@@ -375,40 +458,11 @@ fun ProductEditDialog(
                 ) {
                     OutlinedButton(
                         onClick = handleDismissRequest,
+                        enabled = !isSaving,
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(strings.cancel, fontSize = 14.sp)
-                    }
-
-                    if (!isNewProduct && hasDialogChanges) {
-                        OutlinedButton(
-                            onClick = {
-                                name = product.name
-                                basePriceBrl = initialPriceBrl
-                                unitType = product.unitType
-                                stockQuantity = Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)
-                                customMarkup = initialCustomMarkup
-                                barcodeList = product.barcodes
-                                barcodeCode = ""
-                                barcodeDesc = ""
-                            },
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Undo,
-                                    contentDescription = null,
-                                    tint = PrimaryNavy,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(strings.revertChanges, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                            }
-                        }
                     }
 
                     Button(
@@ -418,7 +472,15 @@ fun ProductEditDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(if (isNewProduct) strings.addProduct else strings.save, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        if (isSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = SurfaceWhite,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(if (isNewProduct) strings.addProduct else strings.save, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

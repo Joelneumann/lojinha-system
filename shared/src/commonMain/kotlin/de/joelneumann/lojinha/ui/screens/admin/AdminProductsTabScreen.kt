@@ -4,11 +4,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.components.admin.AdminExpandableSection
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
 import de.joelneumann.lojinha.ui.components.admin.products.AdminProductAccordionCard
@@ -17,10 +23,13 @@ import de.joelneumann.lojinha.ui.components.admin.products.ProductEditDialog
 import de.joelneumann.lojinha.ui.components.admin.products.ProductSortButton
 import de.joelneumann.lojinha.ui.components.admin.products.sortWithOption
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.theme.AccentNavy
 import de.joelneumann.lojinha.ui.theme.ColorWarningAmber
+import de.joelneumann.lojinha.ui.theme.PrimaryNavy
+import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
-import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 
 @Composable
@@ -37,7 +46,9 @@ fun AdminProductsTabScreen(
     val settings by viewModel.settings.collectAsState()
 
     val showProductModal by viewModel.showProductModal.collectAsState()
+    val isSavingProduct by viewModel.isSavingProduct.collectAsState()
     val editProduct by viewModel.editProduct.collectAsState()
+    val productErrorMessage by viewModel.productErrorMessage.collectAsState()
 
     val strings = I18n.current
 
@@ -54,20 +65,20 @@ fun AdminProductsTabScreen(
     val activeProducts = remember(products, sortOption) { products.filter { it.isActive }.sortWithOption(sortOption) }
     val disabledProducts = remember(products, sortOption) { products.filter { !it.isActive }.sortWithOption(sortOption) }
 
-    val filteredActiveProducts = remember(activeProducts, searchQuery, sortOption) {
+    val filteredActiveProducts = remember(activeProducts, searchQuery) {
         if (searchQuery.isBlank()) activeProducts
         else activeProducts.filter { p ->
             p.name.containsIgnoreAccents(searchQuery) ||
                     p.barcodes.any { b -> b.code.containsIgnoreAccents(searchQuery) || (b.description != null && b.description.containsIgnoreAccents(searchQuery)) }
-        }.sortWithOption(sortOption)
+        }
     }
 
-    val filteredDisabledProducts = remember(disabledProducts, searchQuery, sortOption) {
+    val filteredDisabledProducts = remember(disabledProducts, searchQuery) {
         if (searchQuery.isBlank()) disabledProducts
         else disabledProducts.filter { p ->
             p.name.containsIgnoreAccents(searchQuery) ||
                     p.barcodes.any { b -> b.code.containsIgnoreAccents(searchQuery) || (b.description != null && b.description.containsIgnoreAccents(searchQuery)) }
-        }.sortWithOption(sortOption)
+        }
     }
 
     val totalMatches = filteredActiveProducts.size + filteredDisabledProducts.size
@@ -76,8 +87,6 @@ fun AdminProductsTabScreen(
         val openFirstResult = {
             if (filteredActiveProducts.isNotEmpty()) {
                 onRequestExpandProduct(filteredActiveProducts.first().id)
-            } else if (filteredDisabledProducts.isNotEmpty()) {
-                // First result is disabled
             }
         }
 
@@ -157,8 +166,33 @@ fun AdminProductsTabScreen(
         ProductEditDialog(
             product = editProduct!!,
             allProducts = products,
+            isSaving = isSavingProduct,
             onSave = { viewModel.saveProduct(it) },
             onCancel = { viewModel.closeProductModal() }
+        )
+    }
+
+    if (productErrorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.clearProductError() },
+            containerColor = SurfaceWhite,
+            shape = RoundedCornerShape(16.dp),
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(
+                onCancel = { viewModel.clearProductError() },
+                onConfirm = { viewModel.clearProductError() }
+            ),
+            title = { Text(strings.errorTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
+            text = { Text(productErrorMessage!!, color = PrimaryNavy) },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.clearProductError() },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
+                ) {
+                    Text(strings.ok, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
+            }
         )
     }
 }
