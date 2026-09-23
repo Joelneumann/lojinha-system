@@ -225,11 +225,12 @@ fun TransactionItemCard(
                         }
                     } else {
                         val isNegative = tx.totalAmount < 0
+                        val isStrictlyPositive = tx.totalAmount > 0
                         Text(
-                            text = "${if (!isNegative && tx.type != TransactionType.PURCHASE) "+" else ""}${Formatting.formatBrl(tx.totalAmount)}",
+                            text = "${if (isStrictlyPositive && tx.type != TransactionType.PURCHASE) "+" else ""}${Formatting.formatBrl(tx.totalAmount)}",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isNegative) ColorDangerCrimson else amountColor
+                            color = if (isNegative) ColorDangerCrimson else if (isStrictlyPositive) amountColor else TextSecondaryMuted
                         )
                     }
                     val secFormatted = Formatting.formatSecondaryCurrency(tx.totalAmount, secondaryCurrency, rate)
@@ -242,7 +243,7 @@ fun TransactionItemCard(
             if (!displayNote.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Note: $displayNote",
+                    text = displayNote,
                     fontSize = 13.sp,
                     color = TextSecondarySubtle
                 )
@@ -380,48 +381,50 @@ fun TransactionItemCard(
             }
 
             // Balance Flow Banner: Before -> After (placed under the item list)
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = SurfaceContainerHighLight,
-                border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            if (balanceBefore != null && balanceAfter != null) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SurfaceContainerHighLight,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                 ) {
-                    Text(
-                        text = "${strings.balance}:",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = TextSecondarySubtle
-                    )
-
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = Formatting.formatBrl(balanceBefore),
+                            text = "${strings.balance}:",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextSecondaryMuted
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondarySubtle
                         )
 
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = TextSecondarySubtle
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = Formatting.formatBrl(balanceBefore),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextSecondaryMuted
+                            )
 
-                        Text(
-                            text = Formatting.formatBrl(balanceAfter),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (balanceAfter >= 0) PrimaryNavy else ColorDangerCrimson
-                        )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = TextSecondarySubtle
+                            )
+
+                            Text(
+                                text = Formatting.formatBrl(balanceAfter),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (balanceAfter >= 0) PrimaryNavy else ColorDangerCrimson
+                            )
+                        }
                     }
                 }
             }

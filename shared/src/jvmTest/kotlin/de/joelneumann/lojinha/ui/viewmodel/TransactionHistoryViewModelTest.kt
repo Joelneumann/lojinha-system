@@ -144,4 +144,73 @@ class TransactionHistoryViewModelTest {
             testScope.cancel()
         }
     }
+
+    @Test
+    fun testSaveUserSettings_hashesPinAndInvokesCallback() = runBlocking {
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val txRepo = FakeTransactionRepository()
+        val userRepo = TxFakeUserRepository()
+
+        val vm = TransactionHistoryViewModel(txRepo, userRepo, testScope)
+        val user = User(
+            id = "user-1",
+            name = "Test User",
+            pin = null,
+            balance = 500,
+            language = Language.DE
+        )
+
+        try {
+            vm.openSettingsModal(user)
+            assertEquals(true, vm.showSettingsModal.value)
+
+            vm.updatePinInput("4321")
+            vm.updateLanguage(Language.BR)
+
+            var callbackInvoked = false
+            var returnedUser: User? = null
+
+            vm.saveUserSettings(user) { updated ->
+                callbackInvoked = true
+                returnedUser = updated
+            }
+
+            assertEquals(true, callbackInvoked)
+            assertEquals(false, vm.showSettingsModal.value)
+            assertEquals(Language.BR, returnedUser?.language)
+            assertEquals(de.joelneumann.lojinha.security.PasswordHasher.hash("4321"), returnedUser?.pin)
+        } finally {
+            testScope.cancel()
+        }
+    }
+
+    @Test
+    fun testFetchPage_handlesExceptionGracefully() = runBlocking {
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val failingRepo = object : FakeTransactionRepository() {
+            override suspend fun getTransactionsByUserIdPaged(
+                userId: String,
+                page: Int,
+                pageSize: Int,
+                searchQuery: String?,
+                typeFilter: TransactionType?
+            ): PagedResult<Transaction> {
+                throw IllegalStateException("Database query failed")
+            }
+        }
+        val userRepo = TxFakeUserRepository()
+
+        val vm = TransactionHistoryViewModel(failingRepo, userRepo, testScope)
+
+        try {
+            vm.loadUserTransactions("user-1")
+            delay(50)
+
+            // Should remain empty and not crash the scope
+            assertEquals(emptyList(), vm.transactions.value)
+            assertEquals(0, vm.totalCount.value)
+        } finally {
+            testScope.cancel()
+        }
+    }
 }

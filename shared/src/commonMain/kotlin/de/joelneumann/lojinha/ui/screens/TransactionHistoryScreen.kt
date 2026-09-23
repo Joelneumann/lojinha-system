@@ -71,7 +71,7 @@ fun TransactionHistoryScreen(
     val selectedAvatar by viewModel.selectedAvatar.collectAsState()
     val relatedTransactionsMap by viewModel.relatedTransactionsMap.collectAsState()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(user.id) {
         viewModel.loadUserTransactions(user.id, resetFilters = true)
     }
 
@@ -177,17 +177,11 @@ fun TransactionHistoryContent(
 ) {
     val strings = I18n.current
 
-    val transactionsWithBalance = remember(transactions, user.balance) {
+    val transactionsWithBalance = remember(transactions) {
         val sortedDesc = transactions.sortedByDescending { it.timestamp }
-        val list = ArrayList<TransactionWithBalance>(sortedDesc.size)
-        var current = user.balance
-        for (tx in sortedDesc) {
-            val before = tx.userBalanceBefore ?: (current - tx.totalAmount)
-            val after = tx.userBalanceAfter ?: current
-            list.add(TransactionWithBalance(tx, before, after))
-            current = before
+        sortedDesc.map { tx ->
+            TransactionWithBalance(tx, tx.userBalanceBefore, tx.userBalanceAfter)
         }
-        list
     }
 
     val rate = when (user.secondaryCurrency) {
@@ -431,6 +425,6 @@ fun TransactionHistoryContent(
 
 data class TransactionWithBalance(
     val transaction: Transaction,
-    val balanceBefore: Long,
-    val balanceAfter: Long
+    val balanceBefore: Long?,
+    val balanceAfter: Long?
 )
