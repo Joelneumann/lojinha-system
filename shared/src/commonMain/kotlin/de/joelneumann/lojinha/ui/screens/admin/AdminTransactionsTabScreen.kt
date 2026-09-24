@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -18,6 +21,8 @@ import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
 import de.joelneumann.lojinha.ui.components.admin.transactions.AdminTransactionAccordionCard
 import de.joelneumann.lojinha.ui.components.admin.transactions.PurchaseCorrectionDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
+import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 
@@ -34,6 +39,7 @@ fun AdminTransactionsTabScreen(
     val referencedParentsMap by viewModel.referencedParentsMap.collectAsState()
     val correctionTarget by viewModel.correctionTarget.collectAsState()
     val isSubmitting by viewModel.isSubmitting.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     val searchQuery by viewModel.searchFilter.collectAsState()
     val currentPage by viewModel.currentPage.collectAsState()
@@ -176,8 +182,36 @@ fun AdminTransactionsTabScreen(
         PurchaseCorrectionDialog(
             originalTransaction = origTx,
             currentItems = currentEffective,
+            isSubmitting = isSubmitting,
             onApplyCorrection = viewModel::applyPurchaseCorrection,
             onDismiss = viewModel::closeCorrectionModal
         )
     }
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::clearErrorMessage,
+            shape = RoundedCornerShape(16.dp),
+            containerColor = SurfaceWhite,
+            title = {
+                Text(
+                    text = strings.errorTitle,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorDangerCrimson
+                )
+            },
+            text = {
+                Text(errorMessage ?: "")
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::clearErrorMessage,
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
+                ) {
+                    Text(strings.ok, color = SurfaceWhite)
+                }
+            }
+        )
+    }
 }
+

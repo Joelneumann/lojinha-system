@@ -8,11 +8,15 @@ import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class RoomTransactionRepositoryImpl(
     private val transactionDao: TransactionDao,
     private val onDataChanged: (() -> Unit)? = null
 ) : TransactionRepository {
+
+    private val mutationMutex = Mutex()
 
     override fun getTransactionsFlow(): Flow<List<Transaction>> {
         return transactionDao.getTransactionsFlow().map { entities -> entities.map { it.toDomain() } }
@@ -120,35 +124,33 @@ class RoomTransactionRepositoryImpl(
     override suspend fun applyPurchaseCorrection(
         originalTransactionId: String,
         newItems: List<de.joelneumann.lojinha.domain.model.TransactionItem>
-    ): Boolean {
-        val originalTx = getTransactionById(originalTransactionId) ?: return false
-        if (originalTx.type != TransactionType.PURCHASE) return false
-        if (getCancellationCountForReference(originalTx.id) > 0) return false
+    ): Boolean = mutationMutex.withLock {
+        if (newItems.any { it.quantity < 0L }) return@withLock false
+
+        val originalTx = getTransactionById(originalTransactionId) ?: return@withLock false
+        if (originalTx.type != TransactionType.PURCHASE) return@withLock false
+        if (getCancellationCountForReference(originalTx.id) > 0) return@withLock false
 
         val children = getTransactionsByReferenceIds(listOf(originalTx.id))
         val correctionChildren = children.filter { it.type == TransactionType.CORRECTION }.sortedBy { it.timestamp }
-        val currentItems = de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel.computeEffectiveItems(originalTx.items, correctionChildren)
+        val currentItems = Transaction.computeEffectiveItems(originalTx.items, correctionChildren)
 
-        // Merge incoming newItems with currentItems so partial payloads are safely handled
+        // Merge incoming newItems with currentItems so partial payloads are safely handled,
+        // strictly locking unit prices and product names from currentItems to prevent tampering
         val newItemsMap = newItems.associateBy { it.productId }
         val effectiveNewItems = currentItems.map { current ->
-            newItemsMap[current.productId] ?: current
+            val incoming = newItemsMap[current.productId]
+            if (incoming != null) {
+                current.copy(quantity = incoming.quantity)
+            } else {
+                current
+            }
         }
 
         val isAllZero = effectiveNewItems.all { it.quantity == 0L }
 
-        val currentCost = currentItems.sumOf { item ->
-            when (item.unitType) {
-                de.joelneumann.lojinha.domain.model.UnitType.PIECE -> item.unitPriceAtPurchase * item.quantity
-                de.joelneumann.lojinha.domain.model.UnitType.WEIGHT -> kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
-            }
-        }
-        val newCost = effectiveNewItems.sumOf { item ->
-            when (item.unitType) {
-                de.joelneumann.lojinha.domain.model.UnitType.PIECE -> item.unitPriceAtPurchase * item.quantity
-                de.joelneumann.lojinha.domain.model.UnitType.WEIGHT -> kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
-            }
-        }
+        val currentCost = currentItems.sumOf { it.totalLinePrice }
+        val newCost = effectiveNewItems.sumOf { it.totalLinePrice }
         val costDifference = newCost - currentCost
         val balanceDelta = -costDifference
 
@@ -162,7 +164,7 @@ class RoomTransactionRepositoryImpl(
         }
 
         if (updatedItems.isEmpty()) {
-            return false
+            return@withLock false
         }
 
         val stockDeltas = mutableMapOf<String, Long>()
@@ -179,12 +181,10 @@ class RoomTransactionRepositoryImpl(
         val balAfter = balBefore + balanceDelta
 
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val dateStr = de.joelneumann.lojinha.ui.utils.Formatting.formatTimestamp(originalTx.timestamp, de.joelneumann.lojinha.domain.model.Language.EN)
-        val origAmountStr = de.joelneumann.lojinha.ui.utils.Formatting.formatBrl(kotlin.math.abs(originalTx.totalAmount))
         val humanNote = if (isAllZero) {
-            "SYSNOTE|COMPLETE_STORNO|$dateStr|$origAmountStr"
+            "SYSNOTE|COMPLETE_STORNO|${originalTx.timestamp}|${originalTx.totalAmount}"
         } else {
-            "SYSNOTE|PARTIAL_STORNO|$dateStr|$origAmountStr"
+            "SYSNOTE|PARTIAL_STORNO|${originalTx.timestamp}|${originalTx.totalAmount}"
         }
 
         val correctionTx = Transaction(
@@ -202,22 +202,19 @@ class RoomTransactionRepositoryImpl(
         )
 
         executeAtomicTransaction(correctionTx, balanceDelta, stockDeltas)
-        return true
+        true
     }
 
-    override suspend fun stornoNonPurchase(transactionId: String): Boolean {
-        val tx = getTransactionById(transactionId) ?: return false
-        if (tx.type != TransactionType.ADMIN_DEPOSIT && tx.type != TransactionType.ADMIN_WITHDRAWAL) return false
-        if (getCancellationCountForReference(tx.id) > 0) return false
+    override suspend fun stornoNonPurchase(transactionId: String): Boolean = mutationMutex.withLock {
+        val tx = getTransactionById(transactionId) ?: return@withLock false
+        if (tx.type != TransactionType.ADMIN_DEPOSIT && tx.type != TransactionType.ADMIN_WITHDRAWAL) return@withLock false
+        if (getCancellationCountForReference(tx.id) > 0) return@withLock false
 
         val refundAmount = -tx.totalAmount
         val balBefore = transactionDao.getUserBalance(tx.userId) ?: 0L
         val balAfter = balBefore + refundAmount
 
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
-        val dateStr = de.joelneumann.lojinha.ui.utils.Formatting.formatTimestamp(tx.timestamp, de.joelneumann.lojinha.domain.model.Language.EN)
-        val amountStr = de.joelneumann.lojinha.ui.utils.Formatting.formatBrl(kotlin.math.abs(tx.totalAmount))
-
 
         val stornoTx = Transaction(
             id = de.joelneumann.lojinha.ui.utils.generateUuid(),
@@ -226,7 +223,7 @@ class RoomTransactionRepositoryImpl(
             timestamp = nowMillis,
             type = TransactionType.CANCELLATION,
             referenceTransactionId = tx.id,
-            note = "SYSNOTE|NON_PURCHASE_STORNO|${tx.type.name}|${tx.items.isNotEmpty()}|$dateStr|$amountStr",
+            note = "SYSNOTE|NON_PURCHASE_STORNO|${tx.type.name}|${tx.items.isNotEmpty()}|${tx.timestamp}|${tx.totalAmount}",
             totalAmount = refundAmount,
             items = emptyList(),
             userBalanceBefore = balBefore,
@@ -234,7 +231,7 @@ class RoomTransactionRepositoryImpl(
         )
 
         executeAtomicTransaction(stornoTx, refundAmount, emptyMap())
-        return true
+        true
     }
 
     override suspend fun executeBatchTransactions(
