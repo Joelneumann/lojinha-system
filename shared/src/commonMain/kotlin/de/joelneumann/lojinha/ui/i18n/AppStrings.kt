@@ -527,6 +527,7 @@ interface AppStrings {
     val copyUrlBtn: String
     val urlCopiedToast: String
     val kioskActionsTitle: String
+    fun appVersionLabel(version: String): String
     val exitKioskBtn: String
     val exitKioskConfirmTitle: String
     val exitKioskConfirmMessage: String

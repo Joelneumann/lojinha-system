@@ -18,12 +18,14 @@ import de.joelneumann.lojinha.server.LojinhaAdminServer
 import de.joelneumann.lojinha.ui.App
 import de.joelneumann.lojinha.util.AppLogger
 import de.joelneumann.lojinha.util.CrashHandler
+import de.joelneumann.lojinha.util.AppVersionTracker
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 fun main() {
     System.setProperty("io.netty.noUnsafe", "true")
     CrashHandler.install()
-    AppLogger.info("Main", "Starting Lojinha System v1.0.0 on ${System.getProperty("os.name")} ${System.getProperty("os.version")} (${System.getProperty("os.arch")})")
+    AppVersionTracker.checkAndTrackVersion()
+    AppLogger.info("Main", "Starting Lojinha System v${AppVersion.CURRENT} on ${System.getProperty("os.name")} ${System.getProperty("os.version")} (${System.getProperty("os.arch")})")
     AppLogger.info("Main", "Java Runtime: ${System.getProperty("java.version")} by ${System.getProperty("java.vendor")}")
 
     application {
@@ -56,6 +58,12 @@ fun main() {
                     adminServer.stop()
                 } catch (e: Exception) {
                     AppLogger.warn("Main", "Error stopping admin server: ${e.message}", e)
+                }
+                try {
+                    database.close()
+                    AppLogger.info("Main", "AppDatabase closed and WAL checkpointed successfully.")
+                } catch (e: Exception) {
+                    AppLogger.warn("Main", "Error closing database: ${e.message}", e)
                 }
             }
         }

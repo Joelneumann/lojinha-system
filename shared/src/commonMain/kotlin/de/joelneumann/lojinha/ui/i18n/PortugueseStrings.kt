@@ -539,6 +539,7 @@ object PortugueseStrings : AppStrings {
     override val copyUrlBtn = "Copiar URL"
     override val urlCopiedToast = "URL copiada para a área de transferência!"
     override val kioskActionsTitle = "Controles do Sistema & Quiosque"
+    override fun appVersionLabel(version: String): String = "Versão $version"
     override val exitKioskBtn = "Fechar Aplicativo POS"
     override val exitKioskConfirmTitle = "Encerrar Aplicativo"
     override val exitKioskConfirmMessage = "Tem certeza de que deseja fechar o sistema Lojinha POS?"

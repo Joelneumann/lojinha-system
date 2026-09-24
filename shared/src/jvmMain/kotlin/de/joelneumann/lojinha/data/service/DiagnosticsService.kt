@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.service
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
+import de.joelneumann.lojinha.AppVersion
 import de.joelneumann.lojinha.util.AppLogger
 import de.joelneumann.lojinha.util.FileRollingLogger
 import kotlinx.coroutines.Dispatchers
@@ -137,7 +138,7 @@ class DiagnosticsService(
             appendLine("================================================================================")
             appendLine("Generated At:       $timestamp")
             appendLine("Application:        Lojinha POS & Self-Service Kiosk")
-            appendLine("App Version:        1.0.0")
+            appendLine("App Version:        ${AppVersion.CURRENT}")
             appendLine()
             appendLine("--- OPERATING SYSTEM ---")
             appendLine("OS Name:            ${System.getProperty("os.name")}")

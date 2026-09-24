@@ -133,6 +133,25 @@ object DatabaseFactory {
             try {
                 val startupBackup = File(dbFile.parentFile, "lojinha_room.db.startup_backup")
                 dbFile.copyTo(startupBackup, overwrite = true)
+
+                // Copy companion WAL and SHM files if active to ensure a complete, consistent snapshot
+                val walFile = File("${dbFile.absolutePath}-wal")
+                val shmFile = File("${dbFile.absolutePath}-shm")
+                val backupWal = File("${startupBackup.absolutePath}-wal")
+                val backupShm = File("${startupBackup.absolutePath}-shm")
+
+                if (walFile.exists()) {
+                    walFile.copyTo(backupWal, overwrite = true)
+                } else if (backupWal.exists()) {
+                    backupWal.delete()
+                }
+
+                if (shmFile.exists()) {
+                    shmFile.copyTo(backupShm, overwrite = true)
+                } else if (backupShm.exists()) {
+                    backupShm.delete()
+                }
+
                 AppLogger.info(TAG, "Created pre-startup safety backup at ${startupBackup.absolutePath}")
             } catch (e: Exception) {
                 AppLogger.warn(TAG, "Could not create pre-startup DB backup: ${e.message}", e)

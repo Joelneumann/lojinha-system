@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.ui.screens.admin
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import de.joelneumann.lojinha.AppVersion
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -1200,7 +1201,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 7: REMOTE WEB ADMINISTRATION (LAN)
+            // CARD 9: REMOTE WEB ADMINISTRATION (LAN)
             if (viewModel.serverUrls.isNotEmpty()) {
                 item(key = "remote-admin-card") {
                     Surface(
@@ -1294,7 +1295,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 8: SYSTEM & KIOSK ACTIONS
+            // CARD 10: SYSTEM & KIOSK ACTIONS
             item(key = "kiosk-actions-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1309,15 +1310,28 @@ fun AdminSettingsTabScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.PowerSettingsNew,
-                                contentDescription = null,
-                                tint = ColorDangerCrimson,
-                                modifier = Modifier.size(18.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PowerSettingsNew,
+                                    contentDescription = null,
+                                    tint = ColorDangerCrimson,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.kioskActionsTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+
+                            Text(
+                                text = strings.appVersionLabel(AppVersion.CURRENT),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = TextSecondaryMuted
                             )
-                            Text(strings.kioskActionsTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
 
                         Button(
