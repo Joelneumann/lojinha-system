@@ -14,6 +14,9 @@ interface BillingListDao {
     @Query("SELECT * FROM billing_lists WHERE isDeleted = 0 ORDER BY name ASC")
     fun getActiveBillingListsFlow(): Flow<List<BillingListEntity>>
 
+    @Query("SELECT * FROM billing_list_users")
+    fun getAllBillingListUsersFlow(): Flow<List<BillingListUserEntity>>
+
     @Query("SELECT * FROM billing_list_users WHERE listId = :listId")
     fun getUsersForListFlow(listId: String): Flow<List<BillingListUserEntity>>
 

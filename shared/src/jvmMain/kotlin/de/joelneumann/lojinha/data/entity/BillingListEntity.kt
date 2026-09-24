@@ -32,7 +32,7 @@ data class BillingListEntity(
         )
     ],
     indices = [
-        androidx.room.Index(value = ["listId"]),
+        androidx.room.Index(value = ["listId", "userId"], unique = true),
         androidx.room.Index(value = ["userId"])
     ]
 )

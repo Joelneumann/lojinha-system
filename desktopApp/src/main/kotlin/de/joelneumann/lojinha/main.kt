@@ -72,7 +72,12 @@ fun main() {
         App(
             database = database,
             serverPort = adminServer.getActualPort(),
-            onExitApplication = ::exitApplication
+            onExitApplication = ::exitApplication,
+            productRepository = productRepository,
+            userRepository = userRepository,
+            transactionRepository = transactionRepository,
+            billingListRepository = billingListRepository,
+            settingsRepository = settingsRepository
         )
     }
 }

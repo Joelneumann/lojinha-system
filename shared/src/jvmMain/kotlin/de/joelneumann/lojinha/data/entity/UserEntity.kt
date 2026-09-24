@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import de.joelneumann.lojinha.domain.model.AvatarType
 import de.joelneumann.lojinha.domain.model.Language
@@ -9,7 +10,14 @@ import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 
-@Entity(tableName = "users")
+@Entity(
+    tableName = "users",
+    indices = [
+        Index(value = ["name"]),
+        Index(value = ["userBarcode"]),
+        Index(value = ["userBarcodeNumber"])
+    ]
+)
 data class UserEntity(
     @PrimaryKey val id: String,
     val name: String,

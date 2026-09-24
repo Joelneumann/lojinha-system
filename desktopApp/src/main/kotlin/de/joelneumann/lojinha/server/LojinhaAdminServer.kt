@@ -179,7 +179,29 @@ class LojinhaAdminServer(
                     post("/users/balance") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val req = call.receive<DeltaRequest>()
-                        userRepository.updateBalance(req.id, req.delta)
+                        val user = userRepository.getUserById(req.id)
+                        if (user == null) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@post
+                        }
+                        if (req.delta != 0L) {
+                            val isDeposit = req.delta > 0
+                            val tx = Transaction(
+                                id = UUID.randomUUID().toString(),
+                                userId = user.id,
+                                userNameSnapshot = user.name,
+                                timestamp = System.currentTimeMillis(),
+                                type = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL,
+                                note = if (isDeposit) "SYSNOTE|ADMIN_DEPOSIT" else "SYSNOTE|ADMIN_DEBIT",
+                                totalAmount = req.delta,
+                                items = emptyList()
+                            )
+                            transactionRepository.executeAtomicTransaction(
+                                transaction = tx,
+                                balanceDelta = req.delta,
+                                stockDeltas = emptyMap()
+                            )
+                        }
                         call.respond(HttpStatusCode.OK)
                     }
                     post("/users/deactivate/{id}") {

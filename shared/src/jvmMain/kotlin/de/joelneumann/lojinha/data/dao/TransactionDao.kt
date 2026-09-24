@@ -73,7 +73,10 @@ interface TransactionDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE referenceTransactionId = :refId AND type = 'CANCELLATION'")
     suspend fun getCancellationCountForReference(refId: String): Int
 
-    @Query("""SELECT COUNT(*) FROM transactions WHERE items LIKE '%"productId":"' || :productId || '"%'""")
+    @Query("""
+        SELECT COUNT(*) FROM transactions, json_each(CASE WHEN items IS NULL OR items = '' THEN '[]' ELSE items END) 
+        WHERE json_extract(value, '$.productId') = :productId
+    """)
     suspend fun getTransactionCountForProduct(productId: String): Int
 
 
@@ -92,7 +95,14 @@ interface TransactionDao {
         balanceDelta: Long,
         stockDeltas: Map<String, Long>
     ) {
-        val currentBal = getUserBalance(transaction.userId) ?: 0L
+        val currentBal = getUserBalance(transaction.userId)
+            ?: throw IllegalArgumentException("Cannot execute transaction: User '${transaction.userId}' does not exist.")
+
+        if (transaction.type == "CANCELLATION" && transaction.referenceTransactionId != null) {
+            val cancellations = getCancellationCountForReference(transaction.referenceTransactionId)
+            check(cancellations == 0) { "Transaction '${transaction.referenceTransactionId}' has already been cancelled." }
+        }
+
         if (balanceDelta != 0L) {
             updateUserBalance(transaction.userId, balanceDelta)
         }
@@ -113,7 +123,14 @@ interface TransactionDao {
         items: List<Triple<TransactionEntity, Long, Map<String, Long>>>
     ) {
         for ((tx, balDelta, stockDeltas) in items) {
-            val currentBal = getUserBalance(tx.userId) ?: 0L
+            val currentBal = getUserBalance(tx.userId)
+                ?: throw IllegalArgumentException("Cannot execute batch transaction: User '${tx.userId}' does not exist.")
+
+            if (tx.type == "CANCELLATION" && tx.referenceTransactionId != null) {
+                val cancellations = getCancellationCountForReference(tx.referenceTransactionId)
+                check(cancellations == 0) { "Transaction '${tx.referenceTransactionId}' has already been cancelled." }
+            }
+
             if (balDelta != 0L) {
                 updateUserBalance(tx.userId, balDelta)
             }
