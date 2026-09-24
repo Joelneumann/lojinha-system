@@ -35,6 +35,7 @@ fun AdminSettingsTabScreen(
     onUnsavedStateChanged: (Boolean) -> Unit
 ) {
     val strings = I18n.current
+    @Suppress("DEPRECATION")
     val clipboardManager = LocalClipboardManager.current
     var copiedUrl by remember { mutableStateOf<String?>(null) }
     val settings by viewModel.settings.collectAsState()

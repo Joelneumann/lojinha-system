@@ -21,6 +21,7 @@ import de.joelneumann.lojinha.util.CrashHandler
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 fun main() {
+    System.setProperty("io.netty.noUnsafe", "true")
     CrashHandler.install()
     AppLogger.info("Main", "Starting Lojinha System v1.0.0 on ${System.getProperty("os.name")} ${System.getProperty("os.version")} (${System.getProperty("os.arch")})")
     AppLogger.info("Main", "Java Runtime: ${System.getProperty("java.version")} by ${System.getProperty("java.vendor")}")
