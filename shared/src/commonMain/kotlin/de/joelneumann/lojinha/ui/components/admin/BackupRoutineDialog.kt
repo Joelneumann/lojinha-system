@@ -452,9 +452,9 @@ fun DeleteRoutineConfirmationDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Routine: ${routine.name}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
-                        Text("Format: .${routine.fileType.name.lowercase()}", fontSize = 12.sp, color = AccentNavy)
-                        Text("Save Location: ${routine.backupLocationPath}", fontSize = 11.sp, color = AccentNavy)
+                        Text(strings.routineLabel(routine.name), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
+                        Text(strings.routineFormatLabel(".${routine.fileType.name.lowercase()}"), fontSize = 12.sp, color = AccentNavy)
+                        Text(strings.saveLocationLabel(routine.backupLocationPath), fontSize = 11.sp, color = AccentNavy)
                     }
                 }
             }
@@ -498,7 +498,7 @@ fun ToggleRoutineConfirmationDialog(
     onDismiss: () -> Unit
 ) {
     val strings = I18n.current
-    val actionText = if (targetState) "Activate" else "Deactivate"
+    val actionText = if (targetState) strings.activate else strings.deactivate
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -542,8 +542,8 @@ fun ToggleRoutineConfirmationDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Routine: ${routine.name}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
-                        Text("Target Path: ${routine.backupLocationPath}", fontSize = 11.sp, color = AccentNavy)
+                        Text(strings.routineLabel(routine.name), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
+                        Text(strings.saveLocationLabel(routine.backupLocationPath), fontSize = 11.sp, color = AccentNavy)
                     }
                 }
             }

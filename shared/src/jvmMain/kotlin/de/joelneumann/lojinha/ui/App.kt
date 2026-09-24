@@ -258,6 +258,7 @@ fun App(
                                                 settings = settings,
                                                 onLogout = handleLogoutRequest,
                                                 onNavigateToHistory = onNavigateToHistory,
+                                                onUserUpdated = onUserUpdated,
                                                 onUserInteracted = onUserInteracted,
                                                 onPurchaseFinalized = onPurchaseFinalized,
                                                 onPauseTimer = onPauseTimer,

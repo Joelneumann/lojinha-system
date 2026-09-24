@@ -10,6 +10,7 @@ import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,7 +73,7 @@ class AdminUsersViewModel(
             id = generateUuid(),
             name = "",
             balance = 0L,
-            language = Language.DE
+            language = LanguageManager.currentLanguage
         )
         _showUserModal.value = true
     }

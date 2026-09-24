@@ -121,8 +121,8 @@ fun DbRestoreMultiApprovalDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(strings.backupFileDetailsHeader, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
-                            Text("Filename: ${file.name}", fontSize = 12.sp, color = AccentNavy)
-                            Text("File Path: ${file.absolutePath}", fontSize = 11.sp, color = PrimaryNavy.copy(alpha = 0.7f))
+                            Text(strings.filenameLabel(file.name), fontSize = 12.sp, color = AccentNavy)
+                            Text(strings.filePathLabel(file.absolutePath), fontSize = 11.sp, color = PrimaryNavy.copy(alpha = 0.7f))
                         }
                     }
                 } else {

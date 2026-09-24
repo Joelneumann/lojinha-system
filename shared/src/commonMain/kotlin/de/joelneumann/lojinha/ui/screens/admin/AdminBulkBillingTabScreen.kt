@@ -27,6 +27,7 @@ import de.joelneumann.lojinha.ui.components.admin.bulk.*
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 
 @Composable
@@ -193,7 +194,7 @@ fun AdminBulkBillingTabScreen(
 
                 val activeListUsers = selectedList.users.mapNotNull { listUser ->
                     activeUsers.find { it.id == listUser.userId && it.isActive && !it.isDeleted }?.let { it to listUser }
-                }.sortedBy { it.first.name.lowercase() }
+                }.sortedByAccentInsensitive { it.first.name }
 
                 val totalExpectedAmount = if (selectedList.type == BillingListType.FIXED) {
                     activeListUsers.sumOf { it.second.quantity.coerceAtLeast(0) * (selectedList.basePrice ?: 0L).coerceAtLeast(0L) }

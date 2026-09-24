@@ -32,6 +32,7 @@ interface AppStrings {
     val weightInputHint: String
     val weightTooltip: String
     val invalidWeightFormat: String
+    fun pieceUnitSuffix(quantity: Long): String
     val history: String
     val account: String
     val historyFilterPlaceholder: String
@@ -319,6 +320,9 @@ interface AppStrings {
     val backupFileDetails: String
     fun filenameLabel(name: String): String
     fun filePathLabel(path: String): String
+    fun routineLabel(name: String): String
+    fun routineFormatLabel(format: String): String
+    fun saveLocationLabel(location: String): String
     val typeRestoreToConfirmLabel: String
     val proceedToAuthorization: String
     val restoreDatabaseNowBtn: String

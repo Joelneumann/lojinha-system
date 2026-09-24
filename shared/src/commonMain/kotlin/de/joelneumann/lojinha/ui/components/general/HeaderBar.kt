@@ -26,6 +26,7 @@ fun HeaderBar(
     title: String,
     modifier: Modifier = Modifier,
     onLanguageClick: (() -> Unit)? = null,
+    onLanguageSelected: ((Language) -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     val currentLanguage = LanguageManager.currentLanguage
@@ -77,6 +78,7 @@ fun HeaderBar(
                                     .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
                                     .clickable {
                                         LanguageManager.setLanguage(lang)
+                                        onLanguageSelected?.invoke(lang)
                                         onLanguageClick?.invoke()
                                     }
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -120,6 +122,7 @@ fun HeaderBar(
                                     )
                                     .clickable {
                                         LanguageManager.setLanguage(lang)
+                                        onLanguageSelected?.invoke(lang)
                                         onLanguageClick?.invoke()
                                     }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)

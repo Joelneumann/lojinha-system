@@ -23,6 +23,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.BillingList
 import de.joelneumann.lojinha.domain.model.BillingListType
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.domain.model.BillingListUser
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
@@ -154,7 +155,7 @@ fun BillingListEditDialog(
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 ) {
                     LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                        items(activeUsers.sortedBy { it.name.lowercase() }, key = { it.id }) { user ->
+                        items(activeUsers.sortedByAccentInsensitive { it.name }, key = { it.id }) { user ->
                             val isSelected = selectedUsers.containsKey(user.id)
                             val qty = selectedUsers[user.id] ?: 1
                             

@@ -2,6 +2,8 @@ package de.joelneumann.lojinha.ui.utils
 
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.UnitType
+import de.joelneumann.lojinha.ui.i18n.AppStrings
+import de.joelneumann.lojinha.ui.i18n.I18n
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
@@ -36,9 +38,9 @@ object Formatting {
         return " (≈ $signedValue)"
     }
 
-    fun formatQuantity(quantity: Long, unitType: UnitType): String {
+    fun formatQuantity(quantity: Long, unitType: UnitType, strings: AppStrings = I18n.get()): String {
         return when (unitType) {
-            UnitType.PIECE -> "$quantity pcs"
+            UnitType.PIECE -> strings.pieceUnitSuffix(quantity)
             UnitType.WEIGHT -> {
                 val kgInt = quantity / 1000
                 val remainderGrams = abs(quantity % 1000)

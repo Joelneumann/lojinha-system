@@ -52,6 +52,7 @@ fun ShoppingScreen(
     settings: SystemSettings,
     onLogout: () -> Unit,
     onNavigateToHistory: () -> Unit,
+    onUserUpdated: (User) -> Unit = {},
     onUserInteracted: (force: Boolean) -> Unit = {},
     onPurchaseFinalized: () -> Unit = {},
     onPauseTimer: () -> Unit = {},
@@ -119,6 +120,7 @@ fun ShoppingScreen(
             viewModel.submitWeightDialog(settings.globalMarkupPercent)
         },
         onNavigateToHistory = onNavigateToHistory,
+        onUserUpdated = onUserUpdated,
         onUserInteracted = onUserInteracted,
         onPauseTimer = onPauseTimer,
         onResumeTimer = onResumeTimer
@@ -151,6 +153,7 @@ fun ShoppingContent(
     onCloseWeightDialog: () -> Unit,
     onSubmitWeightDialog: () -> Unit,
     onNavigateToHistory: () -> Unit,
+    onUserUpdated: (User) -> Unit = {},
     onUserInteracted: (force: Boolean) -> Unit = {},
     onPauseTimer: () -> Unit = {},
     onResumeTimer: () -> Unit = {}
@@ -323,6 +326,9 @@ fun ShoppingContent(
     ) {
         HeaderBar(
             title = strings.shopping,
+            onLanguageSelected = { lang ->
+                onUserUpdated(user.copy(language = lang))
+            },
             onLanguageClick = {
                 coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
             },

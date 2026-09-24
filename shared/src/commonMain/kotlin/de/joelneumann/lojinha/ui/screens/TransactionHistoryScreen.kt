@@ -231,8 +231,10 @@ fun TransactionHistoryContent(
         // Header Bar with "Continue Shopping" button on the left of Logout
         HeaderBar(
             title = strings.history,
+            onLanguageSelected = { lang ->
+                onUserUpdated(user.copy(language = lang))
+            },
             onLanguageClick = {
-                onUserUpdated(user.copy(language = LanguageManager.currentLanguage))
                 coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
             },
             actions = {
