@@ -48,12 +48,25 @@ class AutoBackupScheduler(
     fun stopScheduler() {
         schedulerJob?.cancel()
         schedulerJob = null
+        synchronized(this) {
+            hasPendingDataChange = false
+            dataChangeDebounceJob?.cancel()
+            dataChangeDebounceJob = null
+        }
     }
 
     private var dataChangeDebounceJob: Job? = null
+    @Volatile
+    private var isExecutingDataChange = false
+    @Volatile
+    private var hasPendingDataChange = false
 
     @Synchronized
     fun triggerDataChangeBackup(debounceMs: Long = 1000L) {
+        if (isExecutingDataChange) {
+            hasPendingDataChange = true
+            return
+        }
         dataChangeDebounceJob?.cancel()
         dataChangeDebounceJob = externalScope.launch(Dispatchers.IO) {
             try {
@@ -71,7 +84,29 @@ class AutoBackupScheduler(
                 if (configuredDebounce > 0) {
                     delay(configuredDebounce)
                 }
-                evaluateAndRunDataChangeRoutines()
+
+                synchronized(this@AutoBackupScheduler) {
+                    if (isExecutingDataChange) {
+                        hasPendingDataChange = true
+                        return@launch
+                    }
+                    isExecutingDataChange = true
+                    hasPendingDataChange = false
+                }
+
+                try {
+                    evaluateAndRunDataChangeRoutines()
+                } finally {
+                    val shouldRerun: Boolean
+                    synchronized(this@AutoBackupScheduler) {
+                        isExecutingDataChange = false
+                        shouldRerun = hasPendingDataChange && externalScope.isActive
+                        hasPendingDataChange = false
+                    }
+                    if (shouldRerun) {
+                        triggerDataChangeBackup(debounceMs)
+                    }
+                }
             } catch (_: kotlinx.coroutines.CancellationException) {
                 // Expected when debouncing rapid successive data changes
             }
@@ -82,17 +117,26 @@ class AutoBackupScheduler(
         val activeRoutines = backupRepository.getAllBackups().filter {
             it.isEnabled && it.scheduleConfig is de.joelneumann.lojinha.domain.model.BackupScheduleConfig.OnDataChange
         }
+        val now = System.currentTimeMillis()
 
         for (routine in activeRoutines) {
-            if (routine.type == BackupType.LOCAL) {
-                if (routine.backupLocationPath.isBlank()) continue
-                val dir = File(routine.backupLocationPath)
-                if (!dir.exists()) {
-                    dir.mkdirs()
+            try {
+                val nextRetry = failureCooldownMap[routine.id] ?: 0L
+                if (now < nextRetry) continue
+
+                if (routine.type == BackupType.LOCAL) {
+                    if (routine.backupLocationPath.isBlank()) continue
+                    val dir = File(routine.backupLocationPath)
+                    if (!dir.exists()) {
+                        dir.mkdirs()
+                    }
+                    if (!dir.exists() || !dir.isDirectory) continue
                 }
-                if (!dir.exists() || !dir.isDirectory) continue
+                executeRoutine(routine)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                AppLogger.error(TAG, "Real-time data change routine '${routine.name}' failed: ${e.message}", e)
             }
-            executeRoutine(routine)
         }
     }
 

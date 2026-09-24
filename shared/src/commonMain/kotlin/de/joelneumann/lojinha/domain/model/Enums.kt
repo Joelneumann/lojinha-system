@@ -9,7 +9,14 @@ enum class Language(val code: String, val label: String) {
     DE("de", "Deutsch");
 
     companion object {
-        fun fromCode(code: String): Language = entries.firstOrNull { it.code.equals(code, ignoreCase = true) } ?: DE
+        fun fromCode(code: String): Language {
+            val cleanCode = code.trim().replace('_', '-')
+            return entries.firstOrNull {
+                it.code.equals(cleanCode, ignoreCase = true) ||
+                it.name.equals(cleanCode, ignoreCase = true) ||
+                (it == BR && cleanCode.startsWith("pt", ignoreCase = true))
+            } ?: DE
+        }
     }
 }
 
