@@ -104,6 +104,7 @@ class AdminSettingsViewModel(
                 _statusMessage.value = null
                 _errorMessage.value = null
                 onExportSupportBundle?.invoke(prepareEmail, recipientEmail)
+                _statusMessage.value = if (prepareEmail) "Diagnostic bundle exported & email draft opened." else "Diagnostic bundle exported successfully."
                 refreshLogSize()
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to export diagnostic bundle: ${e.message}"
@@ -447,6 +448,5 @@ class AdminSettingsViewModel(
         super.onCleared()
         _statusMessage.value = null
         _showRoutineDialog.value = false
-        oneDriveBackupService?.close()
     }
 }

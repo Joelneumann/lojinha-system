@@ -315,9 +315,7 @@ fun App(
                                 settingsRepository = settingsRepository,
                                 backupRepository = backupRepository,
                                 onRunRoutineNow = { routine ->
-                                    coroutineScope.launch {
-                                        autoBackupScheduler.executeRoutine(routine)
-                                    }
+                                    autoBackupScheduler.executeRoutine(routine)
                                 },
                                 oneDriveBackupService = oneDriveBackupService,
                                 onPreviewCsvImport = { platformFile, type ->

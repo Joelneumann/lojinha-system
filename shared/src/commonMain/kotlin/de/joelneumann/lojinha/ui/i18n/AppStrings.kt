@@ -517,6 +517,8 @@ interface AppStrings {
     val invalidMarkupError: String
     val invalidPriceError: String
     val invalidStockError: String
+    val invalidExchangeRateError: String
+    val fatalImportErrorsHeader: String
     val lastExecutionTimeLabel: String
 
     val remoteAdminTitle: String

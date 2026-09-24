@@ -87,6 +87,9 @@ class AutoBackupScheduler(
             if (routine.type == BackupType.LOCAL) {
                 if (routine.backupLocationPath.isBlank()) continue
                 val dir = File(routine.backupLocationPath)
+                if (!dir.exists()) {
+                    dir.mkdirs()
+                }
                 if (!dir.exists() || !dir.isDirectory) continue
             }
             executeRoutine(routine)
@@ -107,6 +110,9 @@ class AutoBackupScheduler(
                 if (routine.type == BackupType.LOCAL) {
                     if (routine.backupLocationPath.isBlank()) continue
                     val dir = File(routine.backupLocationPath)
+                    if (!dir.exists()) {
+                        dir.mkdirs()
+                    }
                     if (!dir.exists() || !dir.isDirectory) continue
                 }
 
@@ -139,7 +145,12 @@ class AutoBackupScheduler(
                     tempFolderToDelete = targetDir
                 }
             } else {
-                if (!targetDir.exists() || !targetDir.isDirectory) return@withLock
+                if (!targetDir.exists()) {
+                    targetDir.mkdirs()
+                }
+                if (!targetDir.isDirectory) {
+                    error("Backup location is not a valid directory: ${targetDir.absolutePath}")
+                }
             }
 
             val routineForBackup = routine.copy(backupLocationPath = targetDir.absolutePath)
@@ -160,6 +171,7 @@ class AutoBackupScheduler(
             if (e is kotlinx.coroutines.CancellationException) throw e
             AppLogger.error(TAG, "Routine backup '${routine.name}' failed: ${e.message}", e)
             failureCooldownMap[routine.id] = System.currentTimeMillis() + 15 * 60_000L
+            throw e
         } finally {
             if (isTempFolder && tempFolderToDelete != null) {
                 tempFolderToDelete.deleteRecursively()

@@ -529,6 +529,8 @@ object EnglishStrings : AppStrings {
     override val invalidMarkupError = "Must be a percentage between 0 and 1000"
     override val invalidPriceError = "Invalid base price"
     override val invalidStockError = "Invalid stock quantity"
+    override val invalidExchangeRateError = "Invalid rate (must be a positive number)"
+    override val fatalImportErrorsHeader = "Fatal Import Errors:"
     override val lastExecutionTimeLabel = "Last Executed:"
 
     override val remoteAdminTitle = "Remote Web Administration"

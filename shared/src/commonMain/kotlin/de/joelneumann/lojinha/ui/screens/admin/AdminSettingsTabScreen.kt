@@ -25,6 +25,8 @@ import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.pickFile
 import de.joelneumann.lojinha.ui.utils.pickFolder
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 
 @Composable
@@ -44,54 +46,50 @@ fun AdminSettingsTabScreen(
     val csvImportType by viewModel.csvImportType.collectAsState()
     val logFolderSize by viewModel.logFolderSize.collectAsState()
 
-    var newPassword by remember(settings) { mutableStateOf("") }
-    var confirmPassword by remember(settings) { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
 
-    var globalMarkup by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.globalMarkupPercent)) }
-    var usdRate by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.usdExchangeRate)) }
-    var eurRate by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
-    var inactivityTimeout by remember(settings) { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
+    var globalMarkup by remember { mutableStateOf(Formatting.formatDecimal(settings.globalMarkupPercent)) }
+    var usdRate by remember { mutableStateOf(Formatting.formatDecimal(settings.usdExchangeRate)) }
+    var eurRate by remember { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
+    var inactivityTimeout by remember { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
+    var supportEmail by remember { mutableStateOf(settings.supportEmail ?: "") }
 
-    var backupLocation by remember(settings) { mutableStateOf(settings.backupLocationPath) }
-    var supportEmail by remember(settings) { mutableStateOf(settings.supportEmail ?: "") }
+    val hasFieldChanges = remember(
+        settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout, supportEmail
+    ) {
+        (newPassword.isNotEmpty() || confirmPassword.isNotEmpty()) ||
+                globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent) ||
+                usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate) ||
+                eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate) ||
+                inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
+                supportEmail.trim() != (settings.supportEmail ?: "")
+    }
 
+    // Only synchronize baseline fields when the user has NO uncommitted changes
     LaunchedEffect(settings) {
-        newPassword = ""
-        confirmPassword = ""
-        globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
-        usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
-        eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
-        inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
-        backupLocation = settings.backupLocationPath
-        supportEmail = settings.supportEmail ?: ""
+        if (!hasFieldChanges) {
+            globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
+            usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
+            eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
+            inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
+            supportEmail = settings.supportEmail ?: ""
+        }
     }
 
     val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
     val doPasswordsMatch = newPassword == confirmPassword
     val isPasswordValid = !isPasswordEntered || (newPassword.isNotBlank() && doPasswordsMatch)
     val inactivityTimeoutValue = inactivityTimeout.toIntOrNull()
-    val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue >= 2
+    val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue in 2..1440
 
     val globalMarkupValue = remember(globalMarkup) { Formatting.parsePercentageInput(globalMarkup) }
     val isGlobalMarkupValid = globalMarkupValue != null && globalMarkupValue in 0.0..1000.0
     val parsedUsdRate = remember(usdRate) { usdRate.trim().replace(',', '.').toDoubleOrNull() }
-    val isUsdRateValid = parsedUsdRate != null && parsedUsdRate.isFinite() && parsedUsdRate > 0.0
+    val isUsdRateValid = parsedUsdRate != null && parsedUsdRate.isFinite() && parsedUsdRate in 0.0001..100000.0
     val parsedEurRate = remember(eurRate) { eurRate.trim().replace(',', '.').toDoubleOrNull() }
-    val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate > 0.0
-
-    val hasFieldChanges = remember(
-        settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout,
-        backupLocation, supportEmail
-    ) {
-        newPassword.isNotEmpty() ||
-                globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent) ||
-                usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate) ||
-                eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate) ||
-                inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
-                backupLocation != settings.backupLocationPath ||
-                supportEmail != (settings.supportEmail ?: "")
-    }
+    val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate in 0.0001..100000.0
 
     LaunchedEffect(hasFieldChanges) {
         onUnsavedStateChanged(hasFieldChanges)
@@ -142,7 +140,6 @@ fun AdminSettingsTabScreen(
                             usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
                             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
                             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
-                            backupLocation = settings.backupLocationPath
                             supportEmail = settings.supportEmail ?: ""
                             onUnsavedStateChanged(false)
                         },
@@ -172,9 +169,8 @@ fun AdminSettingsTabScreen(
                                 globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
                                 usdExchangeRate = parsedUsdRate ?: settings.usdExchangeRate,
                                 eurExchangeRate = parsedEurRate ?: settings.eurExchangeRate,
-                                inactivityTimeoutMinutes = maxOf(2, inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes),
-                                backupLocationPath = backupLocation,
-                                supportEmail = supportEmail.takeIf { it.isNotBlank() }
+                                inactivityTimeoutMinutes = (inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes).coerceIn(2, 1440),
+                                supportEmail = supportEmail.trim().takeIf { it.isNotBlank() }
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
@@ -428,21 +424,41 @@ fun AdminSettingsTabScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            AdminLabeledField(
-                                label = strings.usdRateLabel,
-                                value = usdRate,
-                                onValueChange = { usdRate = it },
-                                placeholder = strings.usdRatePlaceholder,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                AdminLabeledField(
+                                    label = strings.usdRateLabel,
+                                    value = usdRate,
+                                    onValueChange = { usdRate = it },
+                                    placeholder = strings.usdRatePlaceholder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (!isUsdRateValid) {
+                                    Text(
+                                        text = strings.invalidExchangeRateError,
+                                        fontSize = 11.sp,
+                                        color = ColorDangerCrimson,
+                                        modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                                    )
+                                }
+                            }
 
-                            AdminLabeledField(
-                                label = strings.eurRateLabel,
-                                value = eurRate,
-                                onValueChange = { eurRate = it },
-                                placeholder = strings.eurRatePlaceholder,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                AdminLabeledField(
+                                    label = strings.eurRateLabel,
+                                    value = eurRate,
+                                    onValueChange = { eurRate = it },
+                                    placeholder = strings.eurRatePlaceholder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (!isEurRateValid) {
+                                    Text(
+                                        text = strings.invalidExchangeRateError,
+                                        fontSize = 11.sp,
+                                        color = ColorDangerCrimson,
+                                        modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -539,11 +555,16 @@ fun AdminSettingsTabScreen(
                         }
 
                         var clientIdInput by remember(settingsState.oneDriveClientId) { mutableStateOf(settingsState.oneDriveClientId) }
+                        LaunchedEffect(clientIdInput) {
+                            if (clientIdInput != settingsState.oneDriveClientId) {
+                                kotlinx.coroutines.delay(600)
+                                viewModel.updateOneDriveClientId(clientIdInput)
+                            }
+                        }
                         OutlinedTextField(
                             value = clientIdInput,
                             onValueChange = {
                                 clientIdInput = it
-                                viewModel.updateOneDriveClientId(it)
                             },
                             label = { Text(strings.azureClientIdLabel) },
                             placeholder = { Text(strings.azureClientIdPlaceholder) },
@@ -1052,7 +1073,7 @@ fun AdminSettingsTabScreen(
 
                             OutlinedButton(
                                 onClick = {
-                                    uriHandler.openUri("https://github.com/TODO_YOUR_PROJECT")
+                                    uriHandler.openUri("https://github.com/Joelneumann/lojinha-system")
                                 },
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.weight(1f)
@@ -1325,6 +1346,11 @@ fun AdminSettingsTabScreen(
     if (showExitConfirmationDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissExitConfirmationDialog() },
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(
+                onCancel = { viewModel.dismissExitConfirmationDialog() },
+                onConfirm = { viewModel.confirmExitApplication() }
+            ),
             title = { Text(strings.exitKioskConfirmTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
             text = { Text(strings.exitKioskConfirmMessage, color = PrimaryNavy) },
             confirmButton = {

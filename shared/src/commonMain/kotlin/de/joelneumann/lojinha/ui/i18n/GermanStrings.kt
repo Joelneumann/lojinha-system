@@ -529,6 +529,8 @@ object GermanStrings : AppStrings {
     override val invalidMarkupError = "Muss ein Prozentsatz zwischen 0 und 1000 sein"
     override val invalidPriceError = "Ungültiger Basispreis"
     override val invalidStockError = "Ungültige Lagermenge"
+    override val invalidExchangeRateError = "Ungültiger Kurs (muss eine positive Zahl sein)"
+    override val fatalImportErrorsHeader = "Schwerwiegende Importfehler:"
     override val lastExecutionTimeLabel = "Letzte Ausführung:"
 
     override val remoteAdminTitle = "Web-Fernverwaltung (LAN)"

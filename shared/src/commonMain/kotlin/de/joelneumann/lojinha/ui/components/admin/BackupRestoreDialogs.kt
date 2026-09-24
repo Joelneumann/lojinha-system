@@ -398,7 +398,9 @@ fun CsvImportMultiApprovalDialog(
 
     val handleConfirm = {
         if (step == 1) {
-            step = 2
+            if (importResultPreview.errors.isEmpty()) {
+                step = 2
+            }
         } else {
             val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
             if (!isPasswordCorrect) {
@@ -507,6 +509,39 @@ fun CsvImportMultiApprovalDialog(
                         }
                     }
 
+                    if (importResultPreview.errors.isNotEmpty()) {
+                        Surface(
+                            color = ColorDangerCrimson.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = ColorDangerCrimson,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = strings.fatalImportErrorsHeader,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ColorDangerCrimson
+                                    )
+                                }
+                                LazyColumn(modifier = Modifier.heightIn(max = 120.dp).fillMaxWidth()) {
+                                    items(importResultPreview.errors.size) { idx ->
+                                        Text("• ${importResultPreview.errors[idx]}", fontSize = 11.sp, color = ColorDangerCrimson)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if (importResultPreview.warnings.isNotEmpty()) {
                         Text(strings.warningsNotesHeader, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = PrimaryNavy)
                         LazyColumn(modifier = Modifier.heightIn(max = 120.dp).fillMaxWidth()) {
@@ -540,8 +575,16 @@ fun CsvImportMultiApprovalDialog(
         confirmButton = {
             if (step == 1) {
                 Button(
-                    onClick = { step = 2 },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                    onClick = {
+                        if (importResultPreview.errors.isEmpty()) {
+                            step = 2
+                        }
+                    },
+                    enabled = importResultPreview.errors.isEmpty(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentNavy,
+                        disabledContainerColor = AccentNavy.copy(alpha = 0.38f)
+                    ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(strings.proceedToApprovalBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)

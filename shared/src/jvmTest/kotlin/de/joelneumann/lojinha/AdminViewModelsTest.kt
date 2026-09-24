@@ -1,15 +1,20 @@
 package de.joelneumann.lojinha
 
 import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.BillingListRepository
 import de.joelneumann.lojinha.domain.repository.ProductRepository
+import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import kotlin.test.*
@@ -122,6 +127,50 @@ class AdminViewModelsTest {
         override suspend fun executeBatchTransactions(requests: List<AtomicTransactionRequest>): Boolean {
             recordedBatchRequests.add(requests)
             return batchResult
+        }
+    }
+
+    private class TestSettingsRepository(
+        initialSettings: SystemSettings = SystemSettings()
+    ) : SettingsRepository {
+        val flow = MutableStateFlow(initialSettings)
+        var updatedSettings: SystemSettings? = null
+
+        override fun getSettingsFlow(): Flow<SystemSettings> = flow
+        override suspend fun getSettings(): SystemSettings = flow.value
+        override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {
+            updatedSettings = settings
+            flow.value = settings
+        }
+    }
+
+    private class TestBackupRepository(
+        initialRoutines: List<BackupRoutine> = emptyList()
+    ) : BackupRepository {
+        val flow = MutableStateFlow(initialRoutines)
+        var savedRoutines = mutableListOf<BackupRoutine>()
+        var deletedRoutineIds = mutableListOf<String>()
+
+        override fun getBackupsFlow(): Flow<List<BackupRoutine>> = flow
+        override suspend fun getAllBackups(): List<BackupRoutine> = flow.value
+        override suspend fun getBackupById(id: String): BackupRoutine? = flow.value.find { it.id == id }
+        override suspend fun saveBackupRoutine(routine: BackupRoutine) {
+            savedRoutines.add(routine)
+            val current = flow.value.toMutableList()
+            val idx = current.indexOfFirst { it.id == routine.id }
+            if (idx >= 0) {
+                current[idx] = routine
+            } else {
+                current.add(routine)
+            }
+            flow.value = current
+        }
+        override suspend fun deleteBackupRoutine(id: String) {
+            deletedRoutineIds.add(id)
+            flow.value = flow.value.filter { it.id != id }
+        }
+        override suspend fun deleteAllBackupRoutines() {
+            flow.value = emptyList()
         }
     }
 
@@ -603,5 +652,161 @@ class AdminViewModelsTest {
 
         viewModel.deleteList("list-to-delete")
         assertEquals(0L, viewModel.getVariableAmount("list-to-delete", "user-1"))
+    }
+
+    // --- Tests for AdminSettingsViewModel ---
+
+    @Test
+    fun testAdminSettingsViewModel_updateSystemSettings_updatesRepositoryAndSetsStatusMessage() = runTest {
+        val initialSettings = SystemSettings(shopName = "Old Shop", inactivityTimeoutMinutes = 15)
+        val settingsRepo = TestSettingsRepository(initialSettings)
+        val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo)
+
+        val updated = initialSettings.copy(shopName = "New Shop", inactivityTimeoutMinutes = 30)
+        viewModel.updateSystemSettings(updated)
+
+        assertEquals("New Shop", settingsRepo.updatedSettings?.shopName)
+        assertEquals(30, settingsRepo.updatedSettings?.inactivityTimeoutMinutes)
+        assertEquals("System settings updated successfully.", viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_routineLifecycle_createsEditsAndDeletes() = runTest {
+        val backupRepo = TestBackupRepository()
+        val settingsRepo = TestSettingsRepository()
+        val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo, backupRepository = backupRepo)
+
+        viewModel.openCreateRoutineDialog()
+        assertTrue(viewModel.showRoutineDialog.value)
+        assertNull(viewModel.editingRoutine.value)
+
+        val newRoutine = BackupRoutine(id = "routine-1", name = "Daily DB Routine", isEnabled = true)
+        viewModel.saveBackupRoutine(newRoutine)
+
+        assertFalse(viewModel.showRoutineDialog.value)
+        assertEquals(1, backupRepo.savedRoutines.size)
+        assertEquals("Daily DB Routine", backupRepo.savedRoutines.first().name)
+        assertEquals("Backup routine saved: 'Daily DB Routine'", viewModel.statusMessage.value)
+
+        viewModel.openEditRoutineDialog(newRoutine)
+        assertTrue(viewModel.showRoutineDialog.value)
+        assertEquals(newRoutine, viewModel.editingRoutine.value)
+        viewModel.closeRoutineDialog()
+        assertFalse(viewModel.showRoutineDialog.value)
+
+        viewModel.requestDeleteRoutine(newRoutine)
+        assertEquals(newRoutine, viewModel.routineToDelete.value)
+        viewModel.confirmDeleteRoutine()
+        assertNull(viewModel.routineToDelete.value)
+        assertTrue(backupRepo.deletedRoutineIds.contains("routine-1"))
+        assertEquals("Backup routine 'Daily DB Routine' removed.", viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_toggleBackupRoutine_updatesEnabledState() = runTest {
+        val initialRoutine = BackupRoutine(id = "routine-toggle", name = "Hourly Interval", isEnabled = true)
+        val backupRepo = TestBackupRepository(listOf(initialRoutine))
+        val settingsRepo = TestSettingsRepository()
+        val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo, backupRepository = backupRepo)
+
+        viewModel.requestToggleRoutine(initialRoutine, false)
+        assertEquals(initialRoutine to false, viewModel.routineToToggle.value)
+
+        viewModel.confirmToggleRoutine()
+        assertNull(viewModel.routineToToggle.value)
+        assertEquals(false, backupRepo.savedRoutines.last().isEnabled)
+        assertEquals("Backup routine 'Hourly Interval' disabled.", viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_runRoutineNow_invokesCallbackAndHandlesErrors() = runTest {
+        val routine = BackupRoutine(id = "routine-now", name = "Manual Run", isEnabled = true)
+        val settingsRepo = TestSettingsRepository()
+        var runCount = 0
+        var shouldThrow = false
+
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onRunRoutineNow = {
+                if (shouldThrow) throw IllegalStateException("Backup disk full")
+                runCount++
+            }
+        )
+
+        viewModel.runRoutineNow(routine)
+        assertEquals(1, runCount)
+        assertEquals("Triggered routine 'Manual Run'.", viewModel.statusMessage.value)
+        assertNull(viewModel.errorMessage.value)
+
+        shouldThrow = true
+        viewModel.runRoutineNow(routine)
+        assertEquals("Failed to run routine 'Manual Run': Backup disk full", viewModel.errorMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_exportSupportBundle_setsStatusMessageOnSuccess() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        var exportedWithEmail: Boolean? = null
+        var recipientUsed: String? = null
+
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onExportSupportBundle = { prepareEmail, recipient ->
+                exportedWithEmail = prepareEmail
+                recipientUsed = recipient
+            }
+        )
+
+        viewModel.exportSupportBundle(prepareEmail = false, recipientEmail = "")
+        assertEquals(false, exportedWithEmail)
+        assertEquals("Diagnostic bundle exported successfully.", viewModel.statusMessage.value)
+
+        viewModel.exportSupportBundle(prepareEmail = true, recipientEmail = "support@lojinha.local")
+        assertEquals(true, exportedWithEmail)
+        assertEquals("support@lojinha.local", recipientUsed)
+        assertEquals("Diagnostic bundle exported & email draft opened.", viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_csvImportPreviewAndExecution_handlesErrorsAndSuccess() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        val dummyFile = PlatformFile("products.csv", "/tmp/products.csv")
+
+        var previewCalled = false
+        var executeCalled = false
+
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onPreviewCsvImport = { file, type ->
+                previewCalled = true
+                CsvImportResult(
+                    totalProcessed = 5,
+                    addedCount = 3,
+                    updatedCount = 2,
+                    strippedBarcodesCount = 1,
+                    errors = emptyList(),
+                    warnings = listOf("Line 2: Barcode stripped")
+                )
+            },
+            onExecuteCsvImport = { file, type ->
+                executeCalled = true
+                CsvImportResult(
+                    totalProcessed = 5,
+                    addedCount = 3,
+                    updatedCount = 2,
+                    strippedBarcodesCount = 1
+                )
+            }
+        )
+
+        viewModel.prepareCsvImport(dummyFile, "Products")
+        assertTrue(previewCalled)
+        assertEquals(dummyFile, viewModel.csvImportPreview.value?.first)
+        assertEquals(5, viewModel.csvImportPreview.value?.second?.totalProcessed)
+
+        viewModel.executeCsvImport()
+        assertTrue(executeCalled)
+        assertNull(viewModel.csvImportPreview.value)
+        assertEquals("Successfully imported 5 Products (3 added, 2 updated).", viewModel.statusMessage.value)
     }
 }
