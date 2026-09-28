@@ -57,6 +57,8 @@ fun AdminSettingsTabScreen(
     var eurRate by remember { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
     var inactivityTimeout by remember { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
     var supportEmail by remember { mutableStateOf(settings.supportEmail ?: "") }
+    var isSupportEmailLocked by remember { mutableStateOf(supportEmail.isNotBlank()) }
+    var showUnlockSupportEmailDialog by remember { mutableStateOf(false) }
 
     val hasFieldChanges = remember(
         settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout, supportEmail
@@ -77,6 +79,7 @@ fun AdminSettingsTabScreen(
             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
             supportEmail = settings.supportEmail ?: ""
+            isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
         }
     }
 
@@ -143,6 +146,7 @@ fun AdminSettingsTabScreen(
                             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
                             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
                             supportEmail = settings.supportEmail ?: ""
+                            isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
                             onUnsavedStateChanged(false)
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -177,6 +181,7 @@ fun AdminSettingsTabScreen(
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
                             confirmPassword = ""
+                            isSupportEmailLocked = updatedSettings.supportEmail?.isNotBlank() == true
                             onUnsavedStateChanged(false)
                         }
                     },
@@ -254,106 +259,7 @@ fun AdminSettingsTabScreen(
             contentPadding = PaddingValues(bottom = 32.dp),
             modifier = Modifier.weight(1f).fillMaxWidth()
         ) {
-            // CARD 1: ADMIN MASTER PASSWORD
-            item(key = "admin-security-card") {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SurfaceWhite,
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
-                    shadowElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = PrimaryNavy,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(strings.adminMasterPasswordTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            AdminLabeledField(
-                                label = strings.newPasswordLabel,
-                                value = newPassword,
-                                onValueChange = { newPassword = it },
-                                placeholder = strings.newPasswordPlaceholder,
-                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { showPassword = !showPassword }) {
-                                        Icon(
-                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = "Toggle Visibility",
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            AdminLabeledField(
-                                label = strings.confirmNewPasswordLabel,
-                                value = confirmPassword,
-                                onValueChange = { confirmPassword = it },
-                                placeholder = strings.confirmNewPasswordPlaceholder,
-                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { showPassword = !showPassword }) {
-                                        Icon(
-                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = "Toggle Visibility",
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        if (isPasswordEntered) {
-                            if (!doPasswordsMatch) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Error,
-                                        contentDescription = null,
-                                        tint = ColorDangerCrimson,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(strings.passwordsDoNotMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
-                                }
-                            } else if (newPassword.isNotBlank()) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = ColorSuccessEmerald,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(strings.passwordsMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // CARD 2: PRODUCT PRICING RULES
+            // CARD 1: PRODUCT PRICING RULES
             item(key = "product-pricing-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -397,7 +303,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 3: CURRENCY EXCHANGE RATES
+            // CARD 2: CURRENCY EXCHANGE RATES
             item(key = "currency-exchange-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -466,7 +372,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 4: KIOSK SYSTEM TIMERS
+            // CARD 3: KIOSK SYSTEM TIMERS
             item(key = "kiosk-timers-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -511,7 +417,101 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 4.5: MICROSOFT ONEDRIVE INTEGRATION
+            // CARD 4: REMOTE WEB ADMINISTRATION (LAN)
+            if (viewModel.serverUrls.isNotEmpty()) {
+                item(key = "remote-admin-card") {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SurfaceWhite,
+                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Language,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.remoteAdminTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+
+                            Text(
+                                strings.remoteAdminSubtitle,
+                                fontSize = 13.sp,
+                                color = TextSecondaryMuted
+                            )
+
+                            viewModel.serverUrls.forEach { url ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SurfaceContainerLight,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = url,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AccentNavy
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                clipboardManager.setText(AnnotatedString(url))
+                                                copiedUrl = url
+                                            },
+                                            shape = RoundedCornerShape(6.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (copiedUrl == url) ColorSuccessEmerald else PrimaryNavy
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (copiedUrl == url) Icons.Default.Check else Icons.Default.ContentCopy,
+                                                    contentDescription = null,
+                                                    tint = SurfaceWhite,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Text(
+                                                    text = if (copiedUrl == url) strings.urlCopiedToast else strings.copyUrlBtn,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SurfaceWhite
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text(
+                                strings.remoteAdminFirewallNotice,
+                                fontSize = 12.sp,
+                                color = TextSecondaryMuted
+                            )
+                        }
+                    }
+                }
+            }
+
+            // CARD 5: MICROSOFT ONEDRIVE INTEGRATION
             item(key = "onedrive-integration-card") {
                 val settingsState by viewModel.settings.collectAsState()
 
@@ -630,7 +630,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 5: BACKUP ROUTINES MANAGEMENT
+            // CARD 6: BACKUP ROUTINES MANAGEMENT
             item(key = "backup-routines-card") {
                 val routines by viewModel.routines.collectAsState()
 
@@ -850,7 +850,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 6: DATABASE RESTORE (.DB) & DATA WIPE
+            // CARD 7: DATABASE RESTORE (.DB) & DATA WIPE
             item(key = "restore-wipe-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -930,7 +930,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 7: CSV DATA IMPORT
+            // CARD 8: CSV DATA IMPORT
             item(key = "csv-import-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1011,7 +1011,106 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 8: SUPPORT CONTACT
+            // CARD 9: ADMIN MASTER PASSWORD
+            item(key = "admin-security-card") {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.adminMasterPasswordTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            AdminLabeledField(
+                                label = strings.newPasswordLabel,
+                                value = newPassword,
+                                onValueChange = { newPassword = it },
+                                placeholder = strings.newPasswordPlaceholder,
+                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { showPassword = !showPassword }) {
+                                        Icon(
+                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = "Toggle Visibility",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            AdminLabeledField(
+                                label = strings.confirmNewPasswordLabel,
+                                value = confirmPassword,
+                                onValueChange = { confirmPassword = it },
+                                placeholder = strings.confirmNewPasswordPlaceholder,
+                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { showPassword = !showPassword }) {
+                                        Icon(
+                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = "Toggle Visibility",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        if (isPasswordEntered) {
+                            if (!doPasswordsMatch) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = ColorDangerCrimson,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(strings.passwordsDoNotMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                                }
+                            } else if (newPassword.isNotBlank()) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = ColorSuccessEmerald,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(strings.passwordsMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // CARD 10: SUPPORT CONTACT
             item(key = "support-contact-card") {
                 val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
@@ -1039,13 +1138,85 @@ fun AdminSettingsTabScreen(
                             Text(strings.supportContactTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
 
-                        AdminLabeledField(
-                            label = strings.supportEmailLabel,
-                            value = supportEmail,
-                            onValueChange = { supportEmail = it },
-                            placeholder = strings.supportEmailPlaceholder,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AdminLabeledField(
+                                label = strings.supportEmailLabel,
+                                value = supportEmail,
+                                onValueChange = { supportEmail = it },
+                                placeholder = strings.supportEmailPlaceholder,
+                                enabled = !isSupportEmailLocked,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isSupportEmailLocked) {
+                                IconButton(
+                                    onClick = { showUnlockSupportEmailDialog = true },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = strings.unlockSupportEmailTitle,
+                                        tint = PrimaryNavy.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (showUnlockSupportEmailDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showUnlockSupportEmailDialog = false },
+                                containerColor = SurfaceWhite,
+                                shape = RoundedCornerShape(16.dp),
+                                properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+                                modifier = Modifier.confirmationDialogKeys(
+                                    onCancel = { showUnlockSupportEmailDialog = false },
+                                    onConfirm = { isSupportEmailLocked = false; showUnlockSupportEmailDialog = false }
+                                ),
+                                title = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = null,
+                                            tint = PrimaryNavy,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            text = strings.unlockSupportEmailTitle,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PrimaryNavy
+                                        )
+                                    }
+                                },
+                                text = {
+                                    Text(
+                                        text = strings.unlockSupportEmailMessage,
+                                        fontSize = 14.sp,
+                                        color = TextSecondarySubtle
+                                    )
+                                },
+                                confirmButton = {
+                                    Button(
+                                        onClick = { isSupportEmailLocked = false; showUnlockSupportEmailDialog = false },
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
+                                    ) {
+                                        Text(strings.unlockSupportEmailConfirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                                    }
+                                },
+                                dismissButton = {
+                                    OutlinedButton(onClick = { showUnlockSupportEmailDialog = false }) {
+                                        Text(strings.cancel)
+                                    }
+                                }
+                            )
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1053,7 +1224,7 @@ fun AdminSettingsTabScreen(
                         ) {
                             OutlinedButton(
                                 onClick = {
-                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: "support@example.com"
+                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: ""
                                     uriHandler.openUri("mailto:$email")
                                 },
                                 shape = RoundedCornerShape(8.dp),
@@ -1134,7 +1305,7 @@ fun AdminSettingsTabScreen(
                         ) {
                             Button(
                                 onClick = {
-                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: "support@example.com"
+                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: ""
                                     viewModel.exportSupportBundle(prepareEmail = true, recipientEmail = email)
                                 },
                                 shape = RoundedCornerShape(8.dp),
@@ -1201,101 +1372,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 9: REMOTE WEB ADMINISTRATION (LAN)
-            if (viewModel.serverUrls.isNotEmpty()) {
-                item(key = "remote-admin-card") {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = SurfaceWhite,
-                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
-                        shadowElevation = 1.dp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Language,
-                                    contentDescription = null,
-                                    tint = PrimaryNavy,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(strings.remoteAdminTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                            }
-
-                            Text(
-                                strings.remoteAdminSubtitle,
-                                fontSize = 13.sp,
-                                color = TextSecondaryMuted
-                            )
-
-                            viewModel.serverUrls.forEach { url ->
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = SurfaceContainerLight,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = url,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = AccentNavy
-                                        )
-
-                                        Button(
-                                            onClick = {
-                                                clipboardManager.setText(AnnotatedString(url))
-                                                copiedUrl = url
-                                            },
-                                            shape = RoundedCornerShape(6.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (copiedUrl == url) ColorSuccessEmerald else PrimaryNavy
-                                            ),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (copiedUrl == url) Icons.Default.Check else Icons.Default.ContentCopy,
-                                                    contentDescription = null,
-                                                    tint = SurfaceWhite,
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                                Text(
-                                                    text = if (copiedUrl == url) strings.urlCopiedToast else strings.copyUrlBtn,
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = SurfaceWhite
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Text(
-                                strings.remoteAdminFirewallNotice,
-                                fontSize = 12.sp,
-                                color = TextSecondaryMuted
-                            )
-                        }
-                    }
-                }
-            }
-
-            // CARD 10: SYSTEM & KIOSK ACTIONS
+            // CARD 11: SYSTEM & KIOSK ACTIONS
             item(key = "kiosk-actions-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),

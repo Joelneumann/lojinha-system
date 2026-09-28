@@ -329,6 +329,7 @@ class UserSelectionViewModelTest {
         assertEquals("", vm.adminPasswordInput.value)
         assertTrue(vm.showAdminAuthDialog.value)
 
+        vm.updateAdminPassword("secret")
         vm.submitAdminPassword(expectedHash) { adminNavigated = true }
         assertTrue(adminNavigated)
         assertFalse(vm.showAdminAuthDialog.value)

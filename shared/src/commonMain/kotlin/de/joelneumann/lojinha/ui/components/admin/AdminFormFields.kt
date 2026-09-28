@@ -23,6 +23,7 @@ fun AdminLabeledField(
     singleLine: Boolean = true,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailingIcon: @Composable (() -> Unit)? = null,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -36,6 +37,7 @@ fun AdminLabeledField(
             visualTransformation = visualTransformation,
             trailingIcon = trailingIcon,
             singleLine = singleLine,
+            enabled = enabled,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(8.dp)
         )

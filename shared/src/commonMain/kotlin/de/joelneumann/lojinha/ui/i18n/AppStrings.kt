@@ -501,6 +501,9 @@ interface AppStrings {
     val supportContactTitle: String
     val supportEmailLabel: String
     val supportEmailPlaceholder: String
+    val unlockSupportEmailTitle: String
+    val unlockSupportEmailMessage: String
+    val unlockSupportEmailConfirm: String
     val contactSupportBtn: String
     val githubRepoBtn: String
     val diagnosticsSectionTitle: String

@@ -174,7 +174,7 @@ class DomainAndRulesTest {
     @Test
     fun testSecondaryCurrencyFormatting() {
         val formatted = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.USD, 0.18)
-        assertEquals(" (≈ $ 2.79)", formatted)
+        assertEquals(" (≈ US$ 2.79)", formatted)
 
         val formattedEur = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.EUR, 0.16)
         assertEquals(" (≈ € 2.48)", formattedEur)
@@ -182,9 +182,9 @@ class DomainAndRulesTest {
         val none = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.NONE, 0.18)
         assertEquals("", none)
 
-        // Test IEEE 754 precision boundary (R$ 16,65 with 0.18 rate: 16.65 * 0.18 = 2.997 -> $ 3.00, not $ 2.100)
+        // Test IEEE 754 precision boundary (R$ 16,65 with 0.18 rate: 16.65 * 0.18 = 2.997 -> US$ 3.00, not US$ 2.100)
         val edgeCase = Formatting.formatSecondaryCurrency(1665L, SecondaryCurrency.USD, 0.18)
-        assertEquals(" (≈ $ 3.00)", edgeCase)
+        assertEquals(" (≈ US$ 3.00)", edgeCase)
     }
 
     @Test

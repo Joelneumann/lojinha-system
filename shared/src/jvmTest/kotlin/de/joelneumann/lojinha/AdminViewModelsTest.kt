@@ -658,14 +658,14 @@ class AdminViewModelsTest {
 
     @Test
     fun testAdminSettingsViewModel_updateSystemSettings_updatesRepositoryAndSetsStatusMessage() = runTest {
-        val initialSettings = SystemSettings(shopName = "Old Shop", inactivityTimeoutMinutes = 15)
+        val initialSettings = SystemSettings(supportEmail = "old@support.org", inactivityTimeoutMinutes = 15)
         val settingsRepo = TestSettingsRepository(initialSettings)
         val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo)
 
-        val updated = initialSettings.copy(shopName = "New Shop", inactivityTimeoutMinutes = 30)
+        val updated = initialSettings.copy(supportEmail = "new@support.org", inactivityTimeoutMinutes = 30)
         viewModel.updateSystemSettings(updated)
 
-        assertEquals("New Shop", settingsRepo.updatedSettings?.shopName)
+        assertEquals("new@support.org", settingsRepo.updatedSettings?.supportEmail)
         assertEquals(30, settingsRepo.updatedSettings?.inactivityTimeoutMinutes)
         assertEquals("System settings updated successfully.", viewModel.statusMessage.value)
     }

@@ -136,12 +136,12 @@ object Formatting {
         if (cleaned.isBlank()) return null
         val normalized = cleaned.replace(',', '.')
         val valDouble = normalized.toDoubleOrNull() ?: return null
-        if (valDouble <= 0.0 || valDouble > 100_000.0) return null
 
         if (cleaned.contains(',') || cleaned.contains('.')) {
-            if (valDouble > 100.0) return null
+            if (valDouble < 0.0 || valDouble > 100.0) return null
             return WeightUnitDisplay.KG
         }
+        if (valDouble <= 0.0 || valDouble > 100_000.0) return null
 
         return if (valDouble <= 20.0) WeightUnitDisplay.KG else WeightUnitDisplay.G
     }

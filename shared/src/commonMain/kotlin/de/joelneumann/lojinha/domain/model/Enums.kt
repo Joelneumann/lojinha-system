@@ -23,7 +23,7 @@ enum class Language(val code: String, val label: String) {
 @Serializable
 enum class SecondaryCurrency(val code: String, val symbol: String) {
     NONE("NONE", ""),
-    USD("USD", "$"),
+    USD("USD", "US$"),
     EUR("EUR", "€")
 }
 

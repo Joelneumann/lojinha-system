@@ -7,8 +7,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -106,7 +112,18 @@ fun UserSelectionContent(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.F12) {
+                    if (!showAdminAuthDialog && selectedUserForPin == null) {
+                        onOpenAdminAuthDialog()
+                    }
+                    true
+                } else false
+            }
+    ) {
         HeaderBar(
             title = strings.appTitle,
             onLanguageClick = {
@@ -121,12 +138,23 @@ fun UserSelectionContent(
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    Text(
-                        text = strings.adminLoginBtn,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SurfaceWhite
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = strings.adminLoginBtn,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SurfaceWhite
+                        )
+                        Text(
+                            text = "(F12)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = SurfaceWhite.copy(alpha = 0.45f)
+                        )
+                    }
                 }
             }
         )
@@ -151,7 +179,15 @@ fun UserSelectionContent(
                     onQueryChange = onSearchQueryChange,
                     placeholder = strings.searchUserPlaceholder,
                     onSearchSubmitted = onSearchSubmitted,
-                    focusRequester = focusRequester
+                    focusRequester = focusRequester,
+                    onKeyDown = { keyEvent ->
+                        if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.F12) {
+                            if (!showAdminAuthDialog && selectedUserForPin == null) {
+                                onOpenAdminAuthDialog()
+                            }
+                            true
+                        } else false
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
