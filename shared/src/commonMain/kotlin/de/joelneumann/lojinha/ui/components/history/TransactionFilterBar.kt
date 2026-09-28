@@ -10,6 +10,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,8 +70,10 @@ fun TransactionFilterBar(
                     onClick = { onTypeFilterSelect(type) },
                     shape = RoundedCornerShape(12.dp),
                     color = if (isSelected) AccentNavy else SurfaceWhite,
+                    contentColor = if (isSelected) SurfaceWhite else PrimaryNavy,
                     border = if (isSelected) null else BorderStroke(1.dp, DividerBorder),
-                    modifier = Modifier.fillMaxHeight()
+                    shadowElevation = if (isSelected) 2.dp else 1.dp,
+                    modifier = Modifier.fillMaxHeight().pointerHoverIcon(PointerIcon.Hand)
                 ) {
                     Box(
                         modifier = Modifier.fillMaxHeight().padding(horizontal = 16.dp),
