@@ -89,7 +89,7 @@ fun DeletedUserCard(
                     }
                     Text(
                         text = "${strings.balance}: ${Formatting.formatBrl(user.balance)}" +
-                                if (user.userBarcodeNumber != null) " • ID: ${user.userBarcodeNumber}" else "",
+                                if (user.userBarcodeNumber != null) strings.userBarcodeIdBadge(user.userBarcodeNumber) else "",
                         fontSize = 13.sp,
                         color = TextSecondaryMuted
                     )

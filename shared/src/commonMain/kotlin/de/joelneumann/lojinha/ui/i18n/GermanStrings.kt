@@ -555,4 +555,65 @@ object GermanStrings : AppStrings {
     override val firstRunMessage = "Es wurden noch keine Benutzer oder Produkte eingerichtet. Melden Sie sich als Administrator an, um Ihren Laden zu konfigurieren, Produkte anzulegen und Kunden hinzuzufügen."
     override val firstRunAdminLoginBtn = "Admin-Login öffnen"
     override val errorTitle = "Fehler"
+
+    // Navigation & Destination Targets
+    override val mainScreen = "Hauptbildschirm"
+
+    // Pagination
+    override fun paginationShowing(start: Int, end: Int, total: Int): String = "Zeige $start–$end von $total"
+    override val paginationZeroItems = "0 Einträge"
+    override val perPageLabel = "Pro Seite:"
+    override fun pageOf(current: Int, total: Int): String = "Seite $current von $total"
+    override val firstPage = "Erste Seite"
+    override val previousPage = "Vorherige Seite"
+    override val nextPage = "Nächste Seite"
+    override val lastPage = "Letzte Seite"
+
+    // Accessibility & Inputs
+    override val clear = "Löschen"
+    override val togglePasswordVisibility = "Sichtbarkeit umschalten"
+    override val togglePinVisibility = "PIN-Sichtbarkeit umschalten"
+    override fun userBarcodeIdBadge(id: String): String = " • ID: $id"
+
+    // ViewModel Error & Status Messages
+    override val errCorrectionFailedOrUnchanged = "Korrektur konnte nicht angewendet werden. Die Transaktion wurde möglicherweise bereits storniert oder Mengen sind unverändert."
+    override val errTransactionAlreadyCanceled = "Diese Transaktion wurde bereits storniert."
+    override val errStornoFailed = "Stornierung fehlgeschlagen. Die Transaktion wurde möglicherweise bereits storniert."
+    override val errUnexpectedCorrection = "Beim Anwenden der Korrektur ist ein unerwarteter Fehler aufgetreten."
+    override val errUnexpectedCancellation = "Beim Stornieren der Transaktion ist ein unerwarteter Fehler aufgetreten."
+
+    override val errFailedToSaveUser = "Benutzer konnte nicht gespeichert werden."
+    override val errFailedToUpdateUserStatus = "Benutzerstatus konnte nicht aktualisiert werden."
+    override val errFailedToDeleteUser = "Benutzer konnte nicht gelöscht werden."
+    override val errFailedToRestoreUser = "Benutzer konnte nicht wiederhergestellt werden."
+
+    override val errFailedToSaveProduct = "Produkt konnte nicht gespeichert werden."
+    override val errFailedToUpdateProductStatus = "Produktstatus konnte nicht aktualisiert werden."
+    override val errFailedToDeleteProduct = "Produkt konnte nicht gelöscht werden."
+    override val errFailedToAdjustStock = "Bestandsanpassung fehlgeschlagen."
+
+    override val errNoValidChargesToExecute = "Keine gültigen Buchungen zur Ausführung. Bitte stellen Sie sicher, dass Benutzer aktiv sind und Beträge größer als null sind."
+    override val errFailedToExecuteBatchCharges = "Sammelbuchung fehlgeschlagen. Bitte Netzwerkverbindung prüfen und erneut versuchen."
+    override fun errFailedToSaveBillingList(error: String): String = "Abrechnungsliste konnte nicht gespeichert werden: $error"
+    override fun errFailedToDeleteBillingList(error: String): String = "Abrechnungsliste konnte nicht gelöscht werden: $error"
+
+    override val statusDiagnosticBundleExportedWithEmail = "Diagnosepaket exportiert & E-Mail-Entwurf geöffnet."
+    override val statusDiagnosticBundleExported = "Diagnosepaket erfolgreich exportiert."
+    override val statusSystemSettingsUpdated = "Systemeinstellungen erfolgreich aktualisiert."
+    override fun statusCsvImportSuccess(count: Int, type: String, added: Int, updated: Int): String =
+        "$count $type erfolgreich importiert ($added hinzugefügt, $updated aktualisiert)."
+    override val csvTypeProducts = "Produkte"
+    override val csvTypeUsers = "Benutzer"
+
+    override val errFailedToCompletePurchase = "Kauf konnte nicht abgeschlossen werden"
+
+    // Desktop & Formatting
+    override val appWindowTitle = "Lojinha POS & Selbstbedienungskasse"
+    override val monthNames = listOf("Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez")
+
+    // CSV Import Validation
+    override val csvEmptyError = "CSV-Datei ist leer."
+    override val csvMissingHeadersError = "Erforderliche Spaltenköpfe 'name' und 'basePrice' fehlen."
+    override val csvMissingNameHeaderError = "Erforderlicher Spaltenkopf 'name' fehlt."
 }
+

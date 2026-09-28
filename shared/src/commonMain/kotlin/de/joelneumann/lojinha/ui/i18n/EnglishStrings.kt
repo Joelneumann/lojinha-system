@@ -555,4 +555,65 @@ object EnglishStrings : AppStrings {
     override val firstRunMessage = "No users or products have been set up yet. Log in as Administrator to configure your store settings, add products, and create customer accounts."
     override val firstRunAdminLoginBtn = "Open Admin Login"
     override val errorTitle = "Error"
+
+    // Navigation & Destination Targets
+    override val mainScreen = "Main Screen"
+
+    // Pagination
+    override fun paginationShowing(start: Int, end: Int, total: Int): String = "Showing $start–$end of $total"
+    override val paginationZeroItems = "0 items"
+    override val perPageLabel = "Per page:"
+    override fun pageOf(current: Int, total: Int): String = "Page $current of $total"
+    override val firstPage = "First Page"
+    override val previousPage = "Previous Page"
+    override val nextPage = "Next Page"
+    override val lastPage = "Last Page"
+
+    // Accessibility & Inputs
+    override val clear = "Clear"
+    override val togglePasswordVisibility = "Toggle Visibility"
+    override val togglePinVisibility = "Toggle PIN Visibility"
+    override fun userBarcodeIdBadge(id: String): String = " • ID: $id"
+
+    // ViewModel Error & Status Messages
+    override val errCorrectionFailedOrUnchanged = "Failed to apply correction. Transaction may have already been canceled or quantities are unchanged."
+    override val errTransactionAlreadyCanceled = "This transaction has already been canceled."
+    override val errStornoFailed = "Failed to storno transaction. It may have already been canceled."
+    override val errUnexpectedCorrection = "An unexpected error occurred while applying correction."
+    override val errUnexpectedCancellation = "An unexpected error occurred while canceling transaction."
+
+    override val errFailedToSaveUser = "Failed to save user."
+    override val errFailedToUpdateUserStatus = "Failed to update user status."
+    override val errFailedToDeleteUser = "Failed to delete user."
+    override val errFailedToRestoreUser = "Failed to restore user."
+
+    override val errFailedToSaveProduct = "Failed to save product."
+    override val errFailedToUpdateProductStatus = "Failed to update product status."
+    override val errFailedToDeleteProduct = "Failed to delete product."
+    override val errFailedToAdjustStock = "Failed to adjust product stock."
+
+    override val errNoValidChargesToExecute = "No valid charges to execute. Please ensure users are active and amounts are greater than zero."
+    override val errFailedToExecuteBatchCharges = "Failed to execute batch charges. Please check network connection and retry."
+    override fun errFailedToSaveBillingList(error: String): String = "Failed to save billing list: $error"
+    override fun errFailedToDeleteBillingList(error: String): String = "Failed to delete billing list: $error"
+
+    override val statusDiagnosticBundleExportedWithEmail = "Diagnostic bundle exported & email draft opened."
+    override val statusDiagnosticBundleExported = "Diagnostic bundle exported successfully."
+    override val statusSystemSettingsUpdated = "System settings updated successfully."
+    override fun statusCsvImportSuccess(count: Int, type: String, added: Int, updated: Int): String =
+        "Successfully imported $count $type ($added added, $updated updated)."
+    override val csvTypeProducts = "Products"
+    override val csvTypeUsers = "Users"
+
+    override val errFailedToCompletePurchase = "Failed to complete purchase"
+
+    // Desktop & Formatting
+    override val appWindowTitle = "Lojinha POS & Self-Service Kiosk"
+    override val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+    // CSV Import Validation
+    override val csvEmptyError = "CSV file is empty."
+    override val csvMissingHeadersError = "Required headers 'name' and 'basePrice' missing."
+    override val csvMissingNameHeaderError = "Required header 'name' missing."
 }
+

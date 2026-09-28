@@ -440,7 +440,7 @@ fun UserSettingsModalDialog(
                             }) {
                                 Icon(
                                     imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle PIN Visibility",
+                                    contentDescription = strings.togglePinVisibility,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }

@@ -6,6 +6,7 @@ import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.BillingListRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.util.AppLogger
@@ -92,7 +93,7 @@ class AdminBulkBillingViewModel(
                 refreshData()
             } catch (e: Exception) {
                 AppLogger.error("AdminBulkBillingViewModel", "saveBillingList error: ${e.message}", e)
-                _errorMessage.value = "Failed to save billing list: ${e.message}"
+                _errorMessage.value = I18n.get().errFailedToSaveBillingList(e.message ?: "")
             }
         }
     }
@@ -109,7 +110,7 @@ class AdminBulkBillingViewModel(
                 refreshData()
             } catch (e: Exception) {
                 AppLogger.error("AdminBulkBillingViewModel", "deleteList error: ${e.message}", e)
-                _errorMessage.value = "Failed to delete billing list: ${e.message}"
+                _errorMessage.value = I18n.get().errFailedToDeleteBillingList(e.message ?: "")
             }
         }
     }
@@ -214,7 +215,7 @@ class AdminBulkBillingViewModel(
                 }
 
                 if (batchRequests.isEmpty()) {
-                    _errorMessage.value = "No valid charges to execute. Please ensure users are active and amounts are greater than zero."
+                    _errorMessage.value = I18n.get().errNoValidChargesToExecute
                     onComplete?.invoke(false)
                     return@launch
                 }
@@ -231,12 +232,12 @@ class AdminBulkBillingViewModel(
                     refreshData()
                     onComplete?.invoke(true)
                 } else {
-                    _errorMessage.value = "Failed to execute batch charges. Please check network connection and retry."
+                    _errorMessage.value = I18n.get().errFailedToExecuteBatchCharges
                     onComplete?.invoke(false)
                 }
             } catch (e: Exception) {
                 AppLogger.error("AdminBulkBillingViewModel", "executeCharges error: ${e.message}", e)
-                _errorMessage.value = "Error executing charges: ${e.message}"
+                _errorMessage.value = e.message ?: I18n.get().errFailedToExecuteBatchCharges
                 onComplete?.invoke(false)
             } finally {
                 _isExecutingCharges.value = false

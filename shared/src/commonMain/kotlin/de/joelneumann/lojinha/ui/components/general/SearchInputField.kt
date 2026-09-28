@@ -25,6 +25,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.AccentNavy
 import de.joelneumann.lojinha.ui.theme.DividerBorder
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
@@ -69,7 +70,7 @@ fun SearchInputField(
                 IconButton(onClick = { onQueryChange("") }) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Clear",
+                        contentDescription = I18n.current.clear,
                         tint = TextSecondaryMuted,
                         modifier = Modifier.size(18.dp)
                     )

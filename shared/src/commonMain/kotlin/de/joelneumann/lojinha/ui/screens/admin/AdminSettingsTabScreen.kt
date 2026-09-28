@@ -1046,11 +1046,11 @@ fun AdminSettingsTabScreen(
                                 onValueChange = { newPassword = it },
                                 placeholder = strings.newPasswordPlaceholder,
                                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
+                                 trailingIcon = {
                                     IconButton(onClick = { showPassword = !showPassword }) {
                                         Icon(
                                             imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = "Toggle Visibility",
+                                            contentDescription = strings.togglePasswordVisibility,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -1068,7 +1068,7 @@ fun AdminSettingsTabScreen(
                                     IconButton(onClick = { showPassword = !showPassword }) {
                                         Icon(
                                             imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = "Toggle Visibility",
+                                            contentDescription = strings.togglePasswordVisibility,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }

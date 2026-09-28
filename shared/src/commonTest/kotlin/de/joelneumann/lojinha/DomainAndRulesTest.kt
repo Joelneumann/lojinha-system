@@ -809,4 +809,57 @@ class DomainAndRulesTest {
         assertEquals(10.5, Formatting.parsePercentageInput("10.5"))
         assertEquals(0.18, Formatting.parsePercentageInput("0,18"))
     }
+
+    @Test
+    fun testNewLocalizationCompleteness() {
+        listOf(
+            de.joelneumann.lojinha.ui.i18n.EnglishStrings,
+            de.joelneumann.lojinha.ui.i18n.GermanStrings,
+            de.joelneumann.lojinha.ui.i18n.PortugueseStrings
+        ).forEach { s ->
+            assertTrue(s.mainScreen.isNotBlank())
+            assertTrue(s.paginationShowing(1, 10, 50).isNotBlank())
+            assertTrue(s.paginationZeroItems.isNotBlank())
+            assertTrue(s.perPageLabel.isNotBlank())
+            assertTrue(s.pageOf(1, 5).isNotBlank())
+            assertTrue(s.firstPage.isNotBlank())
+            assertTrue(s.previousPage.isNotBlank())
+            assertTrue(s.nextPage.isNotBlank())
+            assertTrue(s.lastPage.isNotBlank())
+            assertTrue(s.clear.isNotBlank())
+            assertTrue(s.togglePasswordVisibility.isNotBlank())
+            assertTrue(s.togglePinVisibility.isNotBlank())
+            assertTrue(s.userBarcodeIdBadge("123").contains("123"))
+            assertTrue(s.errCorrectionFailedOrUnchanged.isNotBlank())
+            assertTrue(s.errTransactionAlreadyCanceled.isNotBlank())
+            assertTrue(s.errStornoFailed.isNotBlank())
+            assertTrue(s.errUnexpectedCorrection.isNotBlank())
+            assertTrue(s.errUnexpectedCancellation.isNotBlank())
+            assertTrue(s.errFailedToSaveUser.isNotBlank())
+            assertTrue(s.errFailedToUpdateUserStatus.isNotBlank())
+            assertTrue(s.errFailedToDeleteUser.isNotBlank())
+            assertTrue(s.errFailedToRestoreUser.isNotBlank())
+            assertTrue(s.errFailedToSaveProduct.isNotBlank())
+            assertTrue(s.errFailedToUpdateProductStatus.isNotBlank())
+            assertTrue(s.errFailedToDeleteProduct.isNotBlank())
+            assertTrue(s.errFailedToAdjustStock.isNotBlank())
+            assertTrue(s.errNoValidChargesToExecute.isNotBlank())
+            assertTrue(s.errFailedToExecuteBatchCharges.isNotBlank())
+            assertTrue(s.errFailedToSaveBillingList("err").contains("err"))
+            assertTrue(s.errFailedToDeleteBillingList("err").contains("err"))
+            assertTrue(s.statusDiagnosticBundleExportedWithEmail.isNotBlank())
+            assertTrue(s.statusDiagnosticBundleExported.isNotBlank())
+            assertTrue(s.statusSystemSettingsUpdated.isNotBlank())
+            assertTrue(s.statusCsvImportSuccess(10, "Products", 5, 5).isNotBlank())
+            assertTrue(s.csvTypeProducts.isNotBlank())
+            assertTrue(s.csvTypeUsers.isNotBlank())
+            assertTrue(s.errFailedToCompletePurchase.isNotBlank())
+            assertTrue(s.appWindowTitle.isNotBlank())
+            assertEquals(12, s.monthNames.size)
+            assertTrue(s.csvEmptyError.isNotBlank())
+            assertTrue(s.csvMissingHeadersError.isNotBlank())
+            assertTrue(s.csvMissingNameHeaderError.isNotBlank())
+        }
+    }
 }
+

@@ -235,7 +235,7 @@ class ShoppingViewModel(
                 onPurchaseFinalized()
             } catch (e: Exception) {
                 AppLogger.error("ShoppingViewModel", "Failed to complete purchase for user ${user.id}: ${e.message}", e)
-                _purchaseError.value = e.message ?: "Failed to complete purchase"
+                _purchaseError.value = e.message ?: I18n.get().errFailedToCompletePurchase
             } finally {
                 _isProcessingPurchase.value = false
             }

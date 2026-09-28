@@ -543,4 +543,64 @@ interface AppStrings {
     val firstRunMessage: String
     val firstRunAdminLoginBtn: String
     val errorTitle: String
+
+    // Navigation & Destination Targets
+    val mainScreen: String
+
+    // Pagination
+    fun paginationShowing(start: Int, end: Int, total: Int): String
+    val paginationZeroItems: String
+    val perPageLabel: String
+    fun pageOf(current: Int, total: Int): String
+    val firstPage: String
+    val previousPage: String
+    val nextPage: String
+    val lastPage: String
+
+    // Accessibility & Inputs
+    val clear: String
+    val togglePasswordVisibility: String
+    val togglePinVisibility: String
+    fun userBarcodeIdBadge(id: String): String
+
+    // ViewModel Error & Status Messages
+    val errCorrectionFailedOrUnchanged: String
+    val errTransactionAlreadyCanceled: String
+    val errStornoFailed: String
+    val errUnexpectedCorrection: String
+    val errUnexpectedCancellation: String
+
+    val errFailedToSaveUser: String
+    val errFailedToUpdateUserStatus: String
+    val errFailedToDeleteUser: String
+    val errFailedToRestoreUser: String
+
+    val errFailedToSaveProduct: String
+    val errFailedToUpdateProductStatus: String
+    val errFailedToDeleteProduct: String
+    val errFailedToAdjustStock: String
+
+    val errNoValidChargesToExecute: String
+    val errFailedToExecuteBatchCharges: String
+    fun errFailedToSaveBillingList(error: String): String
+    fun errFailedToDeleteBillingList(error: String): String
+
+    val statusDiagnosticBundleExportedWithEmail: String
+    val statusDiagnosticBundleExported: String
+    val statusSystemSettingsUpdated: String
+    fun statusCsvImportSuccess(count: Int, type: String, added: Int, updated: Int): String
+    val csvTypeProducts: String
+    val csvTypeUsers: String
+
+    val errFailedToCompletePurchase: String
+
+    // Desktop & Formatting
+    val appWindowTitle: String
+    val monthNames: List<String>
+
+    // CSV Import Validation
+    val csvEmptyError: String
+    val csvMissingHeadersError: String
+    val csvMissingNameHeaderError: String
 }
+

@@ -293,7 +293,11 @@ fun AdminScreen(
     }
 
     if (pendingTabSwitch != null || isExitAdminPending) {
-        val targetName = if (isExitAdminPending) "Main Screen" else pendingTabSwitch?.name ?: ""
+        val targetName = if (isExitAdminPending) {
+            strings.mainScreen
+        } else {
+            tabItems.find { it.tab == pendingTabSwitch }?.label ?: ""
+        }
         val dismissDialog = {
             pendingTabSwitch = null
             isExitAdminPending = false

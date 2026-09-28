@@ -10,6 +10,7 @@ import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.Job
@@ -102,7 +103,7 @@ class AdminUsersViewModel(
                 closeUserModal()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "saveUser error: ${e.message}", e)
-                _userErrorMessage.value = e.message ?: "Failed to save user."
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToSaveUser
             } finally {
                 _isSavingUser.value = false
             }
@@ -116,7 +117,7 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "toggleUserActive error: ${e.message}", e)
-                _userErrorMessage.value = e.message ?: "Failed to update user status."
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToUpdateUserStatus
             }
         }
     }
@@ -128,7 +129,7 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "softDeleteUser error: ${e.message}", e)
-                _userErrorMessage.value = e.message ?: "Failed to delete user."
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToDeleteUser
             }
         }
     }
@@ -140,7 +141,7 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "restoreUser error: ${e.message}", e)
-                _userErrorMessage.value = e.message ?: "Failed to restore user."
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToRestoreUser
             }
         }
     }

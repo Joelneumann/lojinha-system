@@ -6,6 +6,7 @@ import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import kotlinx.coroutines.Job
@@ -166,11 +167,11 @@ class AdminTransactionsViewModel(
                     closeCorrectionModal()
                     fetchPagedTransactions()
                 } else {
-                    _errorMessage.value = "Failed to apply correction. Transaction may have already been canceled or quantities are unchanged."
+                    _errorMessage.value = I18n.get().errCorrectionFailedOrUnchanged
                 }
             } catch (e: Exception) {
                 de.joelneumann.lojinha.util.AppLogger.error("AdminTransactionsViewModel", "applyPurchaseCorrection error: ${e.message}", e)
-                _errorMessage.value = e.message ?: "An unexpected error occurred while applying correction."
+                _errorMessage.value = e.message ?: I18n.get().errUnexpectedCorrection
             } finally {
                 _isSubmitting.value = false
             }
@@ -186,18 +187,18 @@ class AdminTransactionsViewModel(
         viewModelScope.launch {
             try {
                 if (transactionRepository.getCancellationCountForReference(tx.id) > 0) {
-                    _errorMessage.value = "This transaction has already been canceled."
+                    _errorMessage.value = I18n.get().errTransactionAlreadyCanceled
                     return@launch
                 }
                 val success = transactionRepository.stornoNonPurchase(tx.id)
                 if (success) {
                     fetchPagedTransactions()
                 } else {
-                    _errorMessage.value = "Failed to storno transaction. It may have already been canceled."
+                    _errorMessage.value = I18n.get().errStornoFailed
                 }
             } catch (e: Exception) {
                 de.joelneumann.lojinha.util.AppLogger.error("AdminTransactionsViewModel", "stornoNonPurchaseTransaction error: ${e.message}", e)
-                _errorMessage.value = e.message ?: "An unexpected error occurred while canceling transaction."
+                _errorMessage.value = e.message ?: I18n.get().errUnexpectedCancellation
             } finally {
                 _isSubmitting.value = false
             }

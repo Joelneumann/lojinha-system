@@ -162,8 +162,8 @@ object Formatting {
             de.joelneumann.lojinha.domain.model.Language.EN -> {
                 val hour12 = if (ldt.hour % 12 == 0) 12 else ldt.hour % 12
                 val amPm = if (ldt.hour >= 12) "PM" else "AM"
-                val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-                val monthName = monthNames[ldt.monthNumber - 1]
+                val monthNames = I18n.get(language).monthNames
+                val monthName = monthNames.getOrElse(ldt.monthNumber - 1) { "" }
                 "$monthName $dayStr, $yearStr, ${hour12.toString().padStart(2, '0')}:$minuteStr $amPm"
             }
             de.joelneumann.lojinha.domain.model.Language.DE -> "$dayStr.$monthStr.$yearStr, $hour24Str:$minuteStr"

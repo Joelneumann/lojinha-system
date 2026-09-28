@@ -9,6 +9,7 @@ import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.util.AppLogger
 import de.joelneumann.lojinha.ui.components.admin.products.ProductSortOption
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.Job
@@ -125,7 +126,7 @@ class AdminProductsViewModel(
                 closeProductModal()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "saveProduct error: ${e.message}", e)
-                _productErrorMessage.value = e.message ?: "Failed to save product."
+                _productErrorMessage.value = e.message ?: I18n.get().errFailedToSaveProduct
             } finally {
                 _isSavingProduct.value = false
             }
@@ -139,7 +140,7 @@ class AdminProductsViewModel(
                 refreshProducts()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "toggleProductActive error: ${e.message}", e)
-                _productErrorMessage.value = e.message ?: "Failed to update product status."
+                _productErrorMessage.value = e.message ?: I18n.get().errFailedToUpdateProductStatus
             }
         }
     }
@@ -151,7 +152,7 @@ class AdminProductsViewModel(
                 refreshProducts()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "deleteProduct error: ${e.message}", e)
-                _productErrorMessage.value = e.message ?: "Failed to delete product."
+                _productErrorMessage.value = e.message ?: I18n.get().errFailedToDeleteProduct
             }
         }
     }
@@ -168,7 +169,7 @@ class AdminProductsViewModel(
                 refreshProducts()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "adjustProductStock error: ${e.message}", e)
-                _productErrorMessage.value = e.message ?: "Failed to adjust product stock."
+                _productErrorMessage.value = e.message ?: I18n.get().errFailedToAdjustStock
             }
         }
     }

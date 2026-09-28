@@ -21,6 +21,7 @@ import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -661,7 +662,7 @@ class BackupRestoreService(
         require(csvFile.exists() && csvFile.isFile) { "Product CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
         if (records.isEmpty()) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("CSV file is empty."))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvEmptyError))
         }
 
         val header = records[0].map { it.trim().removePrefix("\uFEFF") }
@@ -678,7 +679,7 @@ class BackupRestoreService(
         val activeIdx = findHeaderIndex("isActive", "active", "is_active")
 
         if (nameIdx == -1 || priceIdx == -1) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("Required headers 'name' and 'basePrice' missing."))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvMissingHeadersError))
         }
 
         val existingProducts = db.productDao().getAllProducts().associateBy { it.id }
@@ -896,7 +897,7 @@ class BackupRestoreService(
         require(csvFile.exists() && csvFile.isFile) { "User CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
         if (records.isEmpty()) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("CSV file is empty."))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvEmptyError))
         }
 
         val header = records[0].map { it.trim().removePrefix("\uFEFF") }
@@ -918,7 +919,7 @@ class BackupRestoreService(
         val avatarColorIdx = findHeaderIndex("avatarColor", "avatar_color", "color")
 
         if (nameIdx == -1) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("Required header 'name' missing."))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvMissingNameHeaderError))
         }
 
         val existingUsers = db.userDao().getAllUsers().associateBy { it.id }

@@ -16,6 +16,7 @@ import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
 import de.joelneumann.lojinha.data.service.DataChangeNotifier
 import de.joelneumann.lojinha.server.LojinhaAdminServer
 import de.joelneumann.lojinha.ui.App
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.util.AppLogger
 import de.joelneumann.lojinha.util.CrashHandler
 import de.joelneumann.lojinha.util.AppVersionTracker
@@ -73,7 +74,7 @@ fun main() {
     val appIcon = painterResource("icon.png")
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Lojinha POS & Self-Service Kiosk",
+        title = I18n.get().appWindowTitle,
         state = windowState,
         icon = appIcon
     ) {

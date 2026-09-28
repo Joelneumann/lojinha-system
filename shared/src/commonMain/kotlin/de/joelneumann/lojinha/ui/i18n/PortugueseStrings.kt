@@ -555,4 +555,65 @@ object PortugueseStrings : AppStrings {
     override val firstRunMessage = "Nenhum usuário ou produto foi configurado ainda. Faça login como Administrador para configurar a loja, cadastrar produtos e criar contas de clientes."
     override val firstRunAdminLoginBtn = "Abrir Login de Administrador"
     override val errorTitle = "Erro"
+
+    // Navigation & Destination Targets
+    override val mainScreen = "Tela Principal"
+
+    // Pagination
+    override fun paginationShowing(start: Int, end: Int, total: Int): String = "Mostrando $start–$end de $total"
+    override val paginationZeroItems = "0 itens"
+    override val perPageLabel = "Por página:"
+    override fun pageOf(current: Int, total: Int): String = "Página $current de $total"
+    override val firstPage = "Primeira Página"
+    override val previousPage = "Página Anterior"
+    override val nextPage = "Próxima Página"
+    override val lastPage = "Última Página"
+
+    // Accessibility & Inputs
+    override val clear = "Limpar"
+    override val togglePasswordVisibility = "Alternar Visibilidade"
+    override val togglePinVisibility = "Alternar Visibilidade do PIN"
+    override fun userBarcodeIdBadge(id: String): String = " • ID: $id"
+
+    // ViewModel Error & Status Messages
+    override val errCorrectionFailedOrUnchanged = "Falha ao aplicar correção. A transação pode já ter sido cancelada ou as quantidades não foram alteradas."
+    override val errTransactionAlreadyCanceled = "Esta transação já foi cancelada."
+    override val errStornoFailed = "Falha ao estornar transação. Ela pode já ter sido cancelada."
+    override val errUnexpectedCorrection = "Ocorreu um erro inesperado ao aplicar a correção."
+    override val errUnexpectedCancellation = "Ocorreu um erro inesperado ao cancelar a transação."
+
+    override val errFailedToSaveUser = "Falha ao salvar usuário."
+    override val errFailedToUpdateUserStatus = "Falha ao atualizar status do usuário."
+    override val errFailedToDeleteUser = "Falha ao excluir usuário."
+    override val errFailedToRestoreUser = "Falha ao restaurar usuário."
+
+    override val errFailedToSaveProduct = "Falha ao salvar produto."
+    override val errFailedToUpdateProductStatus = "Falha ao atualizar status do produto."
+    override val errFailedToDeleteProduct = "Falha ao excluir produto."
+    override val errFailedToAdjustStock = "Falha ao ajustar estoque do produto."
+
+    override val errNoValidChargesToExecute = "Nenhuma cobrança válida para executar. Verifique se os usuários estão ativos e os valores são maiores que zero."
+    override val errFailedToExecuteBatchCharges = "Falha ao executar cobranças em lote. Verifique a conexão de rede e tente novamente."
+    override fun errFailedToSaveBillingList(error: String): String = "Falha ao salvar lista de faturamento: $error"
+    override fun errFailedToDeleteBillingList(error: String): String = "Falha ao excluir lista de faturamento: $error"
+
+    override val statusDiagnosticBundleExportedWithEmail = "Pacote de diagnóstico exportado e rascunho de e-mail aberto."
+    override val statusDiagnosticBundleExported = "Pacote de diagnóstico exportado com sucesso."
+    override val statusSystemSettingsUpdated = "Configurações do sistema atualizadas com sucesso."
+    override fun statusCsvImportSuccess(count: Int, type: String, added: Int, updated: Int): String =
+        "$count $type importado(s) com sucesso ($added adicionado(s), $updated atualizado(s))."
+    override val csvTypeProducts = "Produtos"
+    override val csvTypeUsers = "Usuários"
+
+    override val errFailedToCompletePurchase = "Falha ao finalizar compra"
+
+    // Desktop & Formatting
+    override val appWindowTitle = "Lojinha PDV & Autoatendimento"
+    override val monthNames = listOf("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
+
+    // CSV Import Validation
+    override val csvEmptyError = "Arquivo CSV está vazio."
+    override val csvMissingHeadersError = "Cabeçalhos obrigatórios 'name' e 'basePrice' ausentes."
+    override val csvMissingNameHeaderError = "Cabeçalho obrigatório 'name' ausente."
 }
+

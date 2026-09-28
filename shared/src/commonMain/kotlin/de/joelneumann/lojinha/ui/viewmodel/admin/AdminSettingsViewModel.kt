@@ -9,6 +9,7 @@ import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -104,7 +105,7 @@ class AdminSettingsViewModel(
                 _statusMessage.value = null
                 _errorMessage.value = null
                 onExportSupportBundle?.invoke(prepareEmail, recipientEmail)
-                _statusMessage.value = if (prepareEmail) "Diagnostic bundle exported & email draft opened." else "Diagnostic bundle exported successfully."
+                _statusMessage.value = if (prepareEmail) I18n.get().statusDiagnosticBundleExportedWithEmail else I18n.get().statusDiagnosticBundleExported
                 refreshLogSize()
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to export diagnostic bundle: ${e.message}"
@@ -156,7 +157,7 @@ class AdminSettingsViewModel(
     fun updateSystemSettings(newSettings: SystemSettings) {
         viewModelScope.launch {
             settingsRepository.updateSettings(newSettings)
-            _statusMessage.value = "System settings updated successfully."
+            _statusMessage.value = I18n.get().statusSystemSettingsUpdated
         }
     }
 
@@ -300,7 +301,12 @@ class AdminSettingsViewModel(
                     if (result.errors.isNotEmpty()) {
                         _errorMessage.value = "Import finished with errors: ${result.errors.joinToString(", ")}"
                     } else {
-                        _statusMessage.value = "Successfully imported ${result.totalProcessed} $type (${result.addedCount} added, ${result.updatedCount} updated)."
+                        val localizedType = when (type.lowercase()) {
+                            "products" -> I18n.get().csvTypeProducts
+                            "users" -> I18n.get().csvTypeUsers
+                            else -> type
+                        }
+                        _statusMessage.value = I18n.get().statusCsvImportSuccess(result.totalProcessed, localizedType, result.addedCount, result.updatedCount)
                     }
                 } else {
                     _statusMessage.value = "Import executed for ${file.name}."

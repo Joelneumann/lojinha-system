@@ -248,7 +248,7 @@ fun UserEditDialog(
                                     IconButton(onClick = { isPinVisible = !isPinVisible }) {
                                         Icon(
                                             imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = "Toggle PIN Visibility",
+                                            contentDescription = strings.togglePinVisibility,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -287,7 +287,7 @@ fun UserEditDialog(
                                         IconButton(onClick = { isPinVisible = !isPinVisible }) {
                                             Icon(
                                                 imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                                contentDescription = "Toggle PIN Visibility",
+                                                contentDescription = strings.togglePinVisibility,
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }

@@ -8,6 +8,7 @@ import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.PlatformFile
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
@@ -667,7 +668,7 @@ class AdminViewModelsTest {
 
         assertEquals("new@support.org", settingsRepo.updatedSettings?.supportEmail)
         assertEquals(30, settingsRepo.updatedSettings?.inactivityTimeoutMinutes)
-        assertEquals("System settings updated successfully.", viewModel.statusMessage.value)
+        assertEquals(I18n.get().statusSystemSettingsUpdated, viewModel.statusMessage.value)
     }
 
     @Test
@@ -759,12 +760,12 @@ class AdminViewModelsTest {
 
         viewModel.exportSupportBundle(prepareEmail = false, recipientEmail = "")
         assertEquals(false, exportedWithEmail)
-        assertEquals("Diagnostic bundle exported successfully.", viewModel.statusMessage.value)
+        assertEquals(I18n.get().statusDiagnosticBundleExported, viewModel.statusMessage.value)
 
         viewModel.exportSupportBundle(prepareEmail = true, recipientEmail = "support@lojinha.local")
         assertEquals(true, exportedWithEmail)
         assertEquals("support@lojinha.local", recipientUsed)
-        assertEquals("Diagnostic bundle exported & email draft opened.", viewModel.statusMessage.value)
+        assertEquals(I18n.get().statusDiagnosticBundleExportedWithEmail, viewModel.statusMessage.value)
     }
 
     @Test
@@ -807,6 +808,9 @@ class AdminViewModelsTest {
         viewModel.executeCsvImport()
         assertTrue(executeCalled)
         assertNull(viewModel.csvImportPreview.value)
-        assertEquals("Successfully imported 5 Products (3 added, 2 updated).", viewModel.statusMessage.value)
+        assertEquals(
+            I18n.get().statusCsvImportSuccess(5, I18n.get().csvTypeProducts, 3, 2),
+            viewModel.statusMessage.value
+        )
     }
 }
