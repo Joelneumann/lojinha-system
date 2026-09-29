@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -45,35 +46,19 @@ fun PaginationBar(
             .fillMaxWidth()
             .border(1.dp, DividerBorder, RoundedCornerShape(12.dp))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Left: Item range & count
-            Text(
-                text = if (totalCount > 0) strings.paginationShowing(startItem, endItem, totalCount) else strings.paginationZeroItems,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = TextSecondaryMuted
-            )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val isMobile = maxWidth < 600.dp
 
-            // Right: Page Size Selector & Controls
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Page Size Picker
+            val pageSizePicker: @Composable () -> Unit = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
                         text = strings.perPageLabel,
-                        fontSize = 13.sp,
-                        color = TextSecondaryMuted
+                        fontSize = if (isMobile) 12.sp else 13.sp,
+                        color = TextSecondaryMuted,
+                        softWrap = false
                     )
 
                     Box {
@@ -86,11 +71,11 @@ fun PaginationBar(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
                                     text = "$pageSize",
-                                    fontSize = 13.sp,
+                                    fontSize = if (isMobile) 12.sp else 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = PrimaryNavy
                                 )
@@ -151,22 +136,27 @@ fun PaginationBar(
                         }
                     }
                 }
+            }
 
-                // Page Navigation Controls
+            val navigationControls: @Composable (Modifier) -> Unit = { navModifier ->
+                val buttonSize = if (isMobile) 36.dp else 32.dp
+                val iconSize = if (isMobile) 20.dp else 18.dp
+
                 Row(
+                    modifier = navModifier,
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = if (isMobile) Arrangement.Center else Arrangement.spacedBy(4.dp)
                 ) {
                     // First Page
                     IconButton(
                         onClick = { onPageChange(0) },
                         enabled = currentPage > 0,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(buttonSize)
                     ) {
                         Icon(
                             imageVector = Icons.Default.FirstPage,
                             contentDescription = strings.firstPage,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(iconSize),
                             tint = if (currentPage > 0) PrimaryNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                         )
                     }
@@ -175,12 +165,12 @@ fun PaginationBar(
                     IconButton(
                         onClick = { onPageChange(currentPage - 1) },
                         enabled = currentPage > 0,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(buttonSize)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ChevronLeft,
                             contentDescription = strings.previousPage,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(iconSize),
                             tint = if (currentPage > 0) PrimaryNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                         )
                     }
@@ -188,22 +178,23 @@ fun PaginationBar(
                     // Page Indicator
                     Text(
                         text = strings.pageOf(currentPage + 1, kotlin.math.max(1, totalPages)),
-                        fontSize = 13.sp,
+                        fontSize = if (isMobile) 12.sp else 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy,
-                        modifier = Modifier.padding(horizontal = 6.dp)
+                        modifier = Modifier.padding(horizontal = if (isMobile) 8.dp else 6.dp),
+                        softWrap = false
                     )
 
                     // Next Page
                     IconButton(
                         onClick = { onPageChange(currentPage + 1) },
                         enabled = currentPage < totalPages - 1,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(buttonSize)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ChevronRight,
                             contentDescription = strings.nextPage,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(iconSize),
                             tint = if (currentPage < totalPages - 1) PrimaryNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                         )
                     }
@@ -212,14 +203,70 @@ fun PaginationBar(
                     IconButton(
                         onClick = { onPageChange(totalPages - 1) },
                         enabled = currentPage < totalPages - 1,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(buttonSize)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.LastPage,
                             contentDescription = strings.lastPage,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(iconSize),
                             tint = if (currentPage < totalPages - 1) PrimaryNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                         )
+                    }
+                }
+            }
+
+            if (isMobile) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (totalCount > 0) strings.paginationShowing(startItem, endItem, totalCount) else strings.paginationZeroItems,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondaryMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+
+                        pageSizePicker()
+                    }
+
+                    navigationControls(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Left: Item range & count
+                    Text(
+                        text = if (totalCount > 0) strings.paginationShowing(startItem, endItem, totalCount) else strings.paginationZeroItems,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextSecondaryMuted,
+                        softWrap = false
+                    )
+
+                    // Right: Page Size Selector & Controls
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        pageSizePicker()
+                        navigationControls(Modifier)
                     }
                 }
             }

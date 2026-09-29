@@ -269,53 +269,69 @@ fun TransactionHistoryContent(
             }
         )
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(SurfaceContainerLight)
-                .padding(ScreenPadding)
-        ) {
-            // Top Row: Reused UserBalanceHeader (Left) & User Settings Button (Right)
-            Row(
-                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                UserBalanceHeader(
-                    user = user,
-                    rate = rate,
-                    modifier = Modifier.weight(1f).fillMaxHeight()
-                )
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val isMobile = maxWidth < 600.dp
 
-                Surface(
-                    onClick = onOpenSettingsModal,
-                    shape = RoundedCornerShape(12.dp),
-                    color = SurfaceWhite,
-                    shadowElevation = 2.dp,
-                    modifier = Modifier.fillMaxHeight()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(SurfaceContainerLight)
+                    .padding(if (isMobile) 10.dp else ScreenPadding)
+            ) {
+                // Top Row: Reused UserBalanceHeader (Left) & User Settings Button (Right)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(if (isMobile) 8.dp else 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxHeight().padding(horizontal = 20.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    UserBalanceHeader(
+                        user = user,
+                        rate = rate,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Surface(
+                        onClick = onOpenSettingsModal,
+                        shape = RoundedCornerShape(12.dp),
+                        color = SurfaceWhite,
+                        shadowElevation = 2.dp
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = null,
-                            tint = PrimaryNavy,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = strings.userSettings,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryNavy,
-                            fontSize = 15.sp
-                        )
+                        if (isMobile) {
+                            Box(
+                                modifier = Modifier.size(52.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = strings.userSettings,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = strings.userSettings,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryNavy,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
             // Search & Filter Bar reusing SearchInputField
             TransactionFilterBar(
@@ -363,6 +379,7 @@ fun TransactionHistoryContent(
                 onPageSizeChange = onPageSizeChange
             )
         }
+    }
 
         // User Settings Modal Dialog
         if (showSettingsModal) {
