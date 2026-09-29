@@ -37,6 +37,7 @@ import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
+import de.joelneumann.lojinha.ui.utils.trackUserInteractions
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.*
@@ -71,7 +72,7 @@ fun TransactionHistoryScreen(
     val selectedAvatar by viewModel.selectedAvatar.collectAsState()
     val relatedTransactionsMap by viewModel.relatedTransactionsMap.collectAsState()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(user.id) {
         viewModel.loadUserTransactions(user.id, resetFilters = true)
     }
 
@@ -134,9 +135,9 @@ fun TransactionHistoryScreen(
             onUserInteracted(true)
             viewModel.updateAvatar(av)
         },
-        onSaveUserSettings = {
+        onSaveUserSettings = { removePin ->
             onUserInteracted(true)
-            viewModel.saveUserSettings(user, onUserUpdated)
+            viewModel.saveUserSettings(user, removePin = removePin, onSaved = onUserUpdated)
         },
         onUserInteracted = onUserInteracted
     )
@@ -172,22 +173,16 @@ fun TransactionHistoryContent(
     onUpdateLanguage: (Language) -> Unit,
     onUpdateSecondaryCurrency: (SecondaryCurrency) -> Unit,
     onUpdateAvatar: (UserAvatarConfig) -> Unit,
-    onSaveUserSettings: () -> Unit,
+    onSaveUserSettings: (removePin: Boolean) -> Unit,
     onUserInteracted: (force: Boolean) -> Unit = {}
 ) {
     val strings = I18n.current
 
-    val transactionsWithBalance = remember(transactions, user.balance) {
+    val transactionsWithBalance = remember(transactions) {
         val sortedDesc = transactions.sortedByDescending { it.timestamp }
-        val list = ArrayList<TransactionWithBalance>(sortedDesc.size)
-        var current = user.balance
-        for (tx in sortedDesc) {
-            val before = tx.userBalanceBefore ?: (current - tx.totalAmount)
-            val after = tx.userBalanceAfter ?: current
-            list.add(TransactionWithBalance(tx, before, after))
-            current = before
+        sortedDesc.map { tx ->
+            TransactionWithBalance(tx, tx.userBalanceBefore, tx.userBalanceAfter)
         }
-        list
     }
 
     val rate = when (user.secondaryCurrency) {
@@ -231,55 +226,14 @@ fun TransactionHistoryContent(
                     }
                 } else false
             }
-            .pointerInput(Unit) {
-                var lastInteractionTime = 0L
-                var lastPosition: Offset? = null
-                var accumulatedDistance = 0f
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        // Ignore exit and enter events (e.g. dialog popups appearing/disappearing or window focus shifts)
-                        if (event.type == PointerEventType.Exit || event.type == PointerEventType.Enter) {
-                            lastPosition = null
-                            accumulatedDistance = 0f
-                            continue
-                        }
-
-                        val currentPosition = event.changes.firstOrNull()?.position
-                        val prevPosition = lastPosition
-                        val isClickOrScroll = event.type == PointerEventType.Press || event.type == PointerEventType.Scroll
-
-                        var isRealMovement = false
-                        if (currentPosition != null && prevPosition != null && event.type == PointerEventType.Move) {
-                            val delta = (currentPosition - prevPosition).getDistance()
-                            accumulatedDistance += delta
-                            if (accumulatedDistance >= 15f) {
-                                isRealMovement = true
-                                accumulatedDistance = 0f
-                            }
-                        }
-
-                        if (currentPosition != null) {
-                            lastPosition = currentPosition
-                        }
-
-                        if (isClickOrScroll) {
-                            lastInteractionTime = currentTimeMillis()
-                            onUserInteracted(true)
-                        } else if (isRealMovement) {
-                            val now = currentTimeMillis()
-                            if (now - lastInteractionTime >= 500L) {
-                                lastInteractionTime = now
-                                onUserInteracted(false)
-                            }
-                        }
-                    }
-                }
-            }
+            .trackUserInteractions(onUserInteracted)
     ) {
         // Header Bar with "Continue Shopping" button on the left of Logout
         HeaderBar(
             title = strings.history,
+            onLanguageSelected = { lang ->
+                onUserUpdated(user.copy(language = lang))
+            },
             onLanguageClick = {
                 coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
             },
@@ -423,7 +377,8 @@ fun TransactionHistoryContent(
                 onSecondaryCurrencySelect = onUpdateSecondaryCurrency,
                 onAvatarSelect = onUpdateAvatar,
                 onDismiss = onCloseSettingsModal,
-                onSave = onSaveUserSettings
+                onSave = onSaveUserSettings,
+                onUserInteracted = onUserInteracted
             )
         }
     }
@@ -431,6 +386,6 @@ fun TransactionHistoryContent(
 
 data class TransactionWithBalance(
     val transaction: Transaction,
-    val balanceBefore: Long,
-    val balanceAfter: Long
+    val balanceBefore: Long?,
+    val balanceAfter: Long?
 )

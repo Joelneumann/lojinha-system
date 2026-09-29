@@ -7,11 +7,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
+import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +23,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.BillingList
 import de.joelneumann.lojinha.domain.model.BillingListType
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.domain.model.BillingListUser
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
@@ -48,7 +48,7 @@ fun BillingListEditDialog(
     var type by remember { mutableStateOf(initialList?.type ?: BillingListType.FIXED) }
     
     var priceInput by remember { 
-        mutableStateOf(if (initialList?.basePrice != null) (initialList.basePrice.toDouble() / 100.0).toString() else "") 
+        mutableStateOf(if (initialList?.basePrice != null) Formatting.formatBrl(initialList.basePrice).removePrefix("R$ ").trim() else "") 
     }
 
     var selectedUsers by remember { 
@@ -69,7 +69,7 @@ fun BillingListEditDialog(
             
             val updatedList = BillingList(
                 id = initialList?.id ?: "",
-                name = name,
+                name = name.trim(),
                 type = type,
                 basePrice = price,
                 comment = comment.trim().ifBlank { null },
@@ -155,35 +155,45 @@ fun BillingListEditDialog(
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 ) {
                     LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                        items(activeUsers.sortedBy { it.name.lowercase() }, key = { it.id }) { user ->
+                        items(activeUsers.sortedByAccentInsensitive { it.name }, key = { it.id }) { user ->
                             val isSelected = selectedUsers.containsKey(user.id)
                             val qty = selectedUsers[user.id] ?: 1
                             
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable {
-                                        if (isSelected) {
-                                            selectedUsers = selectedUsers - user.id
-                                        } else {
-                                            selectedUsers = selectedUsers + (user.id to 1)
-                                        }
-                                    }
-                                    .padding(8.dp),
+                                    .padding(4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            if (isSelected) {
+                                                selectedUsers = selectedUsers - user.id
+                                            } else {
+                                                selectedUsers = selectedUsers + (user.id to 1)
+                                            }
+                                        }
+                                        .padding(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Checkbox(
                                         checked = isSelected,
                                         onCheckedChange = null // Handled by row click
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(user.name, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                    if (!user.isActive) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        AdminStatusBadge(text = strings.deactivated, type = AdminBadgeType.WARNING)
+                                    }
                                 }
                                 
                                 if (isSelected && type == BillingListType.FIXED) {
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
                                         color = SurfaceWhite,

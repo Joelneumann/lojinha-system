@@ -14,6 +14,9 @@ interface BillingListDao {
     @Query("SELECT * FROM billing_lists WHERE isDeleted = 0 ORDER BY name ASC")
     fun getActiveBillingListsFlow(): Flow<List<BillingListEntity>>
 
+    @Query("SELECT * FROM billing_list_users")
+    fun getAllBillingListUsersFlow(): Flow<List<BillingListUserEntity>>
+
     @Query("SELECT * FROM billing_list_users WHERE listId = :listId")
     fun getUsersForListFlow(listId: String): Flow<List<BillingListUserEntity>>
 
@@ -43,6 +46,9 @@ interface BillingListDao {
 
     @Query("DELETE FROM billing_list_users WHERE listId = :listId AND userId = :userId")
     suspend fun removeUserFromList(listId: String, userId: String)
+
+    @Query("DELETE FROM billing_list_users WHERE userId = :userId")
+    suspend fun removeUserFromAllLists(userId: String)
     
     @Query("UPDATE billing_list_users SET quantity = :quantity WHERE listId = :listId AND userId = :userId")
     suspend fun updateUserQuantity(listId: String, userId: String, quantity: Int)

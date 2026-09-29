@@ -12,6 +12,7 @@ import java.util.Locale
 import javax.swing.JOptionPane
 import javax.swing.SwingUtilities
 import kotlin.system.exitProcess
+import de.joelneumann.lojinha.AppVersion
 
 object CrashHandler {
     private const val TAG = "CrashHandler"
@@ -98,7 +99,7 @@ object CrashHandler {
             appendLine("                        LOJINHA CRASH REPORT")
             appendLine("================================================================================")
             appendLine("Timestamp:      $timestamp")
-            appendLine("Application:    Lojinha POS & Self-Service Kiosk (Version 1.0.0)")
+            appendLine("Application:    Lojinha POS & Self-Service Kiosk (Version ${AppVersion.CURRENT})")
             appendLine("Thread:         ${thread.name} (id=${thread.id}, priority=${thread.priority}, state=${thread.state})")
             appendLine()
             appendLine("--- SYSTEM ENVIRONMENT ---")

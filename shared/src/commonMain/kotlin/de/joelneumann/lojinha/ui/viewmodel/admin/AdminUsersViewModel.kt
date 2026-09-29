@@ -10,6 +10,8 @@ import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,14 +39,18 @@ class AdminUsersViewModel(
     private val _showUserModal = MutableStateFlow(false)
     val showUserModal: StateFlow<Boolean> = _showUserModal.asStateFlow()
 
+    private val _isSavingUser = MutableStateFlow(false)
+    val isSavingUser: StateFlow<Boolean> = _isSavingUser.asStateFlow()
+
     private val _customExpenseUser = MutableStateFlow<User?>(null)
     val customExpenseUser: StateFlow<User?> = _customExpenseUser.asStateFlow()
 
     private val _customIncomeUser = MutableStateFlow<User?>(null)
     val customIncomeUser: StateFlow<User?> = _customIncomeUser.asStateFlow()
 
-    private val _userDeleteErrorMessage = MutableStateFlow<String?>(null)
-    val userDeleteErrorMessage: StateFlow<String?> = _userDeleteErrorMessage.asStateFlow()
+    private val _userErrorMessage = MutableStateFlow<String?>(null)
+    val userErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
+    val userDeleteErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
 
     private var usersJob: Job? = null
 
@@ -68,7 +74,7 @@ class AdminUsersViewModel(
             id = generateUuid(),
             name = "",
             balance = 0L,
-            language = Language.DE
+            language = LanguageManager.currentLanguage
         )
         _showUserModal.value = true
     }
@@ -88,13 +94,18 @@ class AdminUsersViewModel(
     }
 
     fun saveUser(user: User) {
+        if (_isSavingUser.value) return
         viewModelScope.launch {
+            _isSavingUser.value = true
             try {
                 userRepository.saveUser(user)
                 refreshUsers()
                 closeUserModal()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "saveUser error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToSaveUser
+            } finally {
+                _isSavingUser.value = false
             }
         }
     }
@@ -106,6 +117,7 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "toggleUserActive error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToUpdateUserStatus
             }
         }
     }
@@ -117,6 +129,7 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "softDeleteUser error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToDeleteUser
             }
         }
     }
@@ -128,12 +141,17 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "restoreUser error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToRestoreUser
             }
         }
     }
 
     fun clearUserDeleteError() {
-        _userDeleteErrorMessage.value = null
+        _userErrorMessage.value = null
+    }
+
+    fun clearUserError() {
+        _userErrorMessage.value = null
     }
 
     fun openCustomExpenseModal(user: User) {

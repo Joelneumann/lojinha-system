@@ -46,6 +46,7 @@ class UserSelectionViewModel(
     val adminPasswordError: StateFlow<String?> = _adminPasswordError.asStateFlow()
 
     private var loadUsersJob: Job? = null
+    private var searchSubmitJob: Job? = null
     private var isLoggingIn: Boolean = false
 
     init {
@@ -63,6 +64,8 @@ class UserSelectionViewModel(
 
     fun resetState() {
         isLoggingIn = false
+        searchSubmitJob?.cancel()
+        searchSubmitJob = null
         _searchQuery.value = ""
         _selectedUserForPin.value = null
         _pinInput.value = ""
@@ -77,15 +80,16 @@ class UserSelectionViewModel(
     }
 
     fun onSearchSubmitted(onLoginSuccess: (User) -> Unit) {
+        if (isLoggingIn) return
         val query = _searchQuery.value.trim()
         if (query.isBlank()) return
 
-        activeScope.launch {
+        searchSubmitJob?.cancel()
+        searchSubmitJob = activeScope.launch {
             // 1. Try matching user by barcode first
             val userByBarcode = userRepository.getUserByBarcode(query)
             if (userByBarcode != null && userByBarcode.isActive && !userByBarcode.isDeleted) {
                 onUserCardClicked(userByBarcode, onLoginSuccess)
-                _searchQuery.value = ""
                 return@launch
             }
 
@@ -94,10 +98,8 @@ class UserSelectionViewModel(
             val exactMatch = filtered.firstOrNull { it.name.trim().removeAccents().equals(query.removeAccents(), ignoreCase = true) }
             if (exactMatch != null) {
                 onUserCardClicked(exactMatch, onLoginSuccess)
-                _searchQuery.value = ""
             } else if (filtered.size == 1) {
                 onUserCardClicked(filtered.first(), onLoginSuccess)
-                _searchQuery.value = ""
             }
         }
     }
@@ -123,7 +125,9 @@ class UserSelectionViewModel(
     fun submitPin(adminPassword: String = "", onLoginSuccess: (User) -> Unit) {
         if (isLoggingIn) return
         val user = _selectedUserForPin.value ?: return
-        if (verifyPinOrAdminBypass(user.pin, _pinInput.value, adminPassword)) {
+        val trimmedInput = _pinInput.value.trim()
+        val trimmedAdmin = adminPassword.trim()
+        if (verifyPinOrAdminBypass(user.pin, trimmedInput, trimmedAdmin)) {
             isLoggingIn = true
             _selectedUserForPin.value = null
             _pinInput.value = ""
@@ -131,13 +135,16 @@ class UserSelectionViewModel(
             onLoginSuccess(user)
         } else {
             _pinError.value = "pin_incorrect"
+            _pinInput.value = ""
         }
     }
 
     companion object {
         fun verifyPinOrAdminBypass(userPin: String?, inputPin: String, adminPassword: String = ""): Boolean {
-            val isUserPinMatch = userPin != null && de.joelneumann.lojinha.security.PasswordHasher.verify(inputPin, userPin)
-            val isAdminBypass = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPin, adminPassword)
+            val cleanInput = inputPin.trim()
+            val cleanAdminPassword = adminPassword.trim()
+            val isUserPinMatch = userPin != null && de.joelneumann.lojinha.security.PasswordHasher.verify(cleanInput, userPin)
+            val isAdminBypass = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(cleanInput, cleanAdminPassword)
             return isUserPinMatch || isAdminBypass
         }
     }
@@ -167,11 +174,14 @@ class UserSelectionViewModel(
     }
 
     fun submitAdminPassword(expectedPassword: String, onAdminAuthSuccess: () -> Unit) {
-        if (de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(_adminPasswordInput.value, expectedPassword)) {
+        val trimmedInput = _adminPasswordInput.value.trim()
+        val trimmedExpected = expectedPassword.trim()
+        if (de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(trimmedInput, trimmedExpected)) {
             closeAdminAuthDialog()
             onAdminAuthSuccess()
         } else {
             _adminPasswordError.value = "admin_password_incorrect"
+            _adminPasswordInput.value = ""
         }
     }
 
@@ -179,6 +189,8 @@ class UserSelectionViewModel(
         super.onCleared()
         loadUsersJob?.cancel()
         loadUsersJob = null
+        searchSubmitJob?.cancel()
+        searchSubmitJob = null
         resetState()
     }
 }

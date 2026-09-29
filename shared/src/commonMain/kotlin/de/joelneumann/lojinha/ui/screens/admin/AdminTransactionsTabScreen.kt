@@ -1,24 +1,32 @@
 package de.joelneumann.lojinha.ui.screens.admin
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
 import de.joelneumann.lojinha.ui.components.admin.transactions.AdminTransactionAccordionCard
 import de.joelneumann.lojinha.ui.components.admin.transactions.PurchaseCorrectionDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
-import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
+import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 
 @Composable
@@ -34,6 +42,7 @@ fun AdminTransactionsTabScreen(
     val referencedParentsMap by viewModel.referencedParentsMap.collectAsState()
     val correctionTarget by viewModel.correctionTarget.collectAsState()
     val isSubmitting by viewModel.isSubmitting.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     val searchQuery by viewModel.searchFilter.collectAsState()
     val currentPage by viewModel.currentPage.collectAsState()
@@ -90,16 +99,32 @@ fun AdminTransactionsTabScreen(
         ) {
             filterOptions.forEach { (type, label) ->
                 val isSelected = selectedTypeFilter == type
-                FilterChip(
-                    selected = isSelected,
+                Surface(
                     onClick = { viewModel.updateTypeFilter(type) },
-                    label = {
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) AccentNavy else SurfaceWhite,
+                    contentColor = if (isSelected) SurfaceWhite else PrimaryNavy,
+                    border = if (isSelected) null else BorderStroke(1.dp, DividerBorder),
+                    shadowElevation = if (isSelected) 2.dp else 1.dp,
+                    modifier = Modifier
+                        .height(38.dp)
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
                             text = label,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                            color = if (isSelected) SurfaceWhite else PrimaryNavy,
+                            maxLines = 1
                         )
                     }
-                )
+                }
             }
         }
 
@@ -176,8 +201,36 @@ fun AdminTransactionsTabScreen(
         PurchaseCorrectionDialog(
             originalTransaction = origTx,
             currentItems = currentEffective,
+            isSubmitting = isSubmitting,
             onApplyCorrection = viewModel::applyPurchaseCorrection,
             onDismiss = viewModel::closeCorrectionModal
         )
     }
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::clearErrorMessage,
+            shape = RoundedCornerShape(16.dp),
+            containerColor = SurfaceWhite,
+            title = {
+                Text(
+                    text = strings.errorTitle,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorDangerCrimson
+                )
+            },
+            text = {
+                Text(errorMessage ?: "")
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::clearErrorMessage,
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
+                ) {
+                    Text(strings.ok, color = SurfaceWhite)
+                }
+            }
+        )
+    }
 }
+

@@ -2,11 +2,15 @@ package de.joelneumann.lojinha.ui.components.admin.users
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -79,12 +83,29 @@ fun AdminUserAccordionCard(
                     color = PrimaryNavy
                 )
 
+                val handleTriggerAdjustment = {
+                    val cleaned = moneyInput.replace(',', '.').trim()
+                    val valDouble = cleaned.toDoubleOrNull()
+                    if (valDouble != null && valDouble != 0.0) {
+                        val cents = kotlin.math.round(valDouble * 100.0).toLong()
+                        pendingBalanceAdjustment = cents
+                    }
+                }
+
                 OutlinedTextField(
                     value = moneyInput,
                     onValueChange = { moneyInput = it },
                     placeholder = { Text(strings.amountPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                    modifier = Modifier.weight(1f).height(56.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                handleTriggerAdjustment()
+                                true
+                            } else false
+                        },
                     shape = RoundedCornerShape(8.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = SurfaceWhite,
@@ -92,18 +113,13 @@ fun AdminUserAccordionCard(
                         focusedBorderColor = AccentNavy,
                         unfocusedBorderColor = DividerBorder
                     ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { handleTriggerAdjustment() }),
                     singleLine = true
                 )
 
                 Button(
-                    onClick = {
-                        val cleaned = moneyInput.replace(',', '.').trim()
-                        val valDouble = cleaned.toDoubleOrNull()
-                        if (valDouble != null && valDouble != 0.0) {
-                            val cents = kotlin.math.round(valDouble * 100.0).toLong()
-                            pendingBalanceAdjustment = cents
-                        }
-                    },
+                    onClick = handleTriggerAdjustment,
                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(44.dp)

@@ -6,6 +6,7 @@ import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import kotlinx.coroutines.Job
@@ -53,6 +54,13 @@ class AdminTransactionsViewModel(
 
     private val _isSubmitting = MutableStateFlow(false)
     val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    fun clearErrorMessage() {
+        _errorMessage.value = null
+    }
 
     init {
         loadData()
@@ -123,7 +131,9 @@ class AdminTransactionsViewModel(
                 val children = transactionRepository.getTransactionsByReferenceIds(allParentIds)
                 val parents = transactionRepository.getTransactionsByIds(refIds)
 
-                _relatedChildrenMap.value = children.groupBy { it.referenceTransactionId!! }
+                _relatedChildrenMap.value = children
+                    .filter { !it.referenceTransactionId.isNullOrBlank() }
+                    .groupBy { it.referenceTransactionId!! }
                 _referencedParentsMap.value = parents.associateBy { it.id }
                 _transactions.value = items
                 _totalCount.value = paged.totalCount
@@ -132,7 +142,7 @@ class AdminTransactionsViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Normal cancellation when filter or page changes rapidly
             } catch (e: Exception) {
-                // Ignore or log error
+                de.joelneumann.lojinha.util.AppLogger.error("AdminTransactionsViewModel", "fetchPagedTransactions error: ${e.message}", e)
             }
         }
     }
@@ -148,6 +158,7 @@ class AdminTransactionsViewModel(
     ) {
         if (_isSubmitting.value) return
         _isSubmitting.value = true
+        _errorMessage.value = null
 
         viewModelScope.launch {
             try {
@@ -155,9 +166,12 @@ class AdminTransactionsViewModel(
                 if (success) {
                     closeCorrectionModal()
                     fetchPagedTransactions()
+                } else {
+                    _errorMessage.value = I18n.get().errCorrectionFailedOrUnchanged
                 }
             } catch (e: Exception) {
-                // Log or handle error
+                de.joelneumann.lojinha.util.AppLogger.error("AdminTransactionsViewModel", "applyPurchaseCorrection error: ${e.message}", e)
+                _errorMessage.value = e.message ?: I18n.get().errUnexpectedCorrection
             } finally {
                 _isSubmitting.value = false
             }
@@ -168,18 +182,23 @@ class AdminTransactionsViewModel(
         if (tx.type != TransactionType.ADMIN_DEPOSIT && tx.type != TransactionType.ADMIN_WITHDRAWAL) return
         if (_isSubmitting.value) return
         _isSubmitting.value = true
+        _errorMessage.value = null
 
         viewModelScope.launch {
             try {
                 if (transactionRepository.getCancellationCountForReference(tx.id) > 0) {
+                    _errorMessage.value = I18n.get().errTransactionAlreadyCanceled
                     return@launch
                 }
                 val success = transactionRepository.stornoNonPurchase(tx.id)
                 if (success) {
                     fetchPagedTransactions()
+                } else {
+                    _errorMessage.value = I18n.get().errStornoFailed
                 }
             } catch (e: Exception) {
-                // Log or handle error
+                de.joelneumann.lojinha.util.AppLogger.error("AdminTransactionsViewModel", "stornoNonPurchaseTransaction error: ${e.message}", e)
+                _errorMessage.value = e.message ?: I18n.get().errUnexpectedCancellation
             } finally {
                 _isSubmitting.value = false
             }
@@ -194,6 +213,7 @@ class AdminTransactionsViewModel(
         _correctionTarget.value = null
         _searchFilter.value = ""
         _selectedTypeFilter.value = null
+        _errorMessage.value = null
     }
 
     companion object {
@@ -201,23 +221,7 @@ class AdminTransactionsViewModel(
             originalItems: List<TransactionItem>,
             corrections: List<Transaction>,
             cancellation: Transaction? = null
-        ): List<TransactionItem> {
-            if (cancellation != null) {
-                return originalItems.map { it.copy(quantity = 0L) }
-            }
-            if (corrections.isEmpty()) return originalItems
-
-            val itemsMap = originalItems.associateBy { it.productId }.toMutableMap()
-            val sortedCorrections = corrections.sortedBy { it.timestamp }
-            for (corr in sortedCorrections) {
-                for (item in corr.items) {
-                    val existing = itemsMap[item.productId]
-                    if (existing != null) {
-                        itemsMap[item.productId] = existing.copy(quantity = item.quantity)
-                    }
-                }
-            }
-            return originalItems.map { itemsMap[it.productId] ?: it }
-        }
+        ): List<TransactionItem> = Transaction.computeEffectiveItems(originalItems, corrections, cancellation)
     }
 }
+

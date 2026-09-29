@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 
 @Composable
@@ -30,6 +31,7 @@ fun PaginationBar(
     pageSizeOptions: List<Int> = listOf(25, 50, 100),
     modifier: Modifier = Modifier
 ) {
+    val strings = I18n.current
     val startItem = if (totalCount == 0) 0 else (currentPage * pageSize) + 1
     val endItem = kotlin.math.min((currentPage + 1) * pageSize, totalCount)
 
@@ -52,7 +54,7 @@ fun PaginationBar(
         ) {
             // Left: Item range & count
             Text(
-                text = if (totalCount > 0) "Showing $startItem–$endItem of $totalCount" else "0 items",
+                text = if (totalCount > 0) strings.paginationShowing(startItem, endItem, totalCount) else strings.paginationZeroItems,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 color = TextSecondaryMuted
@@ -69,7 +71,7 @@ fun PaginationBar(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "Per page:",
+                        text = strings.perPageLabel,
                         fontSize = 13.sp,
                         color = TextSecondaryMuted
                     )
@@ -163,7 +165,7 @@ fun PaginationBar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.FirstPage,
-                            contentDescription = "First Page",
+                            contentDescription = strings.firstPage,
                             modifier = Modifier.size(18.dp),
                             tint = if (currentPage > 0) PrimaryNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                         )
@@ -177,7 +179,7 @@ fun PaginationBar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.ChevronLeft,
-                            contentDescription = "Previous Page",
+                            contentDescription = strings.previousPage,
                             modifier = Modifier.size(18.dp),
                             tint = if (currentPage > 0) PrimaryNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                         )
@@ -185,7 +187,7 @@ fun PaginationBar(
 
                     // Page Indicator
                     Text(
-                        text = "Page ${currentPage + 1} of ${kotlin.math.max(1, totalPages)}",
+                        text = strings.pageOf(currentPage + 1, kotlin.math.max(1, totalPages)),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy,
@@ -200,7 +202,7 @@ fun PaginationBar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.ChevronRight,
-                            contentDescription = "Next Page",
+                            contentDescription = strings.nextPage,
                             modifier = Modifier.size(18.dp),
                             tint = if (currentPage < totalPages - 1) PrimaryNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                         )
@@ -214,7 +216,7 @@ fun PaginationBar(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.LastPage,
-                            contentDescription = "Last Page",
+                            contentDescription = strings.lastPage,
                             modifier = Modifier.size(18.dp),
                             tint = if (currentPage < totalPages - 1) PrimaryNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                         )

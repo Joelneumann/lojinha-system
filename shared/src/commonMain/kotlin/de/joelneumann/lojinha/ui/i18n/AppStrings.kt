@@ -31,6 +31,8 @@ interface AppStrings {
     fun weightDialogMsg(productName: String): String
     val weightInputHint: String
     val weightTooltip: String
+    val invalidWeightFormat: String
+    fun pieceUnitSuffix(quantity: Long): String
     val history: String
     val account: String
     val historyFilterPlaceholder: String
@@ -318,6 +320,9 @@ interface AppStrings {
     val backupFileDetails: String
     fun filenameLabel(name: String): String
     fun filePathLabel(path: String): String
+    fun routineLabel(name: String): String
+    fun routineFormatLabel(format: String): String
+    fun saveLocationLabel(location: String): String
     val typeRestoreToConfirmLabel: String
     val proceedToAuthorization: String
     val restoreDatabaseNowBtn: String
@@ -374,10 +379,15 @@ interface AppStrings {
     val userNameLabel: String
     val userNamePlaceholder: String
     val resetPin: String
+    val removePin: String
     val noPinSet: String
     val hide: String
     val pinPlaceholder: String
     val enterNewPinPlaceholder: String
+    val confirmPinPlaceholder: String
+    val pinMismatchError: String
+    val pinWillBeRemovedNotice: String
+    val pinRemovedWarningDesc: String
     val noBarcodeAssigned: String
 
     val step1DbRestoreTitle: String
@@ -448,6 +458,7 @@ interface AppStrings {
     val debitViaAdmin: String
     fun barcodeConflictAlreadyAssignedToUser(code: String, userName: String): String
     fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean): String
+    val restoredUserBarcodeCollisionNotice: String
 
     // --- Custom Expense & Custom Income Modals ---
     val customExpense: String
@@ -490,6 +501,9 @@ interface AppStrings {
     val supportContactTitle: String
     val supportEmailLabel: String
     val supportEmailPlaceholder: String
+    val unlockSupportEmailTitle: String
+    val unlockSupportEmailMessage: String
+    val unlockSupportEmailConfirm: String
     val contactSupportBtn: String
     val githubRepoBtn: String
     val diagnosticsSectionTitle: String
@@ -508,6 +522,10 @@ interface AppStrings {
     val markupCustomSuffix: String
     val markupStandardSuffix: String
     val invalidMarkupError: String
+    val invalidPriceError: String
+    val invalidStockError: String
+    val invalidExchangeRateError: String
+    val fatalImportErrorsHeader: String
     val lastExecutionTimeLabel: String
 
     val remoteAdminTitle: String
@@ -516,6 +534,7 @@ interface AppStrings {
     val copyUrlBtn: String
     val urlCopiedToast: String
     val kioskActionsTitle: String
+    fun appVersionLabel(version: String): String
     val exitKioskBtn: String
     val exitKioskConfirmTitle: String
     val exitKioskConfirmMessage: String
@@ -523,4 +542,65 @@ interface AppStrings {
     val firstRunTitle: String
     val firstRunMessage: String
     val firstRunAdminLoginBtn: String
+    val errorTitle: String
+
+    // Navigation & Destination Targets
+    val mainScreen: String
+
+    // Pagination
+    fun paginationShowing(start: Int, end: Int, total: Int): String
+    val paginationZeroItems: String
+    val perPageLabel: String
+    fun pageOf(current: Int, total: Int): String
+    val firstPage: String
+    val previousPage: String
+    val nextPage: String
+    val lastPage: String
+
+    // Accessibility & Inputs
+    val clear: String
+    val togglePasswordVisibility: String
+    val togglePinVisibility: String
+    fun userBarcodeIdBadge(id: String): String
+
+    // ViewModel Error & Status Messages
+    val errCorrectionFailedOrUnchanged: String
+    val errTransactionAlreadyCanceled: String
+    val errStornoFailed: String
+    val errUnexpectedCorrection: String
+    val errUnexpectedCancellation: String
+
+    val errFailedToSaveUser: String
+    val errFailedToUpdateUserStatus: String
+    val errFailedToDeleteUser: String
+    val errFailedToRestoreUser: String
+
+    val errFailedToSaveProduct: String
+    val errFailedToUpdateProductStatus: String
+    val errFailedToDeleteProduct: String
+    val errFailedToAdjustStock: String
+
+    val errNoValidChargesToExecute: String
+    val errFailedToExecuteBatchCharges: String
+    fun errFailedToSaveBillingList(error: String): String
+    fun errFailedToDeleteBillingList(error: String): String
+
+    val statusDiagnosticBundleExportedWithEmail: String
+    val statusDiagnosticBundleExported: String
+    val statusSystemSettingsUpdated: String
+    fun statusCsvImportSuccess(count: Int, type: String, added: Int, updated: Int): String
+    val csvTypeProducts: String
+    val csvTypeUsers: String
+
+    val errFailedToCompletePurchase: String
+
+    // Desktop & Formatting
+    val appWindowTitle: String
+    val monthNames: List<String>
+
+    // CSV Import Validation
+    val csvEmptyError: String
+    val csvMissingHeadersError: String
+    val csvMissingNameHeaderError: String
 }
+

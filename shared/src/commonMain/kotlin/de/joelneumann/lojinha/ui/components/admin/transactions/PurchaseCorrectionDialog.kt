@@ -34,6 +34,7 @@ import de.joelneumann.lojinha.ui.utils.formModalKeys
 fun PurchaseCorrectionDialog(
     originalTransaction: Transaction,
     currentItems: List<TransactionItem>,
+    isSubmitting: Boolean = false,
     onApplyCorrection: (originalTx: Transaction, currentItems: List<TransactionItem>, newItems: List<TransactionItem>) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -80,11 +81,11 @@ fun PurchaseCorrectionDialog(
                 .formModalKeys(
                     onCancel = handleDismissRequest,
                     onConfirm = {
-                        if (isModified) {
+                        if (isModified && !isSubmitting) {
                             onApplyCorrection(originalTransaction, currentItems, draftItems)
                         }
                     },
-                    confirmEnabled = isModified
+                    confirmEnabled = isModified && !isSubmitting
                 )
         ) {
             Column(
@@ -115,7 +116,7 @@ fun PurchaseCorrectionDialog(
                     }
 
                     IconButton(
-                        onClick = onDismiss,
+                        onClick = handleDismissRequest,
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
@@ -379,8 +380,12 @@ fun PurchaseCorrectionDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Button(
-                        onClick = { showStornoAllConfirm = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
+                        onClick = { if (!isSubmitting) showStornoAllConfirm = true },
+                        enabled = !isSubmitting,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ColorDangerCrimson,
+                            disabledContainerColor = ColorDangerCrimson.copy(alpha = 0.5f)
+                        ),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(44.dp)
                     ) {
@@ -406,6 +411,7 @@ fun PurchaseCorrectionDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedButton(
                             onClick = handleDismissRequest,
+                            enabled = !isSubmitting,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.height(44.dp)
                         ) {
@@ -414,9 +420,11 @@ fun PurchaseCorrectionDialog(
 
                         Button(
                             onClick = {
-                                onApplyCorrection(originalTransaction, currentItems, draftItems)
+                                if (!isSubmitting) {
+                                    onApplyCorrection(originalTransaction, currentItems, draftItems)
+                                }
                             },
-                            enabled = isModified,
+                            enabled = isModified && !isSubmitting,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = AccentNavy,
                                 disabledContainerColor = SurfaceContainerHighLight
@@ -428,17 +436,25 @@ fun PurchaseCorrectionDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = if (isModified) SurfaceWhite else TextSecondaryMuted,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                if (isSubmitting) {
+                                    CircularProgressIndicator(
+                                        color = SurfaceWhite,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = if (isModified && !isSubmitting) SurfaceWhite else TextSecondaryMuted,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                                 Text(
                                     text = strings.applyCorrectionBtn,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isModified) SurfaceWhite else TextSecondaryMuted
+                                    color = if (isModified && !isSubmitting) SurfaceWhite else TextSecondaryMuted
                                 )
                             }
                         }
@@ -467,16 +483,18 @@ fun PurchaseCorrectionDialog(
 
     if (showStornoAllConfirm) {
         AlertDialog(
-            onDismissRequest = { showStornoAllConfirm = false },
+            onDismissRequest = { if (!isSubmitting) showStornoAllConfirm = false },
             containerColor = SurfaceWhite,
             shape = RoundedCornerShape(16.dp),
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
             modifier = Modifier.confirmationDialogKeys(
-                onCancel = { showStornoAllConfirm = false },
+                onCancel = { if (!isSubmitting) showStornoAllConfirm = false },
                 onConfirm = {
-                    val zeroedItems = currentItems.map { it.copy(quantity = 0L) }
-                    onApplyCorrection(originalTransaction, currentItems, zeroedItems)
-                    showStornoAllConfirm = false
+                    if (!isSubmitting) {
+                        val zeroedItems = currentItems.map { it.copy(quantity = 0L) }
+                        onApplyCorrection(originalTransaction, currentItems, zeroedItems)
+                        showStornoAllConfirm = false
+                    }
                 }
             ),
             title = {
@@ -500,17 +518,20 @@ fun PurchaseCorrectionDialog(
             confirmButton = {
                 Button(
                     onClick = {
-                        val zeroedItems = currentItems.map { it.copy(quantity = 0L) }
-                        onApplyCorrection(originalTransaction, currentItems, zeroedItems)
-                        showStornoAllConfirm = false
+                        if (!isSubmitting) {
+                            val zeroedItems = currentItems.map { it.copy(quantity = 0L) }
+                            onApplyCorrection(originalTransaction, currentItems, zeroedItems)
+                            showStornoAllConfirm = false
+                        }
                     },
+                    enabled = !isSubmitting,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
                 ) {
                     Text(strings.approveCompleteStorno, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showStornoAllConfirm = false }) {
+                OutlinedButton(onClick = { if (!isSubmitting) showStornoAllConfirm = false }, enabled = !isSubmitting) {
                     Text(strings.cancel)
                 }
             }

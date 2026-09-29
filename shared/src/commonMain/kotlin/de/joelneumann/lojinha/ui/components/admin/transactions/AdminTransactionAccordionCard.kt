@@ -21,6 +21,7 @@ import de.joelneumann.lojinha.ui.components.admin.AdminAccordionCard
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import androidx.compose.ui.window.DialogProperties
@@ -43,7 +44,7 @@ fun AdminTransactionAccordionCard(
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
-    val dateStr = remember(transaction.timestamp) { Formatting.formatTimestamp(transaction.timestamp) }
+    val dateStr = remember(transaction.timestamp, LanguageManager.currentLanguage) { Formatting.formatTimestamp(transaction.timestamp) }
 
     var showStornoNonPurchaseConfirm by remember { mutableStateOf(false) }
 

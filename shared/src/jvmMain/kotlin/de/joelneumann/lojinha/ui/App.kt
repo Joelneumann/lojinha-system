@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import de.joelneumann.lojinha.domain.repository.*
 import de.joelneumann.lojinha.ui.viewmodel.*
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
 
@@ -44,7 +45,12 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.*
 fun App(
     database: de.joelneumann.lojinha.data.database.AppDatabase = remember { DatabaseFactory.createDatabase() },
     serverPort: Int = 8080,
-    onExitApplication: (() -> Unit)? = null
+    onExitApplication: (() -> Unit)? = null,
+    productRepository: ProductRepository? = null,
+    userRepository: UserRepository? = null,
+    transactionRepository: TransactionRepository? = null,
+    billingListRepository: BillingListRepository? = null,
+    settingsRepository: SettingsRepository? = null
 ) {
     val candidateUrls = remember(serverPort) {
         val urls = mutableListOf("http://localhost:$serverPort")
@@ -70,13 +76,13 @@ fun App(
     val coroutineScope = rememberCoroutineScope()
 
     val onDataChanged = remember { { de.joelneumann.lojinha.data.service.DataChangeNotifier.notifyDataChanged() } }
-    val settingsRepository = remember { RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged) }
+    val effectiveSettingsRepo = settingsRepository ?: remember { RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged) }
     val autoBackupScheduler = remember {
         de.joelneumann.lojinha.data.service.AutoBackupScheduler(
             backupRestoreService = backupRestoreService,
             backupRepository = backupRepository,
             externalScope = coroutineScope,
-            settingsRepository = settingsRepository,
+            settingsRepository = effectiveSettingsRepo,
             oneDriveBackupService = oneDriveBackupService
         )
     }
@@ -91,12 +97,13 @@ fun App(
         }
     }
 
-    val productRepository = remember { RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), onDataChanged) }
-    val userRepository = remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
-    val transactionRepository = remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
+    val effectiveProductRepo = productRepository ?: remember { RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), onDataChanged) }
+    val effectiveUserRepo = userRepository ?: remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
+    val effectiveTransactionRepo = transactionRepository ?: remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
+    val effectiveBillingListRepo = billingListRepository ?: remember { de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged) }
 
     val appViewModel: AppViewModel = viewModel(
-        factory = LojinhaViewModelFactory.createAppViewModelFactory(userRepository, settingsRepository)
+        factory = LojinhaViewModelFactory.createAppViewModelFactory(effectiveUserRepo, effectiveSettingsRepo)
     )
 
     val currentScreen by appViewModel.currentScreen.collectAsState()
@@ -135,7 +142,7 @@ fun App(
                 when (targetContext) {
                     AppScreen.MAIN_USER_SELECT -> {
                         val userSelectionViewModel: UserSelectionViewModel = viewModel(
-                            factory = LojinhaViewModelFactory.createUserSelectionViewModelFactory(userRepository)
+                            factory = LojinhaViewModelFactory.createUserSelectionViewModelFactory(effectiveUserRepo)
                         )
                         LaunchedEffect(Unit) {
                             userSelectionViewModel.resetState()
@@ -168,7 +175,7 @@ fun App(
                                 key = "user_session_${sessionUser.id}_$sessionNonce",
                                 factory = LojinhaViewModelFactory.createUserSessionViewModelFactory(
                                     user = sessionUser,
-                                    settingsRepository = settingsRepository,
+                                    settingsRepository = effectiveSettingsRepo,
                                     onLogoutRequest = {
                                         showAbandonCartGuardDialog = false
                                         appViewModel.logout()
@@ -190,11 +197,11 @@ fun App(
 
                             val shoppingViewModel: ShoppingViewModel = viewModel(
                                 key = "shopping_${sessionUser.id}_$sessionNonce",
-                                factory = LojinhaViewModelFactory.createShoppingViewModelFactory(productRepository, userRepository, transactionRepository)
+                                factory = LojinhaViewModelFactory.createShoppingViewModelFactory(effectiveProductRepo, effectiveUserRepo, effectiveTransactionRepo)
                             )
                             val historyViewModel: TransactionHistoryViewModel = viewModel(
                                 key = "history_${sessionUser.id}_$sessionNonce",
-                                factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(transactionRepository, userRepository)
+                                factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(effectiveTransactionRepo, effectiveUserRepo)
                             )
                             val cartItems by shoppingViewModel.cartItems.collectAsState()
 
@@ -251,6 +258,7 @@ fun App(
                                                 settings = settings,
                                                 onLogout = handleLogoutRequest,
                                                 onNavigateToHistory = onNavigateToHistory,
+                                                onUserUpdated = onUserUpdated,
                                                 onUserInteracted = onUserInteracted,
                                                 onPurchaseFinalized = onPurchaseFinalized,
                                                 onPauseTimer = onPauseTimer,
@@ -279,7 +287,10 @@ fun App(
                                     val inactivitySecondsRemaining by userSessionViewModel.inactivitySecondsRemaining.collectAsState()
                                     InactivityWarningDialog(
                                         secondsRemaining = inactivitySecondsRemaining,
-                                        onStayLoggedIn = { userSessionViewModel.stayLoggedIn() }
+                                        onStayLoggedIn = {
+                                            showAbandonCartGuardDialog = false
+                                            userSessionViewModel.stayLoggedIn()
+                                        }
                                     )
                                 }
                             }
@@ -288,33 +299,25 @@ fun App(
 
                     AppScreen.ADMIN_PANEL -> {
                         val adminProductsViewModel = remember {
-                            AdminProductsViewModel(productRepository, settingsRepository)
+                            AdminProductsViewModel(effectiveProductRepo, effectiveSettingsRepo)
                         }
                         val adminUsersViewModel = remember {
-                            AdminUsersViewModel(userRepository, transactionRepository)
+                            AdminUsersViewModel(effectiveUserRepo, effectiveTransactionRepo)
                         }
                         val adminTransactionsViewModel = remember {
-                            AdminTransactionsViewModel(transactionRepository, userRepository, productRepository)
-                        }
-                        
-                        val billingListRepository = remember {
-                            de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(
-                                database.billingListDao(), onDataChanged
-                            )
+                            AdminTransactionsViewModel(effectiveTransactionRepo, effectiveUserRepo, effectiveProductRepo)
                         }
                         
                         val adminBulkBillingViewModel = remember {
-                            AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository)
+                            AdminBulkBillingViewModel(effectiveBillingListRepo, effectiveUserRepo, effectiveTransactionRepo)
                         }
                         
                         val adminSettingsViewModel = remember {
                             AdminSettingsViewModel(
-                                settingsRepository = settingsRepository,
+                                settingsRepository = effectiveSettingsRepo,
                                 backupRepository = backupRepository,
                                 onRunRoutineNow = { routine ->
-                                    coroutineScope.launch {
-                                        autoBackupScheduler.executeRoutine(routine)
-                                    }
+                                    autoBackupScheduler.executeRoutine(routine)
                                 },
                                 oneDriveBackupService = oneDriveBackupService,
                                 onPreviewCsvImport = { platformFile, type ->

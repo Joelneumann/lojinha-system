@@ -174,7 +174,7 @@ class DomainAndRulesTest {
     @Test
     fun testSecondaryCurrencyFormatting() {
         val formatted = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.USD, 0.18)
-        assertEquals(" (≈ $ 2.79)", formatted)
+        assertEquals(" (≈ US$ 2.79)", formatted)
 
         val formattedEur = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.EUR, 0.16)
         assertEquals(" (≈ € 2.48)", formattedEur)
@@ -182,9 +182,9 @@ class DomainAndRulesTest {
         val none = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.NONE, 0.18)
         assertEquals("", none)
 
-        // Test IEEE 754 precision boundary (R$ 16,65 with 0.18 rate: 16.65 * 0.18 = 2.997 -> $ 3.00, not $ 2.100)
+        // Test IEEE 754 precision boundary (R$ 16,65 with 0.18 rate: 16.65 * 0.18 = 2.997 -> US$ 3.00, not US$ 2.100)
         val edgeCase = Formatting.formatSecondaryCurrency(1665L, SecondaryCurrency.USD, 0.18)
-        assertEquals(" (≈ $ 3.00)", edgeCase)
+        assertEquals(" (≈ US$ 3.00)", edgeCase)
     }
 
     @Test
@@ -198,6 +198,10 @@ class DomainAndRulesTest {
         assertEquals(500L, Formatting.parseWeightInputToGrams("500g"))
         assertEquals(500L, Formatting.parseWeightInputToGrams("500"))
         assertEquals(250L, Formatting.parseWeightInputToGrams("0,25"))
+        assertEquals(100000L, Formatting.parseWeightInputToGrams("100kg")) // Exactly 100 kg is allowed
+        assertNull(Formatting.parseWeightInputToGrams("100.1kg")) // Over 100 kg is rejected
+        assertNull(Formatting.parseWeightInputToGrams("100001g")) // Over 100 kg is rejected
+        assertNull(Formatting.parseWeightInputToGrams("7891234567890")) // 13-digit barcode scan is rejected
     }
 
     @Test
@@ -228,11 +232,13 @@ class DomainAndRulesTest {
         assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("30 g"))
         assertEquals(Formatting.WeightUnitDisplay.G, Formatting.detectWeightUnit("2g"))
 
-        // Invalid, negative or blank -> null
+        // Invalid, negative, blank or exceeding 100kg -> null
         assertNull(Formatting.detectWeightUnit(""))
         assertNull(Formatting.detectWeightUnit("   "))
         assertNull(Formatting.detectWeightUnit("abc"))
         assertNull(Formatting.detectWeightUnit("-5"))
+        assertNull(Formatting.detectWeightUnit("105kg"))
+        assertNull(Formatting.detectWeightUnit("7891234567890")) // barcode
     }
 
     @Test
@@ -803,4 +809,57 @@ class DomainAndRulesTest {
         assertEquals(10.5, Formatting.parsePercentageInput("10.5"))
         assertEquals(0.18, Formatting.parsePercentageInput("0,18"))
     }
+
+    @Test
+    fun testNewLocalizationCompleteness() {
+        listOf(
+            de.joelneumann.lojinha.ui.i18n.EnglishStrings,
+            de.joelneumann.lojinha.ui.i18n.GermanStrings,
+            de.joelneumann.lojinha.ui.i18n.PortugueseStrings
+        ).forEach { s ->
+            assertTrue(s.mainScreen.isNotBlank())
+            assertTrue(s.paginationShowing(1, 10, 50).isNotBlank())
+            assertTrue(s.paginationZeroItems.isNotBlank())
+            assertTrue(s.perPageLabel.isNotBlank())
+            assertTrue(s.pageOf(1, 5).isNotBlank())
+            assertTrue(s.firstPage.isNotBlank())
+            assertTrue(s.previousPage.isNotBlank())
+            assertTrue(s.nextPage.isNotBlank())
+            assertTrue(s.lastPage.isNotBlank())
+            assertTrue(s.clear.isNotBlank())
+            assertTrue(s.togglePasswordVisibility.isNotBlank())
+            assertTrue(s.togglePinVisibility.isNotBlank())
+            assertTrue(s.userBarcodeIdBadge("123").contains("123"))
+            assertTrue(s.errCorrectionFailedOrUnchanged.isNotBlank())
+            assertTrue(s.errTransactionAlreadyCanceled.isNotBlank())
+            assertTrue(s.errStornoFailed.isNotBlank())
+            assertTrue(s.errUnexpectedCorrection.isNotBlank())
+            assertTrue(s.errUnexpectedCancellation.isNotBlank())
+            assertTrue(s.errFailedToSaveUser.isNotBlank())
+            assertTrue(s.errFailedToUpdateUserStatus.isNotBlank())
+            assertTrue(s.errFailedToDeleteUser.isNotBlank())
+            assertTrue(s.errFailedToRestoreUser.isNotBlank())
+            assertTrue(s.errFailedToSaveProduct.isNotBlank())
+            assertTrue(s.errFailedToUpdateProductStatus.isNotBlank())
+            assertTrue(s.errFailedToDeleteProduct.isNotBlank())
+            assertTrue(s.errFailedToAdjustStock.isNotBlank())
+            assertTrue(s.errNoValidChargesToExecute.isNotBlank())
+            assertTrue(s.errFailedToExecuteBatchCharges.isNotBlank())
+            assertTrue(s.errFailedToSaveBillingList("err").contains("err"))
+            assertTrue(s.errFailedToDeleteBillingList("err").contains("err"))
+            assertTrue(s.statusDiagnosticBundleExportedWithEmail.isNotBlank())
+            assertTrue(s.statusDiagnosticBundleExported.isNotBlank())
+            assertTrue(s.statusSystemSettingsUpdated.isNotBlank())
+            assertTrue(s.statusCsvImportSuccess(10, "Products", 5, 5).isNotBlank())
+            assertTrue(s.csvTypeProducts.isNotBlank())
+            assertTrue(s.csvTypeUsers.isNotBlank())
+            assertTrue(s.errFailedToCompletePurchase.isNotBlank())
+            assertTrue(s.appWindowTitle.isNotBlank())
+            assertEquals(12, s.monthNames.size)
+            assertTrue(s.csvEmptyError.isNotBlank())
+            assertTrue(s.csvMissingHeadersError.isNotBlank())
+            assertTrue(s.csvMissingNameHeaderError.isNotBlank())
+        }
+    }
 }
+

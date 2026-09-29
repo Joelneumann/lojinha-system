@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.ui.screens.admin
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import de.joelneumann.lojinha.AppVersion
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -25,6 +26,8 @@ import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.pickFile
 import de.joelneumann.lojinha.ui.utils.pickFolder
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 
 @Composable
@@ -33,6 +36,7 @@ fun AdminSettingsTabScreen(
     onUnsavedStateChanged: (Boolean) -> Unit
 ) {
     val strings = I18n.current
+    @Suppress("DEPRECATION")
     val clipboardManager = LocalClipboardManager.current
     var copiedUrl by remember { mutableStateOf<String?>(null) }
     val settings by viewModel.settings.collectAsState()
@@ -44,54 +48,53 @@ fun AdminSettingsTabScreen(
     val csvImportType by viewModel.csvImportType.collectAsState()
     val logFolderSize by viewModel.logFolderSize.collectAsState()
 
-    var newPassword by remember(settings) { mutableStateOf("") }
-    var confirmPassword by remember(settings) { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
 
-    var globalMarkup by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.globalMarkupPercent)) }
-    var usdRate by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.usdExchangeRate)) }
-    var eurRate by remember(settings) { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
-    var inactivityTimeout by remember(settings) { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
+    var globalMarkup by remember { mutableStateOf(Formatting.formatDecimal(settings.globalMarkupPercent)) }
+    var usdRate by remember { mutableStateOf(Formatting.formatDecimal(settings.usdExchangeRate)) }
+    var eurRate by remember { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
+    var inactivityTimeout by remember { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
+    var supportEmail by remember { mutableStateOf(settings.supportEmail ?: "") }
+    var isSupportEmailLocked by remember { mutableStateOf(supportEmail.isNotBlank()) }
+    var showUnlockSupportEmailDialog by remember { mutableStateOf(false) }
 
-    var backupLocation by remember(settings) { mutableStateOf(settings.backupLocationPath) }
-    var supportEmail by remember(settings) { mutableStateOf(settings.supportEmail ?: "") }
+    val hasFieldChanges = remember(
+        settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout, supportEmail
+    ) {
+        (newPassword.isNotEmpty() || confirmPassword.isNotEmpty()) ||
+                globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent) ||
+                usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate) ||
+                eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate) ||
+                inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
+                supportEmail.trim() != (settings.supportEmail ?: "")
+    }
 
+    // Only synchronize baseline fields when the user has NO uncommitted changes
     LaunchedEffect(settings) {
-        newPassword = ""
-        confirmPassword = ""
-        globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
-        usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
-        eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
-        inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
-        backupLocation = settings.backupLocationPath
-        supportEmail = settings.supportEmail ?: ""
+        if (!hasFieldChanges) {
+            globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
+            usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
+            eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
+            inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
+            supportEmail = settings.supportEmail ?: ""
+            isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
+        }
     }
 
     val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
     val doPasswordsMatch = newPassword == confirmPassword
     val isPasswordValid = !isPasswordEntered || (newPassword.isNotBlank() && doPasswordsMatch)
     val inactivityTimeoutValue = inactivityTimeout.toIntOrNull()
-    val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue >= 2
+    val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue in 2..1440
 
     val globalMarkupValue = remember(globalMarkup) { Formatting.parsePercentageInput(globalMarkup) }
     val isGlobalMarkupValid = globalMarkupValue != null && globalMarkupValue in 0.0..1000.0
     val parsedUsdRate = remember(usdRate) { usdRate.trim().replace(',', '.').toDoubleOrNull() }
-    val isUsdRateValid = parsedUsdRate != null && parsedUsdRate.isFinite() && parsedUsdRate > 0.0
+    val isUsdRateValid = parsedUsdRate != null && parsedUsdRate.isFinite() && parsedUsdRate in 0.0001..100000.0
     val parsedEurRate = remember(eurRate) { eurRate.trim().replace(',', '.').toDoubleOrNull() }
-    val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate > 0.0
-
-    val hasFieldChanges = remember(
-        settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout,
-        backupLocation, supportEmail
-    ) {
-        newPassword.isNotEmpty() ||
-                globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent) ||
-                usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate) ||
-                eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate) ||
-                inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
-                backupLocation != settings.backupLocationPath ||
-                supportEmail != (settings.supportEmail ?: "")
-    }
+    val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate in 0.0001..100000.0
 
     LaunchedEffect(hasFieldChanges) {
         onUnsavedStateChanged(hasFieldChanges)
@@ -142,8 +145,8 @@ fun AdminSettingsTabScreen(
                             usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
                             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
                             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
-                            backupLocation = settings.backupLocationPath
                             supportEmail = settings.supportEmail ?: ""
+                            isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
                             onUnsavedStateChanged(false)
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -172,13 +175,13 @@ fun AdminSettingsTabScreen(
                                 globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
                                 usdExchangeRate = parsedUsdRate ?: settings.usdExchangeRate,
                                 eurExchangeRate = parsedEurRate ?: settings.eurExchangeRate,
-                                inactivityTimeoutMinutes = maxOf(2, inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes),
-                                backupLocationPath = backupLocation,
-                                supportEmail = supportEmail.takeIf { it.isNotBlank() }
+                                inactivityTimeoutMinutes = (inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes).coerceIn(2, 1440),
+                                supportEmail = supportEmail.trim().takeIf { it.isNotBlank() }
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
                             confirmPassword = ""
+                            isSupportEmailLocked = updatedSettings.supportEmail?.isNotBlank() == true
                             onUnsavedStateChanged(false)
                         }
                     },
@@ -256,106 +259,7 @@ fun AdminSettingsTabScreen(
             contentPadding = PaddingValues(bottom = 32.dp),
             modifier = Modifier.weight(1f).fillMaxWidth()
         ) {
-            // CARD 1: ADMIN MASTER PASSWORD
-            item(key = "admin-security-card") {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SurfaceWhite,
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
-                    shadowElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = PrimaryNavy,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(strings.adminMasterPasswordTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            AdminLabeledField(
-                                label = strings.newPasswordLabel,
-                                value = newPassword,
-                                onValueChange = { newPassword = it },
-                                placeholder = strings.newPasswordPlaceholder,
-                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { showPassword = !showPassword }) {
-                                        Icon(
-                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = "Toggle Visibility",
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            AdminLabeledField(
-                                label = strings.confirmNewPasswordLabel,
-                                value = confirmPassword,
-                                onValueChange = { confirmPassword = it },
-                                placeholder = strings.confirmNewPasswordPlaceholder,
-                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { showPassword = !showPassword }) {
-                                        Icon(
-                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = "Toggle Visibility",
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        if (isPasswordEntered) {
-                            if (!doPasswordsMatch) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Error,
-                                        contentDescription = null,
-                                        tint = ColorDangerCrimson,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(strings.passwordsDoNotMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
-                                }
-                            } else if (newPassword.isNotBlank()) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = ColorSuccessEmerald,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(strings.passwordsMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // CARD 2: PRODUCT PRICING RULES
+            // CARD 1: PRODUCT PRICING RULES
             item(key = "product-pricing-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -399,7 +303,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 3: CURRENCY EXCHANGE RATES
+            // CARD 2: CURRENCY EXCHANGE RATES
             item(key = "currency-exchange-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -428,27 +332,47 @@ fun AdminSettingsTabScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            AdminLabeledField(
-                                label = strings.usdRateLabel,
-                                value = usdRate,
-                                onValueChange = { usdRate = it },
-                                placeholder = strings.usdRatePlaceholder,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                AdminLabeledField(
+                                    label = strings.usdRateLabel,
+                                    value = usdRate,
+                                    onValueChange = { usdRate = it },
+                                    placeholder = strings.usdRatePlaceholder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (!isUsdRateValid) {
+                                    Text(
+                                        text = strings.invalidExchangeRateError,
+                                        fontSize = 11.sp,
+                                        color = ColorDangerCrimson,
+                                        modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                                    )
+                                }
+                            }
 
-                            AdminLabeledField(
-                                label = strings.eurRateLabel,
-                                value = eurRate,
-                                onValueChange = { eurRate = it },
-                                placeholder = strings.eurRatePlaceholder,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                AdminLabeledField(
+                                    label = strings.eurRateLabel,
+                                    value = eurRate,
+                                    onValueChange = { eurRate = it },
+                                    placeholder = strings.eurRatePlaceholder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (!isEurRateValid) {
+                                    Text(
+                                        text = strings.invalidExchangeRateError,
+                                        fontSize = 11.sp,
+                                        color = ColorDangerCrimson,
+                                        modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // CARD 4: KIOSK SYSTEM TIMERS
+            // CARD 3: KIOSK SYSTEM TIMERS
             item(key = "kiosk-timers-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -493,7 +417,101 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 4.5: MICROSOFT ONEDRIVE INTEGRATION
+            // CARD 4: REMOTE WEB ADMINISTRATION (LAN)
+            if (viewModel.serverUrls.isNotEmpty()) {
+                item(key = "remote-admin-card") {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SurfaceWhite,
+                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Language,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.remoteAdminTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+
+                            Text(
+                                strings.remoteAdminSubtitle,
+                                fontSize = 13.sp,
+                                color = TextSecondaryMuted
+                            )
+
+                            viewModel.serverUrls.forEach { url ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SurfaceContainerLight,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = url,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AccentNavy
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                clipboardManager.setText(AnnotatedString(url))
+                                                copiedUrl = url
+                                            },
+                                            shape = RoundedCornerShape(6.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (copiedUrl == url) ColorSuccessEmerald else PrimaryNavy
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (copiedUrl == url) Icons.Default.Check else Icons.Default.ContentCopy,
+                                                    contentDescription = null,
+                                                    tint = SurfaceWhite,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Text(
+                                                    text = if (copiedUrl == url) strings.urlCopiedToast else strings.copyUrlBtn,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SurfaceWhite
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text(
+                                strings.remoteAdminFirewallNotice,
+                                fontSize = 12.sp,
+                                color = TextSecondaryMuted
+                            )
+                        }
+                    }
+                }
+            }
+
+            // CARD 5: MICROSOFT ONEDRIVE INTEGRATION
             item(key = "onedrive-integration-card") {
                 val settingsState by viewModel.settings.collectAsState()
 
@@ -539,11 +557,16 @@ fun AdminSettingsTabScreen(
                         }
 
                         var clientIdInput by remember(settingsState.oneDriveClientId) { mutableStateOf(settingsState.oneDriveClientId) }
+                        LaunchedEffect(clientIdInput) {
+                            if (clientIdInput != settingsState.oneDriveClientId) {
+                                kotlinx.coroutines.delay(600)
+                                viewModel.updateOneDriveClientId(clientIdInput)
+                            }
+                        }
                         OutlinedTextField(
                             value = clientIdInput,
                             onValueChange = {
                                 clientIdInput = it
-                                viewModel.updateOneDriveClientId(it)
                             },
                             label = { Text(strings.azureClientIdLabel) },
                             placeholder = { Text(strings.azureClientIdPlaceholder) },
@@ -607,7 +630,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 5: BACKUP ROUTINES MANAGEMENT
+            // CARD 6: BACKUP ROUTINES MANAGEMENT
             item(key = "backup-routines-card") {
                 val routines by viewModel.routines.collectAsState()
 
@@ -827,7 +850,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 6: DATABASE RESTORE (.DB) & DATA WIPE
+            // CARD 7: DATABASE RESTORE (.DB) & DATA WIPE
             item(key = "restore-wipe-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -907,7 +930,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 7: CSV DATA IMPORT
+            // CARD 8: CSV DATA IMPORT
             item(key = "csv-import-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -988,7 +1011,106 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 8: SUPPORT CONTACT
+            // CARD 9: ADMIN MASTER PASSWORD
+            item(key = "admin-security-card") {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.adminMasterPasswordTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            AdminLabeledField(
+                                label = strings.newPasswordLabel,
+                                value = newPassword,
+                                onValueChange = { newPassword = it },
+                                placeholder = strings.newPasswordPlaceholder,
+                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                 trailingIcon = {
+                                    IconButton(onClick = { showPassword = !showPassword }) {
+                                        Icon(
+                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = strings.togglePasswordVisibility,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            AdminLabeledField(
+                                label = strings.confirmNewPasswordLabel,
+                                value = confirmPassword,
+                                onValueChange = { confirmPassword = it },
+                                placeholder = strings.confirmNewPasswordPlaceholder,
+                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { showPassword = !showPassword }) {
+                                        Icon(
+                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = strings.togglePasswordVisibility,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        if (isPasswordEntered) {
+                            if (!doPasswordsMatch) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = ColorDangerCrimson,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(strings.passwordsDoNotMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                                }
+                            } else if (newPassword.isNotBlank()) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = ColorSuccessEmerald,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(strings.passwordsMatch, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorSuccessEmerald)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // CARD 10: SUPPORT CONTACT
             item(key = "support-contact-card") {
                 val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
@@ -1016,13 +1138,85 @@ fun AdminSettingsTabScreen(
                             Text(strings.supportContactTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
 
-                        AdminLabeledField(
-                            label = strings.supportEmailLabel,
-                            value = supportEmail,
-                            onValueChange = { supportEmail = it },
-                            placeholder = strings.supportEmailPlaceholder,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AdminLabeledField(
+                                label = strings.supportEmailLabel,
+                                value = supportEmail,
+                                onValueChange = { supportEmail = it },
+                                placeholder = strings.supportEmailPlaceholder,
+                                enabled = !isSupportEmailLocked,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isSupportEmailLocked) {
+                                IconButton(
+                                    onClick = { showUnlockSupportEmailDialog = true },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = strings.unlockSupportEmailTitle,
+                                        tint = PrimaryNavy.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (showUnlockSupportEmailDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showUnlockSupportEmailDialog = false },
+                                containerColor = SurfaceWhite,
+                                shape = RoundedCornerShape(16.dp),
+                                properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+                                modifier = Modifier.confirmationDialogKeys(
+                                    onCancel = { showUnlockSupportEmailDialog = false },
+                                    onConfirm = { isSupportEmailLocked = false; showUnlockSupportEmailDialog = false }
+                                ),
+                                title = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = null,
+                                            tint = PrimaryNavy,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            text = strings.unlockSupportEmailTitle,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PrimaryNavy
+                                        )
+                                    }
+                                },
+                                text = {
+                                    Text(
+                                        text = strings.unlockSupportEmailMessage,
+                                        fontSize = 14.sp,
+                                        color = TextSecondarySubtle
+                                    )
+                                },
+                                confirmButton = {
+                                    Button(
+                                        onClick = { isSupportEmailLocked = false; showUnlockSupportEmailDialog = false },
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy)
+                                    ) {
+                                        Text(strings.unlockSupportEmailConfirm, color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                                    }
+                                },
+                                dismissButton = {
+                                    OutlinedButton(onClick = { showUnlockSupportEmailDialog = false }) {
+                                        Text(strings.cancel)
+                                    }
+                                }
+                            )
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1030,7 +1224,7 @@ fun AdminSettingsTabScreen(
                         ) {
                             OutlinedButton(
                                 onClick = {
-                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: "support@example.com"
+                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: ""
                                     uriHandler.openUri("mailto:$email")
                                 },
                                 shape = RoundedCornerShape(8.dp),
@@ -1052,7 +1246,7 @@ fun AdminSettingsTabScreen(
 
                             OutlinedButton(
                                 onClick = {
-                                    uriHandler.openUri("https://github.com/TODO_YOUR_PROJECT")
+                                    uriHandler.openUri("https://github.com/Joelneumann/lojinha-system")
                                 },
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.weight(1f)
@@ -1111,7 +1305,7 @@ fun AdminSettingsTabScreen(
                         ) {
                             Button(
                                 onClick = {
-                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: "support@example.com"
+                                    val email = supportEmail.takeIf { it.isNotBlank() } ?: ""
                                     viewModel.exportSupportBundle(prepareEmail = true, recipientEmail = email)
                                 },
                                 shape = RoundedCornerShape(8.dp),
@@ -1178,101 +1372,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 7: REMOTE WEB ADMINISTRATION (LAN)
-            if (viewModel.serverUrls.isNotEmpty()) {
-                item(key = "remote-admin-card") {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = SurfaceWhite,
-                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
-                        shadowElevation = 1.dp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Language,
-                                    contentDescription = null,
-                                    tint = PrimaryNavy,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(strings.remoteAdminTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                            }
-
-                            Text(
-                                strings.remoteAdminSubtitle,
-                                fontSize = 13.sp,
-                                color = TextSecondaryMuted
-                            )
-
-                            viewModel.serverUrls.forEach { url ->
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = SurfaceContainerLight,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = url,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = AccentNavy
-                                        )
-
-                                        Button(
-                                            onClick = {
-                                                clipboardManager.setText(AnnotatedString(url))
-                                                copiedUrl = url
-                                            },
-                                            shape = RoundedCornerShape(6.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (copiedUrl == url) ColorSuccessEmerald else PrimaryNavy
-                                            ),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (copiedUrl == url) Icons.Default.Check else Icons.Default.ContentCopy,
-                                                    contentDescription = null,
-                                                    tint = SurfaceWhite,
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                                Text(
-                                                    text = if (copiedUrl == url) strings.urlCopiedToast else strings.copyUrlBtn,
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = SurfaceWhite
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Text(
-                                strings.remoteAdminFirewallNotice,
-                                fontSize = 12.sp,
-                                color = TextSecondaryMuted
-                            )
-                        }
-                    }
-                }
-            }
-
-            // CARD 8: SYSTEM & KIOSK ACTIONS
+            // CARD 11: SYSTEM & KIOSK ACTIONS
             item(key = "kiosk-actions-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1287,15 +1387,28 @@ fun AdminSettingsTabScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.PowerSettingsNew,
-                                contentDescription = null,
-                                tint = ColorDangerCrimson,
-                                modifier = Modifier.size(18.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PowerSettingsNew,
+                                    contentDescription = null,
+                                    tint = ColorDangerCrimson,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.kioskActionsTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+
+                            Text(
+                                text = strings.appVersionLabel(AppVersion.CURRENT),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = TextSecondaryMuted
                             )
-                            Text(strings.kioskActionsTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
 
                         Button(
@@ -1325,6 +1438,11 @@ fun AdminSettingsTabScreen(
     if (showExitConfirmationDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissExitConfirmationDialog() },
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(
+                onCancel = { viewModel.dismissExitConfirmationDialog() },
+                onConfirm = { viewModel.confirmExitApplication() }
+            ),
             title = { Text(strings.exitKioskConfirmTitle, fontWeight = FontWeight.Bold, color = PrimaryNavy) },
             text = { Text(strings.exitKioskConfirmMessage, color = PrimaryNavy) },
             confirmButton = {

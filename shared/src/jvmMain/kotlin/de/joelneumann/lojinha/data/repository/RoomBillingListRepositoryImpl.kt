@@ -9,46 +9,37 @@ import de.joelneumann.lojinha.domain.model.BillingListUser
 import de.joelneumann.lojinha.domain.repository.BillingListRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 
-@kotlinx.coroutines.ExperimentalCoroutinesApi
 class RoomBillingListRepositoryImpl(
     private val dao: BillingListDao,
     private val onDataChanged: () -> Unit
 ) : BillingListRepository {
 
     override fun getActiveBillingListsFlow(): Flow<List<BillingList>> {
-        return dao.getActiveBillingListsFlow().flatMapLatest { entities ->
-            val userFlows = entities.map { listEntity ->
-                dao.getUsersForListFlow(listEntity.id).map { userEntities ->
-                    listEntity to userEntities
-                }
-            }
-            if (userFlows.isEmpty()) {
-                kotlinx.coroutines.flow.flowOf(emptyList())
-            } else {
-                combine(userFlows) { pairs ->
-                    pairs.map { (listEntity, userEntities) ->
-                        BillingList(
-                            id = listEntity.id,
-                            name = listEntity.name,
-                            type = BillingListType.valueOf(listEntity.type),
-                            basePrice = listEntity.basePrice,
-                            comment = listEntity.comment,
-                            isDeleted = listEntity.isDeleted,
-                            lastExecutionTime = listEntity.lastExecutionTime,
-                            users = userEntities.map {
-                                BillingListUser(
-                                    id = it.id,
-                                    listId = it.listId,
-                                    userId = it.userId,
-                                    quantity = it.quantity
-                                )
-                            }
+        return combine(
+            dao.getActiveBillingListsFlow(),
+            dao.getAllBillingListUsersFlow()
+        ) { lists, allUsers ->
+            val usersByListId = allUsers.groupBy { it.listId }
+            lists.map { listEntity ->
+                val userEntities = usersByListId[listEntity.id] ?: emptyList()
+                BillingList(
+                    id = listEntity.id,
+                    name = listEntity.name,
+                    type = BillingListType.valueOf(listEntity.type),
+                    basePrice = listEntity.basePrice,
+                    comment = listEntity.comment,
+                    isDeleted = listEntity.isDeleted,
+                    lastExecutionTime = listEntity.lastExecutionTime,
+                    users = userEntities.map {
+                        BillingListUser(
+                            id = it.id,
+                            listId = it.listId,
+                            userId = it.userId,
+                            quantity = it.quantity
                         )
                     }
-                }
+                )
             }
         }
     }

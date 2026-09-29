@@ -1,12 +1,20 @@
 package de.joelneumann.lojinha.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -94,12 +102,28 @@ fun UserSelectionContent(
         }
     }
 
-    val filteredUsers = remember(users, searchQuery) {
-        if (searchQuery.isBlank()) users
-        else users.filter { it.name.containsIgnoreAccents(searchQuery) }.sortedByAccentInsensitive { it.name }
+    val trimmedQuery = remember(searchQuery) { searchQuery.trim() }
+    val filteredUsers = remember(users, trimmedQuery) {
+        if (trimmedQuery.isBlank()) users
+        else users.filter { user ->
+            user.name.containsIgnoreAccents(trimmedQuery) ||
+            user.userBarcode?.contains(trimmedQuery, ignoreCase = true) == true ||
+            user.userBarcodeNumber?.contains(trimmedQuery, ignoreCase = true) == true
+        }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.F12) {
+                    if (!showAdminAuthDialog && selectedUserForPin == null) {
+                        onOpenAdminAuthDialog()
+                    }
+                    true
+                } else false
+            }
+    ) {
         HeaderBar(
             title = strings.appTitle,
             onLanguageClick = {
@@ -114,12 +138,23 @@ fun UserSelectionContent(
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    Text(
-                        text = strings.adminLoginBtn,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SurfaceWhite
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = strings.adminLoginBtn,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SurfaceWhite
+                        )
+                        Text(
+                            text = "(F12)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = SurfaceWhite.copy(alpha = 0.45f)
+                        )
+                    }
                 }
             }
         )
@@ -128,6 +163,14 @@ fun UserSelectionContent(
             modifier = Modifier
                 .fillMaxSize()
                 .background(SurfaceContainerLight)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    coroutineScope.launch {
+                        focusRequester.safeRequestFocus()
+                    }
+                }
                 .padding(ScreenPadding)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -136,7 +179,15 @@ fun UserSelectionContent(
                     onQueryChange = onSearchQueryChange,
                     placeholder = strings.searchUserPlaceholder,
                     onSearchSubmitted = onSearchSubmitted,
-                    focusRequester = focusRequester
+                    focusRequester = focusRequester,
+                    onKeyDown = { keyEvent ->
+                        if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.F12) {
+                            if (!showAdminAuthDialog && selectedUserForPin == null) {
+                                onOpenAdminAuthDialog()
+                            }
+                            true
+                        } else false
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))

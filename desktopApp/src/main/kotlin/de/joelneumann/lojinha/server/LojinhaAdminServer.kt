@@ -88,32 +88,29 @@ class LojinhaAdminServer(
                         }
                     }
 
-                    try {
-                        val req = call.receive<LoginRequest>()
-                        val settings = settingsRepository.getSettings()
-                        val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
-                        val matches = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(req.password, expectedPassword)
+                    val req = call.receive<LoginRequest>()
+                    val settings = settingsRepository.getSettings()
+                    val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
+                    val matches = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(req.password, expectedPassword)
 
-                        AppLogger.info("LojinhaAdminServer", "Admin Login Attempt from $clientIp: success=$matches")
-                        if (matches) {
-                            failedLoginAttempts.remove(clientIp)
-                            val token = UUID.randomUUID().toString()
-                            activeTokens[token] = now + SESSION_DURATION_MS
-                            call.respond(HttpStatusCode.OK, LoginResponse(true, "Authenticated", token))
-                        } else {
-                            val prevCount = failedLoginAttempts[clientIp]?.first ?: 0
-                            val firstTime = failedLoginAttempts[clientIp]?.second ?: now
-                            failedLoginAttempts[clientIp] = Pair(prevCount + 1, firstTime)
-                            call.respond(HttpStatusCode.OK, LoginResponse(false, "Invalid admin password"))
+                    AppLogger.info("LojinhaAdminServer", "Admin Login Attempt from $clientIp: success=$matches")
+                    if (matches) {
+                        failedLoginAttempts.remove(clientIp)
+                        val token = UUID.randomUUID().toString()
+                        activeTokens[token] = now + SESSION_DURATION_MS
+                        call.respond(HttpStatusCode.OK, LoginResponse(true, "Authenticated", token))
+                    } else {
+                        failedLoginAttempts.compute(clientIp) { _, current ->
+                            val count = current?.first ?: 0
+                            val firstTime = current?.second ?: now
+                            Pair(count + 1, firstTime)
                         }
-                    } catch (e: Exception) {
-                        AppLogger.error("LojinhaAdminServer", "Error processing login request: ${e.message}", e)
-                        call.respond(HttpStatusCode.OK, LoginResponse(false, "Error processing login request"))
+                        call.respond(HttpStatusCode.OK, LoginResponse(false, "Invalid admin password"))
                     }
                 }
 
                 post("/api/admin/logout") {
-                    val token = call.extractBearerToken()
+                    val token = call.extractBearerToken() ?: call.request.queryParameters["token"]
                     if (token != null) {
                         activeTokens.remove(token)
                     }
@@ -130,7 +127,16 @@ class LojinhaAdminServer(
                     post("/products") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val product = call.receive<Product>()
-                        productRepository.saveProduct(product)
+                        if (product.name.isBlank()) {
+                            call.respond(HttpStatusCode.BadRequest, "Product name cannot be blank")
+                            return@post
+                        }
+                        if (product.basePrice < 0) {
+                            call.respond(HttpStatusCode.BadRequest, "Product base price cannot be negative")
+                            return@post
+                        }
+                        val productToSave = if (product.id.isBlank()) product.copy(id = UUID.randomUUID().toString()) else product
+                        productRepository.saveProduct(productToSave)
                         call.respond(HttpStatusCode.OK)
                     }
                     post("/products/stock") {
@@ -160,13 +166,39 @@ class LojinhaAdminServer(
                     post("/users") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val user = call.receive<User>()
+                        if (user.name.isBlank()) {
+                            call.respond(HttpStatusCode.BadRequest, "User name cannot be blank")
+                            return@post
+                        }
                         userRepository.saveUser(user)
                         call.respond(HttpStatusCode.OK)
                     }
                     post("/users/balance") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val req = call.receive<DeltaRequest>()
-                        userRepository.updateBalance(req.id, req.delta)
+                        val user = userRepository.getUserById(req.id)
+                        if (user == null) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@post
+                        }
+                        if (req.delta != 0L) {
+                            val isDeposit = req.delta > 0
+                            val tx = Transaction(
+                                id = UUID.randomUUID().toString(),
+                                userId = user.id,
+                                userNameSnapshot = user.name,
+                                timestamp = System.currentTimeMillis(),
+                                type = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL,
+                                note = if (isDeposit) "SYSNOTE|ADMIN_DEPOSIT" else "SYSNOTE|ADMIN_DEBIT",
+                                totalAmount = req.delta,
+                                items = emptyList()
+                            )
+                            transactionRepository.executeAtomicTransaction(
+                                transaction = tx,
+                                balanceDelta = req.delta,
+                                stockDeltas = emptyMap()
+                            )
+                        }
                         call.respond(HttpStatusCode.OK)
                     }
                     post("/users/deactivate/{id}") {
@@ -368,7 +400,7 @@ class LojinhaAdminServer(
                                     }
                                 }
                             } catch (e: Exception) {
-                                // Client disconnected
+                                if (e is kotlinx.coroutines.CancellationException) throw e
                             } finally {
                                 DataChangeNotifier.removeListener(listener)
                                 channel.close()
@@ -378,18 +410,26 @@ class LojinhaAdminServer(
                 }
 
                 // 3. Serve static Wasm assets
+                suspend fun io.ktor.server.application.ApplicationCall.respondWasmAsset(assetName: String) {
+                    val file = findWasmAsset(assetName)
+                    if (file != null && file.exists() && !file.isDirectory) {
+                        respondFile(file)
+                        return
+                    }
+                    val resourceBytes = loadWasmResourceBytes(assetName)
+                    if (resourceBytes != null) {
+                        respondBytes(resourceBytes, getContentTypeForName(assetName))
+                        return
+                    }
+                    if (assetName == "index.html") {
+                        respond(HttpStatusCode.NotFound, "Admin web interface assets not found.")
+                    } else {
+                        respond(HttpStatusCode.NotFound)
+                    }
+                }
+
                 get("/") {
-                    val indexFile = findWasmAsset("index.html")
-                    if (indexFile != null && indexFile.exists() && !indexFile.isDirectory) {
-                        call.respondFile(indexFile)
-                        return@get
-                    }
-                    val indexBytes = loadWasmResourceBytes("index.html")
-                    if (indexBytes != null) {
-                        call.respondBytes(indexBytes, ContentType.Text.Html)
-                        return@get
-                    }
-                    call.respond(HttpStatusCode.NotFound, "Admin web interface assets not found.")
+                    call.respondWasmAsset("index.html")
                 }
 
                 get("/{filename...}") {
@@ -409,28 +449,16 @@ class LojinhaAdminServer(
                     }
 
                     val file = findWasmAsset(filename)
-                    if (file != null && file.exists() && !file.isDirectory) {
-                        call.respondFile(file)
+                    val resourceBytes = if (filename.isNotBlank()) loadWasmResourceBytes(filename) else null
+
+                    if (file != null || resourceBytes != null) {
+                        call.respondWasmAsset(filename)
                     } else {
-                        val resourceBytes = if (filename.isNotBlank()) loadWasmResourceBytes(filename) else null
-                        if (resourceBytes != null) {
-                            val contentType = getContentTypeForName(filename)
-                            call.respondBytes(resourceBytes, contentType)
+                        // Only fallback to index.html for root or clean single-segment SPA routes
+                        val isSpaRoute = !filename.contains(".")
+                        if (isSpaRoute) {
+                            call.respondWasmAsset("index.html")
                         } else {
-                            // Only fallback to index.html for root or clean single-segment SPA routes
-                            val isSpaRoute = !filename.contains(".")
-                            if (isSpaRoute) {
-                                val indexFile = findWasmAsset("index.html")
-                                if (indexFile != null && indexFile.exists() && !indexFile.isDirectory) {
-                                    call.respondFile(indexFile)
-                                    return@get
-                                }
-                                val indexBytes = loadWasmResourceBytes("index.html")
-                                if (indexBytes != null) {
-                                    call.respondBytes(indexBytes, ContentType.Text.Html)
-                                    return@get
-                                }
-                            }
                             call.respond(HttpStatusCode.NotFound)
                         }
                     }
@@ -465,8 +493,12 @@ class LojinhaAdminServer(
         val token = extractBearerToken() ?: request.queryParameters["token"]
         if (token != null) {
             val expiry = activeTokens[token]
-            if (expiry != null && System.currentTimeMillis() < expiry) {
-                return true
+            if (expiry != null) {
+                if (System.currentTimeMillis() < expiry) {
+                    return true
+                } else {
+                    activeTokens.remove(token)
+                }
             }
         }
 
@@ -511,7 +543,6 @@ class LojinhaAdminServer(
         if (clean.isBlank()) return null
         val stream = LojinhaAdminServer::class.java.getResourceAsStream("/wasm/$clean")
             ?: Thread.currentThread().contextClassLoader.getResourceAsStream("wasm/$clean")
-            ?: LojinhaAdminServer::class.java.getResourceAsStream("/$clean")
         return stream?.use { it.readBytes() }
     }
 

@@ -330,7 +330,7 @@ fun BackupRoutineDialog(
                         return@Button
                     }
 
-                    val timeRegex = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
+                    val timeRegex = Regex("^([0-9]|0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$")
                     val scheduleConfig: BackupScheduleConfig = when (scheduleMode) {
                         ScheduleMode.TIMED -> {
                             val trimmedTime = timedTime.trim()
@@ -338,12 +338,14 @@ fun BackupRoutineDialog(
                                 errorMessage = strings.invalidTimeFormat
                                 return@Button
                             }
-                            BackupScheduleConfig.Timed(trimmedTime)
+                            val parts = trimmedTime.split(":")
+                            val normalizedTime = "${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}"
+                            BackupScheduleConfig.Timed(normalizedTime)
                         }
                         ScheduleMode.INTERVAL -> {
-                            val h = intervalHours.trim().toIntOrNull() ?: 0
-                            val m = intervalMinutes.trim().toIntOrNull() ?: 0
-                            if (h <= 0 && m <= 0) {
+                            val h = intervalHours.trim().toIntOrNull() ?: -1
+                            val m = intervalMinutes.trim().toIntOrNull() ?: -1
+                            if (h < 0 || m < 0 || (h == 0 && m == 0)) {
                                 errorMessage = strings.invalidIntervalFormat
                                 return@Button
                             }
@@ -357,16 +359,22 @@ fun BackupRoutineDialog(
                         ScheduleMode.ON_DATA_CHANGE -> BackupScheduleConfig.OnDataChange()
                     }
 
+                    val normalizedPath = if (destinationType == BackupType.ONEDRIVE && !locationPath.trim().startsWith("/")) {
+                        "/${locationPath.trim()}"
+                    } else {
+                        locationPath.trim()
+                    }
+
                     val routine = BackupRoutine(
                         id = initialRoutine?.id?.ifBlank { generateUuid() } ?: generateUuid(),
-                        name = name,
+                        name = name.trim(),
                         isEnabled = initialRoutine?.isEnabled ?: true,
                         type = destinationType,
                         fileType = fileType,
                         writeMode = writeMode,
                         scheduleConfig = scheduleConfig,
-                        backupLocationPath = locationPath,
-                        lastBackupTimestamp = initialRoutine?.lastBackupTimestamp ?: currentTimeMillis()
+                        backupLocationPath = normalizedPath,
+                        lastBackupTimestamp = initialRoutine?.lastBackupTimestamp
                     )
 
                     onSaveRoutine(routine)
@@ -444,9 +452,9 @@ fun DeleteRoutineConfirmationDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Routine: ${routine.name}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
-                        Text("Format: .${routine.fileType.name.lowercase()}", fontSize = 12.sp, color = AccentNavy)
-                        Text("Save Location: ${routine.backupLocationPath}", fontSize = 11.sp, color = AccentNavy)
+                        Text(strings.routineLabel(routine.name), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
+                        Text(strings.routineFormatLabel(".${routine.fileType.name.lowercase()}"), fontSize = 12.sp, color = AccentNavy)
+                        Text(strings.saveLocationLabel(routine.backupLocationPath), fontSize = 11.sp, color = AccentNavy)
                     }
                 }
             }
@@ -490,7 +498,7 @@ fun ToggleRoutineConfirmationDialog(
     onDismiss: () -> Unit
 ) {
     val strings = I18n.current
-    val actionText = if (targetState) "Activate" else "Deactivate"
+    val actionText = if (targetState) strings.activate else strings.deactivate
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -534,8 +542,8 @@ fun ToggleRoutineConfirmationDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Routine: ${routine.name}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
-                        Text("Target Path: ${routine.backupLocationPath}", fontSize = 11.sp, color = AccentNavy)
+                        Text(strings.routineLabel(routine.name), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
+                        Text(strings.saveLocationLabel(routine.backupLocationPath), fontSize = 11.sp, color = AccentNavy)
                     }
                 }
             }

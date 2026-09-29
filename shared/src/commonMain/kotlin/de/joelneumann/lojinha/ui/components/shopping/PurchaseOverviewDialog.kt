@@ -34,6 +34,7 @@ import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
@@ -69,9 +70,12 @@ fun PurchaseOverviewDialog(
         }
     }
 
+    LaunchedEffect(Unit) {
+        focusRequester.safeRequestFocus()
+    }
+
     // 15-second countdown timer (independent of inactivity timer, resets on interaction)
     LaunchedEffect(lastInteractionTime) {
-        focusRequester.safeRequestFocus()
         val totalDurationSecs = 15
         val startTime = lastInteractionTime
         secondsRemaining = totalDurationSecs
@@ -91,7 +95,7 @@ fun PurchaseOverviewDialog(
     val totalCents = abs(transaction.totalAmount)
     val balanceBefore = transaction.userBalanceBefore ?: user.balance
     val balanceAfter = transaction.userBalanceAfter ?: (balanceBefore - totalCents)
-    val formattedTimestamp = remember(transaction.timestamp) {
+    val formattedTimestamp = remember(transaction.timestamp, LanguageManager.currentLanguage) {
         Formatting.formatTimestamp(transaction.timestamp)
     }
 
@@ -204,7 +208,7 @@ fun PurchaseOverviewDialog(
                                 modifier = Modifier.weight(1.8f)
                             )
                             Text(
-                                text = strings.stock.let { strings.headerQtyWeight },
+                                text = strings.headerQtyWeight,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextSecondaryMuted,

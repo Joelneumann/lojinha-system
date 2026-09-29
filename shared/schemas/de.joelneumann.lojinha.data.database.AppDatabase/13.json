@@ -1,0 +1,628 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 13,
+    "identityHash": "1192531392dc85e33846e584c64d21ea",
+    "entities": [
+      {
+        "tableName": "users",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `balance` INTEGER NOT NULL, `language` TEXT NOT NULL, `secondaryCurrency` TEXT NOT NULL, `pin` TEXT, `userBarcode` TEXT, `userBarcodeNumber` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL DEFAULT 0, `avatarType` TEXT NOT NULL DEFAULT 'INITIALS', `avatarEmoji` TEXT NOT NULL DEFAULT '😀', `avatarColor` TEXT NOT NULL DEFAULT '#1E293B', PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "balance",
+            "columnName": "balance",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "language",
+            "columnName": "language",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "secondaryCurrency",
+            "columnName": "secondaryCurrency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pin",
+            "columnName": "pin",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "userBarcode",
+            "columnName": "userBarcode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "userBarcodeNumber",
+            "columnName": "userBarcodeNumber",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isActive",
+            "columnName": "isActive",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "isDeleted",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "avatarType",
+            "columnName": "avatarType",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'INITIALS'"
+          },
+          {
+            "fieldPath": "avatarEmoji",
+            "columnName": "avatarEmoji",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'😀'"
+          },
+          {
+            "fieldPath": "avatarColor",
+            "columnName": "avatarColor",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'#1E293B'"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_users_name",
+            "unique": false,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_users_name` ON `${TABLE_NAME}` (`name`)"
+          },
+          {
+            "name": "index_users_userBarcode",
+            "unique": false,
+            "columnNames": [
+              "userBarcode"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_users_userBarcode` ON `${TABLE_NAME}` (`userBarcode`)"
+          },
+          {
+            "name": "index_users_userBarcodeNumber",
+            "unique": false,
+            "columnNames": [
+              "userBarcodeNumber"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_users_userBarcodeNumber` ON `${TABLE_NAME}` (`userBarcodeNumber`)"
+          }
+        ]
+      },
+      {
+        "tableName": "products",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `barcodes` TEXT NOT NULL, `basePrice` INTEGER NOT NULL, `unitType` TEXT NOT NULL, `stockQuantity` INTEGER NOT NULL, `customMarkupPercent` REAL, `isActive` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "barcodes",
+            "columnName": "barcodes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "basePrice",
+            "columnName": "basePrice",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitType",
+            "columnName": "unitType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stockQuantity",
+            "columnName": "stockQuantity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customMarkupPercent",
+            "columnName": "customMarkupPercent",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "isActive",
+            "columnName": "isActive",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "transactions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `type` TEXT NOT NULL, `referenceTransactionId` TEXT, `note` TEXT, `totalAmount` INTEGER NOT NULL, `items` TEXT NOT NULL, `userBalanceBefore` INTEGER, `userBalanceAfter` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userNameSnapshot",
+            "columnName": "userNameSnapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referenceTransactionId",
+            "columnName": "referenceTransactionId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "totalAmount",
+            "columnName": "totalAmount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "items",
+            "columnName": "items",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userBalanceBefore",
+            "columnName": "userBalanceBefore",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "userBalanceAfter",
+            "columnName": "userBalanceAfter",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_transactions_referenceTransactionId",
+            "unique": false,
+            "columnNames": [
+              "referenceTransactionId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transactions_referenceTransactionId` ON `${TABLE_NAME}` (`referenceTransactionId`)"
+          },
+          {
+            "name": "index_transactions_userId",
+            "unique": false,
+            "columnNames": [
+              "userId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transactions_userId` ON `${TABLE_NAME}` (`userId`)"
+          },
+          {
+            "name": "index_transactions_timestamp",
+            "unique": false,
+            "columnNames": [
+              "timestamp"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transactions_timestamp` ON `${TABLE_NAME}` (`timestamp`)"
+          },
+          {
+            "name": "index_transactions_type",
+            "unique": false,
+            "columnNames": [
+              "type"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transactions_type` ON `${TABLE_NAME}` (`type`)"
+          }
+        ]
+      },
+      {
+        "tableName": "settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `adminPasswordHash` TEXT NOT NULL, `globalMarkupPercent` REAL NOT NULL, `usdExchangeRate` REAL NOT NULL, `eurExchangeRate` REAL NOT NULL, `inactivityTimeoutMinutes` INTEGER NOT NULL, `backupLocationPath` TEXT NOT NULL, `autoBackupEnabled` INTEGER NOT NULL, `autoBackupFormat` TEXT NOT NULL, `autoBackupScheduleType` TEXT NOT NULL, `autoBackupTime` TEXT NOT NULL, `autoBackupIntervalHours` INTEGER NOT NULL, `lastBackupTimestamp` INTEGER, `oneDriveClientId` TEXT NOT NULL, `oneDriveRefreshToken` TEXT, `oneDriveAccountEmail` TEXT, `oneDriveAccountName` TEXT, `oneDriveDefaultFolder` TEXT NOT NULL, `oneDriveTenant` TEXT NOT NULL, `supportEmail` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "adminPasswordHash",
+            "columnName": "adminPasswordHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "globalMarkupPercent",
+            "columnName": "globalMarkupPercent",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usdExchangeRate",
+            "columnName": "usdExchangeRate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eurExchangeRate",
+            "columnName": "eurExchangeRate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "inactivityTimeoutMinutes",
+            "columnName": "inactivityTimeoutMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backupLocationPath",
+            "columnName": "backupLocationPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoBackupEnabled",
+            "columnName": "autoBackupEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoBackupFormat",
+            "columnName": "autoBackupFormat",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoBackupScheduleType",
+            "columnName": "autoBackupScheduleType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoBackupTime",
+            "columnName": "autoBackupTime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoBackupIntervalHours",
+            "columnName": "autoBackupIntervalHours",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastBackupTimestamp",
+            "columnName": "lastBackupTimestamp",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "oneDriveClientId",
+            "columnName": "oneDriveClientId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "oneDriveRefreshToken",
+            "columnName": "oneDriveRefreshToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "oneDriveAccountEmail",
+            "columnName": "oneDriveAccountEmail",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "oneDriveAccountName",
+            "columnName": "oneDriveAccountName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "oneDriveDefaultFolder",
+            "columnName": "oneDriveDefaultFolder",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "oneDriveTenant",
+            "columnName": "oneDriveTenant",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "supportEmail",
+            "columnName": "supportEmail",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "backup_routines",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `isEnabled` INTEGER NOT NULL, `type` TEXT NOT NULL, `fileType` TEXT NOT NULL, `writeMode` TEXT NOT NULL, `scheduleConfig` TEXT NOT NULL, `backupLocationPath` TEXT NOT NULL, `lastBackupTimestamp` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isEnabled",
+            "columnName": "isEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileType",
+            "columnName": "fileType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "writeMode",
+            "columnName": "writeMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleConfig",
+            "columnName": "scheduleConfig",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backupLocationPath",
+            "columnName": "backupLocationPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastBackupTimestamp",
+            "columnName": "lastBackupTimestamp",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "billing_lists",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `basePrice` INTEGER, `comment` TEXT, `isDeleted` INTEGER NOT NULL, `lastExecutionTime` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "basePrice",
+            "columnName": "basePrice",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "comment",
+            "columnName": "comment",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "isDeleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastExecutionTime",
+            "columnName": "lastExecutionTime",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "billing_list_users",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `listId` TEXT NOT NULL, `userId` TEXT NOT NULL, `quantity` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`listId`) REFERENCES `billing_lists`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`userId`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "listId",
+            "columnName": "listId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quantity",
+            "columnName": "quantity",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_billing_list_users_listId_userId",
+            "unique": true,
+            "columnNames": [
+              "listId",
+              "userId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_billing_list_users_listId_userId` ON `${TABLE_NAME}` (`listId`, `userId`)"
+          },
+          {
+            "name": "index_billing_list_users_userId",
+            "unique": false,
+            "columnNames": [
+              "userId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_billing_list_users_userId` ON `${TABLE_NAME}` (`userId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "billing_lists",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "listId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "users",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "userId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1192531392dc85e33846e584c64d21ea')"
+    ]
+  }
+}

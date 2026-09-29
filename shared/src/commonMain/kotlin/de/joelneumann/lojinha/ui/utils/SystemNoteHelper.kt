@@ -12,14 +12,20 @@ object SystemNoteHelper {
         val code = parts.getOrNull(1) ?: return note
         
         return when (code) {
-            "COMPLETE_STORNO" -> strings.sysNoteCompleteStorno(
-                date = parts.getOrNull(2) ?: "",
-                amount = parts.getOrNull(3) ?: ""
-            )
-            "PARTIAL_STORNO" -> strings.sysNotePartialStorno(
-                date = parts.getOrNull(2) ?: "",
-                amount = parts.getOrNull(3) ?: ""
-            )
+            "COMPLETE_STORNO" -> {
+                val rawDate = parts.getOrNull(2) ?: ""
+                val rawAmt = parts.getOrNull(3) ?: ""
+                val date = rawDate.toLongOrNull()?.let { Formatting.formatTimestamp(it) } ?: rawDate
+                val amount = rawAmt.toLongOrNull()?.let { Formatting.formatBrl(kotlin.math.abs(it)) } ?: rawAmt
+                strings.sysNoteCompleteStorno(date = date, amount = amount)
+            }
+            "PARTIAL_STORNO" -> {
+                val rawDate = parts.getOrNull(2) ?: ""
+                val rawAmt = parts.getOrNull(3) ?: ""
+                val date = rawDate.toLongOrNull()?.let { Formatting.formatTimestamp(it) } ?: rawDate
+                val amount = rawAmt.toLongOrNull()?.let { Formatting.formatBrl(kotlin.math.abs(it)) } ?: rawAmt
+                strings.sysNotePartialStorno(date = date, amount = amount)
+            }
             "NON_PURCHASE_STORNO" -> {
                 val rawType = parts.getOrNull(2) ?: ""
                 val hasItems = parts.getOrNull(3)?.toBooleanStrictOrNull() ?: false
@@ -38,10 +44,15 @@ object SystemNoteHelper {
                     else -> rawType
                 }
                 
+                val rawDate = parts.getOrNull(4) ?: ""
+                val rawAmt = parts.getOrNull(5) ?: ""
+                val date = rawDate.toLongOrNull()?.let { Formatting.formatTimestamp(it) } ?: rawDate
+                val amount = rawAmt.toLongOrNull()?.let { Formatting.formatBrl(kotlin.math.abs(it)) } ?: rawAmt
+
                 strings.sysNoteNonPurchaseStorno(
                     type = typeLabel,
-                    date = parts.getOrNull(4) ?: "",
-                    amount = parts.getOrNull(5) ?: ""
+                    date = date,
+                    amount = amount
                 )
             }
             "ADMIN_DEPOSIT" -> strings.depositViaAdmin

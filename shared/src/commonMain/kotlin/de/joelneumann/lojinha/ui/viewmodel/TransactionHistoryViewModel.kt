@@ -11,6 +11,7 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,6 +69,7 @@ class TransactionHistoryViewModel(
     val relatedTransactionsMap: StateFlow<Map<String, Transaction>> = _relatedTransactionsMap.asStateFlow()
 
     fun loadUserTransactions(userId: String, resetFilters: Boolean = true) {
+        val sameUser = currentUserId == userId
         currentUserId = userId
         if (resetFilters) {
             _searchFilter.value = ""
@@ -75,6 +77,9 @@ class TransactionHistoryViewModel(
             _showSettingsModal.value = false
         }
         _currentPage.value = 0
+        if (sameUser && fetchJob?.isActive == true && resetFilters) {
+            return
+        }
         fetchPage()
     }
 
@@ -132,13 +137,15 @@ class TransactionHistoryViewModel(
                 _relatedTransactionsMap.value = (parentTxs + childTxs).associateBy { it.id }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Normal cancellation when user updates filter/page rapidly
+            } catch (e: Exception) {
+                AppLogger.error("TransactionHistoryViewModel", "Failed to fetch transactions for user $userId: ${e.message}", e)
             }
         }
     }
 
     fun openSettingsModal(user: User) {
         _pinInput.value = ""
-        _selectedLanguage.value = user.language
+        _selectedLanguage.value = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
         _selectedSecondaryCurrency.value = user.secondaryCurrency
         _selectedAvatar.value = user.avatar
         _showSettingsModal.value = true
@@ -164,11 +171,11 @@ class TransactionHistoryViewModel(
         _selectedAvatar.value = avatar
     }
 
-    fun saveUserSettings(user: User, onSaved: (User) -> Unit) {
-        val updatedPin = if (_pinInput.value.isNotBlank()) {
-            de.joelneumann.lojinha.security.PasswordHasher.hash(_pinInput.value.trim())
-        } else {
-            user.pin
+    fun saveUserSettings(user: User, removePin: Boolean = false, onSaved: (User) -> Unit) {
+        val updatedPin = when {
+            removePin -> null
+            _pinInput.value.isNotBlank() -> de.joelneumann.lojinha.security.PasswordHasher.hash(_pinInput.value.trim())
+            else -> user.pin
         }
         val updated = user.copy(
             pin = updatedPin,
@@ -176,10 +183,11 @@ class TransactionHistoryViewModel(
             secondaryCurrency = _selectedSecondaryCurrency.value,
             avatar = _selectedAvatar.value
         )
-        activeScope.launch {
-            userRepository.saveUser(updated)
+        try {
             _showSettingsModal.value = false
             onSaved(updated)
+        } catch (e: Exception) {
+            AppLogger.error("TransactionHistoryViewModel", "Failed to save user settings: ${e.message}", e)
         }
     }
 

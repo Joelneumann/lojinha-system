@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha.data.database
 
 import androidx.room.TypeConverter
+import de.joelneumann.lojinha.domain.model.BackupScheduleConfig
 import de.joelneumann.lojinha.domain.model.Barcode
 import de.joelneumann.lojinha.domain.model.TransactionItem
 import kotlinx.serialization.encodeToString
@@ -16,7 +17,7 @@ class Converters {
 
     @TypeConverter
     fun toBarcodeList(value: String): List<Barcode> {
-        return if (value.isBlank()) emptyList() else json.decodeFromString(value)
+        return if (value.isBlank()) emptyList() else runCatching { json.decodeFromString<List<Barcode>>(value) }.getOrElse { emptyList() }
     }
 
     @TypeConverter
@@ -26,16 +27,24 @@ class Converters {
 
     @TypeConverter
     fun toTransactionItemList(value: String): List<TransactionItem> {
-        return if (value.isBlank()) emptyList() else json.decodeFromString(value)
+        return if (value.isBlank()) emptyList() else runCatching { json.decodeFromString<List<TransactionItem>>(value) }.getOrElse { emptyList() }
     }
 
     @TypeConverter
-    fun fromBackupScheduleConfig(value: de.joelneumann.lojinha.domain.model.BackupScheduleConfig): String {
+    fun fromBackupScheduleConfig(value: BackupScheduleConfig): String {
         return json.encodeToString(value)
     }
 
     @TypeConverter
-    fun toBackupScheduleConfig(value: String): de.joelneumann.lojinha.domain.model.BackupScheduleConfig {
-        return if (value.isBlank()) de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed("02:00") else json.decodeFromString(value)
+    fun toBackupScheduleConfig(value: String): BackupScheduleConfig {
+        return if (value.isBlank()) {
+            BackupScheduleConfig.Timed("02:00")
+        } else {
+            runCatching {
+                json.decodeFromString<BackupScheduleConfig>(value)
+            }.getOrElse {
+                BackupScheduleConfig.Timed("02:00")
+            }
+        }
     }
 }

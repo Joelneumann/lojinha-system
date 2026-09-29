@@ -1,15 +1,21 @@
 package de.joelneumann.lojinha
 
 import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.BillingListRepository
 import de.joelneumann.lojinha.domain.repository.ProductRepository
+import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.utils.PlatformFile
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import kotlin.test.*
@@ -36,13 +42,22 @@ class AdminViewModelsTest {
     ) : ProductRepository {
         var recordedStockDeltas = mutableListOf<Pair<String, Long>>()
         var savedProducts = mutableListOf<Product>()
+        var shouldThrowOnSave: Boolean = false
 
         override fun getProductsFlow(): Flow<List<Product>> = flowOf(products)
         override suspend fun getAllProducts(): List<Product> = products
         override suspend fun getProductById(id: String): Product? = products.find { it.id == id }
         override suspend fun getProductByBarcode(barcode: String): Product? = null
         override suspend fun saveProduct(product: Product) {
+            if (shouldThrowOnSave) {
+                throw RuntimeException("Database error saving product")
+            }
             savedProducts.add(product)
+            products = if (products.any { it.id == product.id }) {
+                products.map { if (it.id == product.id) product else it }
+            } else {
+                products + product
+            }
         }
         override suspend fun deactivateProduct(id: String) {}
         override suspend fun hardDeleteProduct(id: String) {}
@@ -116,6 +131,50 @@ class AdminViewModelsTest {
         }
     }
 
+    private class TestSettingsRepository(
+        initialSettings: SystemSettings = SystemSettings()
+    ) : SettingsRepository {
+        val flow = MutableStateFlow(initialSettings)
+        var updatedSettings: SystemSettings? = null
+
+        override fun getSettingsFlow(): Flow<SystemSettings> = flow
+        override suspend fun getSettings(): SystemSettings = flow.value
+        override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {
+            updatedSettings = settings
+            flow.value = settings
+        }
+    }
+
+    private class TestBackupRepository(
+        initialRoutines: List<BackupRoutine> = emptyList()
+    ) : BackupRepository {
+        val flow = MutableStateFlow(initialRoutines)
+        var savedRoutines = mutableListOf<BackupRoutine>()
+        var deletedRoutineIds = mutableListOf<String>()
+
+        override fun getBackupsFlow(): Flow<List<BackupRoutine>> = flow
+        override suspend fun getAllBackups(): List<BackupRoutine> = flow.value
+        override suspend fun getBackupById(id: String): BackupRoutine? = flow.value.find { it.id == id }
+        override suspend fun saveBackupRoutine(routine: BackupRoutine) {
+            savedRoutines.add(routine)
+            val current = flow.value.toMutableList()
+            val idx = current.indexOfFirst { it.id == routine.id }
+            if (idx >= 0) {
+                current[idx] = routine
+            } else {
+                current.add(routine)
+            }
+            flow.value = current
+        }
+        override suspend fun deleteBackupRoutine(id: String) {
+            deletedRoutineIds.add(id)
+            flow.value = flow.value.filter { it.id != id }
+        }
+        override suspend fun deleteAllBackupRoutines() {
+            flow.value = emptyList()
+        }
+    }
+
     // --- Tests for AdminProductsViewModel (QA-01 & QA-08) ---
 
     @Test
@@ -158,6 +217,107 @@ class AdminViewModelsTest {
 
         assertEquals(1, productRepo.recordedStockDeltas.size)
         assertEquals("prod-2" to -3L, productRepo.recordedStockDeltas.first())
+    }
+
+    @Test
+    fun testSaveProduct_newProduct_doesNotCallUpdateStockAndSetsInitialStockCorrectly() = runTest {
+        val productRepo = TestProductRepository(emptyList())
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openNewProductModal()
+        assertEquals(true, viewModel.showProductModal.value)
+        assertEquals("", viewModel.editProduct.value?.id)
+
+        val newProduct = Product(
+            id = "",
+            name = "Fresh Apples",
+            barcodes = emptyList(),
+            basePrice = 450,
+            unitType = UnitType.WEIGHT,
+            stockQuantity = 25000 // 25 kg in grams
+        )
+
+        viewModel.saveProduct(newProduct)
+
+        // Must save the product directly with the initial stock
+        assertEquals(1, productRepo.savedProducts.size)
+        val saved = productRepo.savedProducts.first()
+        assertEquals("Fresh Apples", saved.name)
+        assertEquals(25000L, saved.stockQuantity)
+        assertTrue(saved.id.isNotBlank())
+
+        // P0 FIX: updateStock must NOT be called for new products (preventing doubled stock)
+        assertTrue(productRepo.recordedStockDeltas.isEmpty())
+
+        // Modal closed and saving state reset
+        assertFalse(viewModel.showProductModal.value)
+        assertNull(viewModel.editProduct.value)
+        assertFalse(viewModel.isSavingProduct.value)
+    }
+
+    @Test
+    fun testSaveProduct_existingProduct_calculatesDeltaAndCallsUpdateStock() = runTest {
+        val existingProduct = Product(
+            id = "prod-existing",
+            name = "Juice Box",
+            barcodes = emptyList(),
+            basePrice = 300,
+            unitType = UnitType.PIECE,
+            stockQuantity = 10
+        )
+        val productRepo = TestProductRepository(listOf(existingProduct))
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openEditProductModal(existingProduct)
+        assertEquals(true, viewModel.showProductModal.value)
+        assertEquals("prod-existing", viewModel.editProduct.value?.id)
+
+        // Admin updates name and increases stock from 10 to 14 (+4)
+        val modifiedProduct = existingProduct.copy(
+            name = "Juice Box Orange",
+            stockQuantity = 14
+        )
+        viewModel.saveProduct(modifiedProduct)
+
+        assertEquals(1, productRepo.savedProducts.size)
+        assertEquals("Juice Box Orange", productRepo.savedProducts.first().name)
+
+        // Delta (+4) must be applied via updateStock
+        assertEquals(1, productRepo.recordedStockDeltas.size)
+        assertEquals("prod-existing" to 4L, productRepo.recordedStockDeltas.first())
+
+        // Modal closed and saving state reset
+        assertFalse(viewModel.showProductModal.value)
+        assertNull(viewModel.editProduct.value)
+        assertFalse(viewModel.isSavingProduct.value)
+    }
+
+    @Test
+    fun testSaveProduct_handlesExceptionAndSetsProductErrorMessage() = runTest {
+        val productRepo = TestProductRepository().apply {
+            shouldThrowOnSave = true
+        }
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openNewProductModal()
+        val product = Product(
+            id = "",
+            name = "Failure Product",
+            barcodes = emptyList(),
+            basePrice = 100,
+            unitType = UnitType.PIECE,
+            stockQuantity = 5
+        )
+
+        viewModel.saveProduct(product)
+
+        // Error message set and isSavingProduct reset
+        assertNotNull(viewModel.productErrorMessage.value)
+        assertFalse(viewModel.isSavingProduct.value)
+
+        // Dismiss error
+        viewModel.clearProductError()
+        assertNull(viewModel.productErrorMessage.value)
     }
 
     // --- Tests for AdminBulkBillingViewModel (QA-02 & QA-08) ---
@@ -399,5 +559,258 @@ class AdminViewModelsTest {
 
         assertFalse(completedSuccess ?: true)
         assertEquals(0, txRepo.recordedBatchRequests.size)
+    }
+
+    @Test
+    fun testBulkBilling_deduplicatesUsersInBatchExecution() = runTest {
+        val user1 = User(id = "user-1", name = "Alice", balance = 5000, isActive = true)
+        val billingList = BillingList(
+            id = "list-dedup",
+            name = "Duplicate Members List",
+            type = BillingListType.FIXED,
+            basePrice = 1000L,
+            users = listOf(
+                BillingListUser(id = "blu-1", listId = "list-dedup", userId = "user-1", quantity = 1),
+                BillingListUser(id = "blu-2", listId = "list-dedup", userId = "user-1", quantity = 1)
+            )
+        )
+
+        val userRepo = TestUserRepository(listOf(user1))
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+
+        var completedSuccess: Boolean? = null
+        viewModel.executeCharges(billingList) { success ->
+            completedSuccess = success
+        }
+
+        assertTrue(completedSuccess == true)
+        assertEquals(1, txRepo.recordedBatchRequests.size)
+        val batch = txRepo.recordedBatchRequests.first()
+        // Deduplication must ensure only 1 transaction request is produced for user-1
+        assertEquals(1, batch.size)
+        assertEquals("user-1", batch.first().transaction.userId)
+        assertEquals(-1000L, batch.first().balanceDelta)
+    }
+
+    @Test
+    fun testBulkBilling_reactivatingUserMakesThemEligibleForCharges() = runTest {
+        val user1 = User(id = "user-1", name = "Alice", balance = 5000, isActive = false)
+        val billingList = BillingList(
+            id = "list-reactivate",
+            name = "Reactivate List",
+            type = BillingListType.FIXED,
+            basePrice = 1500L,
+            users = listOf(
+                BillingListUser(id = "blu-1", listId = "list-reactivate", userId = "user-1", quantity = 1)
+            )
+        )
+
+        val userRepo = TestUserRepository(listOf(user1))
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+
+        // While deactivated, charges abort with no valid charges
+        var completedDeactivated: Boolean? = null
+        viewModel.executeCharges(billingList) { success ->
+            completedDeactivated = success
+        }
+        assertFalse(completedDeactivated ?: true)
+        assertEquals(0, txRepo.recordedBatchRequests.size)
+
+        // Reactivate user in repository
+        userRepo.users = listOf(user1.copy(isActive = true))
+        viewModel.refreshData()
+
+        // Now charges succeed and charge the user
+        var completedActive: Boolean? = null
+        viewModel.executeCharges(billingList) { success ->
+            completedActive = success
+        }
+        assertTrue(completedActive == true)
+        assertEquals(1, txRepo.recordedBatchRequests.size)
+        assertEquals("user-1", txRepo.recordedBatchRequests.first().first().transaction.userId)
+    }
+
+    @Test
+    fun testBulkBilling_deleteListPurgesVariableAmounts() = runTest {
+        val billingList = BillingList(
+            id = "list-to-delete",
+            name = "Delete Me",
+            type = BillingListType.VARIABLE
+        )
+        val listRepo = TestBillingListRepository(listOf(billingList))
+        val userRepo = TestUserRepository()
+        val txRepo = TestTransactionRepository()
+
+        val viewModel = AdminBulkBillingViewModel(listRepo, userRepo, txRepo)
+        viewModel.setVariableAmount("list-to-delete", "user-1", 5000L)
+        assertEquals(5000L, viewModel.getVariableAmount("list-to-delete", "user-1"))
+
+        viewModel.deleteList("list-to-delete")
+        assertEquals(0L, viewModel.getVariableAmount("list-to-delete", "user-1"))
+    }
+
+    // --- Tests for AdminSettingsViewModel ---
+
+    @Test
+    fun testAdminSettingsViewModel_updateSystemSettings_updatesRepositoryAndSetsStatusMessage() = runTest {
+        val initialSettings = SystemSettings(supportEmail = "old@support.org", inactivityTimeoutMinutes = 15)
+        val settingsRepo = TestSettingsRepository(initialSettings)
+        val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo)
+
+        val updated = initialSettings.copy(supportEmail = "new@support.org", inactivityTimeoutMinutes = 30)
+        viewModel.updateSystemSettings(updated)
+
+        assertEquals("new@support.org", settingsRepo.updatedSettings?.supportEmail)
+        assertEquals(30, settingsRepo.updatedSettings?.inactivityTimeoutMinutes)
+        assertEquals(I18n.get().statusSystemSettingsUpdated, viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_routineLifecycle_createsEditsAndDeletes() = runTest {
+        val backupRepo = TestBackupRepository()
+        val settingsRepo = TestSettingsRepository()
+        val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo, backupRepository = backupRepo)
+
+        viewModel.openCreateRoutineDialog()
+        assertTrue(viewModel.showRoutineDialog.value)
+        assertNull(viewModel.editingRoutine.value)
+
+        val newRoutine = BackupRoutine(id = "routine-1", name = "Daily DB Routine", isEnabled = true)
+        viewModel.saveBackupRoutine(newRoutine)
+
+        assertFalse(viewModel.showRoutineDialog.value)
+        assertEquals(1, backupRepo.savedRoutines.size)
+        assertEquals("Daily DB Routine", backupRepo.savedRoutines.first().name)
+        assertEquals("Backup routine saved: 'Daily DB Routine'", viewModel.statusMessage.value)
+
+        viewModel.openEditRoutineDialog(newRoutine)
+        assertTrue(viewModel.showRoutineDialog.value)
+        assertEquals(newRoutine, viewModel.editingRoutine.value)
+        viewModel.closeRoutineDialog()
+        assertFalse(viewModel.showRoutineDialog.value)
+
+        viewModel.requestDeleteRoutine(newRoutine)
+        assertEquals(newRoutine, viewModel.routineToDelete.value)
+        viewModel.confirmDeleteRoutine()
+        assertNull(viewModel.routineToDelete.value)
+        assertTrue(backupRepo.deletedRoutineIds.contains("routine-1"))
+        assertEquals("Backup routine 'Daily DB Routine' removed.", viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_toggleBackupRoutine_updatesEnabledState() = runTest {
+        val initialRoutine = BackupRoutine(id = "routine-toggle", name = "Hourly Interval", isEnabled = true)
+        val backupRepo = TestBackupRepository(listOf(initialRoutine))
+        val settingsRepo = TestSettingsRepository()
+        val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo, backupRepository = backupRepo)
+
+        viewModel.requestToggleRoutine(initialRoutine, false)
+        assertEquals(initialRoutine to false, viewModel.routineToToggle.value)
+
+        viewModel.confirmToggleRoutine()
+        assertNull(viewModel.routineToToggle.value)
+        assertEquals(false, backupRepo.savedRoutines.last().isEnabled)
+        assertEquals("Backup routine 'Hourly Interval' disabled.", viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_runRoutineNow_invokesCallbackAndHandlesErrors() = runTest {
+        val routine = BackupRoutine(id = "routine-now", name = "Manual Run", isEnabled = true)
+        val settingsRepo = TestSettingsRepository()
+        var runCount = 0
+        var shouldThrow = false
+
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onRunRoutineNow = {
+                if (shouldThrow) throw IllegalStateException("Backup disk full")
+                runCount++
+            }
+        )
+
+        viewModel.runRoutineNow(routine)
+        assertEquals(1, runCount)
+        assertEquals("Triggered routine 'Manual Run'.", viewModel.statusMessage.value)
+        assertNull(viewModel.errorMessage.value)
+
+        shouldThrow = true
+        viewModel.runRoutineNow(routine)
+        assertEquals("Failed to run routine 'Manual Run': Backup disk full", viewModel.errorMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_exportSupportBundle_setsStatusMessageOnSuccess() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        var exportedWithEmail: Boolean? = null
+        var recipientUsed: String? = null
+
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onExportSupportBundle = { prepareEmail, recipient ->
+                exportedWithEmail = prepareEmail
+                recipientUsed = recipient
+            }
+        )
+
+        viewModel.exportSupportBundle(prepareEmail = false, recipientEmail = "")
+        assertEquals(false, exportedWithEmail)
+        assertEquals(I18n.get().statusDiagnosticBundleExported, viewModel.statusMessage.value)
+
+        viewModel.exportSupportBundle(prepareEmail = true, recipientEmail = "support@lojinha.local")
+        assertEquals(true, exportedWithEmail)
+        assertEquals("support@lojinha.local", recipientUsed)
+        assertEquals(I18n.get().statusDiagnosticBundleExportedWithEmail, viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_csvImportPreviewAndExecution_handlesErrorsAndSuccess() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        val dummyFile = PlatformFile("products.csv", "/tmp/products.csv")
+
+        var previewCalled = false
+        var executeCalled = false
+
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onPreviewCsvImport = { file, type ->
+                previewCalled = true
+                CsvImportResult(
+                    totalProcessed = 5,
+                    addedCount = 3,
+                    updatedCount = 2,
+                    strippedBarcodesCount = 1,
+                    errors = emptyList(),
+                    warnings = listOf("Line 2: Barcode stripped")
+                )
+            },
+            onExecuteCsvImport = { file, type ->
+                executeCalled = true
+                CsvImportResult(
+                    totalProcessed = 5,
+                    addedCount = 3,
+                    updatedCount = 2,
+                    strippedBarcodesCount = 1
+                )
+            }
+        )
+
+        viewModel.prepareCsvImport(dummyFile, "Products")
+        assertTrue(previewCalled)
+        assertEquals(dummyFile, viewModel.csvImportPreview.value?.first)
+        assertEquals(5, viewModel.csvImportPreview.value?.second?.totalProcessed)
+
+        viewModel.executeCsvImport()
+        assertTrue(executeCalled)
+        assertNull(viewModel.csvImportPreview.value)
+        assertEquals(
+            I18n.get().statusCsvImportSuccess(5, I18n.get().csvTypeProducts, 3, 2),
+            viewModel.statusMessage.value
+        )
     }
 }

@@ -2,13 +2,17 @@ package de.joelneumann.lojinha.ui.components.admin.products
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Product
@@ -112,6 +116,13 @@ fun AdminProductAccordionCard(
                     )
                 }
 
+                val handleTriggerAdjustment = {
+                    val deltaDb = Formatting.parseAdminStockToDb(stockDeltaInput, product.unitType)
+                    if (deltaDb != null && deltaDb != 0L) {
+                        pendingStockAdjustment = deltaDb
+                    }
+                }
+
                 OutlinedTextField(
                     value = stockDeltaInput,
                     onValueChange = { stockDeltaInput = it },
@@ -123,7 +134,15 @@ fun AdminProductAccordionCard(
                         )
                     },
                     textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                    modifier = Modifier.weight(1f).height(56.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                handleTriggerAdjustment()
+                                true
+                            } else false
+                        },
                     shape = RoundedCornerShape(8.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = SurfaceWhite,
@@ -131,16 +150,13 @@ fun AdminProductAccordionCard(
                         focusedBorderColor = AccentNavy,
                         unfocusedBorderColor = DividerBorder
                     ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { handleTriggerAdjustment() }),
                     singleLine = true
                 )
 
                 Button(
-                    onClick = {
-                        val deltaDb = Formatting.parseAdminStockToDb(stockDeltaInput, product.unitType)
-                        if (deltaDb != null && deltaDb != 0L) {
-                            pendingStockAdjustment = deltaDb
-                        }
-                    },
+                    onClick = handleTriggerAdjustment,
                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(44.dp)

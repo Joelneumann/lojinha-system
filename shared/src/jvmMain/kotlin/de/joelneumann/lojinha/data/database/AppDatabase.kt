@@ -16,8 +16,8 @@ import de.joelneumann.lojinha.data.entity.*
         BillingListEntity::class,
         BillingListUserEntity::class
     ],
-    version = 12,
-    exportSchema = false
+    version = 13,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

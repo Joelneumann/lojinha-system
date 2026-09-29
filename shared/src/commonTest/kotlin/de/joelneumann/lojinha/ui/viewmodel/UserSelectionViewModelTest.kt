@@ -15,10 +15,12 @@ class FakeUserRepository(initialUsers: List<User> = emptyList()) : UserRepositor
     override suspend fun getUserById(id: String): User? = usersFlow.value.firstOrNull { it.id == id }
     override suspend fun getUserByBarcode(barcode: String): User? {
         val clean = barcode.trim()
-        return usersFlow.value.firstOrNull {
-            (it.userBarcode != null && it.userBarcode.equals(clean, ignoreCase = true)) ||
-            (it.userBarcodeNumber != null && it.userBarcodeNumber.equals(clean, ignoreCase = true))
-        }
+        return usersFlow.value
+            .sortedWith(compareBy<User> { it.isDeleted }.thenByDescending { it.isActive })
+            .firstOrNull {
+                (it.userBarcode != null && it.userBarcode.equals(clean, ignoreCase = true)) ||
+                (it.userBarcodeNumber != null && it.userBarcodeNumber.equals(clean, ignoreCase = true))
+            }
     }
     override suspend fun saveUser(user: User) {
         val list = usersFlow.value.toMutableList()
@@ -219,6 +221,77 @@ class UserSelectionViewModelTest {
         assertNull(loggedInUser)
         assertEquals(userBobWithPin, vm.selectedUserForPin.value)
         assertEquals("pin_incorrect", vm.pinError.value)
+        assertEquals("", vm.pinInput.value)
+    }
+
+    @Test
+    fun testPinSubmission_acceptsTrailingAndLeadingWhitespace() = withViewModel(listOf(userBobWithPin)) { vm, _ ->
+        delay(50)
+
+        vm.onUserCardClicked(userBobWithPin) {}
+        var loggedInUser: User? = null
+
+        vm.updatePinInput("  1234  ")
+        vm.submitPin("adminSecret") { loggedInUser = it }
+
+        assertEquals(userBobWithPin, loggedInUser)
+        assertNull(vm.selectedUserForPin.value)
+        assertEquals("", vm.pinInput.value)
+    }
+
+    @Test
+    fun testCancelPinDialogPreservesSearchQueryFromSearchSubmitted() = withViewModel(listOf(userBobWithPin)) { vm, _ ->
+        delay(50)
+
+        vm.updateSearchQuery("Bob")
+        vm.onSearchSubmitted {}
+        delay(50)
+
+        assertEquals(userBobWithPin, vm.selectedUserForPin.value)
+        assertEquals("Bob", vm.searchQuery.value)
+
+        vm.cancelPinDialog()
+        assertNull(vm.selectedUserForPin.value)
+        assertEquals("Bob", vm.searchQuery.value)
+    }
+
+    @Test
+    fun testSearchSubmitted_prioritizesActiveUserOverSoftDeletedWithSameBarcode() = runBlocking {
+        val activeUser = User(id = "10", name = "Active With Barcode", userBarcode = "BAR-SAME", userBarcodeNumber = "BAR-SAME", isActive = true, isDeleted = false)
+        val deletedUser = User(id = "11", name = "Deleted With Barcode", userBarcode = "BAR-SAME", userBarcodeNumber = "BAR-SAME", isActive = false, isDeleted = true)
+
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        // Pass deleted user first in list to simulate older DB insertion order
+        val repo = FakeUserRepository(listOf(deletedUser, activeUser))
+        val vm = UserSelectionViewModel(repo, testScope)
+        try {
+            delay(50)
+            var loggedIn: User? = null
+            vm.updateSearchQuery("BAR-SAME")
+            vm.onSearchSubmitted { loggedIn = it }
+            delay(50)
+
+            assertNotNull(loggedIn)
+            assertEquals("10", loggedIn?.id)
+            assertEquals("Active With Barcode", loggedIn?.name)
+        } finally {
+            testScope.cancel()
+        }
+    }
+
+    @Test
+    fun testSearchSubmitted_reentrancyGuardWhenLoggingIn() = withViewModel(listOf(userAlice, userCarlos)) { vm, _ ->
+        delay(50)
+
+        var loginCount = 0
+        vm.onUserCardClicked(userAlice) { loginCount++ }
+        assertEquals(1, loginCount)
+
+        vm.updateSearchQuery("Carlos")
+        vm.onSearchSubmitted { loginCount++ }
+        delay(50)
+
+        assertEquals(1, loginCount)
     }
 
     @Test
@@ -253,8 +326,10 @@ class UserSelectionViewModelTest {
         vm.submitAdminPassword("wrongPass") { adminNavigated = true }
         assertFalse(adminNavigated)
         assertEquals("admin_password_incorrect", vm.adminPasswordError.value)
+        assertEquals("", vm.adminPasswordInput.value)
         assertTrue(vm.showAdminAuthDialog.value)
 
+        vm.updateAdminPassword("secret")
         vm.submitAdminPassword(expectedHash) { adminNavigated = true }
         assertTrue(adminNavigated)
         assertFalse(vm.showAdminAuthDialog.value)

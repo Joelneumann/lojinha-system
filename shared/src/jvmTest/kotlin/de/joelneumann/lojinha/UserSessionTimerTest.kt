@@ -564,4 +564,80 @@ class UserSessionTimerTest {
         assertEquals(1, forceCount)
         assertEquals(1200L, lastInteractionTime)
     }
+
+    @Test
+    fun testLogoutRequestedPreventsTimerResurrection() = runBlocking {
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        var currentTime = 100_000L
+        val repo = FakeSettingsRepository(SystemSettings(inactivityTimeoutMinutes = 2))
+        var logoutCount = 0
+
+        val vm = UserSessionViewModel(
+            user = testUser,
+            settingsRepository = repo,
+            onLogoutRequest = { logoutCount++ },
+            clock = { currentTime },
+            coroutineScope = testScope,
+            initialSettings = SystemSettings(inactivityTimeoutMinutes = 2)
+        )
+
+        try {
+            // Trigger logout
+            vm.requestLogout()
+            assertEquals(1, logoutCount)
+
+            // Attempt to resurrect via user interaction or reset
+            vm.onUserInteracted(force = true)
+            vm.resetInactivityTimer()
+            vm.resumeInactivityTimer()
+
+            // Advance time past timeout
+            currentTime += 150_000L
+            delay(350L)
+
+            // No second logout should have occurred
+            assertEquals(1, logoutCount)
+        } finally {
+            vm.stopInactivityTimer()
+            testScope.cancel()
+        }
+    }
+
+    @Test
+    fun testResumeInactivityTimerRestartsCancelledTicker() = runBlocking {
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        var currentTime = 100_000L
+        val repo = FakeSettingsRepository(SystemSettings(inactivityTimeoutMinutes = 2))
+        var logoutTriggered = false
+
+        val vm = UserSessionViewModel(
+            user = testUser,
+            settingsRepository = repo,
+            onLogoutRequest = { logoutTriggered = true },
+            clock = { currentTime },
+            coroutineScope = testScope,
+            initialSettings = SystemSettings(inactivityTimeoutMinutes = 2)
+        )
+
+        try {
+            // Pause timer
+            vm.pauseInactivityTimer()
+
+            // Cancel ticker job while paused
+            vm.stopInactivityTimer()
+
+            // Resume timer
+            vm.resumeInactivityTimer()
+
+            // Advance clock past the 2-minute threshold
+            currentTime += 130_000L
+            delay(350L)
+
+            // Resurrected ticker should trigger logout
+            assertTrue(logoutTriggered)
+        } finally {
+            vm.stopInactivityTimer()
+            testScope.cancel()
+        }
+    }
 }

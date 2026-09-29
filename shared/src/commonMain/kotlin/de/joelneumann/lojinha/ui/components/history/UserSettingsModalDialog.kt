@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.ui.components.history
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,6 +39,10 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.formModalKeys
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
+import de.joelneumann.lojinha.ui.utils.trackUserInteractions
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -59,27 +65,47 @@ fun UserSettingsModalDialog(
     onSecondaryCurrencySelect: (SecondaryCurrency) -> Unit,
     onAvatarSelect: (UserAvatarConfig) -> Unit,
     onDismiss: () -> Unit,
-    onSave: () -> Unit,
+    onSave: (removePin: Boolean) -> Unit,
+    onUserInteracted: (force: Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
     var isPinVisible by remember { mutableStateOf(false) }
     var isAvatarExpanded by remember { mutableStateOf(false) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
+    var shouldRemovePin by remember { mutableStateOf(false) }
+    var confirmPinInput by remember { mutableStateOf("") }
     val dialogFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         dialogFocusRequester.safeRequestFocus()
     }
 
-    val isPinChanged = pinInput.isNotBlank()
-    val hasChanges = isPinChanged ||
+    val isPinEntering = pinInput.isNotEmpty()
+    val isPinMatching = !isPinEntering || pinInput == confirmPinInput
+    val canSave = (!shouldRemovePin && (!isPinEntering || (confirmPinInput.isNotEmpty() && isPinMatching))) || (shouldRemovePin && user.pin != null)
+
+    val isPinActionChanged = if (user.pin != null) {
+        shouldRemovePin || (pinInput.isNotBlank() && pinInput == confirmPinInput)
+    } else {
+        pinInput.isNotBlank() && pinInput == confirmPinInput
+    }
+
+    val hasPendingInputs = shouldRemovePin ||
+            pinInput.isNotEmpty() ||
+            confirmPinInput.isNotEmpty() ||
+            (selectedLanguage != user.language) ||
+            (selectedSecondaryCurrency != user.secondaryCurrency) ||
+            (selectedAvatar != user.avatar)
+
+    val hasChanges = isPinActionChanged ||
             (selectedLanguage != user.language) ||
             (selectedSecondaryCurrency != user.secondaryCurrency) ||
             (selectedAvatar != user.avatar)
 
     val handleDismissRequest = {
-        if (hasChanges) {
+        onUserInteracted(true)
+        if (hasPendingInputs) {
             showDiscardConfirm = true
         } else {
             onDismiss()
@@ -97,14 +123,22 @@ fun UserSettingsModalDialog(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
             modifier = modifier
-                .width(480.dp)
+                .fillMaxWidth(0.95f)
+                .widthIn(max = 480.dp)
                 .wrapContentHeight()
+                .trackUserInteractions(onUserInteracted)
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        onUserInteracted(true)
+                    }
+                    false
+                }
                 .focusRequester(dialogFocusRequester)
                 .focusable()
                 .formModalKeys(
                     onCancel = handleDismissRequest,
-                    onConfirm = { if (hasChanges) onSave() },
-                    confirmEnabled = hasChanges
+                    onConfirm = { if (hasChanges && canSave && !showDiscardConfirm) onSave(shouldRemovePin) },
+                    confirmEnabled = hasChanges && canSave && !showDiscardConfirm
                 )
         ) {
             Column(
@@ -135,7 +169,10 @@ fun UserSettingsModalDialog(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { isAvatarExpanded = !isAvatarExpanded }
+                                .clickable {
+                                    onUserInteracted(true)
+                                    isAvatarExpanded = !isAvatarExpanded
+                                }
                                 .padding(14.dp)
                         ) {
                             Row(
@@ -157,7 +194,7 @@ fun UserSettingsModalDialog(
                                         color = PrimaryNavy
                                     )
                                     Text(
-                                        text = if (selectedAvatar.type == AvatarType.EMOJI) "Emoji: ${selectedAvatar.emoji}" else "Initials (${user.initials})",
+                                        text = if (selectedAvatar.type == AvatarType.EMOJI) strings.emojiWithVal(selectedAvatar.emoji) else strings.initialsWithVal(user.initials),
                                         fontSize = 12.sp,
                                         color = TextSecondaryMuted
                                     )
@@ -200,7 +237,10 @@ fun UserSettingsModalDialog(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     OutlinedButton(
-                                        onClick = { onAvatarSelect(selectedAvatar.copy(type = AvatarType.INITIALS)) },
+                                        onClick = {
+                                            onUserInteracted(true)
+                                            onAvatarSelect(selectedAvatar.copy(type = AvatarType.INITIALS))
+                                        },
                                         modifier = Modifier.weight(1f),
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             containerColor = if (selectedAvatar.type == AvatarType.INITIALS) AccentNavy else SurfaceWhite,
@@ -208,11 +248,14 @@ fun UserSettingsModalDialog(
                                         ),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Text("Initials (${user.initials})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(strings.initialsWithVal(user.initials), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
 
                                     OutlinedButton(
-                                        onClick = { onAvatarSelect(selectedAvatar.copy(type = AvatarType.EMOJI)) },
+                                        onClick = {
+                                            onUserInteracted(true)
+                                            onAvatarSelect(selectedAvatar.copy(type = AvatarType.EMOJI))
+                                        },
                                         modifier = Modifier.weight(1f),
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             containerColor = if (selectedAvatar.type == AvatarType.EMOJI) AccentNavy else SurfaceWhite,
@@ -220,7 +263,7 @@ fun UserSettingsModalDialog(
                                         ),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Text("Emoji (${selectedAvatar.emoji})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(strings.emojiWithVal(selectedAvatar.emoji), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
 
@@ -246,7 +289,10 @@ fun UserSettingsModalDialog(
                                                         color = if (isSelected) AccentNavy else DividerBorder,
                                                         shape = CircleShape
                                                     )
-                                                    .clickable { onAvatarSelect(selectedAvatar.copy(emoji = emoji)) },
+                                                    .clickable {
+                                                        onUserInteracted(true)
+                                                        onAvatarSelect(selectedAvatar.copy(emoji = emoji))
+                                                    },
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 PlatformEmoji(emoji = emoji, fontSize = 18.sp)
@@ -278,7 +324,10 @@ fun UserSettingsModalDialog(
                                                     color = if (isSelected) PrimaryNavy else SurfaceWhite.copy(alpha = 0.5f),
                                                     shape = CircleShape
                                                 )
-                                                .clickable { onAvatarSelect(selectedAvatar.copy(colorHex = colorHex)) },
+                                                .clickable {
+                                                    onUserInteracted(true)
+                                                    onAvatarSelect(selectedAvatar.copy(colorHex = colorHex))
+                                                },
                                             contentAlignment = Alignment.Center
                                         ) {
                                             if (isSelected) {
@@ -299,35 +348,145 @@ fun UserSettingsModalDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // PIN Setting
-                Text(text = strings.setPin, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = pinInput,
-                    onValueChange = onPinInputChange,
-                    placeholder = {
-                        Text(
-                            if (user.pin != null) strings.enterNewPinPlaceholder else strings.pinPlaceholder,
-                            fontSize = 13.sp,
-                            color = TextSecondaryMuted
-                        )
-                    },
-                    textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp),
-                    visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { isPinVisible = !isPinVisible }) {
+                // PIN Setting Header Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = strings.setPin, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+
+                    if (user.pin != null) {
+                        TextButton(
+                            onClick = {
+                                onUserInteracted(true)
+                                shouldRemovePin = !shouldRemovePin
+                                if (shouldRemovePin) {
+                                    onPinInputChange("")
+                                    confirmPinInput = ""
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                        ) {
                             Icon(
-                                imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = "Toggle PIN Visibility",
-                                modifier = Modifier.size(20.dp)
+                                imageVector = if (shouldRemovePin) Icons.AutoMirrored.Filled.Undo else Icons.Default.LockOpen,
+                                contentDescription = null,
+                                tint = if (shouldRemovePin) AccentNavy else ColorDangerCrimson,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (shouldRemovePin) strings.cancel else strings.removePin,
+                                color = if (shouldRemovePin) AccentNavy else ColorDangerCrimson,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { if (hasChanges) onSave() }),
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (shouldRemovePin) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SurfaceContainerHighLight,
+                        border = BorderStroke(1.dp, ColorDangerCrimson.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = ColorDangerCrimson,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = strings.pinWillBeRemovedNotice,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ColorDangerCrimson
+                                )
+                                Text(
+                                    text = strings.pinRemovedWarningDesc,
+                                    fontSize = 12.sp,
+                                    color = TextSecondaryMuted
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = onPinInputChange,
+                        placeholder = {
+                            Text(
+                                if (user.pin != null) strings.enterNewPinPlaceholder else strings.pinPlaceholder,
+                                fontSize = 13.sp,
+                                color = TextSecondaryMuted
+                            )
+                        },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp),
+                        visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                onUserInteracted(true)
+                                isPinVisible = !isPinVisible
+                            }) {
+                                Icon(
+                                    imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = strings.togglePinVisibility,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = if (pinInput.isNotEmpty()) ImeAction.Next else ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { if (hasChanges && canSave) onSave(false) }),
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                    )
+
+                    AnimatedVisibility(visible = pinInput.isNotEmpty()) {
+                        Column(modifier = Modifier.padding(top = 8.dp)) {
+                            OutlinedTextField(
+                                value = confirmPinInput,
+                                onValueChange = {
+                                    confirmPinInput = it
+                                    onUserInteracted(true)
+                                },
+                                placeholder = {
+                                    Text(
+                                        text = strings.confirmPinPlaceholder,
+                                        fontSize = 13.sp,
+                                        color = TextSecondaryMuted
+                                    )
+                                },
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp),
+                                visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                isError = confirmPinInput.isNotEmpty() && !isPinMatching,
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { if (hasChanges && canSave) onSave(false) }),
+                                modifier = Modifier.fillMaxWidth().height(56.dp)
+                            )
+
+                            if (confirmPinInput.isNotEmpty() && !isPinMatching) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = strings.pinMismatchError,
+                                    color = ColorDangerCrimson,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -338,7 +497,10 @@ fun UserSettingsModalDialog(
                     Language.entries.forEach { lang ->
                         val isSel = selectedLanguage == lang
                         OutlinedButton(
-                            onClick = { onLanguageSelect(lang) },
+                            onClick = {
+                                onUserInteracted(true)
+                                onLanguageSelect(lang)
+                            },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = if (isSel) AccentNavy else SurfaceWhite,
@@ -371,12 +533,18 @@ fun UserSettingsModalDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onSecondaryCurrencySelect(curr) }
+                                .clickable {
+                                    onUserInteracted(true)
+                                    onSecondaryCurrencySelect(curr)
+                                }
                                 .padding(vertical = 4.dp)
                         ) {
                             RadioButton(
                                 selected = selectedSecondaryCurrency == curr,
-                                onClick = { onSecondaryCurrencySelect(curr) }
+                                onClick = {
+                                    onUserInteracted(true)
+                                    onSecondaryCurrencySelect(curr)
+                                }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(label, fontSize = 14.sp)
@@ -396,7 +564,7 @@ fun UserSettingsModalDialog(
                         .padding(12.dp)
                 ) {
                     Text(
-                        text = user.userBarcodeNumber ?: strings.noBarcodeAssigned,
+                        text = user.userBarcodeNumber.takeUnless { it.isNullOrBlank() } ?: strings.noBarcodeAssigned,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextSecondarySubtle
@@ -418,8 +586,11 @@ fun UserSettingsModalDialog(
                     }
 
                     Button(
-                        onClick = onSave,
-                        enabled = hasChanges,
+                        onClick = {
+                            onUserInteracted(true)
+                            onSave(shouldRemovePin)
+                        },
+                        enabled = hasChanges && canSave,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)

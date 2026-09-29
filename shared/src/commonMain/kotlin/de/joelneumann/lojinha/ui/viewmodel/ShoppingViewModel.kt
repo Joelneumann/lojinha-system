@@ -6,11 +6,13 @@ import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +46,12 @@ class ShoppingViewModel(
     private val _cartItems = MutableStateFlow<List<CartItem>>(emptyList())
     val cartItems: StateFlow<List<CartItem>> = _cartItems.asStateFlow()
 
+    private val _isProcessingPurchase = MutableStateFlow(false)
+    val isProcessingPurchase: StateFlow<Boolean> = _isProcessingPurchase.asStateFlow()
+
+    private val _purchaseError = MutableStateFlow<String?>(null)
+    val purchaseError: StateFlow<String?> = _purchaseError.asStateFlow()
+
     private val _weightProductDialog = MutableStateFlow<Product?>(null)
     val weightProductDialog: StateFlow<Product?> = _weightProductDialog.asStateFlow()
 
@@ -52,9 +60,6 @@ class ShoppingViewModel(
 
     private val _weightError = MutableStateFlow<String?>(null)
     val weightError: StateFlow<String?> = _weightError.asStateFlow()
-
-    private val _showCheckoutConfirmation = MutableStateFlow(false)
-    val showCheckoutConfirmation: StateFlow<Boolean> = _showCheckoutConfirmation.asStateFlow()
 
     private val _completedPurchase = MutableStateFlow<Transaction?>(null)
     val completedPurchase: StateFlow<Transaction?> = _completedPurchase.asStateFlow()
@@ -141,7 +146,7 @@ class ShoppingViewModel(
             _searchQuery.value = ""
             closeWeightDialog()
         } else {
-            _weightError.value = "Invalid weight format"
+            _weightError.value = I18n.get().invalidWeightFormat
         }
     }
 
@@ -169,26 +174,23 @@ class ShoppingViewModel(
         _cartItems.value = emptyList()
         _searchQuery.value = ""
         closeWeightDialog()
-        closeCheckoutConfirmation()
-    }
-
-    fun openCheckoutConfirmation() {
-        if (_cartItems.value.isNotEmpty()) {
-            _showCheckoutConfirmation.value = true
-        }
-    }
-
-    fun closeCheckoutConfirmation() {
-        _showCheckoutConfirmation.value = false
     }
 
     fun dismissCompletedPurchase() {
         _completedPurchase.value = null
     }
 
+    fun clearPurchaseError() {
+        _purchaseError.value = null
+    }
+
     fun completePurchase(user: User, onPurchaseFinalized: () -> Unit = {}) {
+        if (_isProcessingPurchase.value) return
         val cart = _cartItems.value
         if (cart.isEmpty()) return
+
+        _isProcessingPurchase.value = true
+        _purchaseError.value = null
 
         val totalCents = cart.sumOf { it.lineTotal }
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
@@ -220,17 +222,23 @@ class ShoppingViewModel(
         )
 
         viewModelScope.launch {
-            val stockDeltas = cart.associate { it.product.id to -it.quantity }
-            transactionRepository.executeAtomicTransaction(
-                transaction = tx,
-                balanceDelta = -totalCents,
-                stockDeltas = stockDeltas
-            )
+            try {
+                val stockDeltas = cart.associate { it.product.id to -it.quantity }
+                transactionRepository.executeAtomicTransaction(
+                    transaction = tx,
+                    balanceDelta = -totalCents,
+                    stockDeltas = stockDeltas
+                )
 
-            clearCart()
-            closeCheckoutConfirmation()
-            _completedPurchase.value = tx
-            onPurchaseFinalized()
+                clearCart()
+                _completedPurchase.value = tx
+                onPurchaseFinalized()
+            } catch (e: Exception) {
+                AppLogger.error("ShoppingViewModel", "Failed to complete purchase for user ${user.id}: ${e.message}", e)
+                _purchaseError.value = e.message ?: I18n.get().errFailedToCompletePurchase
+            } finally {
+                _isProcessingPurchase.value = false
+            }
         }
     }
 
@@ -238,5 +246,6 @@ class ShoppingViewModel(
         super.onCleared()
         clearCart()
         dismissCompletedPurchase()
+        clearPurchaseError()
     }
 }

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import de.joelneumann.lojinha.data.entity.UserEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -18,7 +19,13 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id = :id")
     suspend fun getUserById(id: String): UserEntity?
 
-    @Query("SELECT * FROM users WHERE userBarcode = :barcode COLLATE NOCASE OR userBarcodeNumber = :barcode COLLATE NOCASE LIMIT 1")
+    @Query("""
+        SELECT * FROM users 
+        WHERE (userBarcode = :barcode COLLATE NOCASE OR userBarcodeNumber = :barcode COLLATE NOCASE)
+          AND isDeleted = 0 
+        ORDER BY isActive DESC 
+        LIMIT 1
+    """)
     suspend fun getUserByBarcode(barcode: String): UserEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -54,17 +61,35 @@ interface UserDao {
         avatarColor: String
     )
 
+    @Query("DELETE FROM billing_list_users WHERE userId = :id")
+    suspend fun removeUserFromAllBillingLists(id: String)
+
     @Query("UPDATE users SET isDeleted = 1, isActive = 0 WHERE id = :id")
-    suspend fun softDeleteUser(id: String)
+    suspend fun updateSoftDelete(id: String)
+
+    @Transaction
+    suspend fun softDeleteUser(id: String) {
+        updateSoftDelete(id)
+        removeUserFromAllBillingLists(id)
+    }
 
     @Query("UPDATE users SET isDeleted = 0, isActive = 1 WHERE id = :id")
     suspend fun restoreUser(id: String)
+
+    @Query("UPDATE users SET userBarcode = NULL, userBarcodeNumber = NULL WHERE id = :id")
+    suspend fun clearUserBarcode(id: String)
 
     @Query("UPDATE users SET isActive = 0 WHERE id = :id")
     suspend fun deactivateUser(id: String)
 
     @Query("DELETE FROM users WHERE id = :id")
-    suspend fun deleteUser(id: String)
+    suspend fun deleteUserRow(id: String)
+
+    @Transaction
+    suspend fun deleteUser(id: String) {
+        removeUserFromAllBillingLists(id)
+        deleteUserRow(id)
+    }
 
     @Query("DELETE FROM users")
     suspend fun deleteAllUsers()

@@ -422,6 +422,13 @@ class BackupRestoreServiceJvmTest {
         val expectedHash = de.joelneumann.lojinha.security.PasswordHasher.hash("4321")
         assertEquals(expectedHash, importedUser.pin)
 
+        val txs1 = db.transactionDao().getTransactionsByUserId("u-imp-1")
+        assertEquals(1, txs1.size)
+        assertEquals(de.joelneumann.lojinha.domain.model.TransactionType.ADMIN_DEPOSIT.name, txs1.first().type)
+        assertEquals(2500L, txs1.first().totalAmount)
+        assertEquals(0L, txs1.first().userBalanceBefore)
+        assertEquals(2500L, txs1.first().userBalanceAfter)
+
         // Test performCsvBackup ensures users.csv contains hash and formatted currency
         val exportedFolder = service.performCsvBackup(tempDir, BackupWriteMode.CREATE_NEW_FILE)
         val exportedUsersCsv = File(exportedFolder, "users.csv")
@@ -615,5 +622,47 @@ class BackupRestoreServiceJvmTest {
         assertEquals("bl-exec", restored.id)
         assertEquals("Executed List", restored.name)
         assertEquals(1726000000000L, restored.lastExecutionTime, "lastExecutionTime must be preserved across DB restore")
+    }
+
+    @Test
+    fun testImportUsersWithBalanceCreatesTransactions() = runTest {
+        val usersCsv = File(tempDir, "users_balance_tx.csv")
+        usersCsv.writeText(
+            "id,name,balance\n" +
+            "u-pos,Positive User,15.50\n" +
+            "u-neg,Negative User,-7.25\n" +
+            "u-zero,Zero User,0.00\n"
+        )
+        val result = service.importUsersFromCsv(usersCsv)
+        assertEquals(3, result.addedCount)
+
+        // Positive user: starts at 0, deposit of 15.50 (1550L)
+        val userPos = db.userDao().getUserById("u-pos")
+        assertNotNull(userPos)
+        assertEquals(1550L, userPos.balance)
+        val txsPos = db.transactionDao().getTransactionsByUserId("u-pos")
+        assertEquals(1, txsPos.size)
+        assertEquals(de.joelneumann.lojinha.domain.model.TransactionType.ADMIN_DEPOSIT.name, txsPos.first().type)
+        assertEquals(1550L, txsPos.first().totalAmount)
+        assertEquals(0L, txsPos.first().userBalanceBefore)
+        assertEquals(1550L, txsPos.first().userBalanceAfter)
+
+        // Negative user: starts at 0, withdrawal of -7.25 (-725L)
+        val userNeg = db.userDao().getUserById("u-neg")
+        assertNotNull(userNeg)
+        assertEquals(-725L, userNeg.balance)
+        val txsNeg = db.transactionDao().getTransactionsByUserId("u-neg")
+        assertEquals(1, txsNeg.size)
+        assertEquals(de.joelneumann.lojinha.domain.model.TransactionType.ADMIN_WITHDRAWAL.name, txsNeg.first().type)
+        assertEquals(-725L, txsNeg.first().totalAmount)
+        assertEquals(0L, txsNeg.first().userBalanceBefore)
+        assertEquals(-725L, txsNeg.first().userBalanceAfter)
+
+        // Zero user: starts at 0, no transaction created
+        val userZero = db.userDao().getUserById("u-zero")
+        assertNotNull(userZero)
+        assertEquals(0L, userZero.balance)
+        val txsZero = db.transactionDao().getTransactionsByUserId("u-zero")
+        assertEquals(0, txsZero.size)
     }
 }

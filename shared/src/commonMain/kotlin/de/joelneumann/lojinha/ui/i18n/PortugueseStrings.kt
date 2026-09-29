@@ -31,9 +31,11 @@ object PortugueseStrings : AppStrings {
     override fun weightDialogMsg(productName: String) = "Digite o peso para $productName:"
     override val weightInputHint = ""
     override val weightTooltip = "• Decimais (1,5 / 0,25) ou ≤20 = kg\n• Números inteiros >20 (500) = gramas (g)\n• Ou digite unidades diretamente (1,5 kg / 500g)"
+    override val invalidWeightFormat = "Formato de peso inválido"
+    override fun pieceUnitSuffix(quantity: Long) = "$quantity un."
     override val history = "Histórico de Transações"
     override val account = "Conta"
-    override val historyFilterPlaceholder = "Filtrar histórico (Produto, data, nota...)"
+    override val historyFilterPlaceholder = "Filtrar histórico (Produto, nota...)"
     override val historyFilterAll = "Todos os Tipos"
     override val historyTypePurchase = "Compra"
     override val historyTypeDeposit = "Depósito"
@@ -51,15 +53,15 @@ object PortugueseStrings : AppStrings {
     override val preferredLanguage = "Idioma Preferido"
     override val secondaryCurrency = "Moeda Secundária de Exibição"
     override val secondaryCurrencyNone = "Nenhuma (Apenas BRL)"
-    override val secondaryCurrencyUsd = "Dólar Americano ($ USD)"
+    override val secondaryCurrencyUsd = "Dólar Americano (US$ USD)"
     override val secondaryCurrencyEur = "Euro (€ EUR)"
     override val assignedBarcodeId = "Código de Barras Atribuído"
     override val save = "Salvar"
     override val adminPanel = "Painel do Administrador"
     override val tabProducts = "Produtos"
     override val tabUsers = "Usuários"
-    override val tabTransactions = "Transações & Estorno"
-    override val tabSettings = "Configurações do Sistema"
+    override val tabTransactions = "Transações"
+    override val tabSettings = "Configurações"
     override val adminPasswordPrompt = "Digite a senha de Admin:"
     override val adminPasswordIncorrect = "Senha de Admin incorreta!"
     override val addProduct = "+ Novo Produto"
@@ -324,6 +326,9 @@ object PortugueseStrings : AppStrings {
     override val backupFileDetails = "Detalhes do Arquivo de Backup:"
     override fun filenameLabel(name: String) = "Nome do Arquivo: $name"
     override fun filePathLabel(path: String) = "Caminho do Arquivo: $path"
+    override fun routineLabel(name: String) = "Rotina: $name"
+    override fun routineFormatLabel(format: String) = "Formato: $format"
+    override fun saveLocationLabel(location: String) = "Local de Salvamento: $location"
     override val typeRestoreToConfirmLabel = "Digite 'RESTORE' para confirmar"
     override val proceedToAuthorization = "Prosseguir para Autorização"
     override val restoreDatabaseNowBtn = "RESTAURAR BANCO DE DADOS AGORA"
@@ -380,10 +385,15 @@ object PortugueseStrings : AppStrings {
     override val userNameLabel = "Nome do Usuário"
     override val userNamePlaceholder = "Nome Completo"
     override val resetPin = "Redefinir PIN"
+    override val removePin = "Remover PIN"
     override val noPinSet = "Nenhum PIN definido"
     override val hide = "Ocultar"
     override val pinPlaceholder = "ex: 1234 (deixe em branco para nenhum)"
     override val enterNewPinPlaceholder = "Digite o novo PIN (deixe em branco para manter o atual)"
+    override val confirmPinPlaceholder = "Confirmar novo PIN"
+    override val pinMismatchError = "Os PINs não coincidem"
+    override val pinWillBeRemovedNotice = "A proteção por PIN será removida"
+    override val pinRemovedWarningDesc = "Qualquer pessoa poderá entrar nesta conta sem PIN."
     override val noBarcodeAssigned = "Nenhum código de barras atribuído"
 
     override val step1DbRestoreTitle = "Etapa 1 de 2: Confirmar Restauração do Banco de Dados"
@@ -461,6 +471,8 @@ object PortugueseStrings : AppStrings {
         "O código de barras '$code' já está atribuído ao usuário '$userName'!"
     override fun userBarcodeIncompleteWarning(isSymbolFilled: Boolean) =
         "${if (isSymbolFilled) "O Número do Código de Barras (ID)" else "O Símbolo do Código de Barras"} está faltando! O Símbolo do Código de Barras e o Número do Código de Barras (ID) devem ser preenchidos juntos, ou deixe ambos vazios."
+    override val restoredUserBarcodeCollisionNotice =
+        "Nota: O código de barras deste usuário está atualmente atribuído a outro usuário ativo e será redefinido após a restauração."
 
     // --- Custom Expense & Custom Income Modals ---
     override val customExpense = "Despesa Avulsa"
@@ -474,7 +486,7 @@ object PortugueseStrings : AppStrings {
     override val customIncomeDescriptionLabel = "Comentário / Motivo:"
     override val customIncomeDescriptionPlaceholder = "ex: Depósito, Bônus, Reembolso..."
     override val customIncomeConfirmBtn = "Adicionar Receita"
-    override val tabBulkBilling = "Faturamento em Lote"
+    override val tabBulkBilling = "Faturamento"
     override val bulkBillingTitle = "Faturamento em Lote e Recorrente"
     override val createNewList = "Criar Lista"
     override val editList = "Editar Lista"
@@ -500,7 +512,10 @@ object PortugueseStrings : AppStrings {
 
     override val supportContactTitle = "Contato de Suporte"
     override val supportEmailLabel = "Email de Suporte"
-    override val supportEmailPlaceholder = "admin@example.com"
+    override val supportEmailPlaceholder = ""
+    override val unlockSupportEmailTitle = "Alterar Endereço de Suporte"
+    override val unlockSupportEmailMessage = "Tem certeza de que deseja alterar o endereço de email de suporte registrado? Isso afetará o destino dos relatórios de diagnóstico e pedidos de suporte."
+    override val unlockSupportEmailConfirm = "Desbloquear"
     override val contactSupportBtn = "Contatar Suporte"
     override val githubRepoBtn = "Repositório GitHub"
     override val diagnosticsSectionTitle = "Diagnóstico e Logs do Sistema"
@@ -519,6 +534,10 @@ object PortugueseStrings : AppStrings {
     override val markupCustomSuffix = "Personalizada"
     override val markupStandardSuffix = "Padrão"
     override val invalidMarkupError = "Deve ser uma porcentagem entre 0 e 1000"
+    override val invalidPriceError = "Preço base inválido"
+    override val invalidStockError = "Quantidade de estoque inválida"
+    override val invalidExchangeRateError = "Taxa inválida (deve ser um número positivo)"
+    override val fatalImportErrorsHeader = "Erros fatais de importação:"
     override val lastExecutionTimeLabel = "Última Execução:"
 
     override val remoteAdminTitle = "Administração Web Remota (LAN)"
@@ -527,6 +546,7 @@ object PortugueseStrings : AppStrings {
     override val copyUrlBtn = "Copiar URL"
     override val urlCopiedToast = "URL copiada para a área de transferência!"
     override val kioskActionsTitle = "Controles do Sistema & Quiosque"
+    override fun appVersionLabel(version: String): String = "Versão $version"
     override val exitKioskBtn = "Fechar Aplicativo POS"
     override val exitKioskConfirmTitle = "Encerrar Aplicativo"
     override val exitKioskConfirmMessage = "Tem certeza de que deseja fechar o sistema Lojinha POS?"
@@ -534,4 +554,66 @@ object PortugueseStrings : AppStrings {
     override val firstRunTitle = "Bem-vindo ao Lojinha POS!"
     override val firstRunMessage = "Nenhum usuário ou produto foi configurado ainda. Faça login como Administrador para configurar a loja, cadastrar produtos e criar contas de clientes."
     override val firstRunAdminLoginBtn = "Abrir Login de Administrador"
+    override val errorTitle = "Erro"
+
+    // Navigation & Destination Targets
+    override val mainScreen = "Tela Principal"
+
+    // Pagination
+    override fun paginationShowing(start: Int, end: Int, total: Int): String = "Mostrando $start–$end de $total"
+    override val paginationZeroItems = "0 itens"
+    override val perPageLabel = "Por página:"
+    override fun pageOf(current: Int, total: Int): String = "Página $current de $total"
+    override val firstPage = "Primeira Página"
+    override val previousPage = "Página Anterior"
+    override val nextPage = "Próxima Página"
+    override val lastPage = "Última Página"
+
+    // Accessibility & Inputs
+    override val clear = "Limpar"
+    override val togglePasswordVisibility = "Alternar Visibilidade"
+    override val togglePinVisibility = "Alternar Visibilidade do PIN"
+    override fun userBarcodeIdBadge(id: String): String = " • ID: $id"
+
+    // ViewModel Error & Status Messages
+    override val errCorrectionFailedOrUnchanged = "Falha ao aplicar correção. A transação pode já ter sido cancelada ou as quantidades não foram alteradas."
+    override val errTransactionAlreadyCanceled = "Esta transação já foi cancelada."
+    override val errStornoFailed = "Falha ao estornar transação. Ela pode já ter sido cancelada."
+    override val errUnexpectedCorrection = "Ocorreu um erro inesperado ao aplicar a correção."
+    override val errUnexpectedCancellation = "Ocorreu um erro inesperado ao cancelar a transação."
+
+    override val errFailedToSaveUser = "Falha ao salvar usuário."
+    override val errFailedToUpdateUserStatus = "Falha ao atualizar status do usuário."
+    override val errFailedToDeleteUser = "Falha ao excluir usuário."
+    override val errFailedToRestoreUser = "Falha ao restaurar usuário."
+
+    override val errFailedToSaveProduct = "Falha ao salvar produto."
+    override val errFailedToUpdateProductStatus = "Falha ao atualizar status do produto."
+    override val errFailedToDeleteProduct = "Falha ao excluir produto."
+    override val errFailedToAdjustStock = "Falha ao ajustar estoque do produto."
+
+    override val errNoValidChargesToExecute = "Nenhuma cobrança válida para executar. Verifique se os usuários estão ativos e os valores são maiores que zero."
+    override val errFailedToExecuteBatchCharges = "Falha ao executar cobranças em lote. Verifique a conexão de rede e tente novamente."
+    override fun errFailedToSaveBillingList(error: String): String = "Falha ao salvar lista de faturamento: $error"
+    override fun errFailedToDeleteBillingList(error: String): String = "Falha ao excluir lista de faturamento: $error"
+
+    override val statusDiagnosticBundleExportedWithEmail = "Pacote de diagnóstico exportado e rascunho de e-mail aberto."
+    override val statusDiagnosticBundleExported = "Pacote de diagnóstico exportado com sucesso."
+    override val statusSystemSettingsUpdated = "Configurações do sistema atualizadas com sucesso."
+    override fun statusCsvImportSuccess(count: Int, type: String, added: Int, updated: Int): String =
+        "$count $type importado(s) com sucesso ($added adicionado(s), $updated atualizado(s))."
+    override val csvTypeProducts = "Produtos"
+    override val csvTypeUsers = "Usuários"
+
+    override val errFailedToCompletePurchase = "Falha ao finalizar compra"
+
+    // Desktop & Formatting
+    override val appWindowTitle = "Lojinha PDV & Autoatendimento"
+    override val monthNames = listOf("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
+
+    // CSV Import Validation
+    override val csvEmptyError = "Arquivo CSV está vazio."
+    override val csvMissingHeadersError = "Cabeçalhos obrigatórios 'name' e 'basePrice' ausentes."
+    override val csvMissingNameHeaderError = "Cabeçalho obrigatório 'name' ausente."
 }
+

@@ -18,8 +18,10 @@ import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
+import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -332,11 +334,28 @@ class BackupRestoreService(
 
             // Read products
             if (tableNames.contains("products")) {
-                val stmt = connection.prepare("SELECT id, name, barcodes, basePrice, unitType, stockQuantity, customMarkupPercent, isActive FROM products")
+                val productCols = mutableSetOf<String>()
+                val stmtCols = connection.prepare("PRAGMA table_info(products)")
+                try {
+                    while (stmtCols.step()) {
+                        productCols.add(stmtCols.getText(1).lowercase())
+                    }
+                } finally {
+                    stmtCols.close()
+                }
+
+                val hasMarkup = productCols.contains("custommarkuppercent")
+                val query = buildString {
+                    append("SELECT id, name, barcodes, basePrice, unitType, stockQuantity, ")
+                    append(if (hasMarkup) "customMarkupPercent" else "NULL")
+                    append(", isActive FROM products")
+                }
+
+                val stmt = connection.prepare(query)
                 try {
                     while (stmt.step()) {
                         val barcodesStr = if (stmt.isNull(2)) "" else stmt.getText(2)
-                        val customMarkup = if (stmt.isNull(6)) null else stmt.getDouble(6)
+                        val customMarkup = if (hasMarkup && !stmt.isNull(6)) stmt.getDouble(6) else null
 
                         val p = ProductEntity(
                             id = stmt.getText(0),
@@ -598,7 +617,11 @@ class BackupRestoreService(
                 backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
                 backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
                 backupBillingLists.forEach { db.billingListDao().insertOrUpdateBillingList(it) }
-                backupBillingListUsers.forEach { db.billingListDao().insertBillingListUser(it) }
+                val validUserIds = backupUsers.map { it.id }.toSet()
+                val validListIds = backupBillingLists.map { it.id }.toSet()
+                backupBillingListUsers
+                    .filter { it.userId in validUserIds && it.listId in validListIds }
+                    .forEach { db.billingListDao().insertBillingListUser(it) }
                 backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
                 if (backupSettings != null) {
                     db.settingsDao().insertOrUpdateSettings(backupSettings)
@@ -639,21 +662,24 @@ class BackupRestoreService(
         require(csvFile.exists() && csvFile.isFile) { "Product CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
         if (records.isEmpty()) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("CSV file is empty."))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvEmptyError))
         }
 
         val header = records[0].map { it.trim().removePrefix("\uFEFF") }
-        val idIdx = header.indexOf("id")
-        val nameIdx = header.indexOf("name")
-        val barcodesIdx = header.indexOf("barcodes")
-        val priceIdx = header.indexOf("basePrice")
-        val unitIdx = header.indexOf("unitType")
-        val stockIdx = header.indexOf("stockQuantity")
-        val markupIdx = header.indexOf("customMarkupPercent")
-        val activeIdx = header.indexOf("isActive")
+        fun findHeaderIndex(vararg candidates: String): Int =
+            header.indexOfFirst { col -> candidates.any { it.equals(col, ignoreCase = true) } }
+
+        val idIdx = findHeaderIndex("id", "productId")
+        val nameIdx = findHeaderIndex("name", "productName", "title")
+        val barcodesIdx = findHeaderIndex("barcodes", "barcode")
+        val priceIdx = findHeaderIndex("basePrice", "price", "base_price")
+        val unitIdx = findHeaderIndex("unitType", "unit", "unit_type")
+        val stockIdx = findHeaderIndex("stockQuantity", "stock", "quantity", "stock_quantity")
+        val markupIdx = findHeaderIndex("customMarkupPercent", "markup", "custom_markup_percent")
+        val activeIdx = findHeaderIndex("isActive", "active", "is_active")
 
         if (nameIdx == -1 || priceIdx == -1) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("Required headers 'name' and 'basePrice' missing."))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvMissingHeadersError))
         }
 
         val existingProducts = db.productDao().getAllProducts().associateBy { it.id }
@@ -680,13 +706,22 @@ class BackupRestoreService(
 
             val rawId = if (idIdx != -1 && idIdx < cols.size) cols[idIdx].trim() else ""
             val name = cols[nameIdx].trim()
+            if (name.isBlank()) {
+                warnings.add("Row ${i + 1}: Skipped product because name is blank.")
+                continue
+            }
             val priceStr = cols[priceIdx].trim()
             val parsedPrice = parseCurrencyToCents(priceStr)
             if (parsedPrice == null) {
                 warnings.add("Row ${i + 1} ('$name'): Invalid price '$priceStr'. Row skipped.")
                 continue
             }
-            val price = parsedPrice
+            val price = if (parsedPrice < 0) {
+                warnings.add("Row ${i + 1} ('$name'): Negative price '$priceStr' was adjusted to 0,00.")
+                0L
+            } else {
+                parsedPrice
+            }
 
             val productId = if (rawId.isNotEmpty()) rawId else "p-imp-${getTimestampString()}-$i"
             val existing = existingProducts[productId]
@@ -701,7 +736,13 @@ class BackupRestoreService(
 
             val stockStr = if (stockIdx != -1 && stockIdx < cols.size) cols[stockIdx].trim() else ""
             val stock = if (stockStr.isNotEmpty()) {
-                stockStr.toLongOrNull() ?: existing?.stockQuantity ?: 0L
+                val parsedStock = stockStr.toLongOrNull()
+                if (parsedStock != null && parsedStock < 0) {
+                    warnings.add("Row ${i + 1} ('$name'): Negative stock '$stockStr' was adjusted to 0.")
+                    0L
+                } else {
+                    parsedStock ?: existing?.stockQuantity ?: 0L
+                }
             } else {
                 existing?.stockQuantity ?: 0L
             }
@@ -730,9 +771,9 @@ class BackupRestoreService(
             if (rawBarcodesStr.isNotEmpty()) {
                 val parts = rawBarcodesStr.split("|")
                 parts.forEach { part ->
-                    val pair = part.split(":")
+                    val pair = part.split(":", limit = 2)
                     val code = pair[0].trim()
-                    val label = if (pair.size > 1) pair[1].trim() else "Barcode"
+                    val label = if (pair.size > 1 && pair[1].trim().isNotEmpty()) pair[1].trim() else "Barcode"
 
                     if (code.isNotEmpty()) {
                         val assignedProductId = allExistingBarcodesMap[code]
@@ -856,26 +897,29 @@ class BackupRestoreService(
         require(csvFile.exists() && csvFile.isFile) { "User CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
         if (records.isEmpty()) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("CSV file is empty."))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvEmptyError))
         }
 
         val header = records[0].map { it.trim().removePrefix("\uFEFF") }
-        val idIdx = header.indexOf("id")
-        val nameIdx = header.indexOf("name")
-        val balanceIdx = header.indexOf("balance")
-        val langIdx = header.indexOf("language")
-        val secCurrIdx = header.indexOf("secondaryCurrency")
-        val pinIdx = header.indexOf("pin")
-        val userBarcodeIdx = header.indexOf("userBarcode")
-        val userBarcodeNumberIdx = header.indexOf("userBarcodeNumber")
-        val activeIdx = header.indexOf("isActive")
-        val isDeletedIdx = header.indexOf("isDeleted")
-        val avatarTypeIdx = header.indexOf("avatarType")
-        val avatarEmojiIdx = header.indexOf("avatarEmoji")
-        val avatarColorIdx = header.indexOf("avatarColor")
+        fun findHeaderIndex(vararg candidates: String): Int =
+            header.indexOfFirst { col -> candidates.any { it.equals(col, ignoreCase = true) } }
+
+        val idIdx = findHeaderIndex("id", "userId", "user_id")
+        val nameIdx = findHeaderIndex("name", "userName", "user_name")
+        val balanceIdx = findHeaderIndex("balance", "kontostand", "saldo")
+        val langIdx = findHeaderIndex("language", "lang", "sprache")
+        val secCurrIdx = findHeaderIndex("secondaryCurrency", "secondary_currency", "secCurr")
+        val pinIdx = findHeaderIndex("pin", "password")
+        val userBarcodeIdx = findHeaderIndex("userBarcode", "user_barcode", "barcode")
+        val userBarcodeNumberIdx = findHeaderIndex("userBarcodeNumber", "user_barcode_number", "barcodeNumber", "barcode_number")
+        val activeIdx = findHeaderIndex("isActive", "active", "is_active")
+        val isDeletedIdx = findHeaderIndex("isDeleted", "deleted", "is_deleted")
+        val avatarTypeIdx = findHeaderIndex("avatarType", "avatar_type")
+        val avatarEmojiIdx = findHeaderIndex("avatarEmoji", "avatar_emoji", "emoji")
+        val avatarColorIdx = findHeaderIndex("avatarColor", "avatar_color", "color")
 
         if (nameIdx == -1) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf("Required header 'name' missing."))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvMissingNameHeaderError))
         }
 
         val existingUsers = db.userDao().getAllUsers().associateBy { it.id }
@@ -891,6 +935,8 @@ class BackupRestoreService(
         val warnings = mutableListOf<String>()
         val errors = mutableListOf<String>()
         val usersToInsert = mutableListOf<UserEntity>()
+        val transactionsToInsert = mutableListOf<TransactionEntity>()
+        val importTimestamp = System.currentTimeMillis()
 
         for (i in 1 until records.size) {
             val cols = records[i]
@@ -901,6 +947,10 @@ class BackupRestoreService(
 
             val rawId = if (idIdx != -1 && idIdx < cols.size) cols[idIdx].trim() else ""
             val name = cols[nameIdx].trim()
+            if (name.isBlank()) {
+                warnings.add("Row ${i + 1}: Skipped user because name is blank.")
+                continue
+            }
 
             val userId = if (rawId.isNotEmpty()) rawId else "u-imp-${getTimestampString()}-$i"
             val existing = existingUsers[userId]
@@ -908,7 +958,7 @@ class BackupRestoreService(
 
             // Balance parsing
             val balanceStr = if (balanceIdx != -1 && balanceIdx < cols.size) cols[balanceIdx].trim() else ""
-            val balance = if (balanceStr.isNotEmpty()) {
+            val targetBalance = if (balanceStr.isNotEmpty()) {
                 val parsed = parseCurrencyToCents(balanceStr)
                 if (parsed != null) {
                     parsed
@@ -920,8 +970,29 @@ class BackupRestoreService(
                 existing?.balance ?: 0L
             }
 
+            val balBefore = existing?.balance ?: 0L
+            val delta = targetBalance - balBefore
+            if (delta != 0L) {
+                val isDeposit = delta > 0
+                val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
+                val tx = TransactionEntity(
+                    id = java.util.UUID.randomUUID().toString(),
+                    userId = userId,
+                    userNameSnapshot = name,
+                    timestamp = importTimestamp + i,
+                    type = txType.name,
+                    referenceTransactionId = null,
+                    note = if (isDeposit) "SYSNOTE|ADMIN_DEPOSIT" else "SYSNOTE|ADMIN_DEBIT",
+                    totalAmount = delta,
+                    items = emptyList(),
+                    userBalanceBefore = balBefore,
+                    userBalanceAfter = targetBalance
+                )
+                transactionsToInsert.add(tx)
+            }
+
             val langStr = if (langIdx != -1 && langIdx < cols.size && cols[langIdx].trim().isNotEmpty()) {
-                cols[langIdx].trim()
+                Language.fromCode(cols[langIdx].trim()).code
             } else {
                 existing?.language ?: Language.DE.code
             }
@@ -975,7 +1046,11 @@ class BackupRestoreService(
             var finalUserBarcode: String? = null
             var finalUserBarcodeNumber: String? = null
 
-            if (rawUserBarcode.isNotEmpty() || rawUserBarcodeNumber.isNotEmpty()) {
+            if (userBarcodeIdx == -1 && userBarcodeNumberIdx == -1 && isExisting) {
+                // If barcode columns were omitted from CSV, preserve existing barcodes
+                finalUserBarcode = existing?.userBarcode
+                finalUserBarcodeNumber = existing?.userBarcodeNumber
+            } else {
                 if (rawUserBarcode.isNotEmpty()) {
                     val assignedUserId = allExistingUserBarcodesMap[rawUserBarcode]
                     if (assignedUserId != null && assignedUserId != userId) {
@@ -986,6 +1061,7 @@ class BackupRestoreService(
                         allExistingUserBarcodesMap[rawUserBarcode] = userId
                     }
                 }
+
                 if (rawUserBarcodeNumber.isNotEmpty()) {
                     val assignedUserId = allExistingUserBarcodesMap[rawUserBarcodeNumber]
                     if (assignedUserId != null && assignedUserId != userId) {
@@ -996,10 +1072,16 @@ class BackupRestoreService(
                         allExistingUserBarcodesMap[rawUserBarcodeNumber] = userId
                     }
                 }
-            } else if (isExisting && userBarcodeIdx == -1 && userBarcodeNumberIdx == -1) {
-                // If barcode columns were omitted from CSV, preserve existing barcodes
-                finalUserBarcode = existing!!.userBarcode
-                finalUserBarcodeNumber = existing.userBarcodeNumber
+
+                // If one column was omitted from CSV, preserve existing value for that column if the other was provided
+                if (isExisting) {
+                    if (userBarcodeIdx == -1 && finalUserBarcodeNumber != null) {
+                        finalUserBarcode = existing?.userBarcode
+                    }
+                    if (userBarcodeNumberIdx == -1 && finalUserBarcode != null) {
+                        finalUserBarcodeNumber = existing?.userBarcodeNumber
+                    }
+                }
             }
 
             val effectiveBarcode = if (finalUserBarcode != null && finalUserBarcodeNumber != null) {
@@ -1015,7 +1097,7 @@ class BackupRestoreService(
             val userEntity = UserEntity(
                 id = userId,
                 name = name,
-                balance = balance,
+                balance = targetBalance,
                 language = langStr,
                 secondaryCurrency = secCurrStr,
                 pin = pin,
@@ -1032,10 +1114,11 @@ class BackupRestoreService(
             if (isExisting) updatedCount++ else addedCount++
         }
 
-        if (!dryRun && usersToInsert.isNotEmpty()) {
+        if (!dryRun && (usersToInsert.isNotEmpty() || transactionsToInsert.isNotEmpty())) {
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     usersToInsert.forEach { db.userDao().insertOrUpdateUser(it) }
+                    transactionsToInsert.forEach { db.transactionDao().insertTransaction(it) }
                 }
             }
         }
@@ -1125,9 +1208,5 @@ class BackupRestoreService(
             }
         }
         return records
-    }
-
-    fun parseCsvLine(line: String): List<String> {
-        return parseCsvRecords(line).firstOrNull() ?: emptyList()
     }
 }

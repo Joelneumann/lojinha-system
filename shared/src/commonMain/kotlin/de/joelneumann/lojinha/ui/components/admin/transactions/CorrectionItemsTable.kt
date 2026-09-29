@@ -18,7 +18,9 @@ import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.UnitType
+import de.joelneumann.lojinha.domain.model.calculateAdjustment
 import de.joelneumann.lojinha.ui.i18n.I18n
+
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 
@@ -74,38 +76,11 @@ fun CorrectionItemsTable(
                 HorizontalDivider(color = DividerBorder)
 
                 items.forEachIndexed { index, item ->
-                    val (prevQty, qtyDiff, adjustmentAmount) = if (item.previousQuantity != null) {
-                        val prev = item.previousQuantity!!
-                        val diff = item.quantity - prev
-                        val diffCost = when (item.unitType) {
-                            UnitType.PIECE -> item.unitPriceAtPurchase * diff
-                            UnitType.WEIGHT -> {
-                                val newC = kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
-                                val prevC = kotlin.math.round((item.unitPriceAtPurchase * prev) / 1000.0).toLong()
-                                newC - prevC
-                            }
-                        }
-                        Triple(prev, diff, -diffCost)
-                    } else if (items.size == 1 && item.unitPriceAtPurchase > 0) {
-                        // For legacy transactions with a single item, derive the exact delta from transaction.totalAmount
-                        val diff = when (item.unitType) {
-                            UnitType.PIECE -> -transaction.totalAmount / item.unitPriceAtPurchase
-                            UnitType.WEIGHT -> kotlin.math.round((-transaction.totalAmount * 1000.0) / item.unitPriceAtPurchase).toLong()
-                        }
-                        Triple(item.quantity - diff, diff, transaction.totalAmount)
-                    } else {
-                        val prev = referencedTransaction?.items?.firstOrNull { it.productId == item.productId }?.quantity ?: item.quantity
-                        val diff = item.quantity - prev
-                        val diffCost = when (item.unitType) {
-                            UnitType.PIECE -> item.unitPriceAtPurchase * diff
-                            UnitType.WEIGHT -> {
-                                val newC = kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
-                                val prevC = kotlin.math.round((item.unitPriceAtPurchase * prev) / 1000.0).toLong()
-                                newC - prevC
-                            }
-                        }
-                        Triple(prev, diff, -diffCost)
-                    }
+                    val (prevQty, qtyDiff, adjustmentAmount) = item.calculateAdjustment(
+                        parentTransaction = referencedTransaction,
+                        totalTransactionAmount = transaction.totalAmount,
+                        totalItemCount = items.size
+                    )
 
                     Row(
                         modifier = Modifier

@@ -2,6 +2,8 @@ package de.joelneumann.lojinha.ui.utils
 
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.UnitType
+import de.joelneumann.lojinha.ui.i18n.AppStrings
+import de.joelneumann.lojinha.ui.i18n.I18n
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
@@ -36,9 +38,9 @@ object Formatting {
         return " (≈ $signedValue)"
     }
 
-    fun formatQuantity(quantity: Long, unitType: UnitType): String {
+    fun formatQuantity(quantity: Long, unitType: UnitType, strings: AppStrings = I18n.get()): String {
         return when (unitType) {
-            UnitType.PIECE -> "$quantity pcs"
+            UnitType.PIECE -> strings.pieceUnitSuffix(quantity)
             UnitType.WEIGHT -> {
                 val kgInt = quantity / 1000
                 val remainderGrams = abs(quantity % 1000)
@@ -93,12 +95,16 @@ object Formatting {
         val valDouble = normalized.toDoubleOrNull() ?: return null
         if (valDouble <= 0.0) return null
 
-        return when {
+        val grams = when {
             hasKg -> round(valDouble * 1000.0).toLong()
             hasG -> round(valDouble).toLong()
             normalized.contains('.') || valDouble <= 20.0 -> round(valDouble * 1000.0).toLong()
             else -> round(valDouble).toLong()
         }
+
+        // Sanity limit: max 100 kg (100,000 g) per weighted item to prevent barcode scanner overflow
+        if (grams <= 0L || grams > 100_000L) return null
+        return grams
     }
 
     enum class WeightUnitDisplay(val symbol: String) {
@@ -113,21 +119,29 @@ object Formatting {
         val hasKg = trimmed.contains("kg")
         val hasG = !hasKg && trimmed.contains("g")
 
-        if (hasKg) return WeightUnitDisplay.KG
-        if (hasG) return WeightUnitDisplay.G
-
-        val cleaned = trimmed
-            .replace("kg", "")
-            .replace("g", "")
-            .trim()
-
-        if (cleaned.isBlank()) return null
-        if (cleaned.contains(',') || cleaned.contains('.')) {
+        if (hasKg) {
+            val numStr = trimmed.replace("kg", "").trim().replace(',', '.')
+            val kgVal = numStr.toDoubleOrNull() ?: return null
+            if (kgVal <= 0.0 || kgVal > 100.0) return null
             return WeightUnitDisplay.KG
         }
+        if (hasG) {
+            val numStr = trimmed.replace("g", "").trim().replace(',', '.')
+            val gVal = numStr.toDoubleOrNull() ?: return null
+            if (gVal <= 0.0 || gVal > 100_000.0) return null
+            return WeightUnitDisplay.G
+        }
 
-        val valDouble = cleaned.toDoubleOrNull() ?: return null
-        if (valDouble <= 0.0) return null
+        val cleaned = trimmed.trim()
+        if (cleaned.isBlank()) return null
+        val normalized = cleaned.replace(',', '.')
+        val valDouble = normalized.toDoubleOrNull() ?: return null
+
+        if (cleaned.contains(',') || cleaned.contains('.')) {
+            if (valDouble < 0.0 || valDouble > 100.0) return null
+            return WeightUnitDisplay.KG
+        }
+        if (valDouble <= 0.0 || valDouble > 100_000.0) return null
 
         return if (valDouble <= 20.0) WeightUnitDisplay.KG else WeightUnitDisplay.G
     }
@@ -148,8 +162,8 @@ object Formatting {
             de.joelneumann.lojinha.domain.model.Language.EN -> {
                 val hour12 = if (ldt.hour % 12 == 0) 12 else ldt.hour % 12
                 val amPm = if (ldt.hour >= 12) "PM" else "AM"
-                val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-                val monthName = monthNames[ldt.monthNumber - 1]
+                val monthNames = I18n.get(language).monthNames
+                val monthName = monthNames.getOrElse(ldt.monthNumber - 1) { "" }
                 "$monthName $dayStr, $yearStr, ${hour12.toString().padStart(2, '0')}:$minuteStr $amPm"
             }
             de.joelneumann.lojinha.domain.model.Language.DE -> "$dayStr.$monthStr.$yearStr, $hour24Str:$minuteStr"

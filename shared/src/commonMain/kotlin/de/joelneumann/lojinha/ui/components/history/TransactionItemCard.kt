@@ -21,6 +21,7 @@ import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.UnitType
+import de.joelneumann.lojinha.domain.model.calculateAdjustment
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -225,11 +226,12 @@ fun TransactionItemCard(
                         }
                     } else {
                         val isNegative = tx.totalAmount < 0
+                        val isStrictlyPositive = tx.totalAmount > 0
                         Text(
-                            text = "${if (!isNegative && tx.type != TransactionType.PURCHASE) "+" else ""}${Formatting.formatBrl(tx.totalAmount)}",
+                            text = "${if (isStrictlyPositive && tx.type != TransactionType.PURCHASE) "+" else ""}${Formatting.formatBrl(tx.totalAmount)}",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isNegative) ColorDangerCrimson else amountColor
+                            color = if (isNegative) ColorDangerCrimson else if (isStrictlyPositive) amountColor else TextSecondaryMuted
                         )
                     }
                     val secFormatted = Formatting.formatSecondaryCurrency(tx.totalAmount, secondaryCurrency, rate)
@@ -242,7 +244,7 @@ fun TransactionItemCard(
             if (!displayNote.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Note: $displayNote",
+                    text = displayNote,
                     fontSize = 13.sp,
                     color = TextSecondarySubtle
                 )
@@ -261,37 +263,11 @@ fun TransactionItemCard(
                         color = PrimaryNavy
                     )
                     tx.items.forEach { item ->
-                        val (prevQty, diff, adjustmentAmount) = if (item.previousQuantity != null) {
-                            val prev = item.previousQuantity!!
-                            val d = item.quantity - prev
-                            val diffCost = when (item.unitType) {
-                                UnitType.PIECE -> item.unitPriceAtPurchase * d
-                                UnitType.WEIGHT -> {
-                                    val newC = kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
-                                    val prevC = kotlin.math.round((item.unitPriceAtPurchase * prev) / 1000.0).toLong()
-                                    newC - prevC
-                                }
-                            }
-                            Triple(prev, d, -diffCost)
-                        } else if (tx.items.size == 1 && item.unitPriceAtPurchase > 0) {
-                            val d = when (item.unitType) {
-                                UnitType.PIECE -> -tx.totalAmount / item.unitPriceAtPurchase
-                                UnitType.WEIGHT -> kotlin.math.round((-tx.totalAmount * 1000.0) / item.unitPriceAtPurchase).toLong()
-                            }
-                            Triple(item.quantity - d, d, tx.totalAmount)
-                        } else {
-                            val prev = allTransactionsMap[tx.referenceTransactionId]?.items?.firstOrNull { it.productId == item.productId }?.quantity ?: item.quantity
-                            val d = item.quantity - prev
-                            val diffCost = when (item.unitType) {
-                                UnitType.PIECE -> item.unitPriceAtPurchase * d
-                                UnitType.WEIGHT -> {
-                                    val newC = kotlin.math.round((item.unitPriceAtPurchase * item.quantity) / 1000.0).toLong()
-                                    val prevC = kotlin.math.round((item.unitPriceAtPurchase * prev) / 1000.0).toLong()
-                                    newC - prevC
-                                }
-                            }
-                            Triple(prev, d, -diffCost)
-                        }
+                        val (prevQty, diff, adjustmentAmount) = item.calculateAdjustment(
+                            parentTransaction = allTransactionsMap[tx.referenceTransactionId],
+                            totalTransactionAmount = tx.totalAmount,
+                            totalItemCount = tx.items.size
+                        )
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -380,48 +356,50 @@ fun TransactionItemCard(
             }
 
             // Balance Flow Banner: Before -> After (placed under the item list)
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = SurfaceContainerHighLight,
-                border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            if (balanceBefore != null && balanceAfter != null) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SurfaceContainerHighLight,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                 ) {
-                    Text(
-                        text = "${strings.balance}:",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = TextSecondarySubtle
-                    )
-
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = Formatting.formatBrl(balanceBefore),
+                            text = "${strings.balance}:",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextSecondaryMuted
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondarySubtle
                         )
 
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = TextSecondarySubtle
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = Formatting.formatBrl(balanceBefore),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextSecondaryMuted
+                            )
 
-                        Text(
-                            text = Formatting.formatBrl(balanceAfter),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (balanceAfter >= 0) PrimaryNavy else ColorDangerCrimson
-                        )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = TextSecondarySubtle
+                            )
+
+                            Text(
+                                text = Formatting.formatBrl(balanceAfter),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (balanceAfter >= 0) PrimaryNavy else ColorDangerCrimson
+                            )
+                        }
                     }
                 }
             }

@@ -9,6 +9,7 @@ import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.util.AppLogger
 import de.joelneumann.lojinha.ui.components.admin.products.ProductSortOption
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.Job
@@ -40,6 +41,12 @@ class AdminProductsViewModel(
     private val _showProductModal = MutableStateFlow(false)
     val showProductModal: StateFlow<Boolean> = _showProductModal.asStateFlow()
 
+    private val _isSavingProduct = MutableStateFlow(false)
+    val isSavingProduct: StateFlow<Boolean> = _isSavingProduct.asStateFlow()
+
+    private val _productErrorMessage = MutableStateFlow<String?>(null)
+    val productErrorMessage: StateFlow<String?> = _productErrorMessage.asStateFlow()
+
     private var productsJob: Job? = null
     private var settingsJob: Job? = null
 
@@ -68,9 +75,13 @@ class AdminProductsViewModel(
         _sortOption.value = option
     }
 
+    fun clearProductError() {
+        _productErrorMessage.value = null
+    }
+
     fun openNewProductModal() {
         _editProduct.value = Product(
-            id = generateUuid(),
+            id = "",
             name = "",
             barcodes = emptyList(),
             basePrice = 0L,
@@ -95,23 +106,29 @@ class AdminProductsViewModel(
     }
 
     fun saveProduct(product: Product) {
+        if (_isSavingProduct.value) return
         viewModelScope.launch {
+            _isSavingProduct.value = true
             try {
-                val original = _editProduct.value
-                val isExisting = original != null && original.id.isNotBlank() && original.id == product.id
+                val isExisting = product.id.isNotBlank() && _products.value.any { it.id == product.id }
                 if (isExisting) {
-                    val stockDelta = product.stockQuantity - original.stockQuantity
+                    val original = _products.value.find { it.id == product.id } ?: _editProduct.value
+                    val stockDelta = if (original != null) product.stockQuantity - original.stockQuantity else 0L
                     productRepository.saveProduct(product)
                     if (stockDelta != 0L) {
                         productRepository.updateStock(product.id, stockDelta)
                     }
                 } else {
-                    productRepository.saveProduct(product)
+                    val newProduct = if (product.id.isBlank()) product.copy(id = generateUuid()) else product
+                    productRepository.saveProduct(newProduct)
                 }
                 refreshProducts()
                 closeProductModal()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "saveProduct error: ${e.message}", e)
+                _productErrorMessage.value = e.message ?: I18n.get().errFailedToSaveProduct
+            } finally {
+                _isSavingProduct.value = false
             }
         }
     }
@@ -123,6 +140,7 @@ class AdminProductsViewModel(
                 refreshProducts()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "toggleProductActive error: ${e.message}", e)
+                _productErrorMessage.value = e.message ?: I18n.get().errFailedToUpdateProductStatus
             }
         }
     }
@@ -134,6 +152,7 @@ class AdminProductsViewModel(
                 refreshProducts()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "deleteProduct error: ${e.message}", e)
+                _productErrorMessage.value = e.message ?: I18n.get().errFailedToDeleteProduct
             }
         }
     }
@@ -150,6 +169,7 @@ class AdminProductsViewModel(
                 refreshProducts()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "adjustProductStock error: ${e.message}", e)
+                _productErrorMessage.value = e.message ?: I18n.get().errFailedToAdjustStock
             }
         }
     }
