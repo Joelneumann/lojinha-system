@@ -11,8 +11,10 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.ui.utils.removeAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.util.AppLogger
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,8 +36,11 @@ data class CartItem(
 class ShoppingViewModel(
     private val productRepository: ProductRepository,
     private val userRepository: UserRepository,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
+
+    private val activeScope = coroutineScope ?: viewModelScope
 
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     val products: StateFlow<List<Product>> = _products.asStateFlow()
@@ -69,7 +74,7 @@ class ShoppingViewModel(
     }
 
     fun loadProducts() {
-        viewModelScope.launch {
+        activeScope.launch {
             productRepository.getProductsFlow().collect { list ->
                 _products.value = list.filter { it.isActive }.sortedByAccentInsensitive { it.name }
             }
@@ -80,15 +85,61 @@ class ShoppingViewModel(
         _searchQuery.value = query
     }
 
-    fun onSearchSubmitted(globalMarkup: Double) {
-        val query = _searchQuery.value.trim()
-        if (query.isBlank()) return
+    fun submitBarcodeOrSearch(
+        query: String,
+        globalMarkup: Double,
+        highlightedProduct: Product? = null
+    ): Boolean {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return false
 
-        val ranked = _products.value.filterAndRankProducts(query)
+        // 1. Try exact barcode match first
+        val exactBarcodeProduct = _products.value.firstOrNull { product ->
+            product.barcodes.any { it.code.trim().equals(trimmed, ignoreCase = true) }
+        }
+        if (exactBarcodeProduct != null) {
+            onProductSelected(exactBarcodeProduct, globalMarkup)
+            _searchQuery.value = ""
+            return true
+        }
+
+        // 2. Try exact name match (accent and case insensitive)
+        val exactNameProduct = _products.value.firstOrNull { product ->
+            product.name.trim().removeAccents().equals(trimmed.removeAccents(), ignoreCase = true)
+        }
+        if (exactNameProduct != null) {
+            onProductSelected(exactNameProduct, globalMarkup)
+            _searchQuery.value = ""
+            return true
+        }
+
+        // 3. Safety Guard: If query is purely numeric and has barcode length (>= 4 digits),
+        // and did NOT match an exact barcode, DO NOT add a random substring-matching product!
+        val isNumericBarcode = trimmed.all { it.isDigit() } && trimmed.length >= 4
+        if (isNumericBarcode) {
+            _searchQuery.value = trimmed
+            return false
+        }
+
+        // 4. Manual search submission: use highlighted product or first ranked search result
+        if (highlightedProduct != null) {
+            onProductSelected(highlightedProduct, globalMarkup)
+            _searchQuery.value = ""
+            return true
+        }
+
+        val ranked = _products.value.filterAndRankProducts(trimmed)
         if (ranked.isNotEmpty()) {
             onProductSelected(ranked.first(), globalMarkup)
             _searchQuery.value = ""
+            return true
         }
+
+        return false
+    }
+
+    fun onSearchSubmitted(globalMarkup: Double) {
+        submitBarcodeOrSearch(_searchQuery.value, globalMarkup)
     }
 
     fun onProductSelected(product: Product, globalMarkup: Double) {
@@ -221,7 +272,7 @@ class ShoppingViewModel(
             userBalanceAfter = balAfter
         )
 
-        viewModelScope.launch {
+        activeScope.launch {
             try {
                 val stockDeltas = cart.associate { it.product.id to -it.quantity }
                 transactionRepository.executeAtomicTransaction(

@@ -90,6 +90,10 @@ fun ShoppingScreen(
             onUserInteracted(true)
             viewModel.onSearchSubmitted(settings.globalMarkupPercent)
         },
+        onSubmitBarcodeOrSearch = { query, highlighted ->
+            onUserInteracted(true)
+            viewModel.submitBarcodeOrSearch(query, settings.globalMarkupPercent, highlighted)
+        },
         onProductSelected = { product ->
             onUserInteracted(true)
             viewModel.onProductSelected(product, settings.globalMarkupPercent)
@@ -144,6 +148,7 @@ fun ShoppingContent(
     onLogout: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmitted: () -> Unit,
+    onSubmitBarcodeOrSearch: (String, Product?) -> Boolean = { _, _ -> false },
     onProductSelected: (Product) -> Unit,
     onUpdateCartQty: (productId: String, newQty: Long) -> Unit,
     onRemoveCartItem: (productId: String) -> Unit,
@@ -297,7 +302,6 @@ fun ShoppingContent(
             }
             else -> {
                 selectedCartIndex = -1
-                coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
                 false
             }
         }
@@ -386,20 +390,37 @@ fun ShoppingContent(
                     onQueryChange = onSearchQueryChange,
                     placeholder = strings.searchProductPlaceholder,
                     onSearchSubmitted = {
-                        if (searchQuery.isBlank()) {
+                        val clean = searchQuery.trim()
+                        if (clean.isBlank()) {
                             if (cartItems.isNotEmpty()) {
                                 showCheckoutConfirmation = true
                             }
-                        } else if (highlightedProductIndex in filteredProducts.indices) {
-                            val p = filteredProducts[highlightedProductIndex]
-                            selectProductInCart(p.id)
-                            onProductSelected(p)
-                        } else if (filteredProducts.isNotEmpty()) {
-                            val p = filteredProducts.first()
-                            selectProductInCart(p.id)
-                            onProductSelected(p)
                         } else {
-                            onSearchSubmitted()
+                            val highlighted = if (highlightedProductIndex in filteredProducts.indices) {
+                                filteredProducts[highlightedProductIndex]
+                            } else null
+                            val handled = onSubmitBarcodeOrSearch(clean, highlighted)
+                            if (handled) {
+                                highlightedProductIndex = -1
+                                selectedCartIndex = -1
+                            }
+                        }
+                    },
+                    onSearchSubmittedWithQuery = { submittedQuery ->
+                        val clean = submittedQuery.trim()
+                        if (clean.isBlank()) {
+                            if (cartItems.isNotEmpty()) {
+                                showCheckoutConfirmation = true
+                            }
+                        } else {
+                            val highlighted = if (highlightedProductIndex in filteredProducts.indices) {
+                                filteredProducts[highlightedProductIndex]
+                            } else null
+                            val handled = onSubmitBarcodeOrSearch(clean, highlighted)
+                            if (handled) {
+                                highlightedProductIndex = -1
+                                selectedCartIndex = -1
+                            }
                         }
                     },
                     focusRequester = searchFocusRequester,
@@ -407,7 +428,14 @@ fun ShoppingContent(
                     onKeyDown = { event ->
                         if (handleSelectedAdjustment(event)) {
                             true
-                        } else if (selectedCartIndex in cartItems.indices) {
+                        } else if (selectedCartIndex in cartItems.indices && (
+                            event.key == Key.Backspace ||
+                            event.key == Key.Delete ||
+                            event.key == Key.DirectionDown ||
+                            event.key == Key.DirectionUp ||
+                            event.key == Key.Escape ||
+                            event.key == Key.Tab
+                        )) {
                             handleCartNavigation(event)
                         } else when {
                             event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown -> {
@@ -443,29 +471,12 @@ fun ShoppingContent(
                                     true
                                 } else false
                             }
-                            (event.key == Key.Enter || event.key == Key.NumPadEnter) -> {
-                                if (event.type == KeyEventType.KeyDown) {
-                                    if (searchQuery.isBlank()) {
-                                        if (cartItems.isNotEmpty()) {
-                                            showCheckoutConfirmation = true
-                                        }
-                                        true
-                                    } else if (highlightedProductIndex in filteredProducts.indices) {
-                                        val p = filteredProducts[highlightedProductIndex]
-                                        selectProductInCart(p.id)
-                                        onProductSelected(p)
-                                        true
-                                    } else if (filteredProducts.isNotEmpty()) {
-                                        val p = filteredProducts.first()
-                                        selectProductInCart(p.id)
-                                        onProductSelected(p)
-                                        true
-                                    } else false
-                                } else if (event.type == KeyEventType.KeyUp) {
-                                    searchQuery.isBlank() || filteredProducts.isNotEmpty()
-                                } else false
+                            else -> {
+                                if (selectedCartIndex != -1) {
+                                    selectedCartIndex = -1
+                                }
+                                false
                             }
-                            else -> false
                         }
                     }
                 )
