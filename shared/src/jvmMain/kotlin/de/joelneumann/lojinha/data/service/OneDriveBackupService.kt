@@ -10,9 +10,13 @@ import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
@@ -38,7 +42,8 @@ actual class OneDriveBackupService {
         tenant: String,
         onStatusUpdate: ((String) -> Unit)?
     ): Result<TokenResponse> = withContext(Dispatchers.IO) {
-        var server: com.sun.net.httpserver.HttpServer? = null
+        var serverSocket: java.net.ServerSocket? = null
+        var listenerJob: Job? = null
         try {
             onStatusUpdate?.invoke("Initializing 1-click browser login...")
 
@@ -48,61 +53,29 @@ actual class OneDriveBackupService {
             val redirectUri = "http://localhost:$port/callback"
             val authCodeDeferred = CompletableDeferred<String>()
 
-            // Create local temporary HTTP server on port 8989 (bind to all loopback interfaces)
-            server = try {
-                com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress(port), 0)
+            // Create local temporary ServerSocket on port 8989 (binds to loopback interfaces)
+            serverSocket = try {
+                java.net.ServerSocket(port, 10)
             } catch (e: java.net.BindException) {
                 return@withContext Result.failure(Exception("Port $port is currently in use. Please close any applications using port $port and try again."))
             }
-            server.createContext("/callback") { exchange ->
-                val query = exchange.requestURI.query ?: ""
-                val queryParams = query.split("&").associate {
-                    val parts = it.split("=")
-                    parts.getOrNull(0).orEmpty() to (parts.getOrNull(1)?.let { v -> java.net.URLDecoder.decode(v, "UTF-8") } ?: "")
+
+            val currentServer = serverSocket
+            listenerJob = launch {
+                while (isActive && !currentServer.isClosed) {
+                    val clientSocket = try {
+                        currentServer.accept()
+                    } catch (_: java.net.SocketException) {
+                        break // ServerSocket was closed
+                    } catch (_: Exception) {
+                        break
+                    }
+
+                    launch {
+                        handleAuthClientSocket(clientSocket, authCodeDeferred)
+                    }
                 }
-
-                val code = queryParams["code"]
-                val errorDesc = queryParams["error_description"] ?: queryParams["error"]
-
-                val htmlResponse = if (!code.isNullOrBlank()) {
-                    authCodeDeferred.complete(code)
-                    """
-                    <!DOCTYPE html>
-                    <html>
-                    <head><meta charset="UTF-8"><title>Lojinha - Connected</title></head>
-                    <body style="font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #F8FAFC; color: #0F172A;">
-                        <div style="text-align: center; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 400px; width: 90%;">
-                            <div style="font-size: 48px; margin-bottom: 16px;">🟢</div>
-                            <h1 style="color: #059669; font-size: 22px; margin: 0 0 8px 0; font-weight: 700;">Connected to OneDrive!</h1>
-                            <p style="color: #64748B; font-size: 14px; margin: 0; line-height: 1.5;">You can now close this browser tab and return to Lojinha.</p>
-                        </div>
-                    </body>
-                    </html>
-                    """.trimIndent()
-                } else {
-                    val errText = errorDesc ?: "Authorization was cancelled."
-                    authCodeDeferred.completeExceptionally(Exception(errText))
-                    """
-                    <!DOCTYPE html>
-                    <html>
-                    <head><meta charset="UTF-8"><title>Lojinha - Connection Error</title></head>
-                    <body style="font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #F8FAFC; color: #0F172A;">
-                        <div style="text-align: center; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 400px; width: 90%;">
-                            <div style="font-size: 48px; margin-bottom: 16px;">🔴</div>
-                            <h1 style="color: #DC2626; font-size: 22px; margin: 0 0 8px 0; font-weight: 700;">Connection Failed</h1>
-                            <p style="color: #64748B; font-size: 14px; margin: 0; line-height: 1.5;">$errText</p>
-                        </div>
-                    </body>
-                    </html>
-                    """.trimIndent()
-                }
-
-                val responseBytes = htmlResponse.toByteArray(Charsets.UTF_8)
-                exchange.responseHeaders.add("Content-Type", "text/html; charset=UTF-8")
-                exchange.sendResponseHeaders(200, responseBytes.size.toLong())
-                exchange.responseBody.use { os -> os.write(responseBytes) }
             }
-            server.start()
 
             val safeTenant = tenant.ifBlank { "common" }
 
@@ -120,7 +93,8 @@ actual class OneDriveBackupService {
             try {
                 java.awt.Desktop.getDesktop().browse(java.net.URI(authUrl))
             } catch (e: Exception) {
-                server.stop(0)
+                try { currentServer.close() } catch (_: Exception) {}
+                listenerJob.cancel()
                 return@withContext Result.failure(Exception("Could not open system browser: ${e.message}"))
             }
 
@@ -134,8 +108,9 @@ actual class OneDriveBackupService {
             }
 
             delay(1000L) // Allow browser to receive HTML response page cleanly before closing socket
-            server.stop(0)
-            server = null
+            try { currentServer.close() } catch (_: Exception) {}
+            listenerJob.cancel()
+            serverSocket = null
 
             if (authCode.isNullOrBlank()) {
                 return@withContext Result.failure(Exception("Authorization timed out or was cancelled."))
@@ -161,13 +136,103 @@ actual class OneDriveBackupService {
             } else {
                 Result.failure(Exception(parsed.errorDescription ?: parsed.error ?: "Token exchange failed"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(Exception(t.message ?: "Authentication failed", t))
         } finally {
             try {
-                server?.stop(0)
+                serverSocket?.close()
             } catch (_: Exception) {}
+            listenerJob?.cancel()
         }
+    }
+
+    private fun handleAuthClientSocket(
+        socket: java.net.Socket,
+        authCodeDeferred: CompletableDeferred<String>
+    ) {
+        try {
+            socket.use { s ->
+                val reader = s.getInputStream().bufferedReader(Charsets.UTF_8)
+                val requestLine = reader.readLine() ?: return
+                // Drain headers until empty line
+                while (true) {
+                    val header = reader.readLine()
+                    if (header.isNullOrEmpty()) break
+                }
+
+                val parts = requestLine.split(" ")
+                if (parts.size < 2) return
+                val fullUri = parts[1]
+
+                val pathAndQuery = fullUri.split("?", limit = 2)
+                val path = pathAndQuery[0]
+                val query = pathAndQuery.getOrNull(1).orEmpty()
+
+                if (path == "/callback") {
+                    val queryParams = query.split("&").filter { it.isNotEmpty() }.associate {
+                        val p = it.split("=", limit = 2)
+                        val key = p[0]
+                        val value = p.getOrNull(1)?.let { v ->
+                            try { java.net.URLDecoder.decode(v, "UTF-8") } catch (_: Exception) { v }
+                        }.orEmpty()
+                        key to value
+                    }
+
+                    val code = queryParams["code"]
+                    val errorDesc = queryParams["error_description"] ?: queryParams["error"]
+
+                    val htmlResponse = if (!code.isNullOrBlank()) {
+                        authCodeDeferred.complete(code)
+                        """
+                        <!DOCTYPE html>
+                        <html>
+                        <head><meta charset="UTF-8"><title>Lojinha - Connected</title></head>
+                        <body style="font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #F8FAFC; color: #0F172A;">
+                            <div style="text-align: center; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 400px; width: 90%;">
+                                <div style="font-size: 48px; margin-bottom: 16px;">🟢</div>
+                                <h1 style="color: #059669; font-size: 22px; margin: 0 0 8px 0; font-weight: 700;">Connected to OneDrive!</h1>
+                                <p style="color: #64748B; font-size: 14px; margin: 0; line-height: 1.5;">You can now close this browser tab and return to Lojinha.</p>
+                            </div>
+                        </body>
+                        </html>
+                        """.trimIndent()
+                    } else {
+                        val errText = errorDesc ?: "Authorization was cancelled."
+                        authCodeDeferred.completeExceptionally(Exception(errText))
+                        """
+                        <!DOCTYPE html>
+                        <html>
+                        <head><meta charset="UTF-8"><title>Lojinha - Connection Error</title></head>
+                        <body style="font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #F8FAFC; color: #0F172A;">
+                            <div style="text-align: center; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 400px; width: 90%;">
+                                <div style="font-size: 48px; margin-bottom: 16px;">🔴</div>
+                                <h1 style="color: #DC2626; font-size: 22px; margin: 0 0 8px 0; font-weight: 700;">Connection Failed</h1>
+                                <p style="color: #64748B; font-size: 14px; margin: 0; line-height: 1.5;">$errText</p>
+                            </div>
+                        </body>
+                        </html>
+                        """.trimIndent()
+                    }
+
+                    val responseBytes = htmlResponse.toByteArray(Charsets.UTF_8)
+                    val out = s.getOutputStream()
+                    val header = "HTTP/1.1 200 OK\r\n" +
+                            "Content-Type: text/html; charset=UTF-8\r\n" +
+                            "Content-Length: ${responseBytes.size}\r\n" +
+                            "Connection: close\r\n\r\n"
+                    out.write(header.toByteArray(Charsets.UTF_8))
+                    out.write(responseBytes)
+                    out.flush()
+                } else {
+                    val notFound = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    val out = s.getOutputStream()
+                    out.write(notFound.toByteArray(Charsets.UTF_8))
+                    out.flush()
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     actual suspend fun refreshAccessToken(
@@ -192,8 +257,10 @@ actual class OneDriveBackupService {
             } else {
                 Result.failure(Exception(parsed.errorDescription ?: parsed.error ?: "Failed to refresh token"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(Exception(t.message ?: "Failed to refresh token", t))
         }
     }
 
@@ -209,8 +276,10 @@ actual class OneDriveBackupService {
             } else {
                 Result.failure(Exception("HTTP ${response.status.value}: ${response.bodyAsText()}"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(Exception(t.message ?: "Failed to fetch user profile", t))
         }
     }
 
@@ -290,8 +359,10 @@ actual class OneDriveBackupService {
                 }
                 Result.success(lastRespText)
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(Exception(t.message ?: "Failed to upload file", t))
         }
     }
 
