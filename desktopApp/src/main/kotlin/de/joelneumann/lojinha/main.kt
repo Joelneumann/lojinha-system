@@ -1,6 +1,10 @@
 package de.joelneumann.lojinha
 
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -69,25 +73,43 @@ fun main() {
             }
         }
 
-    val windowState = rememberWindowState(placement = WindowPlacement.Fullscreen)
-    @Suppress("DEPRECATION")
-    val appIcon = painterResource("icon.png")
-    Window(
-        onCloseRequest = ::exitApplication,
-        title = I18n.get().appWindowTitle,
-        state = windowState,
-        icon = appIcon
-    ) {
-        App(
-            database = database,
-            serverPort = adminServer.getActualPort(),
-            onExitApplication = ::exitApplication,
-            productRepository = productRepository,
-            userRepository = userRepository,
-            transactionRepository = transactionRepository,
-            billingListRepository = billingListRepository,
-            settingsRepository = settingsRepository
+        val screenSize = remember {
+            try {
+                val tk = java.awt.Toolkit.getDefaultToolkit().screenSize
+                androidx.compose.ui.unit.DpSize(tk.width.dp, tk.height.dp)
+            } catch (_: Exception) {
+                androidx.compose.ui.unit.DpSize(800.dp, 600.dp)
+            }
+        }
+        val windowState = rememberWindowState(
+            placement = WindowPlacement.Fullscreen,
+            size = screenSize
         )
-    }
+        @Suppress("DEPRECATION")
+        val appIcon = painterResource("icon.png")
+        var showExitAuthDialog by remember { mutableStateOf(false) }
+
+        Window(
+            onCloseRequest = {
+                showExitAuthDialog = true
+            },
+            title = I18n.get().appWindowTitle,
+            state = windowState,
+            icon = appIcon,
+            undecorated = true
+        ) {
+            App(
+                database = database,
+                serverPort = adminServer.getActualPort(),
+                onExitApplication = ::exitApplication,
+                productRepository = productRepository,
+                userRepository = userRepository,
+                transactionRepository = transactionRepository,
+                billingListRepository = billingListRepository,
+                settingsRepository = settingsRepository,
+                showExitAuthDialog = showExitAuthDialog,
+                onDismissExitAuthDialog = { showExitAuthDialog = false }
+            )
+        }
 }
 }

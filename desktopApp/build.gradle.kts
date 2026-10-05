@@ -56,6 +56,13 @@ compose.desktop {
             packageName = "Lojinha System"
             packageVersion = providers.gradleProperty("app.version").getOrElse("1.0.0")
 
+            modules(
+                "java.instrument",
+                "java.management",
+                "jdk.unsupported",
+                "jdk.httpserver"
+            )
+
             macOS {
                 bundleID = "de.joelneumann.lojinha"
                 iconFile.set(project.file("src/main/resources/icon.icns"))

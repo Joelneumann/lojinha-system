@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.ui.theme.ColorWarningAmber
@@ -69,7 +70,9 @@ fun AdminAccordionCard(
                                 text = title,
                                 fontSize = if (isMobile) 15.sp else 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = PrimaryNavy
+                                color = PrimaryNavy,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             if (isExpanded && hasUnsaved) {
                                 AdminStatusBadge(

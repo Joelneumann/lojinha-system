@@ -5,6 +5,7 @@ import de.joelneumann.lojinha.domain.repository.UserRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 
 class FakeUserRepository(initialUsers: List<User> = emptyList()) : UserRepository {
@@ -55,15 +56,10 @@ class UserSelectionViewModelTest {
     private fun withViewModel(
         users: List<User> = allTestUsers,
         block: suspend (UserSelectionViewModel, FakeUserRepository) -> Unit
-    ) = runBlocking {
-        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    ) = runTest {
         val repo = FakeUserRepository(users)
-        val vm = UserSelectionViewModel(repo, testScope)
-        try {
-            block(vm, repo)
-        } finally {
-            testScope.cancel()
-        }
+        val vm = UserSelectionViewModel(repo, backgroundScope)
+        block(vm, repo)
     }
 
     @Test
@@ -256,27 +252,23 @@ class UserSelectionViewModelTest {
     }
 
     @Test
-    fun testSearchSubmitted_prioritizesActiveUserOverSoftDeletedWithSameBarcode() = runBlocking {
+    fun testSearchSubmitted_prioritizesActiveUserOverSoftDeletedWithSameBarcode() = runTest {
         val activeUser = User(id = "10", name = "Active With Barcode", userBarcode = "BAR-SAME", userBarcodeNumber = "BAR-SAME", isActive = true, isDeleted = false)
         val deletedUser = User(id = "11", name = "Deleted With Barcode", userBarcode = "BAR-SAME", userBarcodeNumber = "BAR-SAME", isActive = false, isDeleted = true)
 
-        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         // Pass deleted user first in list to simulate older DB insertion order
         val repo = FakeUserRepository(listOf(deletedUser, activeUser))
-        val vm = UserSelectionViewModel(repo, testScope)
-        try {
-            delay(50)
-            var loggedIn: User? = null
-            vm.updateSearchQuery("BAR-SAME")
-            vm.onSearchSubmitted { loggedIn = it }
-            delay(50)
+        val vm = UserSelectionViewModel(repo, backgroundScope)
 
-            assertNotNull(loggedIn)
-            assertEquals("10", loggedIn?.id)
-            assertEquals("Active With Barcode", loggedIn?.name)
-        } finally {
-            testScope.cancel()
-        }
+        delay(50)
+        var loggedIn: User? = null
+        vm.updateSearchQuery("BAR-SAME")
+        vm.onSearchSubmitted { loggedIn = it }
+        delay(50)
+
+        assertNotNull(loggedIn)
+        assertEquals("10", loggedIn?.id)
+        assertEquals("Active With Barcode", loggedIn?.name)
     }
 
     @Test

@@ -60,7 +60,8 @@ fun AdminUserAccordionCard(
                 text = "${strings.balance}: ${Formatting.formatBrl(user.balance)}",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (user.balance >= 0) ColorSuccessEmerald else ColorDangerCrimson
+                color = if (user.balance >= 0) ColorSuccessEmerald else ColorDangerCrimson,
+                softWrap = false
             )
         }
     ) {

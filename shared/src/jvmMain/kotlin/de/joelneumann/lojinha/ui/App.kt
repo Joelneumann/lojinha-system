@@ -39,6 +39,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import de.joelneumann.lojinha.domain.repository.*
 import de.joelneumann.lojinha.ui.viewmodel.*
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
+import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
+import de.joelneumann.lojinha.security.PasswordHasher
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
@@ -50,7 +52,9 @@ fun App(
     userRepository: UserRepository? = null,
     transactionRepository: TransactionRepository? = null,
     billingListRepository: BillingListRepository? = null,
-    settingsRepository: SettingsRepository? = null
+    settingsRepository: SettingsRepository? = null,
+    showExitAuthDialog: Boolean = false,
+    onDismissExitAuthDialog: () -> Unit = {}
 ) {
     val candidateUrls = remember(serverPort) {
         val urls = mutableListOf("http://localhost:$serverPort")
@@ -408,6 +412,40 @@ fun App(
                         showAbandonCartGuardDialog = false
                         onUserInteractedSession?.invoke()
                     }
+                )
+            }
+
+            // Guarded Exit Confirmation Dialog (e.g. from Alt+F4 or window close request)
+            if (showExitAuthDialog) {
+                var exitPasswordInput by remember { mutableStateOf("") }
+                var exitPasswordError by remember { mutableStateOf<String?>(null) }
+                PasswordInputDialog(
+                    title = strings.exitKioskConfirmTitle,
+                    promptText = strings.exitKioskConfirmMessage,
+                    inputValue = exitPasswordInput,
+                    onValueChange = {
+                        exitPasswordInput = it
+                        exitPasswordError = null
+                    },
+                    onDismiss = {
+                        exitPasswordInput = ""
+                        exitPasswordError = null
+                        onDismissExitAuthDialog()
+                    },
+                    onSubmit = {
+                        val isCorrect = PasswordHasher.verifyAdminBypass(
+                            exitPasswordInput,
+                            settings.adminPasswordHash
+                        )
+                        if (isCorrect) {
+                            onDismissExitAuthDialog()
+                            onExitApplication?.invoke()
+                        } else {
+                            exitPasswordError = strings.incorrectAdminPassword
+                            exitPasswordInput = ""
+                        }
+                    },
+                    errorText = exitPasswordError
                 )
             }
         }

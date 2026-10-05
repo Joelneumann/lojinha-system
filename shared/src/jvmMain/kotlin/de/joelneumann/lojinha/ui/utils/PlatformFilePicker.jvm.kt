@@ -9,10 +9,11 @@ actual fun pickFolder(onSelect: (String) -> Unit) {
             javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName())
         } catch (_: Exception) {}
 
+        val activeFrame = Frame.getFrames().firstOrNull { it.isShowing }
         val os = System.getProperty("os.name", "").lowercase()
         if (os.contains("mac")) {
             System.setProperty("apple.awt.fileDialogForDirectories", "true")
-            val dialog = FileDialog(null as Frame?, "Select Backup Destination Directory", FileDialog.LOAD)
+            val dialog = FileDialog(activeFrame, "Select Backup Destination Directory", FileDialog.LOAD)
             dialog.isVisible = true
             val dir = dialog.directory
             val file = dialog.file
@@ -33,7 +34,7 @@ actual fun pickFolder(onSelect: (String) -> Unit) {
                 fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
                 isAcceptAllFileFilterUsed = false
             }
-            val result = chooser.showOpenDialog(null)
+            val result = chooser.showOpenDialog(activeFrame)
             if (result == javax.swing.JFileChooser.APPROVE_OPTION && chooser.selectedFile != null) {
                 onSelect(chooser.selectedFile.absolutePath)
             }
@@ -49,7 +50,8 @@ actual fun pickFile(title: String, extensionFilter: String?, onSelect: (Platform
             javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName())
         } catch (_: Exception) {}
 
-        val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
+        val activeFrame = Frame.getFrames().firstOrNull { it.isShowing }
+        val dialog = FileDialog(activeFrame, title, FileDialog.LOAD)
         if (extensionFilter != null) {
             dialog.file = "*$extensionFilter"
         }
