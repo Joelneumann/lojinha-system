@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha
 
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,17 +74,10 @@ fun main() {
             }
         }
 
-        val screenSize = remember {
-            try {
-                val tk = java.awt.Toolkit.getDefaultToolkit().screenSize
-                androidx.compose.ui.unit.DpSize(tk.width.dp, tk.height.dp)
-            } catch (_: Exception) {
-                androidx.compose.ui.unit.DpSize(800.dp, 600.dp)
-            }
-        }
+        val isMac = System.getProperty("os.name").lowercase().contains("mac")
+        
         val windowState = rememberWindowState(
-            placement = WindowPlacement.Fullscreen,
-            size = screenSize
+            placement = WindowPlacement.Fullscreen
         )
         @Suppress("DEPRECATION")
         val appIcon = painterResource("icon.png")
@@ -96,7 +90,8 @@ fun main() {
             title = I18n.get().appWindowTitle,
             state = windowState,
             icon = appIcon,
-            undecorated = true
+            undecorated = !isMac,
+            resizable = isMac,
         ) {
             App(
                 database = database,
