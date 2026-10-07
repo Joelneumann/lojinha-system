@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,8 +27,12 @@ import de.joelneumann.lojinha.ui.components.admin.AdminSegmentedOptionsRow
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.formModalKeys
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
+import kotlinx.coroutines.launch
 
 @Composable
 fun ProductEditDialog(
@@ -52,6 +57,10 @@ fun ProductEditDialog(
     var barcodeDesc by remember { mutableStateOf("") }
     var barcodeList by remember { mutableStateOf(product.barcodes) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
+
+    val codeFocusRequester = remember { FocusRequester() }
+    val descFocusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
 
     val hasDialogChanges = name != product.name ||
             basePriceBrl != initialPriceBrl ||
@@ -176,13 +185,7 @@ fun ProductEditDialog(
                 .formModalKeys(
                     onCancel = handleDismissRequest,
                     onConfirm = handleSave,
-                    confirmEnabled = canSave,
-                    interceptEnter = {
-                        if (barcodeCode.isNotBlank()) {
-                            handleAddBarcode()
-                            true
-                        } else false
-                    }
+                    confirmEnabled = canSave
                 )
         ) {
             Column(
@@ -326,7 +329,17 @@ fun ProductEditDialog(
                                     border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder))
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                barcodeCode = b.code
+                                                barcodeDesc = b.description ?: ""
+                                                barcodeList = barcodeList.filter { it.code != b.code }
+                                                coroutineScope.launch {
+                                                    descFocusRequester.safeRequestFocus()
+                                                }
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
@@ -368,10 +381,19 @@ fun ProductEditDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp)
+                                .focusRequester(codeFocusRequester)
                                 .onKeyEvent { event ->
                                     if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                                        handleAddBarcode()
-                                        true
+                                        if (barcodeCode.isNotBlank()) {
+                                            if (barcodeDesc.isBlank()) {
+                                                coroutineScope.launch {
+                                                    descFocusRequester.safeRequestFocus()
+                                                }
+                                            } else {
+                                                handleAddBarcode()
+                                            }
+                                            true
+                                        } else false
                                     } else false
                                 },
                             shape = RoundedCornerShape(8.dp),
@@ -386,10 +408,16 @@ fun ProductEditDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp)
+                                .focusRequester(descFocusRequester)
                                 .onKeyEvent { event ->
                                     if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                                        handleAddBarcode()
-                                        true
+                                        if (barcodeCode.isNotBlank()) {
+                                            handleAddBarcode()
+                                            coroutineScope.launch {
+                                                codeFocusRequester.safeRequestFocus()
+                                            }
+                                            true
+                                        } else false
                                     } else false
                                 },
                             shape = RoundedCornerShape(8.dp),
@@ -397,7 +425,12 @@ fun ProductEditDialog(
                         )
 
                         Button(
-                            onClick = handleAddBarcode,
+                            onClick = {
+                                handleAddBarcode()
+                                coroutineScope.launch {
+                                    codeFocusRequester.safeRequestFocus()
+                                }
+                            },
                             enabled = barcodeCode.isNotBlank() && newBarcodeConflictProduct == null,
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),

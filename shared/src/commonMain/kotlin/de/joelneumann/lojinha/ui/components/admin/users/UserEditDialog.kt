@@ -37,6 +37,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import de.joelneumann.lojinha.domain.model.AvatarType
+import de.joelneumann.lojinha.ui.components.userselection.EmojiPickerRow
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_COLORS
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_EMOJIS
 import de.joelneumann.lojinha.ui.components.userselection.PlatformEmoji
@@ -402,32 +403,12 @@ fun UserEditDialog(
 
                         if (selectedAvatar.type == AvatarType.EMOJI) {
                             Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                PRESET_AVATAR_EMOJIS.forEach { emoji ->
-                                    val isSelected = selectedAvatar.emoji == emoji
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(CircleShape)
-                                            .background(if (isSelected) AccentNavy.copy(alpha = 0.2f) else SurfaceWhite)
-                                            .border(
-                                                width = if (isSelected) 2.dp else 1.dp,
-                                                color = if (isSelected) AccentNavy else DividerBorder,
-                                                shape = CircleShape
-                                            )
-                                            .clickable { selectedAvatar = selectedAvatar.copy(emoji = emoji) },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        PlatformEmoji(emoji = emoji, fontSize = 16.sp)
-                                    }
-                                }
-                            }
+                            EmojiPickerRow(
+                                selectedEmoji = selectedAvatar.emoji,
+                                onEmojiSelect = { selectedAvatar = selectedAvatar.copy(emoji = it) },
+                                itemSize = 32.dp,
+                                fontSize = 16.sp
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))

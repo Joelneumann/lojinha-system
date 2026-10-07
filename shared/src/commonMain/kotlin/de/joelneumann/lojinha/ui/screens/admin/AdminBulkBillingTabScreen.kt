@@ -61,8 +61,20 @@ fun AdminBulkBillingTabScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(strings.bulkBillingTitle, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = PrimaryNavy)
-                IconButton(onClick = { isCreatingNew = true }) {
+                Text(
+                    text = strings.bulkBillingTitle,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = PrimaryNavy,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = { isCreatingNew = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(Icons.Default.Add, contentDescription = strings.createNewList, tint = AccentNavy)
                 }
             }
@@ -146,24 +158,38 @@ fun AdminBulkBillingTabScreen(
                 if (showBackButton) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.selectList(null) }
                             .padding(bottom = 8.dp)
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = strings.backBtn,
-                            tint = AccentNavy,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            strings.backBtn,
-                            color = AccentNavy,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { viewModel.selectList(null) }
+                                .padding(vertical = 4.dp, horizontal = 2.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = strings.backBtn,
+                                tint = AccentNavy,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                strings.backBtn,
+                                color = AccentNavy,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                        }
+                        IconButton(
+                            onClick = { isCreatingNew = true },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = strings.createNewList, tint = AccentNavy)
+                        }
                     }
                 }
 
@@ -199,7 +225,9 @@ fun AdminBulkBillingTabScreen(
                 val totalExpectedAmount = if (selectedList.type == BillingListType.FIXED) {
                     activeListUsers.sumOf { it.second.quantity.coerceAtLeast(0) * (selectedList.basePrice ?: 0L).coerceAtLeast(0L) }
                 } else {
-                    activeListUsers.sumOf { viewModel.getVariableAmount(selectedList.id, it.first.id).coerceAtLeast(0L) }
+                    activeListUsers.sumOf {
+                        (variableAmounts["${selectedList.id}:${it.first.id}"] ?: variableAmounts[it.first.id] ?: 0L).coerceAtLeast(0L)
+                    }
                 }
 
                 LazyColumn(
@@ -250,7 +278,7 @@ fun AdminBulkBillingTabScreen(
                                         )
                                     }
                                 } else {
-                                    val currentAmount = viewModel.getVariableAmount(selectedList.id, user.id)
+                                    val currentAmount = variableAmounts["${selectedList.id}:${user.id}"] ?: variableAmounts[user.id] ?: 0L
                                     var amountStr by remember(selectedList.id, user.id) { 
                                         mutableStateOf(if (currentAmount == 0L) "" else Formatting.formatBrl(currentAmount).removePrefix("R$ ").trim()) 
                                     }
@@ -307,7 +335,7 @@ fun AdminBulkBillingTabScreen(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        val isMobile = maxWidth < 700.dp
+        val isMobile = maxWidth < 750.dp
         if (isMobile) {
             if (selectedList == null) {
                 contentLeftPane(Modifier.fillMaxSize())
@@ -316,7 +344,7 @@ fun AdminBulkBillingTabScreen(
             }
         } else {
             Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                contentLeftPane(Modifier.weight(1f).fillMaxHeight())
+                contentLeftPane(Modifier.widthIn(min = 280.dp).weight(1f).fillMaxHeight())
                 contentRightPane(Modifier.weight(2f).fillMaxHeight(), false)
             }
         }

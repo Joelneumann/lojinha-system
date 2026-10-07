@@ -30,6 +30,7 @@ import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
+import de.joelneumann.lojinha.ui.components.userselection.EmojiPickerRow
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_COLORS
 import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_EMOJIS
 import de.joelneumann.lojinha.ui.components.userselection.PlatformEmoji
@@ -270,35 +271,15 @@ fun UserSettingsModalDialog(
                                 // Horizontally Scrollable Preset Emoji Selection Bar
                                 if (selectedAvatar.type == AvatarType.EMOJI) {
                                     Spacer(modifier = Modifier.height(10.dp))
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        PRESET_AVATAR_EMOJIS.forEach { emoji ->
-                                            val isSelected = selectedAvatar.emoji == emoji
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(36.dp)
-                                                    .clip(CircleShape)
-                                                    .background(if (isSelected) AccentNavy.copy(alpha = 0.2f) else SurfaceWhite)
-                                                    .border(
-                                                        width = if (isSelected) 2.dp else 1.dp,
-                                                        color = if (isSelected) AccentNavy else DividerBorder,
-                                                        shape = CircleShape
-                                                    )
-                                                    .clickable {
-                                                        onUserInteracted(true)
-                                                        onAvatarSelect(selectedAvatar.copy(emoji = emoji))
-                                                    },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                PlatformEmoji(emoji = emoji, fontSize = 18.sp)
-                                            }
-                                        }
-                                    }
+                                    EmojiPickerRow(
+                                        selectedEmoji = selectedAvatar.emoji,
+                                        onEmojiSelect = { emoji ->
+                                            onUserInteracted(true)
+                                            onAvatarSelect(selectedAvatar.copy(emoji = emoji))
+                                        },
+                                        itemSize = 36.dp,
+                                        fontSize = 18.sp
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(12.dp))
