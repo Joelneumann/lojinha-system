@@ -86,7 +86,10 @@ interface TransactionDao {
     @Query("UPDATE users SET balance = balance + :amountDelta WHERE id = :id")
     suspend fun updateUserBalance(id: String, amountDelta: Long)
 
-    @Query("UPDATE products SET stockQuantity = stockQuantity + :delta WHERE id = :id")
+    @Query("SELECT stockQuantity FROM products WHERE id = :id")
+    suspend fun getProductStock(id: String): Long?
+
+    @Query("UPDATE products SET stockQuantity = MAX(0, stockQuantity + :delta) WHERE id = :id")
     suspend fun updateProductStock(id: String, delta: Long)
 
     @androidx.room.Transaction
@@ -101,6 +104,15 @@ interface TransactionDao {
         if (transaction.type == "CANCELLATION" && transaction.referenceTransactionId != null) {
             val cancellations = getCancellationCountForReference(transaction.referenceTransactionId)
             check(cancellations == 0) { "Transaction '${transaction.referenceTransactionId}' has already been cancelled." }
+        }
+
+        for ((productId, delta) in stockDeltas) {
+            if (delta < 0L) {
+                val currentStock = getProductStock(productId) ?: 0L
+                check(currentStock + delta >= 0L) {
+                    "Insufficient stock for product '$productId'. Current: $currentStock, required: ${-delta}"
+                }
+            }
         }
 
         if (balanceDelta != 0L) {
@@ -129,6 +141,15 @@ interface TransactionDao {
             if (tx.type == "CANCELLATION" && tx.referenceTransactionId != null) {
                 val cancellations = getCancellationCountForReference(tx.referenceTransactionId)
                 check(cancellations == 0) { "Transaction '${tx.referenceTransactionId}' has already been cancelled." }
+            }
+
+            for ((productId, delta) in stockDeltas) {
+                if (delta < 0L) {
+                    val currentStock = getProductStock(productId) ?: 0L
+                    check(currentStock + delta >= 0L) {
+                        "Insufficient stock for product '$productId'. Current: $currentStock, required: ${-delta}"
+                    }
+                }
             }
 
             if (balDelta != 0L) {

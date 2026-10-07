@@ -595,6 +595,13 @@ interface AppStrings {
 
     val errFailedToCompletePurchase: String
 
+    // Stock Limits & Feedback
+    fun errProductOutOfStock(productName: String): String
+    fun errProductMaxStockReached(productName: String, maxQuantity: String): String
+    fun errWeightExceedsStock(maxQuantity: String): String
+    fun errProductNotFound(barcode: String): String
+    fun availableStockLabel(quantity: String): String
+
     // Desktop & Formatting
     val appWindowTitle: String
     val monthNames: List<String>

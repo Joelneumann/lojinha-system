@@ -67,6 +67,7 @@ fun ShoppingScreen(
     val weightInput by viewModel.weightInput.collectAsState()
     val weightError by viewModel.weightError.collectAsState()
     val completedPurchase by viewModel.completedPurchase.collectAsState()
+    val stockNotice by viewModel.stockNotice.collectAsState()
 
     ShoppingContent(
         user = user,
@@ -77,6 +78,9 @@ fun ShoppingScreen(
         isProcessingPurchase = isProcessingPurchase,
         purchaseError = purchaseError,
         onDismissPurchaseError = viewModel::clearPurchaseError,
+        stockNotice = stockNotice,
+        onDismissStockNotice = viewModel::clearStockNotice,
+        onShowStockNotice = viewModel::showStockNotice,
         weightProductDialog = weightProductDialog,
         weightInput = weightInput,
         weightError = weightError,
@@ -141,6 +145,9 @@ fun ShoppingContent(
     isProcessingPurchase: Boolean = false,
     purchaseError: String? = null,
     onDismissPurchaseError: () -> Unit = {},
+    stockNotice: String? = null,
+    onDismissStockNotice: () -> Unit = {},
+    onShowStockNotice: (String) -> Unit = {},
     weightProductDialog: Product?,
     weightInput: String,
     weightError: String?,
@@ -167,8 +174,11 @@ fun ShoppingContent(
     val searchFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
 
-    val filteredProducts = remember(products, searchQuery) {
-        products.filterAndRankProducts(searchQuery)
+    val purchasableProducts = remember(products) {
+        products.filter { it.stockQuantity > 0L }
+    }
+    val filteredProducts = remember(purchasableProducts, searchQuery) {
+        purchasableProducts.filterAndRankProducts(searchQuery)
     }
 
     var highlightedProductIndex by remember(filteredProducts) {
@@ -242,7 +252,14 @@ fun ShoppingContent(
             val step = if (item.product.unitType == UnitType.WEIGHT) 100L else 1L
             if (isPlusKey(event)) {
                 if (event.type == KeyEventType.KeyDown) {
-                    onUpdateCartQty(item.product.id, item.quantity + step)
+                    if (item.quantity + step > item.product.stockQuantity) {
+                        onShowStockNotice(strings.errProductMaxStockReached(
+                            item.product.name,
+                            Formatting.formatQuantity(item.product.stockQuantity, item.product.unitType)
+                        ))
+                    } else {
+                        onUpdateCartQty(item.product.id, item.quantity + step)
+                    }
                 }
                 return true
             } else if (isMinusKey(event)) {
@@ -311,10 +328,11 @@ fun ShoppingContent(
         return handled
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .onKeyEvent { keyEvent ->
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .onKeyEvent { keyEvent ->
                 if (handleSelectedAdjustment(keyEvent)) {
                     true
                 } else if (handleCartNavigation(keyEvent)) {
@@ -521,7 +539,7 @@ fun ShoppingContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = strings.productsCountText(filteredProducts.size, products.size),
+                            text = strings.productsCountText(filteredProducts.size, purchasableProducts.size),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = TextSecondaryMuted
@@ -540,11 +558,19 @@ fun ShoppingContent(
                                 rate = rate,
                                 isHighlighted = (index == highlightedProductIndex),
                                 onClick = {
-                                    highlightedProductIndex = index
-                                    selectProductInCart(product.id)
-                                    onProductSelected(product)
-                                    coroutineScope.launch {
-                                        searchFocusRequester.safeRequestFocus()
+                                    val inCart = cartItems.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
+                                    if (inCart >= product.stockQuantity) {
+                                        onShowStockNotice(strings.errProductMaxStockReached(
+                                            product.name,
+                                            Formatting.formatQuantity(product.stockQuantity, product.unitType)
+                                        ))
+                                    } else {
+                                        highlightedProductIndex = index
+                                        selectProductInCart(product.id)
+                                        onProductSelected(product)
+                                        coroutineScope.launch {
+                                            searchFocusRequester.safeRequestFocus()
+                                        }
                                     }
                                 }
                             )
@@ -576,22 +602,31 @@ fun ShoppingContent(
                 },
                 modifier = Modifier.weight(0.9f),
                 selectedCartIndex = selectedCartIndex,
-                isProcessing = isProcessingPurchase
+                isProcessing = isProcessingPurchase,
+                onMaxStockNotice = { cartItem ->
+                    onShowStockNotice(strings.errProductMaxStockReached(
+                        cartItem.product.name,
+                        Formatting.formatQuantity(cartItem.product.stockQuantity, cartItem.product.unitType)
+                    ))
+                }
             )
         }
 
         // Weight Input Modal Dialog
         weightProductDialog?.let { product ->
+            val inCart = cartItems.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
+            val maxAvailable = (product.stockQuantity - inCart).coerceAtLeast(0L)
             WeightInputDialog(
                 productName = product.name,
                 weightInput = weightInput,
-                weightError = if (weightError != null) strings.invalidWeightFormat else null,
+                weightError = weightError,
                 onWeightInputChange = onWeightInputChange,
                 onDismiss = onCloseWeightDialog,
                 onSubmit = {
                     selectProductInCart(product.id)
                     onSubmitWeightDialog()
-                }
+                },
+                maxAvailableQuantityText = Formatting.formatQuantity(maxAvailable, UnitType.WEIGHT)
             )
         }
 
@@ -644,4 +679,13 @@ fun ShoppingContent(
             )
         }
     }
+
+    StockNoticeBanner(
+        message = stockNotice,
+        onDismiss = onDismissStockNotice,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 24.dp)
+    )
+}
 }

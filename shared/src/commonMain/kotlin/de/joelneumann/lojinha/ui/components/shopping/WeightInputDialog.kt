@@ -38,7 +38,8 @@ fun WeightInputDialog(
     onWeightInputChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    maxAvailableQuantityText: String? = null
 ) {
     val strings = I18n.current
     val weightFocusRequester = remember { FocusRequester() }
@@ -84,6 +85,23 @@ fun WeightInputDialog(
                     color = TextSecondarySubtle,
                     textAlign = TextAlign.Center
                 )
+
+                if (maxAvailableQuantityText != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SurfaceContainerHighLight,
+                        border = BorderStroke(1.dp, DividerBorder)
+                    ) {
+                        Text(
+                            text = strings.availableStockLabel(maxAvailableQuantityText),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextSecondarySubtle,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 

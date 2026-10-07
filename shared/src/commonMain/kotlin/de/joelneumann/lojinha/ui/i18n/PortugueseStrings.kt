@@ -608,6 +608,17 @@ object PortugueseStrings : AppStrings {
 
     override val errFailedToCompletePurchase = "Falha ao finalizar compra"
 
+    // Stock Limits & Feedback
+    override fun errProductOutOfStock(productName: String): String = "$productName está fora de estoque"
+    override fun errProductMaxStockReached(productName: String, maxQuantity: String): String =
+        "Estoque máximo disponível atingido para $productName ($maxQuantity)"
+    override fun errWeightExceedsStock(maxQuantity: String): String =
+        "Peso excede o estoque disponível (máx. $maxQuantity)"
+    override fun errProductNotFound(barcode: String): String =
+        "Nenhum produto encontrado para o código de barras '$barcode'"
+    override fun availableStockLabel(quantity: String): String =
+        "Disponível: $quantity"
+
     // Desktop & Formatting
     override val appWindowTitle = "Lojinha PDV & Autoatendimento"
     override val monthNames = listOf("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
