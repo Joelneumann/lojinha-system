@@ -15,6 +15,7 @@ import de.joelneumann.lojinha.ui.utils.removeAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +43,7 @@ class ShoppingViewModel(
 
     private val activeScope = coroutineScope ?: viewModelScope
 
+    private var productsJob: Job? = null
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     val products: StateFlow<List<Product>> = _products.asStateFlow()
 
@@ -74,7 +76,8 @@ class ShoppingViewModel(
     }
 
     fun loadProducts() {
-        activeScope.launch {
+        productsJob?.cancel()
+        productsJob = activeScope.launch {
             productRepository.getProductsFlow().collect { list ->
                 _products.value = list.filter { it.isActive }.sortedByAccentInsensitive { it.name }
             }
@@ -235,7 +238,11 @@ class ShoppingViewModel(
         _purchaseError.value = null
     }
 
-    fun completePurchase(user: User, onPurchaseFinalized: () -> Unit = {}) {
+    fun completePurchase(
+        user: User,
+        onPurchaseFinalized: () -> Unit = {},
+        onError: ((String) -> Unit)? = null
+    ) {
         if (_isProcessingPurchase.value) return
         val cart = _cartItems.value
         if (cart.isEmpty()) return
@@ -282,21 +289,35 @@ class ShoppingViewModel(
                 )
 
                 clearCart()
-                _completedPurchase.value = tx
+                val freshUser = userRepository.getUserById(user.id)
+                val actualBefore = freshUser?.balance?.plus(totalCents) ?: balBefore
+                val actualAfter = freshUser?.balance ?: balAfter
+                _completedPurchase.value = tx.copy(
+                    userBalanceBefore = actualBefore,
+                    userBalanceAfter = actualAfter
+                )
                 onPurchaseFinalized()
             } catch (e: Exception) {
                 AppLogger.error("ShoppingViewModel", "Failed to complete purchase for user ${user.id}: ${e.message}", e)
-                _purchaseError.value = e.message ?: I18n.get().errFailedToCompletePurchase
+                val errMsg = e.message ?: I18n.get().errFailedToCompletePurchase
+                _purchaseError.value = errMsg
+                onError?.invoke(errMsg)
             } finally {
                 _isProcessingPurchase.value = false
             }
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
+    fun teardown() {
+        productsJob?.cancel()
+        productsJob = null
         clearCart()
         dismissCompletedPurchase()
         clearPurchaseError()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        teardown()
     }
 }

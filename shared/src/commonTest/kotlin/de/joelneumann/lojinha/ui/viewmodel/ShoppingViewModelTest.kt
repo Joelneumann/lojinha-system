@@ -33,8 +33,11 @@ private class FakeShoppingProductRepository(initialProducts: List<Product> = emp
     override suspend fun updateStock(productId: String, delta: Long) {}
 }
 
-private class FakeShoppingTransactionRepository : TransactionRepository {
+private class FakeShoppingTransactionRepository(
+    private val userRepo: FakeUserRepository? = null
+) : TransactionRepository {
     val transactions = mutableListOf<Transaction>()
+    var shouldThrowOnExecute: Boolean = false
 
     override fun getTransactionsFlow(): Flow<List<Transaction>> = MutableStateFlow(transactions)
     override suspend fun getAllTransactions(): List<Transaction> = transactions
@@ -47,7 +50,16 @@ private class FakeShoppingTransactionRepository : TransactionRepository {
     override suspend fun getTransactionsByReferenceIds(referenceIds: List<String>): List<Transaction> = emptyList()
     override suspend fun getTransactionsByIds(ids: List<String>): List<Transaction> = emptyList()
     override suspend fun getCancellationCountForReference(refId: String): Int = 0
-    override suspend fun executeAtomicTransaction(transaction: Transaction, balanceDelta: Long, stockDeltas: Map<String, Long>) { transactions.add(transaction) }
+    override suspend fun executeAtomicTransaction(transaction: Transaction, balanceDelta: Long, stockDeltas: Map<String, Long>) {
+        if (shouldThrowOnExecute) {
+            throw IllegalStateException("Simulated DB lock error")
+        }
+        transactions.add(transaction)
+        val user = userRepo?.usersFlow?.value?.firstOrNull { it.id == transaction.userId }
+        if (user != null) {
+            userRepo.saveUser(user.copy(balance = user.balance + balanceDelta))
+        }
+    }
     override suspend fun applyPurchaseCorrection(originalTransactionId: String, newItems: List<TransactionItem>): Boolean = true
     override suspend fun stornoNonPurchase(transactionId: String): Boolean = true
     override suspend fun executeBatchTransactions(requests: List<AtomicTransactionRequest>): Boolean = true
@@ -210,5 +222,83 @@ class ShoppingViewModelTest {
         assertFalse(vm.submitBarcodeOrSearch("", 0.0))
         assertFalse(vm.submitBarcodeOrSearch("   ", 0.0))
         assertTrue(vm.cartItems.value.isEmpty())
+    }
+
+    private fun withCustomContext(
+        products: List<Product> = allProducts,
+        users: List<User> = emptyList(),
+        block: suspend (ShoppingViewModel, FakeShoppingProductRepository, FakeUserRepository, FakeShoppingTransactionRepository) -> Unit
+    ) = runTest {
+        val productRepo = FakeShoppingProductRepository(products)
+        val userRepo = FakeUserRepository(users)
+        val txRepo = FakeShoppingTransactionRepository(userRepo)
+        val vm = ShoppingViewModel(productRepo, userRepo, txRepo, backgroundScope)
+
+        withTimeout(2000) {
+            while (vm.products.value.isEmpty() && products.isNotEmpty()) {
+                delay(10)
+            }
+        }
+        block(vm, productRepo, userRepo, txRepo)
+    }
+
+    @Test
+    fun testCompletePurchase_onFailure_invokesOnErrorCallback() = withCustomContext { vm, _, _, txRepo ->
+        val user = User(id = "user1", name = "Test User", balance = 5000)
+        vm.submitBarcodeOrSearch("4029764001807", 0.0)
+        assertEquals(1, vm.cartItems.value.size)
+
+        txRepo.shouldThrowOnExecute = true
+        var errorReported: String? = null
+        var finalizedCalled = false
+
+        vm.completePurchase(
+            user = user,
+            onPurchaseFinalized = { finalizedCalled = true },
+            onError = { err -> errorReported = err }
+        )
+
+        assertNotNull(errorReported, "onError should be invoked on failure")
+        assertTrue(errorReported!!.contains("Simulated DB lock error"))
+        assertFalse(finalizedCalled, "onPurchaseFinalized must not be called on failure")
+        assertNotNull(vm.purchaseError.value)
+        assertNull(vm.completedPurchase.value)
+        assertEquals(1, vm.cartItems.value.size, "Cart should remain intact on failure")
+    }
+
+    @Test
+    fun testCompletePurchase_updatesCompletedPurchaseWithAuthoritativeBalance() = withCustomContext(
+        users = listOf(User(id = "user1", name = "Test User", balance = 6000))
+    ) { vm, _, _, _ ->
+        // User passed in had stale in-memory balance of 5000, but repository has 6000
+        val staleUser = User(id = "user1", name = "Test User", balance = 5000)
+        vm.submitBarcodeOrSearch("4029764001807", 0.0) // 800 cents
+
+        var finalizedCalled = false
+        vm.completePurchase(
+            user = staleUser,
+            onPurchaseFinalized = { finalizedCalled = true }
+        )
+
+        assertTrue(finalizedCalled)
+        val completedTx = vm.completedPurchase.value
+        assertNotNull(completedTx)
+        // Authoritative balance after is 6000 - 800 = 5200 (stored in userRepo)
+        // Authoritative balance before was 6000
+        assertEquals(6000L, completedTx.userBalanceBefore)
+        assertEquals(5200L, completedTx.userBalanceAfter)
+        assertTrue(vm.cartItems.value.isEmpty())
+    }
+
+    @Test
+    fun testTeardown_cancelsProductJobAndClearsState() = withCustomContext { vm, _, _, _ ->
+        vm.submitBarcodeOrSearch("4029764001807", 0.0)
+        assertEquals(1, vm.cartItems.value.size)
+
+        vm.teardown()
+
+        assertTrue(vm.cartItems.value.isEmpty())
+        assertNull(vm.completedPurchase.value)
+        assertNull(vm.purchaseError.value)
     }
 }

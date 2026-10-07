@@ -41,6 +41,7 @@ import de.joelneumann.lojinha.ui.viewmodel.*
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
 import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.security.PasswordHasher
+import de.joelneumann.lojinha.util.AppLogger
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
@@ -188,17 +189,6 @@ fun App(
                                 )
                             )
 
-                            SideEffect {
-                                onUserInteractedSession = { userSessionViewModel.onUserInteracted(true) }
-                            }
-
-                            DisposableEffect(sessionUser.id, sessionNonce) {
-                                onDispose {
-                                    onUserInteractedSession = null
-                                    userSessionViewModel.stopInactivityTimer()
-                                }
-                            }
-
                             val shoppingViewModel: ShoppingViewModel = viewModel(
                                 key = "shopping_${sessionUser.id}_$sessionNonce",
                                 factory = LojinhaViewModelFactory.createShoppingViewModelFactory(effectiveProductRepo, effectiveUserRepo, effectiveTransactionRepo)
@@ -207,6 +197,19 @@ fun App(
                                 key = "history_${sessionUser.id}_$sessionNonce",
                                 factory = LojinhaViewModelFactory.createTransactionHistoryViewModelFactory(effectiveTransactionRepo, effectiveUserRepo)
                             )
+
+                            SideEffect {
+                                onUserInteractedSession = { userSessionViewModel.onUserInteracted(true) }
+                            }
+
+                            DisposableEffect(sessionUser.id, sessionNonce) {
+                                onDispose {
+                                    onUserInteractedSession = null
+                                    userSessionViewModel.stopInactivityTimer()
+                                    shoppingViewModel.teardown()
+                                }
+                            }
+
                             val cartItems by shoppingViewModel.cartItems.collectAsState()
 
                             val handleInactivityTimeout = remember(sessionUser, shoppingViewModel, historyViewModel, userSessionViewModel, appViewModel) {
@@ -216,10 +219,18 @@ fun App(
                                     if (items.isNotEmpty()) {
                                         userSessionViewModel.pauseInactivityTimer()
                                         appViewModel.navigateTo(AppScreen.SHOPPING)
-                                        shoppingViewModel.completePurchase(sessionUser) {
-                                            appViewModel.refreshCurrentUser()
-                                            historyViewModel.loadUserTransactions(sessionUser.id, resetFilters = true)
-                                        }
+                                        shoppingViewModel.completePurchase(
+                                            user = sessionUser,
+                                            onPurchaseFinalized = {
+                                                appViewModel.refreshCurrentUser()
+                                                historyViewModel.loadUserTransactions(sessionUser.id, resetFilters = true)
+                                            },
+                                            onError = { error ->
+                                                AppLogger.warn("App", "Auto-checkout on inactivity failed: $error. Logging out to protect user session.")
+                                                showAbandonCartGuardDialog = false
+                                                userSessionViewModel.requestLogout()
+                                            }
+                                        )
                                     } else {
                                         userSessionViewModel.requestLogout()
                                     }
