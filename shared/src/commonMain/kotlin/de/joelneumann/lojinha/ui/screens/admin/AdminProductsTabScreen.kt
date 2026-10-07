@@ -15,6 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.input.key.*
+import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
+import de.joelneumann.lojinha.ui.utils.pageDown
+import de.joelneumann.lojinha.ui.utils.pageUp
+import kotlinx.coroutines.launch
 import de.joelneumann.lojinha.ui.components.admin.AdminExpandableSection
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
 import de.joelneumann.lojinha.ui.components.admin.products.AdminProductAccordionCard
@@ -38,7 +43,8 @@ fun AdminProductsTabScreen(
     expandedProductId: String?,
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandProduct: (String) -> Unit,
-    onUnsavedStateChanged: (Boolean) -> Unit
+    onUnsavedStateChanged: (Boolean) -> Unit,
+    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null
 ) {
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -53,6 +59,18 @@ fun AdminProductsTabScreen(
     val strings = I18n.current
 
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(onRegisterPageScroller, showProductModal) {
+        onRegisterPageScroller?.invoke { isDown ->
+            if (!showProductModal) {
+                coroutineScope.launch {
+                    if (isDown) listState.pageDown() else listState.pageUp()
+                }
+                true
+            } else false
+        }
+    }
 
     LaunchedEffect(Unit) {
         onUnsavedStateChanged(false)
@@ -83,7 +101,29 @@ fun AdminProductsTabScreen(
 
     val totalMatches = filteredActiveProducts.size + filteredDisabledProducts.size
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.PageDown -> {
+                            if (!showProductModal) {
+                                coroutineScope.launch { listState.pageDown() }
+                                true
+                            } else false
+                        }
+                        Key.PageUp -> {
+                            if (!showProductModal) {
+                                coroutineScope.launch { listState.pageUp() }
+                                true
+                            } else false
+                        }
+                        else -> false
+                    }
+                } else false
+            }
+    ) {
         val openFirstResult = {
             if (filteredActiveProducts.isNotEmpty()) {
                 onRequestExpandProduct(filteredActiveProducts.first().id)
@@ -109,56 +149,66 @@ fun AdminProductsTabScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        LazyColumn(
-            state = listState,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 32.dp),
-            modifier = Modifier.weight(1f).fillMaxWidth()
-        ) {
-            if (filteredActiveProducts.isEmpty() && filteredDisabledProducts.isEmpty()) {
-                item(key = "empty-products-msg") {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(strings.noMatchingProducts, color = TextSecondaryMuted)
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 32.dp, end = 14.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (filteredActiveProducts.isEmpty() && filteredDisabledProducts.isEmpty()) {
+                    item(key = "empty-products-msg") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(strings.noMatchingProducts, color = TextSecondaryMuted)
+                        }
+                    }
+                } else {
+                    items(filteredActiveProducts, key = { it.id }) { product ->
+                        val isExpanded = expandedProductId == product.id
+                        AdminProductAccordionCard(
+                            product = product,
+                            globalMarkup = settings.globalMarkupPercent,
+                            isExpanded = isExpanded,
+                            onExpandToggle = { onRequestToggleExpand(product.id) },
+                            onEditProduct = { viewModel.openEditProductModal(it) },
+                            onAdjustStock = viewModel::adjustProductStock,
+                            onToggleActive = viewModel::toggleProductActive,
+                            onDeleteProduct = { viewModel.deleteProduct(it.id) }
+                        )
                     }
                 }
-            } else {
-                items(filteredActiveProducts, key = { it.id }) { product ->
-                    val isExpanded = expandedProductId == product.id
-                    AdminProductAccordionCard(
-                        product = product,
-                        globalMarkup = settings.globalMarkupPercent,
-                        isExpanded = isExpanded,
-                        onExpandToggle = { onRequestToggleExpand(product.id) },
-                        onEditProduct = { viewModel.openEditProductModal(it) },
-                        onAdjustStock = viewModel::adjustProductStock,
-                        onToggleActive = viewModel::toggleProductActive,
-                        onDeleteProduct = { viewModel.deleteProduct(it.id) }
-                    )
-                }
-            }
 
-            if (filteredDisabledProducts.isNotEmpty()) {
-                item(key = "disabled-products-section") {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    AdminExpandableSection(
-                        title = strings.disabledProducts,
-                        countText = strings.productsCountText(filteredDisabledProducts.size),
-                        accentColor = ColorWarningAmber,
-                        showLabel = strings.showDisabledProducts,
-                        hideLabel = strings.hideDisabledProducts
-                    ) {
-                        filteredDisabledProducts.forEach { product ->
-                            DisabledProductCard(
-                                product = product,
-                                onEnableProduct = { viewModel.toggleProductActive(product) }
-                            )
+                if (filteredDisabledProducts.isNotEmpty()) {
+                    item(key = "disabled-products-section") {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        AdminExpandableSection(
+                            title = strings.disabledProducts,
+                            countText = strings.productsCountText(filteredDisabledProducts.size),
+                            accentColor = ColorWarningAmber,
+                            showLabel = strings.showDisabledProducts,
+                            hideLabel = strings.hideDisabledProducts
+                        ) {
+                            filteredDisabledProducts.forEach { product ->
+                                DisabledProductCard(
+                                    product = product,
+                                    onEnableProduct = { viewModel.toggleProductActive(product) }
+                                )
+                            }
                         }
                     }
                 }
             }
+
+            AppVerticalScrollbar(
+                scrollState = listState,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(vertical = 4.dp)
+            )
         }
     }
 

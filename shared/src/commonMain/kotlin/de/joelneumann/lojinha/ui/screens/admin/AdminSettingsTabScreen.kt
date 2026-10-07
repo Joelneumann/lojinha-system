@@ -19,6 +19,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.input.key.*
+import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
+import de.joelneumann.lojinha.ui.utils.pageDown
+import de.joelneumann.lojinha.ui.utils.pageUp
+import kotlinx.coroutines.launch
 import de.joelneumann.lojinha.ui.components.admin.*
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
@@ -33,7 +39,8 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 @Composable
 fun AdminSettingsTabScreen(
     viewModel: AdminSettingsViewModel,
-    onUnsavedStateChanged: (Boolean) -> Unit
+    onUnsavedStateChanged: (Boolean) -> Unit,
+    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null
 ) {
     val strings = I18n.current
     @Suppress("DEPRECATION")
@@ -47,6 +54,18 @@ fun AdminSettingsTabScreen(
     val csvImportPreview by viewModel.csvImportPreview.collectAsState()
     val csvImportType by viewModel.csvImportType.collectAsState()
     val logFolderSize by viewModel.logFolderSize.collectAsState()
+
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(onRegisterPageScroller) {
+        onRegisterPageScroller?.invoke { isDown ->
+            coroutineScope.launch {
+                if (isDown) listState.pageDown() else listState.pageUp()
+            }
+            true
+        }
+    }
 
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -100,7 +119,25 @@ fun AdminSettingsTabScreen(
         onUnsavedStateChanged(hasFieldChanges)
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.PageDown -> {
+                            coroutineScope.launch { listState.pageDown() }
+                            true
+                        }
+                        Key.PageUp -> {
+                            coroutineScope.launch { listState.pageUp() }
+                            true
+                        }
+                        else -> false
+                    }
+                } else false
+            }
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().height(56.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -254,11 +291,13 @@ fun AdminSettingsTabScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(bottom = 32.dp),
-            modifier = Modifier.weight(1f).fillMaxWidth()
-        ) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 32.dp, end = 14.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
             // CARD 1: PRODUCT PRICING RULES
             item(key = "product-pricing-card") {
                 Surface(
@@ -1433,6 +1472,15 @@ fun AdminSettingsTabScreen(
                 }
             }
         }
+
+        AppVerticalScrollbar(
+            scrollState = listState,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .padding(vertical = 4.dp)
+        )
+    }
 
     val showExitConfirmationDialog by viewModel.showExitConfirmationDialog.collectAsState()
     if (showExitConfirmationDialog) {

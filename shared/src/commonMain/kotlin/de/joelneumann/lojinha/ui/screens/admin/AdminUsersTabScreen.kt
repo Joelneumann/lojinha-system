@@ -11,6 +11,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.input.key.*
+import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
+import de.joelneumann.lojinha.ui.utils.pageDown
+import de.joelneumann.lojinha.ui.utils.pageUp
+import kotlinx.coroutines.launch
 import de.joelneumann.lojinha.ui.components.admin.AdminExpandableSection
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
 import de.joelneumann.lojinha.ui.components.admin.users.AdminUserAccordionCard
@@ -35,7 +41,8 @@ fun AdminUsersTabScreen(
     expandedUserId: String?,
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandUser: (String) -> Unit,
-    onUnsavedStateChanged: (Boolean) -> Unit
+    onUnsavedStateChanged: (Boolean) -> Unit,
+    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null
 ) {
     val users by viewModel.users.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -48,6 +55,21 @@ fun AdminUsersTabScreen(
     val userErrorMessage by viewModel.userErrorMessage.collectAsState()
 
     val strings = I18n.current
+
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val isModalOpen = showUserModal || customExpenseUser != null || customIncomeUser != null
+
+    LaunchedEffect(onRegisterPageScroller, isModalOpen) {
+        onRegisterPageScroller?.invoke { isDown ->
+            if (!isModalOpen) {
+                coroutineScope.launch {
+                    if (isDown) listState.pageDown() else listState.pageUp()
+                }
+                true
+            } else false
+        }
+    }
 
     LaunchedEffect(Unit) {
         onUnsavedStateChanged(false)
@@ -84,7 +106,29 @@ fun AdminUsersTabScreen(
         }.sortedByAccentInsensitive { it.name }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.PageDown -> {
+                            if (!isModalOpen) {
+                                coroutineScope.launch { listState.pageDown() }
+                                true
+                            } else false
+                        }
+                        Key.PageUp -> {
+                            if (!isModalOpen) {
+                                coroutineScope.launch { listState.pageUp() }
+                                true
+                            } else false
+                        }
+                        else -> false
+                    }
+                } else false
+            }
+    ) {
         val openFirstResult = {
             if (filteredActiveUsers.isNotEmpty()) {
                 onRequestExpandUser(filteredActiveUsers.first().id)
@@ -103,80 +147,91 @@ fun AdminUsersTabScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 32.dp),
-            modifier = Modifier.weight(1f).fillMaxWidth()
-        ) {
-            if (filteredActiveUsers.isEmpty() && filteredDeactivatedUsers.isEmpty() && filteredDeletedUsers.isEmpty()) {
-                item(key = "empty-users-msg") {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(strings.noMatchingAccounts, color = TextSecondaryMuted)
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 32.dp, end = 14.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (filteredActiveUsers.isEmpty() && filteredDeactivatedUsers.isEmpty() && filteredDeletedUsers.isEmpty()) {
+                    item(key = "empty-users-msg") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(strings.noMatchingAccounts, color = TextSecondaryMuted)
+                        }
+                    }
+                } else {
+                    items(filteredActiveUsers, key = { it.id }) { user ->
+                        val isExpanded = expandedUserId == user.id
+                        AdminUserAccordionCard(
+                            user = user,
+                            isExpanded = isExpanded,
+                            onExpandToggle = { onRequestToggleExpand(user.id) },
+                            onEditUser = { viewModel.openEditUserModal(it) },
+                            onCustomExpense = { viewModel.openCustomExpenseModal(it) },
+                            onCustomIncome = { viewModel.openCustomIncomeModal(it) },
+                            onAdjustBalance = { u, absCents, note, isDeposit ->
+                                val delta = if (isDeposit) absCents else -absCents
+                                viewModel.adjustUserBalance(u.id, u.name, delta, note)
+                            },
+                            onToggleActive = viewModel::toggleUserActive,
+                            onDeleteUser = { viewModel.softDeleteUser(it.id) }
+                        )
                     }
                 }
-            } else {
-                items(filteredActiveUsers, key = { it.id }) { user ->
-                    val isExpanded = expandedUserId == user.id
-                    AdminUserAccordionCard(
-                        user = user,
-                        isExpanded = isExpanded,
-                        onExpandToggle = { onRequestToggleExpand(user.id) },
-                        onEditUser = { viewModel.openEditUserModal(it) },
-                        onCustomExpense = { viewModel.openCustomExpenseModal(it) },
-                        onCustomIncome = { viewModel.openCustomIncomeModal(it) },
-                        onAdjustBalance = { u, absCents, note, isDeposit ->
-                            val delta = if (isDeposit) absCents else -absCents
-                            viewModel.adjustUserBalance(u.id, u.name, delta, note)
-                        },
-                        onToggleActive = viewModel::toggleUserActive,
-                        onDeleteUser = { viewModel.softDeleteUser(it.id) }
-                    )
-                }
-            }
 
-            if (filteredDeactivatedUsers.isNotEmpty()) {
-                item(key = "deactivated-users-section") {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    AdminExpandableSection(
-                        title = strings.deactivatedUsers,
-                        countText = strings.accountsCountText(filteredDeactivatedUsers.size),
-                        accentColor = ColorWarningAmber,
-                        showLabel = strings.showDeactivatedUsers,
-                        hideLabel = strings.hideDeactivatedUsers
-                    ) {
-                        filteredDeactivatedUsers.forEach { user ->
-                            DeactivatedUserCard(
-                                user = user,
-                                onActivateUser = { viewModel.toggleUserActive(user) }
-                            )
+                if (filteredDeactivatedUsers.isNotEmpty()) {
+                    item(key = "deactivated-users-section") {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        AdminExpandableSection(
+                            title = strings.deactivatedUsers,
+                            countText = strings.accountsCountText(filteredDeactivatedUsers.size),
+                            accentColor = ColorWarningAmber,
+                            showLabel = strings.showDeactivatedUsers,
+                            hideLabel = strings.hideDeactivatedUsers
+                        ) {
+                            filteredDeactivatedUsers.forEach { user ->
+                                DeactivatedUserCard(
+                                    user = user,
+                                    onActivateUser = { viewModel.toggleUserActive(user) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (filteredDeletedUsers.isNotEmpty()) {
+                    item(key = "deleted-users-section") {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        AdminExpandableSection(
+                            title = strings.deletedUsers,
+                            countText = strings.accountsCountText(filteredDeletedUsers.size),
+                            accentColor = ColorDangerCrimson,
+                            showLabel = strings.showDeletedUsers,
+                            hideLabel = strings.hideDeletedUsers
+                        ) {
+                            filteredDeletedUsers.forEach { user ->
+                                DeletedUserCard(
+                                    user = user,
+                                    onRestoreUser = { viewModel.restoreUser(user.id) },
+                                    allUsers = users
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            if (filteredDeletedUsers.isNotEmpty()) {
-                item(key = "deleted-users-section") {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    AdminExpandableSection(
-                        title = strings.deletedUsers,
-                        countText = strings.accountsCountText(filteredDeletedUsers.size),
-                        accentColor = ColorDangerCrimson,
-                        showLabel = strings.showDeletedUsers,
-                        hideLabel = strings.hideDeletedUsers
-                    ) {
-                        filteredDeletedUsers.forEach { user ->
-                            DeletedUserCard(
-                                user = user,
-                                onRestoreUser = { viewModel.restoreUser(user.id) },
-                                allUsers = users
-                            )
-                        }
-                    }
-                }
-            }
+            AppVerticalScrollbar(
+                scrollState = listState,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(vertical = 4.dp)
+            )
         }
     }
 
