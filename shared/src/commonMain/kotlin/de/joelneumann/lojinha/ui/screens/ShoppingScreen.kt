@@ -249,7 +249,10 @@ fun ShoppingContent(
             }
 
             val item = cartItems[selectedCartIndex]
-            val step = if (item.product.unitType == UnitType.WEIGHT) 100L else 1L
+            if (item.product.unitType == UnitType.WEIGHT) {
+                return false
+            }
+            val step = 1L
             if (isPlusKey(event)) {
                 if (event.type == KeyEventType.KeyDown) {
                     if (item.quantity + step > item.product.stockQuantity) {
