@@ -209,6 +209,27 @@ fun App(
                             )
                             val cartItems by shoppingViewModel.cartItems.collectAsState()
 
+                            val handleInactivityTimeout = remember(sessionUser, shoppingViewModel, historyViewModel, userSessionViewModel, appViewModel) {
+                                {
+                                    showAbandonCartGuardDialog = false
+                                    val items = shoppingViewModel.cartItems.value
+                                    if (items.isNotEmpty()) {
+                                        userSessionViewModel.pauseInactivityTimer()
+                                        appViewModel.navigateTo(AppScreen.SHOPPING)
+                                        shoppingViewModel.completePurchase(sessionUser) {
+                                            appViewModel.refreshCurrentUser()
+                                            historyViewModel.loadUserTransactions(sessionUser.id, resetFilters = true)
+                                        }
+                                    } else {
+                                        userSessionViewModel.requestLogout()
+                                    }
+                                }
+                            }
+
+                            SideEffect {
+                                userSessionViewModel.onInactivityTimeout = handleInactivityTimeout
+                            }
+
                             val showInactivityWarning by userSessionViewModel.showInactivityWarning.collectAsState()
 
                             val handleLogoutRequest = remember(cartItems.isNotEmpty(), userSessionViewModel) {
@@ -288,9 +309,11 @@ fun App(
 
                                 // Inactivity Warning Modal Dialog (scoped to active user session)
                                 if (showInactivityWarning) {
+                                    showAbandonCartGuardDialog = false
                                     val inactivitySecondsRemaining by userSessionViewModel.inactivitySecondsRemaining.collectAsState()
                                     InactivityWarningDialog(
                                         secondsRemaining = inactivitySecondsRemaining,
+                                        hasCartItems = cartItems.isNotEmpty(),
                                         onStayLoggedIn = {
                                             showAbandonCartGuardDialog = false
                                             userSessionViewModel.stayLoggedIn()

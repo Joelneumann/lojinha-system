@@ -77,6 +77,7 @@ object EnglishStrings : AppStrings {
     override val reversalConfirmMsg = "Do you want to cancel this transaction and refund the balance?"
     override val inactivityWarningTitle = "Inactivity Warning"
     override val inactivityWarningMsg = "You will be logged out automatically in:"
+    override val inactivityWarningWithCartMsg = "Your purchase will be finalized and you will be logged out automatically in:"
     override val stayLoggedIn = "Stay Logged In"
     override val stock = "Stock Quantity"
     override val unitPiece = "Piece"

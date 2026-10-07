@@ -77,6 +77,7 @@ object PortugueseStrings : AppStrings {
     override val reversalConfirmMsg = "Deseja estornar esta transação e reembolsar o saldo?"
     override val inactivityWarningTitle = "Aviso de Inatividade"
     override val inactivityWarningMsg = "Você será desconectado automaticamente em:"
+    override val inactivityWarningWithCartMsg = "Sua compra será finalizada e você será desconectado automaticamente em:"
     override val stayLoggedIn = "Permanecer Conectado"
     override val stock = "Estoque"
     override val unitPiece = "Unidade"

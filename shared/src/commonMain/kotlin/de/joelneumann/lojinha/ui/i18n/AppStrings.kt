@@ -77,6 +77,7 @@ interface AppStrings {
     val reversalConfirmMsg: String
     val inactivityWarningTitle: String
     val inactivityWarningMsg: String
+    val inactivityWarningWithCartMsg: String
     val stayLoggedIn: String
     val stock: String
     val unitPiece: String
