@@ -33,7 +33,8 @@ fun CartPanel(
     onSelectCartItem: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
     selectedCartIndex: Int = -1,
-    isProcessing: Boolean = false
+    isProcessing: Boolean = false,
+    onMaxStockNotice: (CartItem) -> Unit = {}
 ) {
     val strings = I18n.current
 
@@ -79,7 +80,8 @@ fun CartPanel(
                                 onQtyChange = { newQty -> onQtyChange(cartItem.product.id, newQty) },
                                 onRemove = { onRemoveItem(cartItem.product.id) },
                                 onClick = { onSelectCartItem(index) },
-                                isSelected = (index == selectedCartIndex)
+                                isSelected = (index == selectedCartIndex),
+                                onMaxStockNotice = onMaxStockNotice
                             )
                         }
                     }

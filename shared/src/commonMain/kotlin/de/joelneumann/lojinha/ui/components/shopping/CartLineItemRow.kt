@@ -34,7 +34,8 @@ fun CartLineItemRow(
     onRemove: () -> Unit,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier,
-    isSelected: Boolean = false
+    isSelected: Boolean = false,
+    onMaxStockNotice: (CartItem) -> Unit = {}
 ) {
     Card(
         onClick = onClick,
@@ -80,6 +81,7 @@ fun CartLineItemRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     if (cartItem.product.unitType == UnitType.PIECE) {
+                        val isMaxPiece = cartItem.quantity >= cartItem.product.stockQuantity
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = SurfaceWhite,
@@ -118,12 +120,23 @@ fun CartLineItemRow(
                                     modifier = Modifier
                                         .fillMaxHeight()
                                         .width(30.dp)
-                                        .pointerInput(cartItem.product.id, cartItem.quantity) {
-                                            detectTapGestures { onQtyChange(cartItem.quantity + 1) }
+                                        .pointerInput(cartItem.product.id, cartItem.quantity, isMaxPiece) {
+                                            detectTapGestures {
+                                                if (isMaxPiece) {
+                                                    onMaxStockNotice(cartItem)
+                                                } else {
+                                                    onQtyChange(cartItem.quantity + 1)
+                                                }
+                                            }
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("+", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(
+                                        text = "+",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isMaxPiece) TextSecondaryMuted.copy(alpha = 0.35f) else PrimaryNavy
+                                    )
                                 }
                             }
                         }

@@ -135,6 +135,10 @@ class LojinhaAdminServer(
                             call.respond(HttpStatusCode.BadRequest, "Product base price cannot be negative")
                             return@post
                         }
+                        if (product.stockQuantity < 0) {
+                            call.respond(HttpStatusCode.BadRequest, "Product stock cannot be negative")
+                            return@post
+                        }
                         val productToSave = if (product.id.isBlank()) product.copy(id = UUID.randomUUID().toString()) else product
                         productRepository.saveProduct(productToSave)
                         call.respond(HttpStatusCode.OK)

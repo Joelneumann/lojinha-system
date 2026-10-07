@@ -77,6 +77,7 @@ object PortugueseStrings : AppStrings {
     override val reversalConfirmMsg = "Deseja estornar esta transação e reembolsar o saldo?"
     override val inactivityWarningTitle = "Aviso de Inatividade"
     override val inactivityWarningMsg = "Você será desconectado automaticamente em:"
+    override val inactivityWarningWithCartMsg = "Sua compra será finalizada e você será desconectado automaticamente em:"
     override val stayLoggedIn = "Permanecer Conectado"
     override val stock = "Estoque"
     override val unitPiece = "Unidade"
@@ -606,6 +607,17 @@ object PortugueseStrings : AppStrings {
     override val csvTypeUsers = "Usuários"
 
     override val errFailedToCompletePurchase = "Falha ao finalizar compra"
+
+    // Stock Limits & Feedback
+    override fun errProductOutOfStock(productName: String): String = "$productName está fora de estoque"
+    override fun errProductMaxStockReached(productName: String, maxQuantity: String): String =
+        "Estoque máximo disponível atingido para $productName ($maxQuantity)"
+    override fun errWeightExceedsStock(maxQuantity: String): String =
+        "Peso excede o estoque disponível (máx. $maxQuantity)"
+    override fun errProductNotFound(barcode: String): String =
+        "Nenhum produto encontrado para o código de barras '$barcode'"
+    override fun availableStockLabel(quantity: String): String =
+        "Disponível: $quantity"
 
     // Desktop & Formatting
     override val appWindowTitle = "Lojinha PDV & Autoatendimento"

@@ -174,6 +174,9 @@ object DatabaseFactory {
                 connection.execSQL("PRAGMA foreign_keys = ON;")
                 connection.execSQL("PRAGMA busy_timeout = 5000;")
                 connection.execSQL("PRAGMA synchronous = NORMAL;")
+                try {
+                    connection.execSQL("UPDATE products SET stockQuantity = 0 WHERE stockQuantity < 0;")
+                } catch (_: Exception) {}
                 val version = try {
                     val stmt = connection.prepare("PRAGMA user_version;")
                     try {

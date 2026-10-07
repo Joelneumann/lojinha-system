@@ -21,6 +21,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.input.key.*
+import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
+import de.joelneumann.lojinha.ui.utils.pageDown
+import de.joelneumann.lojinha.ui.utils.pageUp
+import kotlinx.coroutines.launch
 import de.joelneumann.lojinha.domain.model.BillingList
 import de.joelneumann.lojinha.domain.model.BillingListType
 import de.joelneumann.lojinha.ui.components.admin.bulk.*
@@ -33,7 +39,8 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 @Composable
 fun AdminBulkBillingTabScreen(
     viewModel: AdminBulkBillingViewModel,
-    onNavigateToTransactions: () -> Unit
+    onNavigateToTransactions: () -> Unit,
+    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null
 ) {
     val strings = I18n.current
     val billingLists by viewModel.billingLists.collectAsState()
@@ -48,6 +55,24 @@ fun AdminBulkBillingTabScreen(
     var showDeleteDialogFor by remember { mutableStateOf<String?>(null) }
     var showExecuteDialogFor by remember { mutableStateOf<BillingList?>(null) }
 
+    val listsListState = rememberLazyListState()
+    val usersListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    val isModalOpen = editingList != null || isCreatingNew || showDeleteDialogFor != null || showExecuteDialogFor != null
+
+    LaunchedEffect(onRegisterPageScroller, selectedListId, isModalOpen) {
+        onRegisterPageScroller?.invoke { isDown ->
+            if (!isModalOpen) {
+                coroutineScope.launch {
+                    val targetState = if (selectedListId != null) usersListState else listsListState
+                    if (isDown) targetState.pageDown() else targetState.pageUp()
+                }
+                true
+            } else false
+        }
+    }
+
     val selectedList = billingLists.find { it.id == selectedListId }
 
     val contentLeftPane: @Composable (Modifier) -> Unit = { modifier ->
@@ -61,8 +86,20 @@ fun AdminBulkBillingTabScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(strings.bulkBillingTitle, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = PrimaryNavy)
-                IconButton(onClick = { isCreatingNew = true }) {
+                Text(
+                    text = strings.bulkBillingTitle,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = PrimaryNavy,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = { isCreatingNew = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(Icons.Default.Add, contentDescription = strings.createNewList, tint = AccentNavy)
                 }
             }
@@ -76,57 +113,72 @@ fun AdminBulkBillingTabScreen(
                     Text(strings.noListsCreated, color = TextSecondaryMuted)
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(billingLists, key = { it.id }) { list ->
-                        val isSelected = list.id == selectedListId
-                        Row(
-                            modifier = Modifier.fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) AccentNavy.copy(alpha = 0.1f) else SurfaceContainerLight)
-                                .clickable { viewModel.selectList(list.id) }
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = list.name,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) AccentNavy else PrimaryNavy,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                val listTypeWithPrice = if (list.type == BillingListType.FIXED) {
-                                    "${strings.listTypeFixed} (${Formatting.formatBrl(list.basePrice ?: 0L)})"
-                                } else strings.listTypeVariable
-                                Text(
-                                    text = listTypeWithPrice,
-                                    fontSize = 12.sp,
-                                    color = TextSecondaryMuted,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                                if (list.lastExecutionTime != null) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        state = listsListState,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(end = 12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(billingLists, key = { it.id }) { list ->
+                            val isSelected = list.id == selectedListId
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) AccentNavy.copy(alpha = 0.1f) else SurfaceContainerLight)
+                                    .clickable { viewModel.selectList(list.id) }
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(
-                                        text = "${strings.lastExecutionTimeLabel} ${Formatting.formatTimestamp(list.lastExecutionTime)}",
-                                        fontSize = 11.sp,
+                                        text = list.name,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) AccentNavy else PrimaryNavy,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val listTypeWithPrice = if (list.type == BillingListType.FIXED) {
+                                        "${strings.listTypeFixed} (${Formatting.formatBrl(list.basePrice ?: 0L)})"
+                                    } else strings.listTypeVariable
+                                    Text(
+                                        text = listTypeWithPrice,
+                                        fontSize = 12.sp,
                                         color = TextSecondaryMuted,
                                         maxLines = 1,
                                         softWrap = false
                                     )
+                                    if (list.lastExecutionTime != null) {
+                                        Text(
+                                            text = "${strings.lastExecutionTimeLabel} ${Formatting.formatTimestamp(list.lastExecutionTime)}",
+                                            fontSize = 11.sp,
+                                            color = TextSecondaryMuted,
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
                                 }
-                            }
-                            Row {
-                                IconButton(onClick = { editingList = list }, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Default.Edit, contentDescription = strings.editList, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
-                                }
-                                Spacer(modifier = Modifier.width(4.dp))
-                                IconButton(onClick = { showDeleteDialogFor = list.id }, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Default.Delete, contentDescription = strings.delete, tint = ColorDangerCrimson, modifier = Modifier.size(16.dp))
+                                Row {
+                                    IconButton(onClick = { editingList = list }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Default.Edit, contentDescription = strings.editList, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(onClick = { showDeleteDialogFor = list.id }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Default.Delete, contentDescription = strings.delete, tint = ColorDangerCrimson, modifier = Modifier.size(16.dp))
+                                    }
                                 }
                             }
                         }
                     }
+
+                    AppVerticalScrollbar(
+                        scrollState = listsListState,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .padding(vertical = 4.dp)
+                    )
                 }
             }
         }
@@ -146,24 +198,38 @@ fun AdminBulkBillingTabScreen(
                 if (showBackButton) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.selectList(null) }
                             .padding(bottom = 8.dp)
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = strings.backBtn,
-                            tint = AccentNavy,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            strings.backBtn,
-                            color = AccentNavy,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { viewModel.selectList(null) }
+                                .padding(vertical = 4.dp, horizontal = 2.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = strings.backBtn,
+                                tint = AccentNavy,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                strings.backBtn,
+                                color = AccentNavy,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                        }
+                        IconButton(
+                            onClick = { isCreatingNew = true },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = strings.createNewList, tint = AccentNavy)
+                        }
                     }
                 }
 
@@ -199,84 +265,98 @@ fun AdminBulkBillingTabScreen(
                 val totalExpectedAmount = if (selectedList.type == BillingListType.FIXED) {
                     activeListUsers.sumOf { it.second.quantity.coerceAtLeast(0) * (selectedList.basePrice ?: 0L).coerceAtLeast(0L) }
                 } else {
-                    activeListUsers.sumOf { viewModel.getVariableAmount(selectedList.id, it.first.id).coerceAtLeast(0L) }
+                    activeListUsers.sumOf {
+                        (variableAmounts["${selectedList.id}:${it.first.id}"] ?: variableAmounts[it.first.id] ?: 0L).coerceAtLeast(0L)
+                    }
                 }
 
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (activeListUsers.isEmpty()) {
-                        item {
-                            Text(strings.noUsersInList, color = TextSecondaryMuted, modifier = Modifier.padding(16.dp))
-                        }
-                    } else {
-                        items(activeListUsers, key = { it.first.id }) { (user, listUser) ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = user.name,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = PrimaryNavy,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                
-                                if (selectedList.type == BillingListType.FIXED) {
-                                    val lineTotal = listUser.quantity * (selectedList.basePrice ?: 0L)
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "${listUser.quantity}x",
-                                            modifier = Modifier.widthIn(min = 32.dp),
-                                            textAlign = TextAlign.End,
-                                            fontSize = 13.sp,
-                                            color = TextSecondaryMuted
-                                        )
-                                        Text(
-                                            text = Formatting.formatBrl(lineTotal),
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 14.sp,
-                                            color = PrimaryNavy,
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            textAlign = TextAlign.End,
-                                            modifier = Modifier.widthIn(min = 100.dp)
-                                        )
-                                    }
-                                } else {
-                                    val currentAmount = viewModel.getVariableAmount(selectedList.id, user.id)
-                                    var amountStr by remember(selectedList.id, user.id) { 
-                                        mutableStateOf(if (currentAmount == 0L) "" else Formatting.formatBrl(currentAmount).removePrefix("R$ ").trim()) 
-                                    }
-                                    LaunchedEffect(isExecutingCharges) {
-                                        if (!isExecutingCharges && currentAmount == 0L && amountStr.isNotBlank()) {
-                                            amountStr = ""
-                                        }
-                                    }
-                                    OutlinedTextField(
-                                        value = amountStr,
-                                        onValueChange = { 
-                                            val sanitized = it.filter { c -> c.isDigit() || c == '.' || c == ',' }
-                                            amountStr = sanitized
-                                            val cents = sanitized.replace(',', '.').toDoubleOrNull()
-                                                ?.let { v -> kotlin.math.round(v * 100).toLong().coerceAtLeast(0L) } ?: 0L
-                                            viewModel.setVariableAmount(selectedList.id, user.id, cents)
-                                        },
-                                        enabled = !isExecutingCharges,
-                                        modifier = Modifier.width(120.dp),
-                                        label = { Text(strings.amount, fontSize = 10.sp) },
-                                        singleLine = true
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        state = usersListState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (activeListUsers.isEmpty()) {
+                            item {
+                                Text(strings.noUsersInList, color = TextSecondaryMuted, modifier = Modifier.padding(16.dp))
+                            }
+                        } else {
+                            items(activeListUsers, key = { it.first.id }) { (user, listUser) ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = user.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = PrimaryNavy,
+                                        modifier = Modifier.weight(1f)
                                     )
+                                    
+                                    if (selectedList.type == BillingListType.FIXED) {
+                                        val lineTotal = listUser.quantity * (selectedList.basePrice ?: 0L)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "${listUser.quantity}x",
+                                                modifier = Modifier.widthIn(min = 32.dp),
+                                                textAlign = TextAlign.End,
+                                                fontSize = 13.sp,
+                                                color = TextSecondaryMuted
+                                            )
+                                            Text(
+                                                text = Formatting.formatBrl(lineTotal),
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 14.sp,
+                                                color = PrimaryNavy,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                textAlign = TextAlign.End,
+                                                modifier = Modifier.widthIn(min = 100.dp)
+                                            )
+                                        }
+                                    } else {
+                                        val currentAmount = variableAmounts["${selectedList.id}:${user.id}"] ?: variableAmounts[user.id] ?: 0L
+                                        var amountStr by remember(selectedList.id, user.id) { 
+                                            mutableStateOf(if (currentAmount == 0L) "" else Formatting.formatBrl(currentAmount).removePrefix("R$ ").trim()) 
+                                        }
+                                        LaunchedEffect(isExecutingCharges) {
+                                            if (!isExecutingCharges && currentAmount == 0L && amountStr.isNotBlank()) {
+                                                amountStr = ""
+                                            }
+                                        }
+                                        OutlinedTextField(
+                                            value = amountStr,
+                                            onValueChange = { 
+                                                val sanitized = it.filter { c -> c.isDigit() || c == '.' || c == ',' }
+                                                amountStr = sanitized
+                                                val cents = sanitized.replace(',', '.').toDoubleOrNull()
+                                                    ?.let { v -> kotlin.math.round(v * 100).toLong().coerceAtLeast(0L) } ?: 0L
+                                                viewModel.setVariableAmount(selectedList.id, user.id, cents)
+                                            },
+                                            enabled = !isExecutingCharges,
+                                            modifier = Modifier.width(120.dp),
+                                            label = { Text(strings.amount, fontSize = 10.sp) },
+                                            singleLine = true
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
+
+                    AppVerticalScrollbar(
+                        scrollState = usersListState,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .padding(vertical = 4.dp)
+                    )
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -306,8 +386,37 @@ fun AdminBulkBillingTabScreen(
         }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        val isMobile = maxWidth < 700.dp
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown) {
+                    when (keyEvent.key) {
+                        Key.PageDown -> {
+                            if (!isModalOpen) {
+                                coroutineScope.launch {
+                                    val targetState = if (selectedListId != null) usersListState else listsListState
+                                    targetState.pageDown()
+                                }
+                                true
+                            } else false
+                        }
+                        Key.PageUp -> {
+                            if (!isModalOpen) {
+                                coroutineScope.launch {
+                                    val targetState = if (selectedListId != null) usersListState else listsListState
+                                    targetState.pageUp()
+                                }
+                                true
+                            } else false
+                        }
+                        else -> false
+                    }
+                } else false
+            }
+    ) {
+        val isMobile = maxWidth < 750.dp
         if (isMobile) {
             if (selectedList == null) {
                 contentLeftPane(Modifier.fillMaxSize())
@@ -316,7 +425,7 @@ fun AdminBulkBillingTabScreen(
             }
         } else {
             Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                contentLeftPane(Modifier.weight(1f).fillMaxHeight())
+                contentLeftPane(Modifier.widthIn(min = 280.dp).weight(1f).fillMaxHeight())
                 contentRightPane(Modifier.weight(2f).fillMaxHeight(), false)
             }
         }

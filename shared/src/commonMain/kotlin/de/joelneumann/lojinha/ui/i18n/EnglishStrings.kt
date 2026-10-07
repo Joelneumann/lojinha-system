@@ -77,6 +77,7 @@ object EnglishStrings : AppStrings {
     override val reversalConfirmMsg = "Do you want to cancel this transaction and refund the balance?"
     override val inactivityWarningTitle = "Inactivity Warning"
     override val inactivityWarningMsg = "You will be logged out automatically in:"
+    override val inactivityWarningWithCartMsg = "Your purchase will be finalized and you will be logged out automatically in:"
     override val stayLoggedIn = "Stay Logged In"
     override val stock = "Stock Quantity"
     override val unitPiece = "Piece"
@@ -606,6 +607,17 @@ object EnglishStrings : AppStrings {
     override val csvTypeUsers = "Users"
 
     override val errFailedToCompletePurchase = "Failed to complete purchase"
+
+    // Stock Limits & Feedback
+    override fun errProductOutOfStock(productName: String): String = "$productName is out of stock"
+    override fun errProductMaxStockReached(productName: String, maxQuantity: String): String =
+        "Maximum available stock reached for $productName ($maxQuantity)"
+    override fun errWeightExceedsStock(maxQuantity: String): String =
+        "Weight exceeds available stock (max. $maxQuantity)"
+    override fun errProductNotFound(barcode: String): String =
+        "No product found for barcode '$barcode'"
+    override fun availableStockLabel(quantity: String): String =
+        "Available: $quantity"
 
     // Desktop & Formatting
     override val appWindowTitle = "Lojinha POS & Self-Service Kiosk"

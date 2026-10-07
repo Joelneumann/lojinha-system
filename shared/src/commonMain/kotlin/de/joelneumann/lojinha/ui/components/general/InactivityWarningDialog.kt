@@ -22,6 +22,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.input.key.type
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +31,7 @@ import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 @Composable
 fun InactivityWarningDialog(
     secondsRemaining: Int,
+    hasCartItems: Boolean = false,
     onStayLoggedIn: () -> Unit
 ) {
     val strings = I18n.current
@@ -64,12 +66,12 @@ fun InactivityWarningDialog(
                 ) {
                     onStayLoggedIn()
                 }
-                .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown) {
-                        onStayLoggedIn()
-                        true
-                    } else false
-                }
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    onStayLoggedIn()
+                    true
+                } else false
+            }
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -85,9 +87,10 @@ fun InactivityWarningDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = strings.inactivityWarningMsg,
+                    text = if (hasCartItems) strings.inactivityWarningWithCartMsg else strings.inactivityWarningMsg,
                     fontSize = 14.sp,
-                    color = TextSecondarySubtle
+                    color = TextSecondarySubtle,
+                    textAlign = TextAlign.Center
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))

@@ -28,6 +28,7 @@ object LojinhaViewModelFactory {
         user: de.joelneumann.lojinha.domain.model.User,
         settingsRepository: SettingsRepository,
         onLogoutRequest: () -> Unit,
+        onInactivityTimeout: (() -> Unit)? = null,
         initialSettings: de.joelneumann.lojinha.domain.model.SystemSettings? = null
     ): ViewModelProvider.Factory = viewModelFactory {
         initializer {
@@ -35,6 +36,7 @@ object LojinhaViewModelFactory {
                 user = user,
                 settingsRepository = settingsRepository,
                 onLogoutRequest = onLogoutRequest,
+                onInactivityTimeout = onInactivityTimeout,
                 initialSettings = initialSettings
             )
         }

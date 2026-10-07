@@ -21,6 +21,7 @@ class UserSessionViewModel(
     val user: User,
     private val settingsRepository: SettingsRepository,
     private val onLogoutRequest: () -> Unit,
+    var onInactivityTimeout: (() -> Unit)? = null,
     private val clock: () -> Long = { currentTimeMillis() },
     coroutineScope: CoroutineScope? = null,
     initialSettings: SystemSettings? = null
@@ -99,7 +100,13 @@ class UserSessionViewModel(
 
         if (remainingSecs <= 0) {
             _showInactivityWarning.value = false
-            requestLogout()
+            pauseInactivityTimer()
+            val timeoutCallback = onInactivityTimeout
+            if (timeoutCallback != null) {
+                timeoutCallback.invoke()
+            } else {
+                requestLogout()
+            }
         } else if (remainingSecs <= 60) {
             _showInactivityWarning.value = true
         } else {
@@ -135,6 +142,7 @@ class UserSessionViewModel(
 
     fun resetInactivityTimer() {
         if (isLoggingOut) return
+        isPaused = false
         lastActivityTimestampMs = clock()
         _showInactivityWarning.value = false
         val timeoutSecs = maxOf(2, _settings.value.inactivityTimeoutMinutes) * 60

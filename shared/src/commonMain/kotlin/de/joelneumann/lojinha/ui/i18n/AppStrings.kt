@@ -77,6 +77,7 @@ interface AppStrings {
     val reversalConfirmMsg: String
     val inactivityWarningTitle: String
     val inactivityWarningMsg: String
+    val inactivityWarningWithCartMsg: String
     val stayLoggedIn: String
     val stock: String
     val unitPiece: String
@@ -593,6 +594,13 @@ interface AppStrings {
     val csvTypeUsers: String
 
     val errFailedToCompletePurchase: String
+
+    // Stock Limits & Feedback
+    fun errProductOutOfStock(productName: String): String
+    fun errProductMaxStockReached(productName: String, maxQuantity: String): String
+    fun errWeightExceedsStock(maxQuantity: String): String
+    fun errProductNotFound(barcode: String): String
+    fun availableStockLabel(quantity: String): String
 
     // Desktop & Formatting
     val appWindowTitle: String

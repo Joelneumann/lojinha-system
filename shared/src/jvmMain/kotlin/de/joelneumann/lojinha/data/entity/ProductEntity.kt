@@ -23,7 +23,7 @@ data class ProductEntity(
         barcodes = barcodes,
         basePrice = basePrice,
         unitType = try { UnitType.valueOf(unitType) } catch (e: Exception) { UnitType.PIECE },
-        stockQuantity = stockQuantity,
+        stockQuantity = stockQuantity.coerceAtLeast(0L),
         customMarkupPercent = customMarkupPercent,
         isActive = isActive
     )

@@ -79,6 +79,7 @@ fun AdminScreen(
     var hasUnsavedChanges by remember { mutableStateOf(false) }
     var pendingTabSwitch by remember { mutableStateOf<AdminTab?>(null) }
     var isExitAdminPending by remember { mutableStateOf(false) }
+    var activePageScroller by remember { mutableStateOf<((Boolean) -> Boolean)?>(null) }
 
     val tabItems = remember(strings, bulkBillingViewModel, settingsViewModel) {
         buildList {
@@ -103,6 +104,7 @@ fun AdminScreen(
                 expandedProductId = null
                 expandedUserId = null
                 expandedTransactionId = null
+                activePageScroller = null
             }
         }
     }
@@ -127,6 +129,10 @@ fun AdminScreen(
                     if (targetTabDef != null) {
                         handleTabSwitchRequest(targetTabDef.tab)
                         true
+                    } else if (event.key == Key.PageDown) {
+                        activePageScroller?.invoke(true) ?: false
+                    } else if (event.key == Key.PageUp) {
+                        activePageScroller?.invoke(false) ?: false
                     } else if (event.key == Key.Escape) {
                         if (pendingTabSwitch != null || isExitAdminPending) {
                             false
@@ -243,7 +249,8 @@ fun AdminScreen(
                                 expandedProductId = if (expandedProductId == id) null else id
                             },
                             onRequestExpandProduct = { id -> expandedProductId = id },
-                            onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
+                            onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
+                            onRegisterPageScroller = { scroller -> activePageScroller = scroller }
                         )
                     }
 
@@ -255,7 +262,8 @@ fun AdminScreen(
                                 expandedUserId = if (expandedUserId == id) null else id
                             },
                             onRequestExpandUser = { id -> expandedUserId = id },
-                            onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
+                            onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
+                            onRegisterPageScroller = { scroller -> activePageScroller = scroller }
                         )
                     }
 
@@ -266,7 +274,8 @@ fun AdminScreen(
                             onRequestToggleExpand = { id ->
                                 expandedTransactionId = if (expandedTransactionId == id) null else id
                             },
-                            onRequestExpandTransaction = { id -> expandedTransactionId = id }
+                            onRequestExpandTransaction = { id -> expandedTransactionId = id },
+                            onRegisterPageScroller = { scroller -> activePageScroller = scroller }
                         )
                     }
 
@@ -274,7 +283,8 @@ fun AdminScreen(
                         if (bulkBillingViewModel != null) {
                             AdminBulkBillingTabScreen(
                                 viewModel = bulkBillingViewModel,
-                                onNavigateToTransactions = { handleTabSwitchRequest(AdminTab.TRANSACTIONS) }
+                                onNavigateToTransactions = { handleTabSwitchRequest(AdminTab.TRANSACTIONS) },
+                                onRegisterPageScroller = { scroller -> activePageScroller = scroller }
                             )
                         }
                     }
@@ -283,7 +293,8 @@ fun AdminScreen(
                         if (settingsViewModel != null) {
                             AdminSettingsTabScreen(
                                 viewModel = settingsViewModel,
-                                onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved }
+                                onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
+                                onRegisterPageScroller = { scroller -> activePageScroller = scroller }
                             )
                         }
                     }

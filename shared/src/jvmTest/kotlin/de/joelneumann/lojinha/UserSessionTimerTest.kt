@@ -640,4 +640,113 @@ class UserSessionTimerTest {
             testScope.cancel()
         }
     }
+
+    @Test
+    fun testInactivityTimeout_withCustomTimeoutCallback_triggersCallbackAndPauses() = runBlocking {
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        var currentTime = 100_000L
+        val repo = FakeSettingsRepository(SystemSettings(inactivityTimeoutMinutes = 2))
+        var logoutTriggered = false
+        var timeoutCallbackTriggered = false
+
+        val vm = UserSessionViewModel(
+            user = testUser,
+            settingsRepository = repo,
+            onLogoutRequest = { logoutTriggered = true },
+            onInactivityTimeout = { timeoutCallbackTriggered = true },
+            clock = { currentTime },
+            coroutineScope = testScope,
+            initialSettings = SystemSettings(inactivityTimeoutMinutes = 2)
+        )
+
+        try {
+            // Advance clock past the 2-minute threshold
+            currentTime += 130_000L
+            delay(350L)
+
+            // Custom timeout callback should have been triggered
+            assertTrue(timeoutCallbackTriggered)
+            // Default onLogoutRequest should NOT have been called
+            assertFalse(logoutTriggered)
+            // Warning dialog should be dismissed
+            assertFalse(vm.showInactivityWarning.value)
+            assertEquals(0, vm.inactivitySecondsRemaining.value)
+
+            // Advancing further time while paused should NOT trigger repeated callback or logout
+            currentTime += 50_000L
+            delay(350L)
+            assertFalse(logoutTriggered)
+        } finally {
+            vm.stopInactivityTimer()
+            testScope.cancel()
+        }
+    }
+
+    @Test
+    fun testInactivityTimeout_withoutCustomCallback_triggersLogout() = runBlocking {
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        var currentTime = 100_000L
+        val repo = FakeSettingsRepository(SystemSettings(inactivityTimeoutMinutes = 2))
+        var logoutTriggered = false
+
+        val vm = UserSessionViewModel(
+            user = testUser,
+            settingsRepository = repo,
+            onLogoutRequest = { logoutTriggered = true },
+            onInactivityTimeout = null,
+            clock = { currentTime },
+            coroutineScope = testScope,
+            initialSettings = SystemSettings(inactivityTimeoutMinutes = 2)
+        )
+
+        try {
+            // Advance clock past the 2-minute threshold
+            currentTime += 130_000L
+            delay(350L)
+
+            // Standard onLogoutRequest should have been called
+            assertTrue(logoutTriggered)
+            assertFalse(vm.showInactivityWarning.value)
+            assertEquals(0, vm.inactivitySecondsRemaining.value)
+        } finally {
+            vm.stopInactivityTimer()
+            testScope.cancel()
+        }
+    }
+
+    @Test
+    fun testResetInactivityTimer_clearsIsPaused() = runBlocking {
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        var currentTime = 100_000L
+        val repo = FakeSettingsRepository(SystemSettings(inactivityTimeoutMinutes = 2))
+        var logoutTriggered = false
+
+        val vm = UserSessionViewModel(
+            user = testUser,
+            settingsRepository = repo,
+            onLogoutRequest = { logoutTriggered = true },
+            clock = { currentTime },
+            coroutineScope = testScope,
+            initialSettings = SystemSettings(inactivityTimeoutMinutes = 2)
+        )
+
+        try {
+            // Pause timer
+            vm.pauseInactivityTimer()
+
+            // Resetting timer should clear paused state
+            vm.resetInactivityTimer()
+            assertEquals(120, vm.inactivitySecondsRemaining.value)
+
+            // Advance clock past the 2-minute threshold
+            currentTime += 130_000L
+            delay(350L)
+
+            // Since it was unpaused by reset, ticker should fire logout
+            assertTrue(logoutTriggered)
+        } finally {
+            vm.stopInactivityTimer()
+            testScope.cancel()
+        }
+    }
 }

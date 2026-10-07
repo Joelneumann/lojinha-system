@@ -15,6 +15,8 @@ import de.joelneumann.lojinha.ui.utils.removeAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +44,7 @@ class ShoppingViewModel(
 
     private val activeScope = coroutineScope ?: viewModelScope
 
+    private var productsJob: Job? = null
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     val products: StateFlow<List<Product>> = _products.asStateFlow()
 
@@ -56,6 +59,10 @@ class ShoppingViewModel(
 
     private val _purchaseError = MutableStateFlow<String?>(null)
     val purchaseError: StateFlow<String?> = _purchaseError.asStateFlow()
+
+    private val _stockNotice = MutableStateFlow<String?>(null)
+    val stockNotice: StateFlow<String?> = _stockNotice.asStateFlow()
+    private var noticeJob: Job? = null
 
     private val _weightProductDialog = MutableStateFlow<Product?>(null)
     val weightProductDialog: StateFlow<Product?> = _weightProductDialog.asStateFlow()
@@ -74,15 +81,34 @@ class ShoppingViewModel(
     }
 
     fun loadProducts() {
-        activeScope.launch {
+        productsJob?.cancel()
+        productsJob = activeScope.launch {
             productRepository.getProductsFlow().collect { list ->
                 _products.value = list.filter { it.isActive }.sortedByAccentInsensitive { it.name }
             }
         }
     }
 
+    fun showStockNotice(message: String) {
+        noticeJob?.cancel()
+        _stockNotice.value = message
+        noticeJob = activeScope.launch {
+            delay(3500)
+            _stockNotice.value = null
+        }
+    }
+
+    fun clearStockNotice() {
+        noticeJob?.cancel()
+        noticeJob = null
+        _stockNotice.value = null
+    }
+
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+        if (_stockNotice.value != null) {
+            clearStockNotice()
+        }
     }
 
     fun submitBarcodeOrSearch(
@@ -98,6 +124,20 @@ class ShoppingViewModel(
             product.barcodes.any { it.code.trim().equals(trimmed, ignoreCase = true) }
         }
         if (exactBarcodeProduct != null) {
+            if (exactBarcodeProduct.stockQuantity <= 0L) {
+                showStockNotice(I18n.get().errProductOutOfStock(exactBarcodeProduct.name))
+                _searchQuery.value = ""
+                return false
+            }
+            val inCart = _cartItems.value.firstOrNull { it.product.id == exactBarcodeProduct.id }?.quantity ?: 0L
+            if (inCart >= exactBarcodeProduct.stockQuantity) {
+                showStockNotice(I18n.get().errProductMaxStockReached(
+                    exactBarcodeProduct.name,
+                    Formatting.formatQuantity(exactBarcodeProduct.stockQuantity, exactBarcodeProduct.unitType)
+                ))
+                _searchQuery.value = ""
+                return false
+            }
             onProductSelected(exactBarcodeProduct, globalMarkup)
             _searchQuery.value = ""
             return true
@@ -108,6 +148,20 @@ class ShoppingViewModel(
             product.name.trim().removeAccents().equals(trimmed.removeAccents(), ignoreCase = true)
         }
         if (exactNameProduct != null) {
+            if (exactNameProduct.stockQuantity <= 0L) {
+                showStockNotice(I18n.get().errProductOutOfStock(exactNameProduct.name))
+                _searchQuery.value = ""
+                return false
+            }
+            val inCart = _cartItems.value.firstOrNull { it.product.id == exactNameProduct.id }?.quantity ?: 0L
+            if (inCart >= exactNameProduct.stockQuantity) {
+                showStockNotice(I18n.get().errProductMaxStockReached(
+                    exactNameProduct.name,
+                    Formatting.formatQuantity(exactNameProduct.stockQuantity, exactNameProduct.unitType)
+                ))
+                _searchQuery.value = ""
+                return false
+            }
             onProductSelected(exactNameProduct, globalMarkup)
             _searchQuery.value = ""
             return true
@@ -118,19 +172,28 @@ class ShoppingViewModel(
         val isNumericBarcode = trimmed.all { it.isDigit() } && trimmed.length >= 4
         if (isNumericBarcode) {
             _searchQuery.value = trimmed
+            showStockNotice(I18n.get().errProductNotFound(trimmed))
             return false
         }
 
-        // 4. Manual search submission: use highlighted product or first ranked search result
-        if (highlightedProduct != null) {
-            onProductSelected(highlightedProduct, globalMarkup)
-            _searchQuery.value = ""
-            return true
-        }
-
-        val ranked = _products.value.filterAndRankProducts(trimmed)
-        if (ranked.isNotEmpty()) {
-            onProductSelected(ranked.first(), globalMarkup)
+        // 4. Manual search submission: use highlighted product or first ranked search result (excluding 0-stock)
+        val candidate = highlightedProduct ?: _products.value.filter { it.stockQuantity > 0L }.filterAndRankProducts(trimmed).firstOrNull()
+        if (candidate != null) {
+            if (candidate.stockQuantity <= 0L) {
+                showStockNotice(I18n.get().errProductOutOfStock(candidate.name))
+                _searchQuery.value = ""
+                return false
+            }
+            val inCart = _cartItems.value.firstOrNull { it.product.id == candidate.id }?.quantity ?: 0L
+            if (inCart >= candidate.stockQuantity) {
+                showStockNotice(I18n.get().errProductMaxStockReached(
+                    candidate.name,
+                    Formatting.formatQuantity(candidate.stockQuantity, candidate.unitType)
+                ))
+                _searchQuery.value = ""
+                return false
+            }
+            onProductSelected(candidate, globalMarkup)
             _searchQuery.value = ""
             return true
         }
@@ -143,6 +206,18 @@ class ShoppingViewModel(
     }
 
     fun onProductSelected(product: Product, globalMarkup: Double) {
+        if (product.stockQuantity <= 0L) {
+            showStockNotice(I18n.get().errProductOutOfStock(product.name))
+            return
+        }
+        val inCart = _cartItems.value.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
+        if (inCart >= product.stockQuantity) {
+            showStockNotice(I18n.get().errProductMaxStockReached(
+                product.name,
+                Formatting.formatQuantity(product.stockQuantity, product.unitType)
+            ))
+            return
+        }
         if (product.unitType == UnitType.PIECE) {
             addPieceItemToCart(product, globalMarkup)
             _searchQuery.value = ""
@@ -159,46 +234,76 @@ class ShoppingViewModel(
         val existingIndex = currentList.indexOfFirst { it.product.id == product.id }
         if (existingIndex >= 0) {
             val item = currentList[existingIndex]
+            if (item.quantity + 1L > product.stockQuantity) {
+                showStockNotice(I18n.get().errProductMaxStockReached(
+                    product.name,
+                    Formatting.formatQuantity(product.stockQuantity, product.unitType)
+                ))
+                return
+            }
             currentList[existingIndex] = item.copy(
                 product = product,
                 quantity = item.quantity + 1,
                 unitPriceWithMarkup = unitPrice
             )
         } else {
+            if (product.stockQuantity < 1L) {
+                showStockNotice(I18n.get().errProductOutOfStock(product.name))
+                return
+            }
             currentList.add(CartItem(product = product, quantity = 1, unitPriceWithMarkup = unitPrice))
         }
         _cartItems.value = currentList
     }
 
-
     fun updateWeightInput(input: String) {
         _weightInput.value = input
+        val product = _weightProductDialog.value
+        if (product != null) {
+            val inCart = _cartItems.value.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
+            val maxAvailable = (product.stockQuantity - inCart).coerceAtLeast(0L)
+            val grams = Formatting.parseWeightInputToGrams(input)
+            if (grams != null && grams > maxAvailable) {
+                _weightError.value = I18n.get().errWeightExceedsStock(
+                    Formatting.formatQuantity(maxAvailable, UnitType.WEIGHT)
+                )
+                return
+            }
+        }
         _weightError.value = null
     }
 
     fun submitWeightDialog(globalMarkup: Double) {
         val product = _weightProductDialog.value ?: return
+        val inCart = _cartItems.value.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
+        val maxAvailable = (product.stockQuantity - inCart).coerceAtLeast(0L)
         val grams = Formatting.parseWeightInputToGrams(_weightInput.value)
-        if (grams != null && grams > 0) {
-            val currentList = _cartItems.value.toMutableList()
-            val unitPrice = product.calculateEffectiveUnitPrice(globalMarkup)
-            val existingIndex = currentList.indexOfFirst { it.product.id == product.id }
-            if (existingIndex >= 0) {
-                val item = currentList[existingIndex]
-                currentList[existingIndex] = item.copy(
-                    product = product,
-                    quantity = item.quantity + grams,
-                    unitPriceWithMarkup = unitPrice
-                )
-            } else {
-                currentList.add(CartItem(product = product, quantity = grams, unitPriceWithMarkup = unitPrice))
-            }
-            _cartItems.value = currentList
-            _searchQuery.value = ""
-            closeWeightDialog()
-        } else {
+        if (grams == null || grams <= 0) {
             _weightError.value = I18n.get().invalidWeightFormat
+            return
         }
+        if (grams > maxAvailable) {
+            _weightError.value = I18n.get().errWeightExceedsStock(
+                Formatting.formatQuantity(maxAvailable, UnitType.WEIGHT)
+            )
+            return
+        }
+        val currentList = _cartItems.value.toMutableList()
+        val unitPrice = product.calculateEffectiveUnitPrice(globalMarkup)
+        val existingIndex = currentList.indexOfFirst { it.product.id == product.id }
+        if (existingIndex >= 0) {
+            val item = currentList[existingIndex]
+            currentList[existingIndex] = item.copy(
+                product = product,
+                quantity = item.quantity + grams,
+                unitPriceWithMarkup = unitPrice
+            )
+        } else {
+            currentList.add(CartItem(product = product, quantity = grams, unitPriceWithMarkup = unitPrice))
+        }
+        _cartItems.value = currentList
+        _searchQuery.value = ""
+        closeWeightDialog()
     }
 
     fun closeWeightDialog() {
@@ -212,8 +317,16 @@ class ShoppingViewModel(
             removeCartItem(productId)
             return
         }
-        _cartItems.value = _cartItems.value.map { item ->
-            if (item.product.id == productId) item.copy(quantity = newQty) else item
+        val item = _cartItems.value.firstOrNull { it.product.id == productId } ?: return
+        if (newQty > item.product.stockQuantity) {
+            showStockNotice(I18n.get().errProductMaxStockReached(
+                item.product.name,
+                Formatting.formatQuantity(item.product.stockQuantity, item.product.unitType)
+            ))
+            return
+        }
+        _cartItems.value = _cartItems.value.map { cartItem ->
+            if (cartItem.product.id == productId) cartItem.copy(quantity = newQty) else cartItem
         }
     }
 
@@ -235,10 +348,25 @@ class ShoppingViewModel(
         _purchaseError.value = null
     }
 
-    fun completePurchase(user: User, onPurchaseFinalized: () -> Unit = {}) {
+    fun completePurchase(
+        user: User,
+        onPurchaseFinalized: () -> Unit = {},
+        onError: ((String) -> Unit)? = null
+    ) {
         if (_isProcessingPurchase.value) return
         val cart = _cartItems.value
         if (cart.isEmpty()) return
+
+        val overStockItem = cart.firstOrNull { it.quantity > it.product.stockQuantity }
+        if (overStockItem != null) {
+            val errMsg = I18n.get().errProductMaxStockReached(
+                overStockItem.product.name,
+                Formatting.formatQuantity(overStockItem.product.stockQuantity, overStockItem.product.unitType)
+            )
+            _purchaseError.value = errMsg
+            onError?.invoke(errMsg)
+            return
+        }
 
         _isProcessingPurchase.value = true
         _purchaseError.value = null
@@ -282,21 +410,38 @@ class ShoppingViewModel(
                 )
 
                 clearCart()
-                _completedPurchase.value = tx
+                val freshUser = userRepository.getUserById(user.id)
+                val actualBefore = freshUser?.balance?.plus(totalCents) ?: balBefore
+                val actualAfter = freshUser?.balance ?: balAfter
+                _completedPurchase.value = tx.copy(
+                    userBalanceBefore = actualBefore,
+                    userBalanceAfter = actualAfter
+                )
                 onPurchaseFinalized()
             } catch (e: Exception) {
                 AppLogger.error("ShoppingViewModel", "Failed to complete purchase for user ${user.id}: ${e.message}", e)
-                _purchaseError.value = e.message ?: I18n.get().errFailedToCompletePurchase
+                val errMsg = e.message ?: I18n.get().errFailedToCompletePurchase
+                _purchaseError.value = errMsg
+                onError?.invoke(errMsg)
             } finally {
                 _isProcessingPurchase.value = false
             }
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
+    fun teardown() {
+        productsJob?.cancel()
+        productsJob = null
+        noticeJob?.cancel()
+        noticeJob = null
+        _stockNotice.value = null
         clearCart()
         dismissCompletedPurchase()
         clearPurchaseError()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        teardown()
     }
 }
