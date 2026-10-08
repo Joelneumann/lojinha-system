@@ -148,7 +148,7 @@ class BackupRestoreService(
                 escapeCsv(p.id),
                 escapeCsv(p.name),
                 escapeCsv(barcodeStr),
-                escapeCsv(Formatting.formatBrl(p.basePrice)),
+                escapeCsv(Formatting.formatBrlCanonical(p.basePrice)),
                 p.unitType.name,
                 p.stockQuantity.toString(),
                 p.customMarkupPercent?.toString() ?: "",
@@ -166,7 +166,7 @@ class BackupRestoreService(
             val line = listOf(
                 escapeCsv(u.id),
                 escapeCsv(u.name),
-                escapeCsv(Formatting.formatBrl(u.balance)),
+                escapeCsv(Formatting.formatBrlCanonical(u.balance)),
                 u.language.code,
                 u.secondaryCurrency.name,
                 escapeCsv(u.pin?.let { if (de.joelneumann.lojinha.security.PasswordHasher.isHash(it)) it else de.joelneumann.lojinha.security.PasswordHasher.hash(it) } ?: ""),
@@ -196,11 +196,11 @@ class BackupRestoreService(
                 t.type.name,
                 escapeCsv(t.referenceTransactionId ?: ""),
                 escapeCsv(t.note ?: ""),
-                escapeCsv(Formatting.formatBrl(t.totalAmount)),
+                escapeCsv(Formatting.formatBrlCanonical(t.totalAmount)),
                 t.items.size.toString(),
                 escapeCsv(itemsSerialized),
-                t.userBalanceBefore?.let { escapeCsv(Formatting.formatBrl(it)) } ?: "",
-                t.userBalanceAfter?.let { escapeCsv(Formatting.formatBrl(it)) } ?: ""
+                t.userBalanceBefore?.let { escapeCsv(Formatting.formatBrlCanonical(it)) } ?: "",
+                t.userBalanceAfter?.let { escapeCsv(Formatting.formatBrlCanonical(it)) } ?: ""
             ).joinToString(",")
             txLines.add(line)
         }
@@ -214,7 +214,7 @@ class BackupRestoreService(
         val blLines = mutableListOf("listId,listName,type,basePrice,comment,isDeleted,userId,userName,quantity")
         billingLists.forEach { bl ->
             val members = billingListUsers[bl.id]
-            val priceStr = bl.basePrice?.let { Formatting.formatBrl(it) } ?: ""
+            val priceStr = bl.basePrice?.let { Formatting.formatBrlCanonical(it) } ?: ""
             if (members.isNullOrEmpty()) {
                 blLines.add(
                     listOf(

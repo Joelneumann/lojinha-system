@@ -1,9 +1,11 @@
 package de.joelneumann.lojinha.ui.utils
 
+import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.ui.i18n.AppStrings
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
@@ -11,9 +13,60 @@ import kotlin.math.round
 
 object Formatting {
 
-    fun formatBrl(cents: Long): String {
+    fun formatIntegerWithGrouping(value: Long, groupingSeparator: Char): String {
+        if (value == Long.MIN_VALUE) {
+            return when (groupingSeparator) {
+                '.' -> "-9.223.372.036.854.775.808"
+                ',' -> "-9,223,372,036,854,775,808"
+                else -> "-9223372036854775808"
+            }
+        }
+        val isNegative = value < 0
+        val absValue = abs(value)
+        val str = absValue.toString()
+        val len = str.length
+        if (len <= 3) return if (isNegative) "-$str" else str
+
+        val sb = StringBuilder()
+        val firstGroupLen = len % 3
+        var i = 0
+        if (firstGroupLen > 0) {
+            sb.append(str.substring(0, firstGroupLen))
+            if (firstGroupLen < len) sb.append(groupingSeparator)
+            i = firstGroupLen
+        }
+        while (i < len) {
+            sb.append(str.substring(i, i + 3))
+            i += 3
+            if (i < len) sb.append(groupingSeparator)
+        }
+        val result = sb.toString()
+        return if (isNegative) "-$result" else result
+    }
+
+    fun formatBrl(
+        cents: Long,
+        language: Language = LanguageManager.currentLanguage
+    ): String {
         val isNegative = cents < 0
-        val absCents = abs(cents)
+        val absCents = if (cents == Long.MIN_VALUE) Long.MAX_VALUE else abs(cents)
+        val reais = absCents / 100
+        val remainder = absCents % 100
+        val centsString = remainder.toString().padStart(2, '0')
+
+        val (groupingSep, decimalSep) = when (language) {
+            Language.EN -> Pair(',', '.')
+            Language.DE, Language.BR -> Pair('.', ',')
+        }
+
+        val reaisFormatted = formatIntegerWithGrouping(reais, groupingSep)
+        val formatted = "R$ $reaisFormatted$decimalSep$centsString"
+        return if (isNegative) "-$formatted" else formatted
+    }
+
+    fun formatBrlCanonical(cents: Long): String {
+        val isNegative = cents < 0
+        val absCents = if (cents == Long.MIN_VALUE) Long.MAX_VALUE else abs(cents)
         val reais = absCents / 100
         val remainder = absCents % 100
         val centsString = remainder.toString().padStart(2, '0')
@@ -21,7 +74,12 @@ object Formatting {
         return if (isNegative) "-$formatted" else formatted
     }
 
-    fun formatSecondaryCurrency(brlCents: Long, secondaryCurrency: SecondaryCurrency, rate: Double): String {
+    fun formatSecondaryCurrency(
+        brlCents: Long,
+        secondaryCurrency: SecondaryCurrency,
+        rate: Double,
+        language: Language = LanguageManager.currentLanguage
+    ): String {
         if (secondaryCurrency == SecondaryCurrency.NONE || rate <= 0.0) return ""
         val brlReais = brlCents.toDouble() / 100.0
         val convertedAmount = brlReais * rate
@@ -33,19 +91,44 @@ object Formatting {
         val decimalPart = totalCents % 100
         val decString = decimalPart.toString().padStart(2, '0')
 
-        val formattedValue = "${secondaryCurrency.symbol} $integerPart.$decString"
+        val (groupingSep, decimalSep) = when (language) {
+            Language.EN -> Pair(',', '.')
+            Language.DE, Language.BR -> Pair('.', ',')
+        }
+
+        val integerFormatted = formatIntegerWithGrouping(integerPart, groupingSep)
+        val formattedValue = "${secondaryCurrency.symbol} $integerFormatted$decimalSep$decString"
         val signedValue = if (isNegative) "-$formattedValue" else formattedValue
         return " (≈ $signedValue)"
     }
 
-    fun formatQuantity(quantity: Long, unitType: UnitType, strings: AppStrings = I18n.get()): String {
+    fun formatQuantity(
+        quantity: Long,
+        unitType: UnitType,
+        strings: AppStrings = I18n.get(),
+        language: Language = LanguageManager.currentLanguage
+    ): String {
+        val (groupingSep, decimalSep) = when (language) {
+            Language.EN -> Pair(',', '.')
+            Language.DE, Language.BR -> Pair('.', ',')
+        }
         return when (unitType) {
-            UnitType.PIECE -> strings.pieceUnitSuffix(quantity)
+            UnitType.PIECE -> {
+                val isNegative = quantity < 0
+                val absQty = abs(quantity)
+                val qtyFormatted = formatIntegerWithGrouping(absQty, groupingSep)
+                val signedQty = if (isNegative) "-$qtyFormatted" else qtyFormatted
+                strings.pieceUnitSuffix(absQty).replaceFirst(absQty.toString(), signedQty)
+            }
             UnitType.WEIGHT -> {
-                val kgInt = quantity / 1000
-                val remainderGrams = abs(quantity % 1000)
+                val isNegative = quantity < 0
+                val absQty = abs(quantity)
+                val kgInt = absQty / 1000
+                val remainderGrams = absQty % 1000
                 val gramsStr = remainderGrams.toString().padStart(3, '0')
-                "$kgInt,$gramsStr kg"
+                val kgFormatted = formatIntegerWithGrouping(kgInt, groupingSep)
+                val sign = if (isNegative) "-" else ""
+                "$sign$kgFormatted$decimalSep$gramsStr kg"
             }
         }
     }
