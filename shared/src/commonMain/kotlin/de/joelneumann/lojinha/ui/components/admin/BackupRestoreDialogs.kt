@@ -25,6 +25,7 @@ import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 fun DbRestoreMultiApprovalDialog(
     file: PlatformFile,
     adminPasswordHash: String,
+    isExecuting: Boolean = false,
     onConfirmRestore: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -35,28 +36,32 @@ fun DbRestoreMultiApprovalDialog(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val handleConfirm = {
-        if (step == 1) {
-            step = 2
-        } else {
-            val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
-            val isPhraseCorrect = inputPhrase.trim() == "RESTORE"
-
-            if (!isPasswordCorrect) {
-                errorMessage = strings.incorrectAdminPassword
-            } else if (!isPhraseCorrect) {
-                errorMessage = strings.typeRestoreExactly
+        if (!isExecuting) {
+            if (step == 1) {
+                step = 2
             } else {
-                onConfirmRestore()
+                val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword.trim(), adminPasswordHash)
+                val isPhraseCorrect = inputPhrase.trim() == "RESTORE"
+
+                if (!isPasswordCorrect) {
+                    errorMessage = strings.incorrectAdminPassword
+                } else if (!isPhraseCorrect) {
+                    errorMessage = strings.typeRestoreExactly
+                } else {
+                    onConfirmRestore()
+                }
             }
         }
     }
     val handleDismiss = {
-        if (step == 2) step = 1 else onDismiss()
+        if (!isExecuting) {
+            if (step == 2) step = 1 else onDismiss()
+        }
     }
 
     AlertDialog(
         onDismissRequest = handleDismiss,
-        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        properties = DialogProperties(dismissOnBackPress = !isExecuting, dismissOnClickOutside = !isExecuting),
         containerColor = SurfaceWhite,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = handleDismiss, onConfirm = handleConfirm),
@@ -167,18 +172,8 @@ fun DbRestoreMultiApprovalDialog(
                 }
             } else {
                 Button(
-                    onClick = {
-                        val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
-                        val isPhraseCorrect = inputPhrase.trim() == "RESTORE"
-
-                        if (!isPasswordCorrect) {
-                            errorMessage = strings.incorrectAdminPassword
-                        } else if (!isPhraseCorrect) {
-                            errorMessage = strings.typeRestoreExactly
-                        } else {
-                            onConfirmRestore()
-                        }
-                    },
+                    onClick = handleConfirm,
+                    enabled = !isExecuting,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                     shape = RoundedCornerShape(8.dp)
                 ) {
@@ -186,12 +181,20 @@ fun DbRestoreMultiApprovalDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.RestoreFromTrash,
-                            contentDescription = null,
-                            tint = SurfaceWhite,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        if (isExecuting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = SurfaceWhite,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.RestoreFromTrash,
+                                contentDescription = null,
+                                tint = SurfaceWhite,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                         Text(strings.restoreDatabaseNowBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -199,9 +202,8 @@ fun DbRestoreMultiApprovalDialog(
         },
         dismissButton = {
             OutlinedButton(
-                onClick = {
-                    if (step == 2) step = 1 else onDismiss()
-                },
+                onClick = handleDismiss,
+                enabled = !isExecuting,
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(if (step == 2) strings.backBtn else strings.cancel)
@@ -213,6 +215,7 @@ fun DbRestoreMultiApprovalDialog(
 @Composable
 fun WipeDataMultiApprovalDialog(
     adminPasswordHash: String,
+    isExecuting: Boolean = false,
     onConfirmWipe: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -223,28 +226,32 @@ fun WipeDataMultiApprovalDialog(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val handleConfirm = {
-        if (step == 1) {
-            step = 2
-        } else {
-            val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
-            val isPhraseCorrect = inputPhrase.trim() == "WIPE"
-
-            if (!isPasswordCorrect) {
-                errorMessage = strings.incorrectAdminPassword
-            } else if (!isPhraseCorrect) {
-                errorMessage = strings.typeWipeExactly
+        if (!isExecuting) {
+            if (step == 1) {
+                step = 2
             } else {
-                onConfirmWipe()
+                val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword.trim(), adminPasswordHash)
+                val isPhraseCorrect = inputPhrase.trim() == "WIPE"
+
+                if (!isPasswordCorrect) {
+                    errorMessage = strings.incorrectAdminPassword
+                } else if (!isPhraseCorrect) {
+                    errorMessage = strings.typeWipeExactly
+                } else {
+                    onConfirmWipe()
+                }
             }
         }
     }
     val handleDismiss = {
-        if (step == 2) step = 1 else onDismiss()
+        if (!isExecuting) {
+            if (step == 2) step = 1 else onDismiss()
+        }
     }
 
     AlertDialog(
         onDismissRequest = handleDismiss,
-        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        properties = DialogProperties(dismissOnBackPress = !isExecuting, dismissOnClickOutside = !isExecuting),
         containerColor = SurfaceWhite,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = handleDismiss, onConfirm = handleConfirm),
@@ -339,18 +346,8 @@ fun WipeDataMultiApprovalDialog(
                 }
             } else {
                 Button(
-                    onClick = {
-                        val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
-                        val isPhraseCorrect = inputPhrase.trim() == "WIPE"
-
-                        if (!isPasswordCorrect) {
-                            errorMessage = strings.incorrectAdminPassword
-                        } else if (!isPhraseCorrect) {
-                            errorMessage = strings.typeWipeExactly
-                        } else {
-                            onConfirmWipe()
-                        }
-                    },
+                    onClick = handleConfirm,
+                    enabled = !isExecuting,
                     colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
                     shape = RoundedCornerShape(8.dp)
                 ) {
@@ -358,12 +355,20 @@ fun WipeDataMultiApprovalDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteForever,
-                            contentDescription = null,
-                            tint = SurfaceWhite,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        if (isExecuting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = SurfaceWhite,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.DeleteForever,
+                                contentDescription = null,
+                                tint = SurfaceWhite,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                         Text(strings.wipeAllSystemDataBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -371,9 +376,8 @@ fun WipeDataMultiApprovalDialog(
         },
         dismissButton = {
             OutlinedButton(
-                onClick = {
-                    if (step == 2) step = 1 else onDismiss()
-                },
+                onClick = handleDismiss,
+                enabled = !isExecuting,
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(if (step == 2) strings.backBtn else strings.cancel)
@@ -388,6 +392,7 @@ fun CsvImportMultiApprovalDialog(
     importResultPreview: CsvImportResult,
     importType: String, // "Products" or "Users"
     adminPasswordHash: String,
+    isExecuting: Boolean = false,
     onConfirmImport: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -397,26 +402,30 @@ fun CsvImportMultiApprovalDialog(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val handleConfirm = {
-        if (step == 1) {
-            if (importResultPreview.errors.isEmpty()) {
-                step = 2
-            }
-        } else {
-            val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
-            if (!isPasswordCorrect) {
-                errorMessage = strings.incorrectAdminPassword
+        if (!isExecuting) {
+            if (step == 1) {
+                if (importResultPreview.errors.isEmpty()) {
+                    step = 2
+                }
             } else {
-                onConfirmImport()
+                val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword.trim(), adminPasswordHash)
+                if (!isPasswordCorrect) {
+                    errorMessage = strings.incorrectAdminPassword
+                } else {
+                    onConfirmImport()
+                }
             }
         }
     }
     val handleDismiss = {
-        if (step == 2) step = 1 else onDismiss()
+        if (!isExecuting) {
+            if (step == 2) step = 1 else onDismiss()
+        }
     }
 
     AlertDialog(
         onDismissRequest = handleDismiss,
-        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        properties = DialogProperties(dismissOnBackPress = !isExecuting, dismissOnClickOutside = !isExecuting),
         containerColor = SurfaceWhite,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.confirmationDialogKeys(onCancel = handleDismiss, onConfirm = handleConfirm),
@@ -591,14 +600,8 @@ fun CsvImportMultiApprovalDialog(
                 }
             } else {
                 Button(
-                    onClick = {
-                        val isPasswordCorrect = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(inputPassword, adminPasswordHash)
-                        if (!isPasswordCorrect) {
-                            errorMessage = strings.incorrectAdminPassword
-                        } else {
-                            onConfirmImport()
-                        }
-                    },
+                    onClick = handleConfirm,
+                    enabled = !isExecuting,
                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                     shape = RoundedCornerShape(8.dp)
                 ) {
@@ -606,12 +609,20 @@ fun CsvImportMultiApprovalDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.FileUpload,
-                            contentDescription = null,
-                            tint = SurfaceWhite,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        if (isExecuting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = SurfaceWhite,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.FileUpload,
+                                contentDescription = null,
+                                tint = SurfaceWhite,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                         Text(strings.executeCsvImportBtn, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -619,9 +630,8 @@ fun CsvImportMultiApprovalDialog(
         },
         dismissButton = {
             OutlinedButton(
-                onClick = {
-                    if (step == 2) step = 1 else onDismiss()
-                },
+                onClick = handleDismiss,
+                enabled = !isExecuting,
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(if (step == 2) strings.backBtn else strings.cancel)

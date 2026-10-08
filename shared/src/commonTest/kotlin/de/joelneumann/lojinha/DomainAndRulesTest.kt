@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha
 
 import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.ui.components.userselection.PRESET_AVATAR_EMOJIS
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
@@ -169,22 +170,103 @@ class DomainAndRulesTest {
         assertEquals("R$ 10,50", Formatting.formatBrl(1050L))
         assertEquals("-R$ 12,30", Formatting.formatBrl(-1230L))
         assertEquals("R$ 0,00", Formatting.formatBrl(0L))
+        assertEquals("R$ 1000,00", Formatting.formatBrlCanonical(100000L))
+        assertEquals("-R$ 1000,00", Formatting.formatBrlCanonical(-100000L))
+    }
+
+    @Test
+    fun testMoneyFormattingWithThousandsAndLanguages() {
+        // Default / Portuguese (Language.BR): dot thousands, comma decimal
+        assertEquals("R$ 1.000,00", Formatting.formatBrl(100000L, Language.BR))
+        assertEquals("R$ 1.234.567,89", Formatting.formatBrl(123456789L, Language.BR))
+        assertEquals("-R$ 1.000,00", Formatting.formatBrl(-100000L, Language.BR))
+        assertEquals("R$ 10,50", Formatting.formatBrl(1050L, Language.BR))
+        assertEquals("R$ 0,00", Formatting.formatBrl(0L, Language.BR))
+
+        // German (Language.DE): dot thousands, comma decimal
+        assertEquals("R$ 1.000,00", Formatting.formatBrl(100000L, Language.DE))
+        assertEquals("R$ 1.234.567,89", Formatting.formatBrl(123456789L, Language.DE))
+        assertEquals("-R$ 1.000,00", Formatting.formatBrl(-100000L, Language.DE))
+        assertEquals("R$ 10,50", Formatting.formatBrl(1050L, Language.DE))
+        assertEquals("R$ 0,00", Formatting.formatBrl(0L, Language.DE))
+
+        // English (Language.EN): comma thousands, dot decimal
+        assertEquals("R$ 1,000.00", Formatting.formatBrl(100000L, Language.EN))
+        assertEquals("R$ 1,234,567.89", Formatting.formatBrl(123456789L, Language.EN))
+        assertEquals("-R$ 1,000.00", Formatting.formatBrl(-100000L, Language.EN))
+        assertEquals("R$ 10.50", Formatting.formatBrl(1050L, Language.EN))
+        assertEquals("R$ 0.00", Formatting.formatBrl(0L, Language.EN))
+    }
+
+    @Test
+    fun testFormatIntegerWithGrouping() {
+        assertEquals("0", Formatting.formatIntegerWithGrouping(0L, '.'))
+        assertEquals("5", Formatting.formatIntegerWithGrouping(5L, '.'))
+        assertEquals("999", Formatting.formatIntegerWithGrouping(999L, '.'))
+        assertEquals("1.000", Formatting.formatIntegerWithGrouping(1000L, '.'))
+        assertEquals("12.345", Formatting.formatIntegerWithGrouping(12345L, '.'))
+        assertEquals("123.456", Formatting.formatIntegerWithGrouping(123456L, '.'))
+        assertEquals("1.234.567", Formatting.formatIntegerWithGrouping(1234567L, '.'))
+        assertEquals("-1.000", Formatting.formatIntegerWithGrouping(-1000L, '.'))
+        assertEquals("1,000", Formatting.formatIntegerWithGrouping(1000L, ','))
+        assertEquals("1,234,567", Formatting.formatIntegerWithGrouping(1234567L, ','))
     }
 
     @Test
     fun testSecondaryCurrencyFormatting() {
-        val formatted = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.USD, 0.18)
-        assertEquals(" (≈ US$ 2.79)", formatted)
+        // In Portuguese (BR)
+        val formattedBr = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.USD, 0.18, Language.BR)
+        assertEquals(" (≈ US$ 2,79)", formattedBr)
 
-        val formattedEur = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.EUR, 0.16)
-        assertEquals(" (≈ € 2.48)", formattedEur)
+        val formattedEurBr = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.EUR, 0.16, Language.BR)
+        assertEquals(" (≈ € 2,48)", formattedEurBr)
+
+        // In English (EN)
+        val formattedEn = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.USD, 0.18, Language.EN)
+        assertEquals(" (≈ US$ 2.79)", formattedEn)
+
+        val formattedEurEn = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.EUR, 0.16, Language.EN)
+        assertEquals(" (≈ € 2.48)", formattedEurEn)
+
+        // With thousands grouping
+        val largeUsdBr = Formatting.formatSecondaryCurrency(1000000L, SecondaryCurrency.USD, 0.18, Language.BR)
+        assertEquals(" (≈ US$ 1.800,00)", largeUsdBr)
+
+        val largeUsdEn = Formatting.formatSecondaryCurrency(1000000L, SecondaryCurrency.USD, 0.18, Language.EN)
+        assertEquals(" (≈ US$ 1,800.00)", largeUsdEn)
 
         val none = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.NONE, 0.18)
         assertEquals("", none)
 
-        // Test IEEE 754 precision boundary (R$ 16,65 with 0.18 rate: 16.65 * 0.18 = 2.997 -> US$ 3.00, not US$ 2.100)
-        val edgeCase = Formatting.formatSecondaryCurrency(1665L, SecondaryCurrency.USD, 0.18)
-        assertEquals(" (≈ US$ 3.00)", edgeCase)
+        // Test IEEE 754 precision boundary (R$ 16,65 with 0.18 rate: 16.65 * 0.18 = 2.997 -> US$ 3.00 in EN, US$ 3,00 in BR)
+        val edgeCaseEn = Formatting.formatSecondaryCurrency(1665L, SecondaryCurrency.USD, 0.18, Language.EN)
+        assertEquals(" (≈ US$ 3.00)", edgeCaseEn)
+        val edgeCaseBr = Formatting.formatSecondaryCurrency(1665L, SecondaryCurrency.USD, 0.18, Language.BR)
+        assertEquals(" (≈ US$ 3,00)", edgeCaseBr)
+    }
+
+    @Test
+    fun testQuantityFormatting() {
+        // Pieces
+        assertEquals("1 un.", Formatting.formatQuantity(1L, UnitType.PIECE, strings = I18n.get(Language.BR), language = Language.BR))
+        assertEquals("1.000 un.", Formatting.formatQuantity(1000L, UnitType.PIECE, strings = I18n.get(Language.BR), language = Language.BR))
+        assertEquals("1.000 Stk.", Formatting.formatQuantity(1000L, UnitType.PIECE, strings = I18n.get(Language.DE), language = Language.DE))
+        assertEquals("1,000 pcs", Formatting.formatQuantity(1000L, UnitType.PIECE, strings = I18n.get(Language.EN), language = Language.EN))
+
+        // Weight
+        assertEquals("1,500 kg", Formatting.formatQuantity(1500L, UnitType.WEIGHT, language = Language.BR))
+        assertEquals("1,500 kg", Formatting.formatQuantity(1500L, UnitType.WEIGHT, language = Language.DE))
+        assertEquals("1.500 kg", Formatting.formatQuantity(1500L, UnitType.WEIGHT, language = Language.EN))
+        assertEquals("1.000,000 kg", Formatting.formatQuantity(1000000L, UnitType.WEIGHT, language = Language.DE))
+        assertEquals("1,000.000 kg", Formatting.formatQuantity(1000000L, UnitType.WEIGHT, language = Language.EN))
+    }
+
+    @Test
+    fun testNewPresetAvatarEmojis() {
+        val requiredEmojis = listOf("🎓", "🍪", "🍫", "🛌", "🤡")
+        for (emoji in requiredEmojis) {
+            assertTrue(PRESET_AVATAR_EMOJIS.contains(emoji), "PRESET_AVATAR_EMOJIS should contain $emoji")
+        }
     }
 
     @Test

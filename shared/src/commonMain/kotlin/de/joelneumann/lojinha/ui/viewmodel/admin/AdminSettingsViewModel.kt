@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.data.service.OneDriveBackupService
 import de.joelneumann.lojinha.domain.model.DeviceCodeResponse
 import de.joelneumann.lojinha.domain.model.BackupRoutine
+import de.joelneumann.lojinha.domain.model.BackupFileType
+import de.joelneumann.lojinha.domain.model.BackupWriteMode
 import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.repository.BackupRepository
@@ -21,6 +23,7 @@ class AdminSettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val backupRepository: BackupRepository? = null,
     private val onRunRoutineNow: (suspend (BackupRoutine) -> Unit)? = null,
+    private val onExecuteBackupNowLocal: (suspend (destinationPath: String, fileType: BackupFileType, writeMode: BackupWriteMode) -> List<String>)? = null,
     private val oneDriveBackupService: OneDriveBackupService? = null,
     private val onPreviewCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
     private val onExecuteCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
@@ -54,6 +57,15 @@ class AdminSettingsViewModel(
     private val _showRoutineDialog = MutableStateFlow(false)
     val showRoutineDialog: StateFlow<Boolean> = _showRoutineDialog.asStateFlow()
 
+    private val _showBackupNowLocalDialog = MutableStateFlow(false)
+    val showBackupNowLocalDialog: StateFlow<Boolean> = _showBackupNowLocalDialog.asStateFlow()
+
+    private val _isExecutingBackupNow = MutableStateFlow(false)
+    val isExecutingBackupNow: StateFlow<Boolean> = _isExecutingBackupNow.asStateFlow()
+
+    private val _lastLocalBackupPath = MutableStateFlow("")
+    val lastLocalBackupPath: StateFlow<String> = _lastLocalBackupPath.asStateFlow()
+
     private val _routineToDelete = MutableStateFlow<BackupRoutine?>(null)
     val routineToDelete: StateFlow<BackupRoutine?> = _routineToDelete.asStateFlow()
 
@@ -77,6 +89,15 @@ class AdminSettingsViewModel(
 
     private val _csvImportType = MutableStateFlow("Products") // "Products" or "Users"
     val csvImportType: StateFlow<String> = _csvImportType.asStateFlow()
+
+    private val _isRestoringDb = MutableStateFlow(false)
+    val isRestoringDb: StateFlow<Boolean> = _isRestoringDb.asStateFlow()
+
+    private val _isWipingData = MutableStateFlow(false)
+    val isWipingData: StateFlow<Boolean> = _isWipingData.asStateFlow()
+
+    private val _isImportingCsv = MutableStateFlow(false)
+    val isImportingCsv: StateFlow<Boolean> = _isImportingCsv.asStateFlow()
 
     private val _showOneDriveDisconnectDialog = MutableStateFlow(false)
     val showOneDriveDisconnectDialog: StateFlow<Boolean> = _showOneDriveDisconnectDialog.asStateFlow()
@@ -258,6 +279,42 @@ class AdminSettingsViewModel(
         }
     }
 
+    fun openBackupNowLocalDialog() {
+        _showBackupNowLocalDialog.value = true
+    }
+
+    fun closeBackupNowLocalDialog() {
+        _showBackupNowLocalDialog.value = false
+    }
+
+    fun executeBackupNowLocal(
+        destinationPath: String,
+        fileType: BackupFileType,
+        writeMode: BackupWriteMode = BackupWriteMode.CREATE_NEW_FILE
+    ) {
+        val trimmedPath = destinationPath.trim()
+        if (trimmedPath.isBlank()) {
+            _errorMessage.value = I18n.get().pleaseSelectDestinationFolder
+            return
+        }
+
+        viewModelScope.launch {
+            _isExecutingBackupNow.value = true
+            _statusMessage.value = null
+            _errorMessage.value = null
+            try {
+                val generated = onExecuteBackupNowLocal?.invoke(trimmedPath, fileType, writeMode) ?: listOf("backup")
+                _lastLocalBackupPath.value = trimmedPath
+                _showBackupNowLocalDialog.value = false
+                _statusMessage.value = I18n.get().statusBackupNowSuccess(generated.size, trimmedPath)
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to create local backup: ${e.message}"
+            } finally {
+                _isExecutingBackupNow.value = false
+            }
+        }
+    }
+
     fun setRestoreDbFile(file: PlatformFile?) {
         _activeRestoreDbFile.value = file
     }
@@ -291,9 +348,10 @@ class AdminSettingsViewModel(
 
     fun executeCsvImport() {
         val preview = _csvImportPreview.value ?: return
+        if (_isImportingCsv.value) return
+        _isImportingCsv.value = true
         val file = preview.first
         val type = _csvImportType.value
-        _csvImportPreview.value = null
         viewModelScope.launch {
             try {
                 if (onExecuteCsvImport != null) {
@@ -311,14 +369,19 @@ class AdminSettingsViewModel(
                 } else {
                     _statusMessage.value = "Import executed for ${file.name}."
                 }
+                _csvImportPreview.value = null
             } catch (e: Exception) {
                 _errorMessage.value = "Import failed: ${e.message}"
+                _csvImportPreview.value = null
+            } finally {
+                _isImportingCsv.value = false
             }
         }
     }
 
     fun executeDbRestore(file: PlatformFile) {
-        _activeRestoreDbFile.value = null
+        if (_isRestoringDb.value) return
+        _isRestoringDb.value = true
         viewModelScope.launch {
             try {
                 if (onExecuteDbRestore != null) {
@@ -327,14 +390,19 @@ class AdminSettingsViewModel(
                 } else {
                     _statusMessage.value = "Database restore requested for ${file.name}."
                 }
+                _activeRestoreDbFile.value = null
             } catch (e: Exception) {
                 _errorMessage.value = "Restore failed: ${e.message}"
+                _activeRestoreDbFile.value = null
+            } finally {
+                _isRestoringDb.value = false
             }
         }
     }
 
     fun executeWipeData() {
-        _showWipeDataDialog.value = false
+        if (_isWipingData.value) return
+        _isWipingData.value = true
         viewModelScope.launch {
             try {
                 if (onExecuteWipeData != null) {
@@ -343,8 +411,12 @@ class AdminSettingsViewModel(
                 } else {
                     _statusMessage.value = "Factory Reset completed."
                 }
+                _showWipeDataDialog.value = false
             } catch (e: Exception) {
                 _errorMessage.value = "Factory Reset failed: ${e.message}"
+                _showWipeDataDialog.value = false
+            } finally {
+                _isWipingData.value = false
             }
         }
     }

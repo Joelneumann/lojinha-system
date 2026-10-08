@@ -25,6 +25,7 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlin.math.round
 import java.io.File
@@ -94,18 +95,29 @@ class BackupRestoreService(
         performDbSnapshot(targetFile)
     }
 
-    suspend fun executeRoutineBackup(routine: de.joelneumann.lojinha.domain.model.BackupRoutine): List<File> = withContext(Dispatchers.IO) {
-        val dir = File(routine.backupLocationPath)
-        require(dir.exists() && dir.isDirectory) { "Target directory does not exist: ${dir.absolutePath}" }
-        when (routine.fileType) {
-            de.joelneumann.lojinha.domain.model.BackupFileType.DB -> listOf(performDbBackup(dir, routine.writeMode))
-            de.joelneumann.lojinha.domain.model.BackupFileType.CSV -> listOf(performCsvBackup(dir, routine.writeMode))
+    suspend fun performLocalBackup(
+        destinationDir: File,
+        fileType: de.joelneumann.lojinha.domain.model.BackupFileType,
+        writeMode: de.joelneumann.lojinha.domain.model.BackupWriteMode = de.joelneumann.lojinha.domain.model.BackupWriteMode.CREATE_NEW_FILE
+    ): List<File> = withContext(Dispatchers.IO) {
+        if (!destinationDir.exists()) {
+            destinationDir.mkdirs()
+        }
+        require(destinationDir.exists() && destinationDir.isDirectory) { "Destination directory does not exist or is not a directory: ${destinationDir.absolutePath}" }
+        when (fileType) {
+            de.joelneumann.lojinha.domain.model.BackupFileType.DB -> listOf(performDbBackup(destinationDir, writeMode))
+            de.joelneumann.lojinha.domain.model.BackupFileType.CSV -> listOf(performCsvBackup(destinationDir, writeMode))
             de.joelneumann.lojinha.domain.model.BackupFileType.BOTH -> {
-                val dbResult = performDbBackup(dir, routine.writeMode)
-                val csvResult = performCsvBackup(dir, routine.writeMode)
+                val dbResult = performDbBackup(destinationDir, writeMode)
+                val csvResult = performCsvBackup(destinationDir, writeMode)
                 listOf(dbResult, csvResult)
             }
         }
+    }
+
+    suspend fun executeRoutineBackup(routine: de.joelneumann.lojinha.domain.model.BackupRoutine): List<File> = withContext(Dispatchers.IO) {
+        val dir = File(routine.backupLocationPath)
+        performLocalBackup(dir, routine.fileType, routine.writeMode)
     }
 
     suspend fun performCsvBackup(
@@ -136,7 +148,7 @@ class BackupRestoreService(
                 escapeCsv(p.id),
                 escapeCsv(p.name),
                 escapeCsv(barcodeStr),
-                escapeCsv(Formatting.formatBrl(p.basePrice)),
+                escapeCsv(Formatting.formatBrlCanonical(p.basePrice)),
                 p.unitType.name,
                 p.stockQuantity.toString(),
                 p.customMarkupPercent?.toString() ?: "",
@@ -154,7 +166,7 @@ class BackupRestoreService(
             val line = listOf(
                 escapeCsv(u.id),
                 escapeCsv(u.name),
-                escapeCsv(Formatting.formatBrl(u.balance)),
+                escapeCsv(Formatting.formatBrlCanonical(u.balance)),
                 u.language.code,
                 u.secondaryCurrency.name,
                 escapeCsv(u.pin?.let { if (de.joelneumann.lojinha.security.PasswordHasher.isHash(it)) it else de.joelneumann.lojinha.security.PasswordHasher.hash(it) } ?: ""),
@@ -184,11 +196,11 @@ class BackupRestoreService(
                 t.type.name,
                 escapeCsv(t.referenceTransactionId ?: ""),
                 escapeCsv(t.note ?: ""),
-                escapeCsv(Formatting.formatBrl(t.totalAmount)),
+                escapeCsv(Formatting.formatBrlCanonical(t.totalAmount)),
                 t.items.size.toString(),
                 escapeCsv(itemsSerialized),
-                t.userBalanceBefore?.let { escapeCsv(Formatting.formatBrl(it)) } ?: "",
-                t.userBalanceAfter?.let { escapeCsv(Formatting.formatBrl(it)) } ?: ""
+                t.userBalanceBefore?.let { escapeCsv(Formatting.formatBrlCanonical(it)) } ?: "",
+                t.userBalanceAfter?.let { escapeCsv(Formatting.formatBrlCanonical(it)) } ?: ""
             ).joinToString(",")
             txLines.add(line)
         }
@@ -202,7 +214,7 @@ class BackupRestoreService(
         val blLines = mutableListOf("listId,listName,type,basePrice,comment,isDeleted,userId,userName,quantity")
         billingLists.forEach { bl ->
             val members = billingListUsers[bl.id]
-            val priceStr = bl.basePrice?.let { Formatting.formatBrl(it) } ?: ""
+            val priceStr = bl.basePrice?.let { Formatting.formatBrlCanonical(it) } ?: ""
             if (members.isNullOrEmpty()) {
                 blLines.add(
                     listOf(
@@ -251,6 +263,7 @@ class BackupRestoreService(
         val backupRoutines = mutableListOf<BackupEntity>()
         val backupBillingLists = mutableListOf<BillingListEntity>()
         val backupBillingListUsers = mutableListOf<BillingListUserEntity>()
+        val tableNames = mutableSetOf<String>()
 
         // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
         val connection = BundledSQLiteDriver().open(backupFile.absolutePath)
@@ -268,7 +281,6 @@ class BackupRestoreService(
                 integrityStmt.close()
             }
 
-            val tableNames = mutableSetOf<String>()
             val stmtTables = connection.prepare("SELECT name FROM sqlite_master WHERE type='table'")
             try {
                 while (stmtTables.step()) {
@@ -602,29 +614,37 @@ class BackupRestoreService(
         }
 
         // 3. Atomically clear and restore active database inside an immediate transaction
-        db.useWriterConnection { transactor ->
-            transactor.immediateTransaction {
-                // Clear tables in reverse dependency order (children first)
-                db.billingListDao().deleteAllBillingListUsers()
-                db.billingListDao().deleteAllBillingLists()
-                db.userDao().deleteAllUsers()
-                db.productDao().deleteAllProducts()
-                db.transactionDao().deleteAllTransactions()
-                db.backupDao().deleteAllBackups()
+        val hasBackupRoutinesInBackup = tableNames.contains("backup_routines")
+        withContext(NonCancellable) {
+            db.useWriterConnection { transactor ->
+                transactor.immediateTransaction {
+                    // Clear tables in reverse dependency order (children first)
+                    db.billingListDao().deleteAllBillingListUsers()
+                    db.billingListDao().deleteAllBillingLists()
+                    db.userDao().deleteAllUsers()
+                    db.productDao().deleteAllProducts()
+                    db.transactionDao().deleteAllTransactions()
+                    if (hasBackupRoutinesInBackup) {
+                        db.backupDao().deleteAllBackups()
+                    }
 
-                // Insert extracted backup records (parents first)
-                backupUsers.forEach { db.userDao().insertOrUpdateUser(it) }
-                backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
-                backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
-                backupBillingLists.forEach { db.billingListDao().insertOrUpdateBillingList(it) }
-                val validUserIds = backupUsers.map { it.id }.toSet()
-                val validListIds = backupBillingLists.map { it.id }.toSet()
-                backupBillingListUsers
-                    .filter { it.userId in validUserIds && it.listId in validListIds }
-                    .forEach { db.billingListDao().insertBillingListUser(it) }
-                backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
-                if (backupSettings != null) {
-                    db.settingsDao().insertOrUpdateSettings(backupSettings)
+                    // Insert extracted backup records (parents first)
+                    backupUsers.forEach { db.userDao().insertOrUpdateUser(it) }
+                    backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
+                    backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
+                    backupBillingLists.forEach { db.billingListDao().insertOrUpdateBillingList(it) }
+                    val validUserIds = backupUsers.map { it.id }.toSet()
+                    val validListIds = backupBillingLists.map { it.id }.toSet()
+                    backupBillingListUsers
+                        .filter { it.userId in validUserIds && it.listId in validListIds }
+                        .distinctBy { it.listId to it.userId }
+                        .forEach { db.billingListDao().insertBillingListUser(it) }
+                    if (hasBackupRoutinesInBackup) {
+                        backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
+                    }
+                    if (backupSettings != null) {
+                        db.settingsDao().insertOrUpdateSettings(backupSettings)
+                    }
                 }
             }
         }
@@ -636,24 +656,26 @@ class BackupRestoreService(
             performDbSnapshot(safetyFile)
         }
 
-        db.useWriterConnection { transactor ->
-            transactor.immediateTransaction {
-                db.billingListDao().deleteAllBillingListUsers()
-                db.billingListDao().deleteAllBillingLists()
-                db.userDao().deleteAllUsers()
-                db.productDao().deleteAllProducts()
-                db.transactionDao().deleteAllTransactions()
+        withContext(NonCancellable) {
+            db.useWriterConnection { transactor ->
+                transactor.immediateTransaction {
+                    db.billingListDao().deleteAllBillingListUsers()
+                    db.billingListDao().deleteAllBillingLists()
+                    db.userDao().deleteAllUsers()
+                    db.productDao().deleteAllProducts()
+                    db.transactionDao().deleteAllTransactions()
 
-                // Reset settings to initial defaults
-                val defaultSettings = SettingsEntity(
-                    id = 1,
-                    adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin"),
-                    globalMarkupPercent = 0.0,
-                    usdExchangeRate = 0.18,
-                    eurExchangeRate = 0.16,
-                    inactivityTimeoutMinutes = 3
-                )
-                db.settingsDao().insertOrUpdateSettings(defaultSettings)
+                    // Reset settings to initial defaults
+                    val defaultSettings = SettingsEntity(
+                        id = 1,
+                        adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin"),
+                        globalMarkupPercent = 0.0,
+                        usdExchangeRate = 0.18,
+                        eurExchangeRate = 0.16,
+                        inactivityTimeoutMinutes = 3
+                    )
+                    db.settingsDao().insertOrUpdateSettings(defaultSettings)
+                }
             }
         }
     }
