@@ -58,6 +58,25 @@ class DomainAndRulesTest {
     }
 
     @Test
+    fun testUserBalanceWarningLevel() {
+        val userNegativeLarge = User(id = "1", name = "Test", balance = -5000L)
+        val userNegativeSmall = User(id = "2", name = "Test", balance = -1L)
+        val userZero = User(id = "3", name = "Test", balance = 0L)
+        val userLowMid = User(id = "4", name = "Test", balance = 15000L) // R$ 150,00
+        val userAtThreshold = User(id = "5", name = "Test", balance = 30000L) // R$ 300,00
+        val userAboveThreshold = User(id = "6", name = "Test", balance = 30001L) // R$ 300,01
+        val userHealthy = User(id = "7", name = "Test", balance = 50000L) // R$ 500,00
+
+        assertEquals(BalanceWarningLevel.NEGATIVE, userNegativeLarge.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.NEGATIVE, userNegativeSmall.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userZero.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userLowMid.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userAtThreshold.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.NORMAL, userAboveThreshold.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.NORMAL, userHealthy.balanceWarningLevel)
+    }
+
+    @Test
     fun testProductMarkupCalculations() {
         val product = Product(
             id = "p1",

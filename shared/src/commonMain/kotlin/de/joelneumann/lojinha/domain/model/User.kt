@@ -39,3 +39,12 @@ data class User(
             }
         }
 }
+
+const val LOW_BALANCE_WARNING_THRESHOLD_CENTS: Long = 300_00L // R$ 300,00
+
+val User.balanceWarningLevel: BalanceWarningLevel
+    get() = when {
+        balance < 0L -> BalanceWarningLevel.NEGATIVE
+        balance <= LOW_BALANCE_WARNING_THRESHOLD_CENTS -> BalanceWarningLevel.LOW_BALANCE
+        else -> BalanceWarningLevel.NORMAL
+    }
