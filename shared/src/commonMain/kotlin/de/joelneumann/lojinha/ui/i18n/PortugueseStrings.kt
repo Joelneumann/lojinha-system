@@ -545,6 +545,14 @@ object PortugueseStrings : AppStrings {
     override val invalidPriceError = "Preço base inválido"
     override val invalidStockError = "Quantidade de estoque inválida"
     override val invalidExchangeRateError = "Taxa inválida (deve ser um número positivo)"
+    override val updateRatesFromApiButton = "Atualizar via API"
+    override val updatingRatesButton = "Atualizando..."
+    override val autoUpdateRatesOnStartupLabel = "Atualizar taxas automaticamente ao iniciar o aplicativo"
+    override fun ratesLastUpdated(timestamp: String): String = "Última atualização via API: $timestamp"
+    override val ratesNeverUpdated = "Ainda não atualizado via API"
+    override fun statusRatesUpdatedSuccess(usd: Double, eur: Double, provider: String): String =
+        "Taxas de câmbio atualizadas: 1 BRL = $usd USD, $eur EUR ($provider)"
+    override val errorFailedToFetchRates = "Falha ao obter taxas de câmbio"
     override val fatalImportErrorsHeader = "Erros fatais de importação:"
     override val lastExecutionTimeLabel = "Última Execução:"
 

@@ -112,6 +112,20 @@ object DatabaseFactory {
         }
     }
 
+    private val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v13 -> v14 (adding autoUpdateExchangeRates and lastExchangeRateUpdateTimestamp to settings)...")
+            try {
+                connection.execSQL("ALTER TABLE settings ADD COLUMN autoUpdateExchangeRates INTEGER NOT NULL DEFAULT 1")
+                connection.execSQL("ALTER TABLE settings ADD COLUMN lastExchangeRateUpdateTimestamp INTEGER DEFAULT NULL")
+                AppLogger.info(TAG, "Database migration v13 -> v14 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v13 -> v14 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
     @Volatile
     private var instance: AppDatabase? = null
 
@@ -164,7 +178,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")
@@ -233,7 +247,9 @@ object DatabaseFactory {
                     globalMarkupPercent = 0.0,
                     usdExchangeRate = 0.18,
                     eurExchangeRate = 0.16,
-                    inactivityTimeoutMinutes = 3
+                    inactivityTimeoutMinutes = 3,
+                    autoUpdateExchangeRates = true,
+                    lastExchangeRateUpdateTimestamp = null
                 )
             )
         } else {

@@ -545,6 +545,14 @@ object EnglishStrings : AppStrings {
     override val invalidPriceError = "Invalid base price"
     override val invalidStockError = "Invalid stock quantity"
     override val invalidExchangeRateError = "Invalid rate (must be a positive number)"
+    override val updateRatesFromApiButton = "Update via API"
+    override val updatingRatesButton = "Updating..."
+    override val autoUpdateRatesOnStartupLabel = "Update rates automatically on application startup"
+    override fun ratesLastUpdated(timestamp: String): String = "Last updated via API: $timestamp"
+    override val ratesNeverUpdated = "Not yet updated via API"
+    override fun statusRatesUpdatedSuccess(usd: Double, eur: Double, provider: String): String =
+        "Exchange rates updated: 1 BRL = $usd USD, $eur EUR ($provider)"
+    override val errorFailedToFetchRates = "Failed to fetch exchange rates"
     override val fatalImportErrorsHeader = "Fatal Import Errors:"
     override val lastExecutionTimeLabel = "Last Executed:"
 

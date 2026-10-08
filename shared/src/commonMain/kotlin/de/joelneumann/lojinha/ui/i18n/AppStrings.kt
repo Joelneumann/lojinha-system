@@ -533,6 +533,13 @@ interface AppStrings {
     val invalidPriceError: String
     val invalidStockError: String
     val invalidExchangeRateError: String
+    val updateRatesFromApiButton: String
+    val updatingRatesButton: String
+    val autoUpdateRatesOnStartupLabel: String
+    fun ratesLastUpdated(timestamp: String): String
+    val ratesNeverUpdated: String
+    fun statusRatesUpdatedSuccess(usd: Double, eur: Double, provider: String): String
+    val errorFailedToFetchRates: String
     val fatalImportErrorsHeader: String
     val lastExecutionTimeLabel: String
 

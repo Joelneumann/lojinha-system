@@ -9,6 +9,8 @@ import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.data.service.CurrencyRateService
+import de.joelneumann.lojinha.data.service.CurrencyRates
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
@@ -910,5 +912,82 @@ class AdminViewModelsTest {
         assertFalse(viewModel.isExecutingBackupNow.value)
         assertEquals("Failed to create local backup: Read-only filesystem", viewModel.errorMessage.value)
         assertNull(viewModel.statusMessage.value)
+    }
+
+    private class FakeCurrencyRateService(
+        var result: Result<CurrencyRates> = Result.success(CurrencyRates(usdRate = 0.1993, eurRate = 0.1782, timestamp = 1700000000000L, provider = "Frankfurter API"))
+    ) : CurrencyRateService {
+        var fetchCount = 0
+        override suspend fun fetchRates(): Result<CurrencyRates> {
+            fetchCount++
+            return result
+        }
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_fetchExchangeRates_success_updatesSettingsAndSetsStatusMessage() = runTest {
+        val initialSettings = SystemSettings(usdExchangeRate = 0.18, eurExchangeRate = 0.16)
+        val settingsRepo = TestSettingsRepository(initialSettings)
+        val fakeService = FakeCurrencyRateService(
+            Result.success(CurrencyRates(usdRate = 0.205, eurRate = 0.185, timestamp = 1720000000000L, provider = "Frankfurter API"))
+        )
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            currencyRateService = fakeService
+        )
+
+        var callbackUsd = 0.0
+        var callbackEur = 0.0
+        viewModel.fetchExchangeRates { u, e ->
+            callbackUsd = u
+            callbackEur = e
+        }
+
+        assertEquals(1, fakeService.fetchCount)
+        assertEquals(0.205, callbackUsd)
+        assertEquals(0.185, callbackEur)
+        assertEquals(0.205, settingsRepo.updatedSettings?.usdExchangeRate)
+        assertEquals(0.185, settingsRepo.updatedSettings?.eurExchangeRate)
+        assertEquals(1720000000000L, settingsRepo.updatedSettings?.lastExchangeRateUpdateTimestamp)
+        assertEquals(I18n.get().statusRatesUpdatedSuccess(0.205, 0.185, "Frankfurter API"), viewModel.statusMessage.value)
+        assertNull(viewModel.errorMessage.value)
+        assertFalse(viewModel.isFetchingRates.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_fetchExchangeRates_failure_setsErrorMessageAndPreservesSettings() = runTest {
+        val initialSettings = SystemSettings(usdExchangeRate = 0.18, eurExchangeRate = 0.16)
+        val settingsRepo = TestSettingsRepository(initialSettings)
+        val fakeService = FakeCurrencyRateService(
+            Result.failure(IllegalStateException("No internet connection"))
+        )
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            currencyRateService = fakeService
+        )
+
+        viewModel.fetchExchangeRates()
+
+        assertEquals(1, fakeService.fetchCount)
+        assertNull(settingsRepo.updatedSettings)
+        assertTrue(viewModel.errorMessage.value?.contains("No internet connection") == true)
+        assertNull(viewModel.statusMessage.value)
+        assertFalse(viewModel.isFetchingRates.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_fetchExchangeRates_serviceNotConfigured_setsErrorMessage() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            currencyRateService = null
+        )
+
+        viewModel.fetchExchangeRates()
+
+        assertNull(settingsRepo.updatedSettings)
+        assertTrue(viewModel.errorMessage.value?.contains("Service not available") == true)
+        assertNull(viewModel.statusMessage.value)
+        assertFalse(viewModel.isFetchingRates.value)
     }
 }

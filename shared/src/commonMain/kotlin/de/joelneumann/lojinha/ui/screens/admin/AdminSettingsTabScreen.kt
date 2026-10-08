@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.ui.screens.admin
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import de.joelneumann.lojinha.AppVersion
@@ -49,6 +50,7 @@ fun AdminSettingsTabScreen(
     val settings by viewModel.settings.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isFetchingRates by viewModel.isFetchingRates.collectAsState()
     val activeRestoreDbFile by viewModel.activeRestoreDbFile.collectAsState()
     val showWipeDataDialog by viewModel.showWipeDataDialog.collectAsState()
     val csvImportPreview by viewModel.csvImportPreview.collectAsState()
@@ -77,18 +79,20 @@ fun AdminSettingsTabScreen(
     var globalMarkup by remember { mutableStateOf(Formatting.formatDecimal(settings.globalMarkupPercent)) }
     var usdRate by remember { mutableStateOf(Formatting.formatDecimal(settings.usdExchangeRate)) }
     var eurRate by remember { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
+    var autoUpdateExchangeRates by remember { mutableStateOf(settings.autoUpdateExchangeRates) }
     var inactivityTimeout by remember { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
     var supportEmail by remember { mutableStateOf(settings.supportEmail ?: "") }
     var isSupportEmailLocked by remember { mutableStateOf(supportEmail.isNotBlank()) }
     var showUnlockSupportEmailDialog by remember { mutableStateOf(false) }
 
     val hasFieldChanges = remember(
-        settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout, supportEmail
+        settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, autoUpdateExchangeRates, inactivityTimeout, supportEmail
     ) {
         (newPassword.isNotEmpty() || confirmPassword.isNotEmpty()) ||
                 globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent) ||
                 usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate) ||
                 eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate) ||
+                autoUpdateExchangeRates != settings.autoUpdateExchangeRates ||
                 inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
                 supportEmail.trim() != (settings.supportEmail ?: "")
     }
@@ -99,6 +103,7 @@ fun AdminSettingsTabScreen(
             globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
             usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
+            autoUpdateExchangeRates = settings.autoUpdateExchangeRates
             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
             supportEmail = settings.supportEmail ?: ""
             isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
@@ -184,6 +189,7 @@ fun AdminSettingsTabScreen(
                             globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
                             usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
                             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
+                            autoUpdateExchangeRates = settings.autoUpdateExchangeRates
                             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
                             supportEmail = settings.supportEmail ?: ""
                             isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
@@ -216,7 +222,8 @@ fun AdminSettingsTabScreen(
                                 usdExchangeRate = parsedUsdRate ?: settings.usdExchangeRate,
                                 eurExchangeRate = parsedEurRate ?: settings.eurExchangeRate,
                                 inactivityTimeoutMinutes = (inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes).coerceIn(2, 1440),
-                                supportEmail = supportEmail.trim().takeIf { it.isNotBlank() }
+                                supportEmail = supportEmail.trim().takeIf { it.isNotBlank() },
+                                autoUpdateExchangeRates = autoUpdateExchangeRates
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
@@ -359,17 +366,69 @@ fun AdminSettingsTabScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.CurrencyExchange,
-                                contentDescription = null,
-                                tint = PrimaryNavy,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(strings.currencyExchangeRatesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CurrencyExchange,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.currencyExchangeRatesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.fetchExchangeRates { newUsd, newEur ->
+                                        usdRate = Formatting.formatDecimal(newUsd)
+                                        eurRate = Formatting.formatDecimal(newEur)
+                                    }
+                                },
+                                enabled = !isFetchingRates,
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = AccentNavy
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (isFetchingRates) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(14.dp),
+                                            strokeWidth = 2.dp,
+                                            color = AccentNavy
+                                        )
+                                        Text(strings.updatingRatesButton, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.Sync,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(strings.updateRatesFromApiButton, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
                         }
+
+                        val lastUpdatedText = settings.lastExchangeRateUpdateTimestamp?.let {
+                            strings.ratesLastUpdated(Formatting.formatTimestamp(it))
+                        } ?: strings.ratesNeverUpdated
+                        Text(
+                            text = lastUpdatedText,
+                            fontSize = 12.sp,
+                            color = TextSecondaryMuted
+                        )
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -409,6 +468,30 @@ fun AdminSettingsTabScreen(
                                     )
                                 }
                             }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { autoUpdateExchangeRates = !autoUpdateExchangeRates }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Switch(
+                                checked = autoUpdateExchangeRates,
+                                onCheckedChange = { autoUpdateExchangeRates = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SurfaceWhite,
+                                    checkedTrackColor = AccentNavy
+                                )
+                            )
+                            Text(
+                                text = strings.autoUpdateRatesOnStartupLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = PrimaryNavy
+                            )
                         }
                     }
                 }
