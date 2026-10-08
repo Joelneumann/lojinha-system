@@ -90,6 +90,15 @@ class AdminSettingsViewModel(
     private val _csvImportType = MutableStateFlow("Products") // "Products" or "Users"
     val csvImportType: StateFlow<String> = _csvImportType.asStateFlow()
 
+    private val _isRestoringDb = MutableStateFlow(false)
+    val isRestoringDb: StateFlow<Boolean> = _isRestoringDb.asStateFlow()
+
+    private val _isWipingData = MutableStateFlow(false)
+    val isWipingData: StateFlow<Boolean> = _isWipingData.asStateFlow()
+
+    private val _isImportingCsv = MutableStateFlow(false)
+    val isImportingCsv: StateFlow<Boolean> = _isImportingCsv.asStateFlow()
+
     private val _showOneDriveDisconnectDialog = MutableStateFlow(false)
     val showOneDriveDisconnectDialog: StateFlow<Boolean> = _showOneDriveDisconnectDialog.asStateFlow()
 
@@ -339,9 +348,10 @@ class AdminSettingsViewModel(
 
     fun executeCsvImport() {
         val preview = _csvImportPreview.value ?: return
+        if (_isImportingCsv.value) return
+        _isImportingCsv.value = true
         val file = preview.first
         val type = _csvImportType.value
-        _csvImportPreview.value = null
         viewModelScope.launch {
             try {
                 if (onExecuteCsvImport != null) {
@@ -359,14 +369,19 @@ class AdminSettingsViewModel(
                 } else {
                     _statusMessage.value = "Import executed for ${file.name}."
                 }
+                _csvImportPreview.value = null
             } catch (e: Exception) {
                 _errorMessage.value = "Import failed: ${e.message}"
+                _csvImportPreview.value = null
+            } finally {
+                _isImportingCsv.value = false
             }
         }
     }
 
     fun executeDbRestore(file: PlatformFile) {
-        _activeRestoreDbFile.value = null
+        if (_isRestoringDb.value) return
+        _isRestoringDb.value = true
         viewModelScope.launch {
             try {
                 if (onExecuteDbRestore != null) {
@@ -375,14 +390,19 @@ class AdminSettingsViewModel(
                 } else {
                     _statusMessage.value = "Database restore requested for ${file.name}."
                 }
+                _activeRestoreDbFile.value = null
             } catch (e: Exception) {
                 _errorMessage.value = "Restore failed: ${e.message}"
+                _activeRestoreDbFile.value = null
+            } finally {
+                _isRestoringDb.value = false
             }
         }
     }
 
     fun executeWipeData() {
-        _showWipeDataDialog.value = false
+        if (_isWipingData.value) return
+        _isWipingData.value = true
         viewModelScope.launch {
             try {
                 if (onExecuteWipeData != null) {
@@ -391,8 +411,12 @@ class AdminSettingsViewModel(
                 } else {
                     _statusMessage.value = "Factory Reset completed."
                 }
+                _showWipeDataDialog.value = false
             } catch (e: Exception) {
                 _errorMessage.value = "Factory Reset failed: ${e.message}"
+                _showWipeDataDialog.value = false
+            } finally {
+                _isWipingData.value = false
             }
         }
     }

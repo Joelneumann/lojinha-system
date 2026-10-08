@@ -713,4 +713,83 @@ class BackupRestoreServiceJvmTest {
         assertEquals("lojinha_backup_latest.db", secondResults.first().name)
         assertEquals(firstResults.first().absolutePath, secondResults.first().absolutePath)
     }
+
+    @Test
+    fun testRestoreDbPreservesActiveRoutinesWhenBackupLacksBackupRoutinesTable() = runTest {
+        // 1. Seed active database with a backup routine
+        val activeRoutine = BackupEntity(
+            id = "active-r1",
+            name = "Active Routine",
+            isEnabled = true,
+            type = "TIMED",
+            fileType = "DB",
+            writeMode = "CREATE_NEW_FILE",
+            scheduleConfig = BackupScheduleConfig.Timed("04:00"),
+            backupLocationPath = tempDir.absolutePath,
+            lastBackupTimestamp = 1700000000000L
+        )
+        db.backupDao().insertOrUpdateBackup(activeRoutine)
+        assertEquals(1, db.backupDao().getAllBackups().size)
+
+        // 2. Create a legacy backup SQLite database that has users, but NO backup_routines table
+        val legacyDbFile = File(tempDir, "legacy_no_routines.db")
+        val driver = BundledSQLiteDriver()
+        val conn = driver.open(legacyDbFile.absolutePath)
+        try {
+            val s1 = conn.prepare("CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, balance INTEGER NOT NULL, language TEXT NOT NULL, secondaryCurrency TEXT NOT NULL, pin TEXT, userBarcode TEXT, userBarcodeNumber TEXT, isActive INTEGER NOT NULL, isDeleted INTEGER NOT NULL, avatarType TEXT NOT NULL, avatarEmoji TEXT NOT NULL, avatarColor TEXT NOT NULL)")
+            s1.step(); s1.close()
+            val s2 = conn.prepare("INSERT INTO users VALUES ('u-legacy', 'Legacy User', 2000, 'de', 'EUR', NULL, NULL, NULL, 1, 0, 'INITIALS', '😀', '#1E293B')")
+            s2.step(); s2.close()
+        } finally {
+            conn.close()
+        }
+
+        // 3. Restore the legacy database
+        service.restoreDbFromBackup(legacyDbFile)
+
+        // 4. Assert: user was restored, AND active routine was NOT wiped!
+        val users = db.userDao().getAllUsers()
+        assertEquals(1, users.size)
+        assertEquals("Legacy User", users.first().name)
+
+        val routines = db.backupDao().getAllBackups()
+        assertEquals(1, routines.size, "Active backup routines must be preserved when restoring legacy DB lacking backup_routines")
+        assertEquals("active-r1", routines.first().id)
+    }
+
+    @Test
+    fun testRestoreDbHandlesDuplicateBillingListUsersWithoutCrashing() = runTest {
+        // Create a backup SQLite DB with users, billing_lists, and DUPLICATE billing_list_users (same listId and userId)
+        val backupFile = File(tempDir, "dup_blu.db")
+        val driver = BundledSQLiteDriver()
+        val conn = driver.open(backupFile.absolutePath)
+        try {
+            val s1 = conn.prepare("CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, balance INTEGER NOT NULL, language TEXT NOT NULL, secondaryCurrency TEXT NOT NULL, pin TEXT, userBarcode TEXT, userBarcodeNumber TEXT, isActive INTEGER NOT NULL, isDeleted INTEGER NOT NULL, avatarType TEXT NOT NULL, avatarEmoji TEXT NOT NULL, avatarColor TEXT NOT NULL)")
+            s1.step(); s1.close()
+            val s2 = conn.prepare("INSERT INTO users VALUES ('u-dup', 'Dup User', 100, 'de', 'EUR', NULL, NULL, NULL, 1, 0, 'INITIALS', '😀', '#1E293B')")
+            s2.step(); s2.close()
+
+            val s3 = conn.prepare("CREATE TABLE billing_lists (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL, basePrice INTEGER, comment TEXT, isDeleted INTEGER NOT NULL, lastExecutionTime INTEGER)")
+            s3.step(); s3.close()
+            val s4 = conn.prepare("INSERT INTO billing_lists VALUES ('bl-1', 'List 1', 'USER', 500, NULL, 0, NULL)")
+            s4.step(); s4.close()
+
+            // In legacy DB, billing_list_users has two rows for same listId and userId with different IDs
+            val s5 = conn.prepare("CREATE TABLE billing_list_users (id TEXT PRIMARY KEY NOT NULL, listId TEXT NOT NULL, userId TEXT NOT NULL, quantity INTEGER NOT NULL)")
+            s5.step(); s5.close()
+            val s6 = conn.prepare("INSERT INTO billing_list_users VALUES ('blu-1', 'bl-1', 'u-dup', 1)")
+            s6.step(); s6.close()
+            val s7 = conn.prepare("INSERT INTO billing_list_users VALUES ('blu-2', 'bl-1', 'u-dup', 2)")
+            s7.step(); s7.close()
+        } finally {
+            conn.close()
+        }
+
+        // Restore should NOT throw SQLiteConstraintException and should deduplicate properly
+        service.restoreDbFromBackup(backupFile)
+
+        val restoredMembers = db.billingListDao().getAllBillingListUsers()
+        assertEquals(1, restoredMembers.size, "Duplicate composite key entries must be filtered to a single entry")
+        assertEquals("u-dup", restoredMembers.first().userId)
+    }
 }

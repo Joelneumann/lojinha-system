@@ -25,6 +25,7 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlin.math.round
 import java.io.File
@@ -262,6 +263,7 @@ class BackupRestoreService(
         val backupRoutines = mutableListOf<BackupEntity>()
         val backupBillingLists = mutableListOf<BillingListEntity>()
         val backupBillingListUsers = mutableListOf<BillingListUserEntity>()
+        val tableNames = mutableSetOf<String>()
 
         // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
         val connection = BundledSQLiteDriver().open(backupFile.absolutePath)
@@ -279,7 +281,6 @@ class BackupRestoreService(
                 integrityStmt.close()
             }
 
-            val tableNames = mutableSetOf<String>()
             val stmtTables = connection.prepare("SELECT name FROM sqlite_master WHERE type='table'")
             try {
                 while (stmtTables.step()) {
@@ -613,29 +614,37 @@ class BackupRestoreService(
         }
 
         // 3. Atomically clear and restore active database inside an immediate transaction
-        db.useWriterConnection { transactor ->
-            transactor.immediateTransaction {
-                // Clear tables in reverse dependency order (children first)
-                db.billingListDao().deleteAllBillingListUsers()
-                db.billingListDao().deleteAllBillingLists()
-                db.userDao().deleteAllUsers()
-                db.productDao().deleteAllProducts()
-                db.transactionDao().deleteAllTransactions()
-                db.backupDao().deleteAllBackups()
+        val hasBackupRoutinesInBackup = tableNames.contains("backup_routines")
+        withContext(NonCancellable) {
+            db.useWriterConnection { transactor ->
+                transactor.immediateTransaction {
+                    // Clear tables in reverse dependency order (children first)
+                    db.billingListDao().deleteAllBillingListUsers()
+                    db.billingListDao().deleteAllBillingLists()
+                    db.userDao().deleteAllUsers()
+                    db.productDao().deleteAllProducts()
+                    db.transactionDao().deleteAllTransactions()
+                    if (hasBackupRoutinesInBackup) {
+                        db.backupDao().deleteAllBackups()
+                    }
 
-                // Insert extracted backup records (parents first)
-                backupUsers.forEach { db.userDao().insertOrUpdateUser(it) }
-                backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
-                backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
-                backupBillingLists.forEach { db.billingListDao().insertOrUpdateBillingList(it) }
-                val validUserIds = backupUsers.map { it.id }.toSet()
-                val validListIds = backupBillingLists.map { it.id }.toSet()
-                backupBillingListUsers
-                    .filter { it.userId in validUserIds && it.listId in validListIds }
-                    .forEach { db.billingListDao().insertBillingListUser(it) }
-                backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
-                if (backupSettings != null) {
-                    db.settingsDao().insertOrUpdateSettings(backupSettings)
+                    // Insert extracted backup records (parents first)
+                    backupUsers.forEach { db.userDao().insertOrUpdateUser(it) }
+                    backupProducts.forEach { db.productDao().insertOrUpdateProduct(it) }
+                    backupTransactions.forEach { db.transactionDao().insertTransaction(it) }
+                    backupBillingLists.forEach { db.billingListDao().insertOrUpdateBillingList(it) }
+                    val validUserIds = backupUsers.map { it.id }.toSet()
+                    val validListIds = backupBillingLists.map { it.id }.toSet()
+                    backupBillingListUsers
+                        .filter { it.userId in validUserIds && it.listId in validListIds }
+                        .distinctBy { it.listId to it.userId }
+                        .forEach { db.billingListDao().insertBillingListUser(it) }
+                    if (hasBackupRoutinesInBackup) {
+                        backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
+                    }
+                    if (backupSettings != null) {
+                        db.settingsDao().insertOrUpdateSettings(backupSettings)
+                    }
                 }
             }
         }
@@ -647,24 +656,26 @@ class BackupRestoreService(
             performDbSnapshot(safetyFile)
         }
 
-        db.useWriterConnection { transactor ->
-            transactor.immediateTransaction {
-                db.billingListDao().deleteAllBillingListUsers()
-                db.billingListDao().deleteAllBillingLists()
-                db.userDao().deleteAllUsers()
-                db.productDao().deleteAllProducts()
-                db.transactionDao().deleteAllTransactions()
+        withContext(NonCancellable) {
+            db.useWriterConnection { transactor ->
+                transactor.immediateTransaction {
+                    db.billingListDao().deleteAllBillingListUsers()
+                    db.billingListDao().deleteAllBillingLists()
+                    db.userDao().deleteAllUsers()
+                    db.productDao().deleteAllProducts()
+                    db.transactionDao().deleteAllTransactions()
 
-                // Reset settings to initial defaults
-                val defaultSettings = SettingsEntity(
-                    id = 1,
-                    adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin"),
-                    globalMarkupPercent = 0.0,
-                    usdExchangeRate = 0.18,
-                    eurExchangeRate = 0.16,
-                    inactivityTimeoutMinutes = 3
-                )
-                db.settingsDao().insertOrUpdateSettings(defaultSettings)
+                    // Reset settings to initial defaults
+                    val defaultSettings = SettingsEntity(
+                        id = 1,
+                        adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin"),
+                        globalMarkupPercent = 0.0,
+                        usdExchangeRate = 0.18,
+                        eurExchangeRate = 0.16,
+                        inactivityTimeoutMinutes = 3
+                    )
+                    db.settingsDao().insertOrUpdateSettings(defaultSettings)
+                }
             }
         }
     }

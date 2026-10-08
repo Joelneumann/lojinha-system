@@ -53,6 +53,9 @@ fun AdminSettingsTabScreen(
     val showWipeDataDialog by viewModel.showWipeDataDialog.collectAsState()
     val csvImportPreview by viewModel.csvImportPreview.collectAsState()
     val csvImportType by viewModel.csvImportType.collectAsState()
+    val isRestoringDb by viewModel.isRestoringDb.collectAsState()
+    val isWipingData by viewModel.isWipingData.collectAsState()
+    val isImportingCsv by viewModel.isImportingCsv.collectAsState()
     val logFolderSize by viewModel.logFolderSize.collectAsState()
 
     val listState = rememberLazyListState()
@@ -1542,6 +1545,7 @@ fun AdminSettingsTabScreen(
         DbRestoreMultiApprovalDialog(
             file = activeRestoreDbFile!!,
             adminPasswordHash = settings.adminPasswordHash,
+            isExecuting = isRestoringDb,
             onConfirmRestore = {
                 viewModel.executeDbRestore(activeRestoreDbFile!!)
             },
@@ -1554,6 +1558,7 @@ fun AdminSettingsTabScreen(
     if (showWipeDataDialog) {
         WipeDataMultiApprovalDialog(
             adminPasswordHash = settings.adminPasswordHash,
+            isExecuting = isWipingData,
             onConfirmWipe = {
                 viewModel.executeWipeData()
             },
@@ -1569,6 +1574,7 @@ fun AdminSettingsTabScreen(
             importResultPreview = csvImportPreview!!.second,
             importType = csvImportType,
             adminPasswordHash = settings.adminPasswordHash,
+            isExecuting = isImportingCsv,
             onConfirmImport = {
                 viewModel.executeCsvImport()
             },
