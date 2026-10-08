@@ -665,4 +665,52 @@ class BackupRestoreServiceJvmTest {
         val txsZero = db.transactionDao().getTransactionsByUserId("u-zero")
         assertEquals(0, txsZero.size)
     }
+
+    @Test
+    fun testPerformLocalBackup_dbOnly() = runTest {
+        val destDir = File(tempDir, "manual_local_db_backup").apply { mkdirs() }
+        val results = service.performLocalBackup(destDir, BackupFileType.DB, BackupWriteMode.CREATE_NEW_FILE)
+        assertEquals(1, results.size)
+        val backupFile = results.first()
+        assertTrue(backupFile.exists())
+        assertTrue(backupFile.name.startsWith("lojinha_backup_") && backupFile.name.endsWith(".db"))
+        assertTrue(backupFile.length() > 0)
+    }
+
+    @Test
+    fun testPerformLocalBackup_csvOnly() = runTest {
+        val destDir = File(tempDir, "manual_local_csv_backup").apply { mkdirs() }
+        val results = service.performLocalBackup(destDir, BackupFileType.CSV, BackupWriteMode.CREATE_NEW_FILE)
+        assertEquals(1, results.size)
+        val csvDir = results.first()
+        assertTrue(csvDir.exists() && csvDir.isDirectory)
+        assertTrue(File(csvDir, "products.csv").exists())
+        assertTrue(File(csvDir, "users.csv").exists())
+        assertTrue(File(csvDir, "transactions.csv").exists())
+        assertTrue(File(csvDir, "billing_lists.csv").exists())
+    }
+
+    @Test
+    fun testPerformLocalBackup_both() = runTest {
+        val destDir = File(tempDir, "manual_local_both_backup").apply { mkdirs() }
+        val results = service.performLocalBackup(destDir, BackupFileType.BOTH, BackupWriteMode.CREATE_NEW_FILE)
+        assertEquals(2, results.size)
+        val dbFile = results.find { it.name.endsWith(".db") }
+        val csvDir = results.find { it.isDirectory }
+        assertNotNull(dbFile)
+        assertTrue(dbFile.exists() && dbFile.length() > 0)
+        assertNotNull(csvDir)
+        assertTrue(csvDir.exists() && csvDir.isDirectory)
+        assertTrue(File(csvDir, "products.csv").exists())
+    }
+
+    @Test
+    fun testPerformLocalBackup_overwriteLatest() = runTest {
+        val destDir = File(tempDir, "manual_local_overwrite_backup").apply { mkdirs() }
+        val firstResults = service.performLocalBackup(destDir, BackupFileType.DB, BackupWriteMode.OVERWRITE_LATEST)
+        assertEquals("lojinha_backup_latest.db", firstResults.first().name)
+        val secondResults = service.performLocalBackup(destDir, BackupFileType.DB, BackupWriteMode.OVERWRITE_LATEST)
+        assertEquals("lojinha_backup_latest.db", secondResults.first().name)
+        assertEquals(firstResults.first().absolutePath, secondResults.first().absolutePath)
+    }
 }

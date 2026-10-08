@@ -94,18 +94,29 @@ class BackupRestoreService(
         performDbSnapshot(targetFile)
     }
 
-    suspend fun executeRoutineBackup(routine: de.joelneumann.lojinha.domain.model.BackupRoutine): List<File> = withContext(Dispatchers.IO) {
-        val dir = File(routine.backupLocationPath)
-        require(dir.exists() && dir.isDirectory) { "Target directory does not exist: ${dir.absolutePath}" }
-        when (routine.fileType) {
-            de.joelneumann.lojinha.domain.model.BackupFileType.DB -> listOf(performDbBackup(dir, routine.writeMode))
-            de.joelneumann.lojinha.domain.model.BackupFileType.CSV -> listOf(performCsvBackup(dir, routine.writeMode))
+    suspend fun performLocalBackup(
+        destinationDir: File,
+        fileType: de.joelneumann.lojinha.domain.model.BackupFileType,
+        writeMode: de.joelneumann.lojinha.domain.model.BackupWriteMode = de.joelneumann.lojinha.domain.model.BackupWriteMode.CREATE_NEW_FILE
+    ): List<File> = withContext(Dispatchers.IO) {
+        if (!destinationDir.exists()) {
+            destinationDir.mkdirs()
+        }
+        require(destinationDir.exists() && destinationDir.isDirectory) { "Destination directory does not exist or is not a directory: ${destinationDir.absolutePath}" }
+        when (fileType) {
+            de.joelneumann.lojinha.domain.model.BackupFileType.DB -> listOf(performDbBackup(destinationDir, writeMode))
+            de.joelneumann.lojinha.domain.model.BackupFileType.CSV -> listOf(performCsvBackup(destinationDir, writeMode))
             de.joelneumann.lojinha.domain.model.BackupFileType.BOTH -> {
-                val dbResult = performDbBackup(dir, routine.writeMode)
-                val csvResult = performCsvBackup(dir, routine.writeMode)
+                val dbResult = performDbBackup(destinationDir, writeMode)
+                val csvResult = performCsvBackup(destinationDir, writeMode)
                 listOf(dbResult, csvResult)
             }
         }
+    }
+
+    suspend fun executeRoutineBackup(routine: de.joelneumann.lojinha.domain.model.BackupRoutine): List<File> = withContext(Dispatchers.IO) {
+        val dir = File(routine.backupLocationPath)
+        performLocalBackup(dir, routine.fileType, routine.writeMode)
     }
 
     suspend fun performCsvBackup(

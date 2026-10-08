@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.data.service.OneDriveBackupService
 import de.joelneumann.lojinha.domain.model.DeviceCodeResponse
 import de.joelneumann.lojinha.domain.model.BackupRoutine
+import de.joelneumann.lojinha.domain.model.BackupFileType
+import de.joelneumann.lojinha.domain.model.BackupWriteMode
 import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.repository.BackupRepository
@@ -21,6 +23,7 @@ class AdminSettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val backupRepository: BackupRepository? = null,
     private val onRunRoutineNow: (suspend (BackupRoutine) -> Unit)? = null,
+    private val onExecuteBackupNowLocal: (suspend (destinationPath: String, fileType: BackupFileType, writeMode: BackupWriteMode) -> List<String>)? = null,
     private val oneDriveBackupService: OneDriveBackupService? = null,
     private val onPreviewCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
     private val onExecuteCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
@@ -53,6 +56,15 @@ class AdminSettingsViewModel(
 
     private val _showRoutineDialog = MutableStateFlow(false)
     val showRoutineDialog: StateFlow<Boolean> = _showRoutineDialog.asStateFlow()
+
+    private val _showBackupNowLocalDialog = MutableStateFlow(false)
+    val showBackupNowLocalDialog: StateFlow<Boolean> = _showBackupNowLocalDialog.asStateFlow()
+
+    private val _isExecutingBackupNow = MutableStateFlow(false)
+    val isExecutingBackupNow: StateFlow<Boolean> = _isExecutingBackupNow.asStateFlow()
+
+    private val _lastLocalBackupPath = MutableStateFlow("")
+    val lastLocalBackupPath: StateFlow<String> = _lastLocalBackupPath.asStateFlow()
 
     private val _routineToDelete = MutableStateFlow<BackupRoutine?>(null)
     val routineToDelete: StateFlow<BackupRoutine?> = _routineToDelete.asStateFlow()
@@ -254,6 +266,42 @@ class AdminSettingsViewModel(
                 _statusMessage.value = "Triggered routine '${routine.name}'."
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to run routine '${routine.name}': ${e.message}"
+            }
+        }
+    }
+
+    fun openBackupNowLocalDialog() {
+        _showBackupNowLocalDialog.value = true
+    }
+
+    fun closeBackupNowLocalDialog() {
+        _showBackupNowLocalDialog.value = false
+    }
+
+    fun executeBackupNowLocal(
+        destinationPath: String,
+        fileType: BackupFileType,
+        writeMode: BackupWriteMode = BackupWriteMode.CREATE_NEW_FILE
+    ) {
+        val trimmedPath = destinationPath.trim()
+        if (trimmedPath.isBlank()) {
+            _errorMessage.value = I18n.get().pleaseSelectDestinationFolder
+            return
+        }
+
+        viewModelScope.launch {
+            _isExecutingBackupNow.value = true
+            _statusMessage.value = null
+            _errorMessage.value = null
+            try {
+                val generated = onExecuteBackupNowLocal?.invoke(trimmedPath, fileType, writeMode) ?: listOf("backup")
+                _lastLocalBackupPath.value = trimmedPath
+                _showBackupNowLocalDialog.value = false
+                _statusMessage.value = I18n.get().statusBackupNowSuccess(generated.size, trimmedPath)
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to create local backup: ${e.message}"
+            } finally {
+                _isExecutingBackupNow.value = false
             }
         }
     }

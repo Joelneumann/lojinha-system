@@ -312,6 +312,13 @@ interface AppStrings {
     val deleteBackupRoutineConfirmTitle: String
     val deleteBackupRoutineConfirmMsg: String
     val deleteRoutineBtn: String
+    val backupNowLocalBtn: String
+    val backupNowLocalTitle: String
+    val backupNowLocalDescription: String
+    val backupNowActionBtn: String
+    val backingUpInProgress: String
+    val pleaseSelectDestinationFolder: String
+    fun statusBackupNowSuccess(count: Int, path: String): String
     val activateBackupRoutineTitle: String
     val deactivateBackupRoutineTitle: String
     fun activateBackupRoutineMsg(name: String): String

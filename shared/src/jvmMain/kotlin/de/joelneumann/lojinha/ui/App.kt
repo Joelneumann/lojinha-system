@@ -357,6 +357,11 @@ fun App(
                                 onRunRoutineNow = { routine ->
                                     autoBackupScheduler.executeRoutine(routine)
                                 },
+                                onExecuteBackupNowLocal = { path, fileType, writeMode ->
+                                    val dir = java.io.File(path)
+                                    val generatedFiles = backupRestoreService.performLocalBackup(dir, fileType, writeMode)
+                                    generatedFiles.map { it.name }
+                                },
                                 oneDriveBackupService = oneDriveBackupService,
                                 onPreviewCsvImport = { platformFile, type ->
                                     val file = java.io.File(platformFile.absolutePath)

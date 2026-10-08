@@ -813,4 +813,102 @@ class AdminViewModelsTest {
             viewModel.statusMessage.value
         )
     }
+
+    @Test
+    fun testAdminSettingsViewModel_backupNowLocal_dialogState() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo)
+
+        assertFalse(viewModel.showBackupNowLocalDialog.value)
+        viewModel.openBackupNowLocalDialog()
+        assertTrue(viewModel.showBackupNowLocalDialog.value)
+        viewModel.closeBackupNowLocalDialog()
+        assertFalse(viewModel.showBackupNowLocalDialog.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_backupNowLocal_successExecution() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        var receivedPath: String? = null
+        var receivedType: BackupFileType? = null
+        var receivedMode: BackupWriteMode? = null
+
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onExecuteBackupNowLocal = { path, type, mode ->
+                receivedPath = path
+                receivedType = type
+                receivedMode = mode
+                listOf("lojinha_backup_20261008.db")
+            }
+        )
+
+        viewModel.openBackupNowLocalDialog()
+        assertTrue(viewModel.showBackupNowLocalDialog.value)
+
+        viewModel.executeBackupNowLocal(
+            destinationPath = "/custom/backups",
+            fileType = BackupFileType.BOTH,
+            writeMode = BackupWriteMode.OVERWRITE_LATEST
+        )
+
+        assertEquals("/custom/backups", receivedPath)
+        assertEquals(BackupFileType.BOTH, receivedType)
+        assertEquals(BackupWriteMode.OVERWRITE_LATEST, receivedMode)
+        assertFalse(viewModel.showBackupNowLocalDialog.value)
+        assertFalse(viewModel.isExecutingBackupNow.value)
+        assertEquals("/custom/backups", viewModel.lastLocalBackupPath.value)
+        assertEquals(
+            I18n.get().statusBackupNowSuccess(1, "/custom/backups"),
+            viewModel.statusMessage.value
+        )
+        assertNull(viewModel.errorMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_backupNowLocal_blankPathValidation() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        var callbackCalled = false
+
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onExecuteBackupNowLocal = { _, _, _ ->
+                callbackCalled = true
+                emptyList()
+            }
+        )
+
+        viewModel.openBackupNowLocalDialog()
+        viewModel.executeBackupNowLocal(
+            destinationPath = "   ",
+            fileType = BackupFileType.DB
+        )
+
+        assertFalse(callbackCalled)
+        assertTrue(viewModel.showBackupNowLocalDialog.value)
+        assertEquals(I18n.get().pleaseSelectDestinationFolder, viewModel.errorMessage.value)
+        assertNull(viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_backupNowLocal_handlesException() = runTest {
+        val settingsRepo = TestSettingsRepository()
+
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onExecuteBackupNowLocal = { _, _, _ ->
+                throw IllegalStateException("Read-only filesystem")
+            }
+        )
+
+        viewModel.openBackupNowLocalDialog()
+        viewModel.executeBackupNowLocal(
+            destinationPath = "/protected",
+            fileType = BackupFileType.DB
+        )
+
+        assertFalse(viewModel.isExecutingBackupNow.value)
+        assertEquals("Failed to create local backup: Read-only filesystem", viewModel.errorMessage.value)
+        assertNull(viewModel.statusMessage.value)
+    }
 }

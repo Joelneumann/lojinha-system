@@ -705,22 +705,46 @@ fun AdminSettingsTabScreen(
                                 }
                             }
 
-                            Button(
-                                onClick = { viewModel.openCreateRoutineDialog() },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                OutlinedButton(
+                                    onClick = { viewModel.openBackupNowLocalDialog() },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryNavy)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = null,
-                                        tint = SurfaceWhite,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(strings.createRoutine, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Save,
+                                            contentDescription = null,
+                                            tint = PrimaryNavy,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(strings.backupNowLocalBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { viewModel.openCreateRoutineDialog() },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = SurfaceWhite,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(strings.createRoutine, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
@@ -1556,6 +1580,27 @@ fun AdminSettingsTabScreen(
 
     val showRoutineDialog by viewModel.showRoutineDialog.collectAsState()
     val editingRoutine by viewModel.editingRoutine.collectAsState()
+
+    val showBackupNowLocalDialog by viewModel.showBackupNowLocalDialog.collectAsState()
+    val isExecutingBackupNow by viewModel.isExecutingBackupNow.collectAsState()
+    val lastLocalBackupPath by viewModel.lastLocalBackupPath.collectAsState()
+
+    if (showBackupNowLocalDialog) {
+        val routines by viewModel.routines.collectAsState()
+        val defaultPath = lastLocalBackupPath.ifBlank {
+            routines.firstOrNull { it.type == de.joelneumann.lojinha.domain.model.BackupType.LOCAL && it.backupLocationPath.isNotBlank() }?.backupLocationPath ?: ""
+        }
+        de.joelneumann.lojinha.ui.components.admin.BackupNowLocalDialog(
+            initialPath = defaultPath,
+            isExecuting = isExecutingBackupNow,
+            onExecuteBackup = { path, fileType, writeMode ->
+                viewModel.executeBackupNowLocal(path, fileType, writeMode)
+            },
+            onDismiss = {
+                viewModel.closeBackupNowLocalDialog()
+            }
+        )
+    }
 
     val routineToDelete by viewModel.routineToDelete.collectAsState()
     val routineToToggle by viewModel.routineToToggle.collectAsState()
