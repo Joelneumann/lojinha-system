@@ -48,3 +48,10 @@ enum class AvatarType {
     EMOJI
 }
 
+@Serializable
+enum class BalanceWarningLevel {
+    NORMAL,
+    LOW_BALANCE,
+    NEGATIVE
+}
+

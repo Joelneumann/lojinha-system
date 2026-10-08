@@ -47,6 +47,10 @@ interface AppStrings {
     val historyTypeCorrection: String
     fun cancellationNote(type: String, date: String): String
     val continueShopping: String
+    val lowBalanceWarningTitle: String
+    val lowBalanceWarningMsg: String
+    val negativeBalanceWarningTitle: String
+    val negativeBalanceWarningMsg: String
     val userSettings: String
     val userSettingsTitle: String
     val setPin: String
