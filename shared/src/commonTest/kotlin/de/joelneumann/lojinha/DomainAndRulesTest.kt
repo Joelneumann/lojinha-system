@@ -262,6 +262,24 @@ class DomainAndRulesTest {
         assertEquals(" (≈ US$ 3.00)", edgeCaseEn)
         val edgeCaseBr = Formatting.formatSecondaryCurrency(1665L, SecondaryCurrency.USD, 0.18, Language.BR)
         assertEquals(" (≈ US$ 3,00)", edgeCaseBr)
+
+        // Test small negative cents (prevents negative zero -US$ 0.00)
+        val smallNegativeEn = Formatting.formatSecondaryCurrency(-1L, SecondaryCurrency.USD, 0.18, Language.EN)
+        assertEquals(" (≈ US$ 0.00)", smallNegativeEn)
+        val genuineNegativeEn = Formatting.formatSecondaryCurrency(-500L, SecondaryCurrency.USD, 0.18, Language.EN)
+        assertEquals(" (≈ -US$ 0.90)", genuineNegativeEn)
+
+        // Test non-finite rates
+        val nanRate = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.USD, Double.NaN)
+        assertEquals("", nanRate)
+        val infRate = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.USD, Double.POSITIVE_INFINITY)
+        assertEquals("", infRate)
+
+        // Test SystemSettings.exchangeRateFor helper
+        val testSettings = SystemSettings(usdExchangeRate = 0.20, eurExchangeRate = 0.17)
+        assertEquals(0.20, testSettings.exchangeRateFor(SecondaryCurrency.USD))
+        assertEquals(0.17, testSettings.exchangeRateFor(SecondaryCurrency.EUR))
+        assertEquals(0.0, testSettings.exchangeRateFor(SecondaryCurrency.NONE))
     }
 
     @Test

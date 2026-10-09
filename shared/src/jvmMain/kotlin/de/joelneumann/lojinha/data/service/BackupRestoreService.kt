@@ -460,6 +460,8 @@ class BackupRestoreService(
                     append(if (settingsColumns.contains("onedrivedefaultfolder")) ", oneDriveDefaultFolder" else ", '/LojinhaBackups'")
                     append(if (settingsColumns.contains("onedrivetenant")) ", oneDriveTenant" else ", 'common'")
                     append(if (settingsColumns.contains("supportemail")) ", supportEmail" else ", NULL")
+                    append(if (settingsColumns.contains("autoupdateexchangerates")) ", autoUpdateExchangeRates" else ", 1")
+                    append(if (settingsColumns.contains("lastexchangerateupdatetimestamp")) ", lastExchangeRateUpdateTimestamp" else ", NULL")
                     append(" FROM settings LIMIT 1")
                 }
 
@@ -489,7 +491,9 @@ class BackupRestoreService(
                             oneDriveAccountName = if (stmt.isNull(16)) null else stmt.getText(16),
                             oneDriveDefaultFolder = if (stmt.isNull(17)) "/LojinhaBackups" else stmt.getText(17),
                             oneDriveTenant = if (stmt.isNull(18)) "common" else stmt.getText(18),
-                            supportEmail = if (stmt.isNull(19)) null else stmt.getText(19)
+                            supportEmail = if (stmt.isNull(19)) null else stmt.getText(19),
+                            autoUpdateExchangeRates = if (stmt.isNull(20)) true else stmt.getLong(20) != 0L,
+                            lastExchangeRateUpdateTimestamp = if (stmt.isNull(21)) null else stmt.getLong(21)
                         )
                     }
                 } finally {
@@ -672,7 +676,9 @@ class BackupRestoreService(
                         globalMarkupPercent = 0.0,
                         usdExchangeRate = 0.18,
                         eurExchangeRate = 0.16,
-                        inactivityTimeoutMinutes = 3
+                        inactivityTimeoutMinutes = 3,
+                        autoUpdateExchangeRates = true,
+                        lastExchangeRateUpdateTimestamp = null
                     )
                     db.settingsDao().insertOrUpdateSettings(defaultSettings)
                 }

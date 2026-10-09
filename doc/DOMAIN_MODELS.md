@@ -174,8 +174,10 @@ Single-row configuration entity persisted in Room SQLite.
 |---|---|---|---|
 | `adminPasswordHash` | `String` | SHA-256 of `"admin"` | Master admin password hash. |
 | `globalMarkupPercent` | `Double` | `0.0` | Default markup percentage applied to catalog items without custom markup. |
-| `usdExchangeRate` | `Double` | `0.18` | Static conversion rate: 1 BRL = X USD. |
-| `eurExchangeRate` | `Double` | `0.16` | Static conversion rate: 1 BRL = X EUR. |
+| `usdExchangeRate` | `Double` | `0.18` | Conversion rate: 1 BRL = X USD (manual or via API). |
+| `eurExchangeRate` | `Double` | `0.16` | Conversion rate: 1 BRL = X EUR (manual or via API). |
+| `autoUpdateExchangeRates` | `Boolean` | `true` | Automatically fetch latest exchange rates on application startup. |
+| `lastExchangeRateUpdateTimestamp` | `Long?` | `null` | Unix epoch milliseconds of when rates were last refreshed via API. |
 | `inactivityTimeoutMinutes` | `Int` | `3` | Kiosk idle timeout before auto-logout (min: 2 min). |
 | `supportEmail` | `String?` | `null` | Administrator/developer email for crash reports and diagnostics. |
 | `oneDriveClientId` | `String` | `"202e1c94-..."` | Microsoft Entra Application (Client) ID. |

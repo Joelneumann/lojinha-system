@@ -77,11 +77,44 @@ fun App(
     val backupRepository = remember { de.joelneumann.lojinha.data.repository.RoomBackupRepositoryImpl(database.backupDao()) }
     val backupRestoreService = remember { de.joelneumann.lojinha.data.service.BackupRestoreService(database) }
     val oneDriveBackupService = remember { de.joelneumann.lojinha.data.service.OneDriveBackupService() }
+    val currencyRateService = remember { de.joelneumann.lojinha.data.service.KtorCurrencyRateService() }
     val diagnosticsService = remember { de.joelneumann.lojinha.data.service.DiagnosticsService(database) }
     val coroutineScope = rememberCoroutineScope()
 
+    DisposableEffect(currencyRateService) {
+        onDispose {
+            currencyRateService.close()
+        }
+    }
+
     val onDataChanged = remember { { de.joelneumann.lojinha.data.service.DataChangeNotifier.notifyDataChanged() } }
     val effectiveSettingsRepo = settingsRepository ?: remember { RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged) }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val current = effectiveSettingsRepo.getSettings()
+                if (current.autoUpdateExchangeRates) {
+                    AppLogger.info("Startup", "Auto-refreshing currency exchange rates...")
+                    currencyRateService.fetchRates().onSuccess { rates ->
+                        val latest = effectiveSettingsRepo.getSettings()
+                        val updated = latest.copy(
+                            usdExchangeRate = rates.usdRate,
+                            eurExchangeRate = rates.eurRate,
+                            lastExchangeRateUpdateTimestamp = rates.timestamp
+                        )
+                        effectiveSettingsRepo.updateSettings(updated)
+                        AppLogger.info("Startup", "Exchange rates updated on startup: 1 BRL = ${rates.usdRate} USD, ${rates.eurRate} EUR (${rates.provider})")
+                    }.onFailure { err ->
+                        AppLogger.warn("Startup", "Could not update exchange rates on startup: ${err.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.warn("Startup", "Exchange rate startup check error: ${e.message}")
+            }
+        }
+    }
+
     val autoBackupScheduler = remember {
         de.joelneumann.lojinha.data.service.AutoBackupScheduler(
             backupRestoreService = backupRestoreService,
@@ -363,6 +396,7 @@ fun App(
                                     generatedFiles.map { it.name }
                                 },
                                 oneDriveBackupService = oneDriveBackupService,
+                                currencyRateService = currencyRateService,
                                 onPreviewCsvImport = { platformFile, type ->
                                     val file = java.io.File(platformFile.absolutePath)
                                     if (type.equals("Products", ignoreCase = true)) {

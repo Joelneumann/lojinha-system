@@ -234,7 +234,17 @@ fun TransactionItemCard(
                             color = if (isNegative) ColorDangerCrimson else if (isStrictlyPositive) amountColor else TextSecondaryMuted
                         )
                     }
-                    val secFormatted = Formatting.formatSecondaryCurrency(tx.totalAmount, secondaryCurrency, rate)
+                    val effectiveAmount = when {
+                        isCanceled -> {
+                            val delta = if (cumulativeDelta != 0L) cumulativeDelta else -tx.totalAmount
+                            tx.totalAmount + delta
+                        }
+                        tx.type == TransactionType.PURCHASE && isCorrected && cumulativeDelta != 0L -> {
+                            tx.totalAmount + cumulativeDelta
+                        }
+                        else -> tx.totalAmount
+                    }
+                    val secFormatted = Formatting.formatSecondaryCurrency(effectiveAmount, secondaryCurrency, rate)
                     if (secFormatted.isNotEmpty()) {
                         Text(secFormatted, fontSize = 12.sp, color = TextSecondaryMuted)
                     }

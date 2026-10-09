@@ -549,6 +549,14 @@ object GermanStrings : AppStrings {
     override val invalidPriceError = "Ungültiger Basispreis"
     override val invalidStockError = "Ungültige Lagermenge"
     override val invalidExchangeRateError = "Ungültiger Kurs (muss eine positive Zahl sein)"
+    override val updateRatesFromApiButton = "Über API aktualisieren"
+    override val updatingRatesButton = "Wird aktualisiert..."
+    override val autoUpdateRatesOnStartupLabel = "Kurse beim Anwendungsstart automatisch aktualisieren"
+    override fun ratesLastUpdated(timestamp: String): String = "Zuletzt über API aktualisiert: $timestamp"
+    override val ratesNeverUpdated = "Noch nicht über API aktualisiert"
+    override fun statusRatesUpdatedSuccess(usd: Double, eur: Double, provider: String): String =
+        "Währungskurse aktualisiert: 1 BRL = $usd USD, $eur EUR ($provider)"
+    override val errorFailedToFetchRates = "Fehler beim Abrufen der Währungskurse"
     override val fatalImportErrorsHeader = "Schwerwiegende Importfehler:"
     override val lastExecutionTimeLabel = "Letzte Ausführung:"
 

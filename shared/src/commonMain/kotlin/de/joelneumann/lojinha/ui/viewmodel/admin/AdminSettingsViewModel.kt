@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.ui.viewmodel.admin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import de.joelneumann.lojinha.data.service.CurrencyRateService
 import de.joelneumann.lojinha.data.service.OneDriveBackupService
 import de.joelneumann.lojinha.domain.model.DeviceCodeResponse
 import de.joelneumann.lojinha.domain.model.BackupRoutine
@@ -25,6 +26,7 @@ class AdminSettingsViewModel(
     private val onRunRoutineNow: (suspend (BackupRoutine) -> Unit)? = null,
     private val onExecuteBackupNowLocal: (suspend (destinationPath: String, fileType: BackupFileType, writeMode: BackupWriteMode) -> List<String>)? = null,
     private val oneDriveBackupService: OneDriveBackupService? = null,
+    private val currencyRateService: CurrencyRateService? = null,
     private val onPreviewCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
     private val onExecuteCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
     private val onExecuteDbRestore: (suspend (PlatformFile) -> Unit)? = null,
@@ -39,6 +41,9 @@ class AdminSettingsViewModel(
 
     private val _settings = MutableStateFlow(SystemSettings())
     val settings: StateFlow<SystemSettings> = _settings.asStateFlow()
+
+    private val _isFetchingRates = MutableStateFlow(false)
+    val isFetchingRates: StateFlow<Boolean> = _isFetchingRates.asStateFlow()
 
     private val _showOneDriveAuthDialog = MutableStateFlow(false)
     val showOneDriveAuthDialog: StateFlow<Boolean> = _showOneDriveAuthDialog.asStateFlow()
@@ -179,6 +184,42 @@ class AdminSettingsViewModel(
         viewModelScope.launch {
             settingsRepository.updateSettings(newSettings)
             _statusMessage.value = I18n.get().statusSystemSettingsUpdated
+        }
+    }
+
+    fun fetchExchangeRates(onSuccess: ((Double, Double) -> Unit)? = null) {
+        if (_isFetchingRates.value) return
+        val service = currencyRateService ?: run {
+            _errorMessage.value = "${I18n.get().errorFailedToFetchRates}: Service not available"
+            return
+        }
+        viewModelScope.launch {
+            _isFetchingRates.value = true
+            _statusMessage.value = null
+            _errorMessage.value = null
+            try {
+                val result = service.fetchRates()
+                result.fold(
+                    onSuccess = { rates ->
+                        val current = _settings.value
+                        val updated = current.copy(
+                            usdExchangeRate = rates.usdRate,
+                            eurExchangeRate = rates.eurRate,
+                            lastExchangeRateUpdateTimestamp = rates.timestamp
+                        )
+                        settingsRepository.updateSettings(updated)
+                        _statusMessage.value = I18n.get().statusRatesUpdatedSuccess(rates.usdRate, rates.eurRate, rates.provider)
+                        onSuccess?.invoke(rates.usdRate, rates.eurRate)
+                    },
+                    onFailure = { error ->
+                        _errorMessage.value = "${I18n.get().errorFailedToFetchRates}: ${error.message}"
+                    }
+                )
+            } catch (e: Exception) {
+                _errorMessage.value = "${I18n.get().errorFailedToFetchRates}: ${e.message}"
+            } finally {
+                _isFetchingRates.value = false
+            }
         }
     }
 
