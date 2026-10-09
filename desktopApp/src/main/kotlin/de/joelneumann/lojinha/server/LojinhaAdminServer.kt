@@ -262,7 +262,7 @@ class LojinhaAdminServer(
                                 toTimestamp = toTimestamp,
                                 language = language
                             )
-                            val cleanUserName = user.name.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
                             val filename = "Extrato_${cleanUserName}.pdf"
                             call.response.header(
                                 HttpHeaders.ContentDisposition,

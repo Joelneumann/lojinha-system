@@ -62,9 +62,7 @@ object TransactionPdfGenerator {
         toTimestamp: Long? = null,
         language: Language = Language.BR
     ): File {
-        if (!outputFile.parentFile.exists()) {
-            outputFile.parentFile.mkdirs()
-        }
+        outputFile.parentFile?.mkdirs()
         FileOutputStream(outputFile).use { fos ->
             writePdf(fos, user, transactions, fromTimestamp, toTimestamp, language)
         }
@@ -118,7 +116,7 @@ object TransactionPdfGenerator {
         val writer = PdfWriter.getInstance(document, outputStream)
 
         // Add Header/Footer Page Events
-        writer.pageEvent = StatementPageEvent(strings)
+        writer.pageEvent = StatementPageEvent(strings, language)
 
         document.open()
 
@@ -150,7 +148,7 @@ object TransactionPdfGenerator {
             horizontalAlignment = Element.ALIGN_RIGHT
             setPaddingBottom(4f)
             val formattedNow = Formatting.formatTimestamp(System.currentTimeMillis(), language)
-            addElement(Paragraph("${strings.dateFrom}: $formattedNow", FONT_MUTED).apply {
+            addElement(Paragraph(formattedNow, FONT_MUTED).apply {
                 alignment = Element.ALIGN_RIGHT
             })
             val statusLabel = if (user.isActive && !user.isDeleted) strings.statementPdfActive else strings.statementPdfInactive
@@ -206,7 +204,7 @@ object TransactionPdfGenerator {
 
         // Card 1: User Info
         summaryTable.addCell(createSummaryCell(
-            title = user.name,
+            title = strings.userNameLabel,
             mainText = user.name,
             subText = user.userBarcodeNumber?.let { "Code: $it" } ?: "ID: ${user.id.take(8)}"
         ))
@@ -214,7 +212,7 @@ object TransactionPdfGenerator {
         // Card 2: Initial Balance
         summaryTable.addCell(createSummaryCell(
             title = strings.initialBalance,
-            mainText = Formatting.formatBrl(initialBalance),
+            mainText = Formatting.formatBrl(initialBalance, language),
             subText = fromTimestamp?.let { Formatting.formatTimestamp(it, language) }
         ))
 
@@ -222,14 +220,14 @@ object TransactionPdfGenerator {
         val netPrefix = if (netChange > 0) "+" else ""
         summaryTable.addCell(createSummaryCell(
             title = strings.periodNetLabel,
-            mainText = "$netPrefix${Formatting.formatBrl(netChange)}",
-            subText = "+${Formatting.formatBrl(totalDeposits)} / -${Formatting.formatBrl(totalPurchases)}"
+            mainText = "$netPrefix${Formatting.formatBrl(netChange, language)}",
+            subText = "+${Formatting.formatBrl(totalDeposits, language)} / -${Formatting.formatBrl(totalPurchases, language)}"
         ))
 
         // Card 4: Final Balance
         summaryTable.addCell(createSummaryCell(
             title = strings.finalBalance,
-            mainText = Formatting.formatBrl(finalBalance),
+            mainText = Formatting.formatBrl(finalBalance, language),
             subText = strings.transactionsCountPreview(filtered.size),
             isHighlight = true
         ))
@@ -310,14 +308,14 @@ object TransactionPdfGenerator {
                 ledgerTable.addCell(createCell(Phrase(typeLabel, typeFont)))
 
                 // Col 3: Description / Items
-                val desc = buildDescription(tx, strings)
+                val desc = buildDescription(tx, strings, language)
                 ledgerTable.addCell(createCell(Phrase(desc, FONT_BODY)))
 
                 // Col 4: Amount
                 val amountStr = when {
-                    tx.totalAmount > 0 -> "+${Formatting.formatBrl(tx.totalAmount)}"
-                    tx.totalAmount < 0 -> "-${Formatting.formatBrl(kotlin.math.abs(tx.totalAmount))}"
-                    else -> Formatting.formatBrl(0L)
+                    tx.totalAmount > 0 -> "+${Formatting.formatBrl(tx.totalAmount, language)}"
+                    tx.totalAmount < 0 -> "-${Formatting.formatBrl(kotlin.math.abs(tx.totalAmount), language)}"
+                    else -> Formatting.formatBrl(0L, language)
                 }
                 val amountFont = when {
                     tx.totalAmount > 0 -> FONT_AMOUNT_POS
@@ -327,7 +325,7 @@ object TransactionPdfGenerator {
                 ledgerTable.addCell(createCell(Phrase(amountStr, amountFont), Element.ALIGN_RIGHT))
 
                 // Col 5: Balance
-                val balStr = tx.userBalanceAfter?.let { Formatting.formatBrl(it) } ?: "-"
+                val balStr = tx.userBalanceAfter?.let { Formatting.formatBrl(it, language) } ?: "-"
                 ledgerTable.addCell(createCell(Phrase(balStr, FONT_BODY_BOLD), Element.ALIGN_RIGHT))
             }
         }
@@ -353,12 +351,16 @@ object TransactionPdfGenerator {
         document.close()
     }
 
-    private fun buildDescription(tx: Transaction, strings: de.joelneumann.lojinha.ui.i18n.AppStrings): String {
+    private fun buildDescription(
+        tx: Transaction,
+        strings: de.joelneumann.lojinha.ui.i18n.AppStrings,
+        language: Language
+    ): String {
         return when {
             tx.items.isNotEmpty() -> {
                 val itemLines = tx.items.joinToString(", ") { item ->
                     val qtyStr = Formatting.formatQuantity(item.quantity, item.unitType, strings)
-                    "$qtyStr ${item.productName} (${Formatting.formatBrl(item.totalLinePrice)})"
+                    "$qtyStr ${item.productName} (${Formatting.formatBrl(item.totalLinePrice, language)})"
                 }
                 if (!tx.note.isNullOrBlank()) {
                     val decoded = SystemNoteHelper.decodeNote(tx.note, strings) ?: tx.note
@@ -382,16 +384,16 @@ object TransactionPdfGenerator {
     ): String {
         return when {
             fromTimestamp != null && toTimestamp != null -> {
-                val fromStr = Formatting.formatTimestamp(fromTimestamp, language).substringBefore(",")
-                val toStr = Formatting.formatTimestamp(toTimestamp, language).substringBefore(",")
+                val fromStr = Formatting.formatTimestamp(fromTimestamp, language).substringBeforeLast(",")
+                val toStr = Formatting.formatTimestamp(toTimestamp, language).substringBeforeLast(",")
                 "${strings.filterPeriod}: $fromStr ${strings.dateTo.lowercase()} $toStr"
             }
             fromTimestamp != null -> {
-                val fromStr = Formatting.formatTimestamp(fromTimestamp, language).substringBefore(",")
+                val fromStr = Formatting.formatTimestamp(fromTimestamp, language).substringBeforeLast(",")
                 "${strings.filterPeriod}: ${strings.dateFrom} $fromStr"
             }
             toTimestamp != null -> {
-                val toStr = Formatting.formatTimestamp(toTimestamp, language).substringBefore(",")
+                val toStr = Formatting.formatTimestamp(toTimestamp, language).substringBeforeLast(",")
                 "${strings.filterPeriod}: ${strings.dateTo} $toStr"
             }
             else -> {
@@ -401,7 +403,10 @@ object TransactionPdfGenerator {
     }
 
     // Page Event for Footer & Page Numbers
-    private class StatementPageEvent(private val strings: de.joelneumann.lojinha.ui.i18n.AppStrings) : PdfPageEventHelper() {
+    private class StatementPageEvent(
+        private val strings: de.joelneumann.lojinha.ui.i18n.AppStrings,
+        private val language: Language
+    ) : PdfPageEventHelper() {
         private var totalPagesTemplate: PdfTemplate? = null
         private val baseFont = BaseFont.createFont(BaseFont.HELVETICA, BaseFont.CP1252, BaseFont.NOT_EMBEDDED)
 
@@ -412,9 +417,14 @@ object TransactionPdfGenerator {
         override fun onEndPage(writer: PdfWriter, document: Document) {
             val cb = writer.directContent
             val pageNum = writer.pageNumber
+            val pagePrefix = when (language) {
+                Language.DE -> "Seite $pageNum / "
+                Language.EN -> "Page $pageNum / "
+                Language.BR -> "Pág. $pageNum / "
+            }
             val footerText = "Lojinha System  •  " + strings.statementPdfFooterGenerated(
                 SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
-            ) + "  •  Pág. $pageNum / "
+            ) + "  •  $pagePrefix"
 
             val textWidth = baseFont.getWidthPoint(footerText, 8f)
             val y = document.bottom() - 15f

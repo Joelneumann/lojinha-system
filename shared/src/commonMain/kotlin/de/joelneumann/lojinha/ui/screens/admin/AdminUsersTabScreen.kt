@@ -65,6 +65,7 @@ fun AdminUsersTabScreen(
     val exportPdfTransactions by viewModel.exportPdfTransactions.collectAsState()
     val isExportingPdf by viewModel.isExportingPdf.collectAsState()
     val exportResultPath by viewModel.exportResultPath.collectAsState()
+    val exportPdfError by viewModel.exportPdfError.collectAsState()
 
     val strings = I18n.current
 
@@ -288,6 +289,7 @@ fun AdminUsersTabScreen(
             defaultSaveDirectory = defaultSaveDirectory,
             isExporting = isExportingPdf,
             exportResultPath = exportResultPath,
+            errorMessage = exportPdfError,
             onExportPdf = { folder, from, to, lang ->
                 onExecutePdfExport?.invoke(targetUser, folder, from, to, lang)
             },

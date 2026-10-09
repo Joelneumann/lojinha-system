@@ -60,6 +60,9 @@ class AdminUsersViewModel(
     private val _exportResultPath = MutableStateFlow<String?>(null)
     val exportResultPath: StateFlow<String?> = _exportResultPath.asStateFlow()
 
+    private val _exportPdfError = MutableStateFlow<String?>(null)
+    val exportPdfError: StateFlow<String?> = _exportPdfError.asStateFlow()
+
     private val _userErrorMessage = MutableStateFlow<String?>(null)
     val userErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
     val userDeleteErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
@@ -104,6 +107,7 @@ class AdminUsersViewModel(
     fun openExportPdfModal(user: User) {
         _exportPdfUser.value = user
         _exportResultPath.value = null
+        _exportPdfError.value = null
         viewModelScope.launch {
             try {
                 _exportPdfTransactions.value = transactionRepository.getTransactionsByUserId(user.id)
@@ -119,10 +123,15 @@ class AdminUsersViewModel(
         _exportPdfTransactions.value = emptyList()
         _exportResultPath.value = null
         _isExportingPdf.value = false
+        _exportPdfError.value = null
     }
 
     fun setExportResultPath(path: String?) {
         _exportResultPath.value = path
+    }
+
+    fun setExportPdfError(error: String?) {
+        _exportPdfError.value = error
     }
 
     fun setIsExportingPdf(isExporting: Boolean) {

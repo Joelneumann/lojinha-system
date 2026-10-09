@@ -162,4 +162,79 @@ class TransactionPdfGeneratorTest {
         val magic = String(bytes.copyOfRange(0, 5), Charsets.US_ASCII)
         assertEquals("%PDF-", magic)
     }
+
+    @Test
+    fun testGenerateStatementPdfRelativePathNullParent() {
+        val user = User(
+            id = "user-rel",
+            name = "Test User",
+            balance = 100L,
+            language = Language.BR
+        )
+        // File with no parent directory specified
+        val relFile = File("test_rel_statement_${System.currentTimeMillis()}.pdf")
+        try {
+            val result = TransactionPdfGenerator.generateStatementPdf(
+                outputFile = relFile,
+                user = user,
+                transactions = emptyList(),
+                language = Language.BR
+            )
+            assertTrue(result.exists())
+            assertTrue(result.length() > 0)
+        } finally {
+            relFile.delete()
+        }
+    }
+
+    @Test
+    fun testGenerateStatementWithEnglishAndGermanLocale() {
+        val user = User(
+            id = "user-multi",
+            name = "Johnathan Doe",
+            balance = 5000L,
+            language = Language.EN
+        )
+        val tx = Transaction(
+            id = "tx-1",
+            userId = user.id,
+            userNameSnapshot = user.name,
+            timestamp = 1700000000000L,
+            type = TransactionType.PURCHASE,
+            totalAmount = -1500L,
+            items = listOf(
+                TransactionItem(
+                    productId = "p-1",
+                    productName = "Coffee",
+                    quantity = 2,
+                    unitPriceAtPurchase = 750L,
+                    unitType = UnitType.PIECE
+                )
+            ),
+            userBalanceBefore = 6500L,
+            userBalanceAfter = 5000L
+        )
+
+        // Generate in English
+        val enBytes = TransactionPdfGenerator.generateStatementBytes(
+            user = user,
+            transactions = listOf(tx),
+            fromTimestamp = 1699900000000L,
+            toTimestamp = 1700100000000L,
+            language = Language.EN
+        )
+        assertTrue(enBytes.isNotEmpty())
+        assertEquals("%PDF-", String(enBytes.copyOfRange(0, 5), Charsets.US_ASCII))
+
+        // Generate in German
+        val deBytes = TransactionPdfGenerator.generateStatementBytes(
+            user = user,
+            transactions = listOf(tx),
+            fromTimestamp = 1699900000000L,
+            toTimestamp = 1700100000000L,
+            language = Language.DE
+        )
+        assertTrue(deBytes.isNotEmpty())
+        assertEquals("%PDF-", String(deBytes.copyOfRange(0, 5), Charsets.US_ASCII))
+    }
 }

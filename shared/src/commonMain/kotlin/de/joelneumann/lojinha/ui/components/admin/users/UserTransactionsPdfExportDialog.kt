@@ -98,33 +98,39 @@ fun UserTransactionsPdfExportDialog(
             .sortedBy { it.timestamp }
     }
 
-    val initialBalance = remember(filteredTransactions, user.balance) {
-        if (filteredTransactions.isNotEmpty()) {
+    val summary = remember(filteredTransactions, user.balance) {
+        val init = if (filteredTransactions.isNotEmpty()) {
             filteredTransactions.first().userBalanceBefore ?: user.balance
         } else {
             user.balance
         }
-    }
-
-    val finalBalance = remember(filteredTransactions, user.balance) {
-        if (filteredTransactions.isNotEmpty()) {
+        val fin = if (filteredTransactions.isNotEmpty()) {
             filteredTransactions.last().userBalanceAfter ?: user.balance
         } else {
             user.balance
         }
+        var dep = 0L
+        var pur = 0L
+        for (tx in filteredTransactions) {
+            if (tx.totalAmount > 0) dep += tx.totalAmount
+            else if (tx.totalAmount < 0) pur += kotlin.math.abs(tx.totalAmount)
+        }
+        ExportFinancialSummary(
+            initialBalance = init,
+            finalBalance = fin,
+            totalDeposits = dep,
+            totalPurchases = pur,
+            netChange = dep - pur
+        )
     }
-
-    var totalDeposits = 0L
-    var totalPurchases = 0L
-    for (tx in filteredTransactions) {
-        if (tx.totalAmount > 0) totalDeposits += tx.totalAmount
-        else if (tx.totalAmount < 0) totalPurchases += kotlin.math.abs(tx.totalAmount)
-    }
-    val netChange = totalDeposits - totalPurchases
 
     val handleExportSubmit = {
         if (selectedPreset == DateRangePreset.CUSTOM) {
-            if (fromTimestamp != null && toTimestamp != null && fromTimestamp > toTimestamp) {
+            if (customFromText.isNotBlank() && fromTimestamp == null) {
+                validationError = strings.errInvalidDateRange
+            } else if (customToText.isNotBlank() && toTimestamp == null) {
+                validationError = strings.errInvalidDateRange
+            } else if (fromTimestamp != null && toTimestamp != null && fromTimestamp > toTimestamp) {
                 validationError = strings.errInvalidDateRange
             } else if (destinationFolder.isBlank()) {
                 validationError = strings.selectDestinationFolder
@@ -367,7 +373,10 @@ fun UserTransactionsPdfExportDialog(
                         ) {
                             OutlinedTextField(
                                 value = customFromText,
-                                onValueChange = { customFromText = it },
+                                onValueChange = {
+                                    customFromText = it
+                                    validationError = null
+                                },
                                 label = { Text("${strings.dateFrom} (DD/MM/YYYY)", fontSize = 11.sp) },
                                 placeholder = { Text("01/01/2026", fontSize = 11.sp) },
                                 singleLine = true,
@@ -375,7 +384,10 @@ fun UserTransactionsPdfExportDialog(
                             )
                             OutlinedTextField(
                                 value = customToText,
-                                onValueChange = { customToText = it },
+                                onValueChange = {
+                                    customToText = it
+                                    validationError = null
+                                },
                                 label = { Text("${strings.dateTo} (DD/MM/YYYY)", fontSize = 11.sp) },
                                 placeholder = { Text("31/01/2026", fontSize = 11.sp) },
                                 singleLine = true,
@@ -454,8 +466,8 @@ fun UserTransactionsPdfExportDialog(
                                     color = PrimaryNavy
                                 )
                                 AdminStatusBadge(
-                                    text = "${strings.finalBalance}: ${Formatting.formatBrl(finalBalance)}",
-                                    type = if (finalBalance >= 0) AdminBadgeType.SUCCESS else AdminBadgeType.DANGER
+                                    text = "${strings.finalBalance}: ${Formatting.formatBrl(summary.finalBalance)}",
+                                    type = if (summary.finalBalance >= 0) AdminBadgeType.SUCCESS else AdminBadgeType.DANGER
                                 )
                             }
                             Row(
@@ -464,16 +476,16 @@ fun UserTransactionsPdfExportDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "${strings.initialBalance}: ${Formatting.formatBrl(initialBalance)}",
+                                    text = "${strings.initialBalance}: ${Formatting.formatBrl(summary.initialBalance)}",
                                     fontSize = 11.sp,
                                     color = TextSecondaryMuted
                                 )
-                                val netPrefix = if (netChange > 0) "+" else ""
+                                val netPrefix = if (summary.netChange > 0) "+" else ""
                                 Text(
-                                    text = "${strings.periodNetLabel}: $netPrefix${Formatting.formatBrl(netChange)}",
+                                    text = "${strings.periodNetLabel}: $netPrefix${Formatting.formatBrl(summary.netChange)}",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (netChange >= 0) ColorSuccessEmerald else ColorDangerCrimson
+                                    color = if (summary.netChange >= 0) ColorSuccessEmerald else ColorDangerCrimson
                                 )
                             }
                         }
@@ -575,7 +587,8 @@ private fun parseDateStringToMillis(input: String, timeZone: TimeZone, isStartOf
 
     val day = parts[0].toIntOrNull() ?: return null
     val month = parts[1].toIntOrNull() ?: return null
-    val year = parts[2].toIntOrNull() ?: return null
+    val rawYear = parts[2].toIntOrNull() ?: return null
+    val year = if (rawYear in 0..99) 2000 + rawYear else rawYear
 
     return try {
         val date = LocalDate(year, month, day)
@@ -589,3 +602,11 @@ private fun parseDateStringToMillis(input: String, timeZone: TimeZone, isStartOf
         null
     }
 }
+
+private data class ExportFinancialSummary(
+    val initialBalance: Long,
+    val finalBalance: Long,
+    val totalDeposits: Long,
+    val totalPurchases: Long,
+    val netChange: Long
+)

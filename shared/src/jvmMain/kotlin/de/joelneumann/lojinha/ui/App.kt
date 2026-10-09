@@ -471,31 +471,35 @@ fun App(
                                 if (downloads.exists()) downloads.absolutePath else userHome
                             },
                             onExecutePdfExport = { user, destinationFolder, fromTimestamp, toTimestamp, language ->
-                                coroutineScope.launch {
-                                    adminUsersViewModel.setIsExportingPdf(true)
-                                    try {
-                                        val transactions = effectiveTransactionRepo.getTransactionsByUserId(user.id)
-                                        val cleanUserName = user.name.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                                        val dateSuffix = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-                                        val targetDir = java.io.File(destinationFolder)
-                                        if (!targetDir.exists()) {
-                                            targetDir.mkdirs()
+                                if (!adminUsersViewModel.isExportingPdf.value) {
+                                    coroutineScope.launch {
+                                        adminUsersViewModel.setIsExportingPdf(true)
+                                        adminUsersViewModel.setExportPdfError(null)
+                                        try {
+                                            val transactions = effectiveTransactionRepo.getTransactionsByUserId(user.id)
+                                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
+                                            val dateSuffix = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                                            val targetDir = java.io.File(destinationFolder)
+                                            if (!targetDir.exists()) {
+                                                targetDir.mkdirs()
+                                            }
+                                            val targetFile = java.io.File(targetDir, "Extrato_${cleanUserName}_$dateSuffix.pdf")
+                                            de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementPdf(
+                                                outputFile = targetFile,
+                                                user = user,
+                                                transactions = transactions,
+                                                fromTimestamp = fromTimestamp,
+                                                toTimestamp = toTimestamp,
+                                                language = language
+                                            )
+                                            adminUsersViewModel.setExportResultPath(targetFile.absolutePath)
+                                        } catch (e: Exception) {
+                                            AppLogger.error("App", "Failed to export PDF statement: ${e.message}", e)
+                                            adminUsersViewModel.setExportResultPath(null)
+                                            adminUsersViewModel.setExportPdfError(e.message ?: "Failed to export PDF statement")
+                                        } finally {
+                                            adminUsersViewModel.setIsExportingPdf(false)
                                         }
-                                        val targetFile = java.io.File(targetDir, "Extrato_${cleanUserName}_$dateSuffix.pdf")
-                                        de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementPdf(
-                                            outputFile = targetFile,
-                                            user = user,
-                                            transactions = transactions,
-                                            fromTimestamp = fromTimestamp,
-                                            toTimestamp = toTimestamp,
-                                            language = language
-                                        )
-                                        adminUsersViewModel.setExportResultPath(targetFile.absolutePath)
-                                    } catch (e: Exception) {
-                                        AppLogger.error("App", "Failed to export PDF statement: ${e.message}", e)
-                                        adminUsersViewModel.setExportResultPath(null)
-                                    } finally {
-                                        adminUsersViewModel.setIsExportingPdf(false)
                                     }
                                 }
                             },
