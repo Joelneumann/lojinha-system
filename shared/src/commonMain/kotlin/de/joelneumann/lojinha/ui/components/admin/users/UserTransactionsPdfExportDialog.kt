@@ -20,6 +20,7 @@ import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
@@ -287,21 +288,30 @@ fun UserTransactionsPdfExportDialog(
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy
                         )
-                        Row(
+                        FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             val languages = listOf(
-                                Language.BR to "🇧🇷 Português",
-                                Language.DE to "🇩🇪 Deutsch",
-                                Language.EN to "🇬🇧 English"
+                                Language.BR to "Português",
+                                Language.DE to "Deutsch",
+                                Language.EN to "English"
                             )
                             languages.forEach { (lang, label) ->
                                 val isSelected = selectedLanguage == lang
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { selectedLanguage = lang },
-                                    label = { Text(label, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                    leadingIcon = {
+                                        LanguageFlagIcon(language = lang, width = 18.dp, height = 13.dp)
+                                    },
+                                    label = {
+                                        Text(
+                                            text = label,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = AccentNavy,
                                         selectedLabelColor = SurfaceWhite
