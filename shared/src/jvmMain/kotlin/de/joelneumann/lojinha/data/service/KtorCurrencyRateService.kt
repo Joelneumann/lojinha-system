@@ -6,8 +6,12 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
+import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
@@ -20,9 +24,14 @@ class KtorCurrencyRateService(
 
     companion object {
         private const val TAG = "CurrencyRateService"
-        private const val PRIMARY_URL = "https://api.frankfurter.dev/v1/latest?base=BRL&symbols=USD,EUR"
-        private const val SECONDARY_URL = "https://api.frankfurter.app/latest?base=BRL&symbols=USD,EUR"
-        private const val FALLBACK_URL = "https://open.er-api.com/v6/latest/BRL"
+
+        private data class Endpoint(val url: String, val providerName: String)
+
+        private val ENDPOINTS = listOf(
+            Endpoint("https://api.frankfurter.dev/v1/latest?base=BRL&symbols=USD,EUR", "Frankfurter API"),
+            Endpoint("https://api.frankfurter.app/latest?base=BRL&symbols=USD,EUR", "Frankfurter API (.app)"),
+            Endpoint("https://open.er-api.com/v6/latest/BRL", "ExchangeRate-API")
+        )
 
         fun createDefaultClient(): HttpClient {
             val jsonConfig = Json {
@@ -38,66 +47,33 @@ class KtorCurrencyRateService(
     }
 
     @Serializable
-    private data class FrankfurterResponse(
-        val amount: Double = 1.0,
-        val base: String = "BRL",
-        val rates: Map<String, Double> = emptyMap()
-    )
-
-    @Serializable
-    private data class ErApiResponse(
-        val result: String = "",
+    private data class RatesResponse(
         val rates: Map<String, Double> = emptyMap()
     )
 
     override suspend fun fetchRates(): Result<CurrencyRates> = withContext(Dispatchers.IO) {
-        // 1. Try Frankfurter Primary (.dev)
-        try {
-            return@withContext fetchFromFrankfurter(PRIMARY_URL, "Frankfurter API")
-        } catch (e: Exception) {
-            AppLogger.warn(TAG, "Primary endpoint ($PRIMARY_URL) failed: ${e.message}. Trying backup host...")
+        var lastError: Exception? = null
+        for (endpoint in ENDPOINTS) {
+            coroutineContext.ensureActive()
+            try {
+                return@withContext fetchFromEndpoint(endpoint.url, endpoint.providerName)
+            } catch (e: Exception) {
+                if (e is CancellationException && e !is TimeoutCancellationException) throw e
+                lastError = e
+                AppLogger.warn(TAG, "${endpoint.providerName} failed: ${e.message}. Trying next fallback...")
+            }
         }
-
-        // 2. Try Frankfurter Backup host (.app)
-        try {
-            return@withContext fetchFromFrankfurter(SECONDARY_URL, "Frankfurter API (.app)")
-        } catch (e: Exception) {
-            AppLogger.warn(TAG, "Secondary endpoint ($SECONDARY_URL) failed: ${e.message}. Trying ExchangeRate-API fallback...")
-        }
-
-        // 3. Try ExchangeRate-API Fallback
-        try {
-            return@withContext fetchFromErApi(FALLBACK_URL, "ExchangeRate-API")
-        } catch (e: Exception) {
-            AppLogger.error(TAG, "All exchange rate API providers failed: ${e.message}", e)
-            Result.failure(Exception("Could not fetch exchange rates from any provider: ${e.message}", e))
-        }
+        AppLogger.error(TAG, "All exchange rate API providers failed: ${lastError?.message}", lastError)
+        Result.failure(Exception("Could not fetch exchange rates from any provider: ${lastError?.message}", lastError))
     }
 
-    private suspend fun fetchFromFrankfurter(url: String, providerName: String): Result<CurrencyRates> {
+    private suspend fun fetchFromEndpoint(url: String, providerName: String): Result<CurrencyRates> {
         val response = withTimeout(8_000L) {
-            client.get(url).body<FrankfurterResponse>()
-        }
-        val usd = response.rates["USD"] ?: throw IllegalStateException("USD rate missing in $providerName response")
-        val eur = response.rates["EUR"] ?: throw IllegalStateException("EUR rate missing in $providerName response")
-
-        validateRates(usd, eur)
-        val roundedUsd = roundTo4Decimals(usd)
-        val roundedEur = roundTo4Decimals(eur)
-
-        AppLogger.info(TAG, "Successfully fetched exchange rates from $providerName: 1 BRL = $roundedUsd USD, $roundedEur EUR")
-        return Result.success(
-            CurrencyRates(
-                usdRate = roundedUsd,
-                eurRate = roundedEur,
-                provider = providerName
-            )
-        )
-    }
-
-    private suspend fun fetchFromErApi(url: String, providerName: String): Result<CurrencyRates> {
-        val response = withTimeout(8_000L) {
-            client.get(url).body<ErApiResponse>()
+            val httpResponse = client.get(url)
+            if (!httpResponse.status.isSuccess()) {
+                throw IllegalStateException("HTTP ${httpResponse.status.value} ${httpResponse.status.description}")
+            }
+            httpResponse.body<RatesResponse>()
         }
         val usd = response.rates["USD"] ?: throw IllegalStateException("USD rate missing in $providerName response")
         val eur = response.rates["EUR"] ?: throw IllegalStateException("EUR rate missing in $providerName response")

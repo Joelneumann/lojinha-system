@@ -990,4 +990,28 @@ class AdminViewModelsTest {
         assertNull(viewModel.statusMessage.value)
         assertFalse(viewModel.isFetchingRates.value)
     }
+
+    @Test
+    fun testAdminSettingsViewModel_fetchExchangeRates_reentranceGuarded() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        val fakeService = object : CurrencyRateService {
+            var fetchCount = 0
+            override suspend fun fetchRates(): Result<CurrencyRates> {
+                fetchCount++
+                kotlinx.coroutines.delay(100)
+                return Result.success(CurrencyRates(usdRate = 0.20, eurRate = 0.18))
+            }
+        }
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            currencyRateService = fakeService
+        )
+
+        viewModel.fetchExchangeRates()
+        assertTrue(viewModel.isFetchingRates.value)
+
+        // Call again while fetching
+        viewModel.fetchExchangeRates()
+        assertEquals(1, fakeService.fetchCount)
+    }
 }

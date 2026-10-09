@@ -185,11 +185,7 @@ fun TransactionHistoryContent(
         }
     }
 
-    val rate = when (user.secondaryCurrency) {
-        SecondaryCurrency.USD -> settings.usdExchangeRate
-        SecondaryCurrency.EUR -> settings.eurExchangeRate
-        else -> 0.0
-    }
+    val rate = settings.exchangeRateFor(user.secondaryCurrency)
 
     val allTransactionsMap = remember(transactions, relatedTransactionsMap) {
         (transactions + relatedTransactionsMap.values).associateBy { it.id }

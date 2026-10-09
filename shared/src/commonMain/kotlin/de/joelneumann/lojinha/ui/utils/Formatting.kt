@@ -80,13 +80,14 @@ object Formatting {
         rate: Double,
         language: Language = LanguageManager.currentLanguage
     ): String {
-        if (secondaryCurrency == SecondaryCurrency.NONE || rate <= 0.0) return ""
+        if (secondaryCurrency == SecondaryCurrency.NONE || !rate.isFinite() || rate <= 0.0) return ""
         val brlReais = brlCents.toDouble() / 100.0
         val convertedAmount = brlReais * rate
         val isNegative = convertedAmount < 0
         val absAmount = abs(convertedAmount)
 
         val totalCents = round(absAmount * 100.0).toLong()
+        val shouldShowNegative = isNegative && totalCents > 0L
         val integerPart = totalCents / 100
         val decimalPart = totalCents % 100
         val decString = decimalPart.toString().padStart(2, '0')
@@ -98,7 +99,7 @@ object Formatting {
 
         val integerFormatted = formatIntegerWithGrouping(integerPart, groupingSep)
         val formattedValue = "${secondaryCurrency.symbol} $integerFormatted$decimalSep$decString"
-        val signedValue = if (isNegative) "-$formattedValue" else formattedValue
+        val signedValue = if (shouldShowNegative) "-$formattedValue" else formattedValue
         return " (≈ $signedValue)"
     }
 

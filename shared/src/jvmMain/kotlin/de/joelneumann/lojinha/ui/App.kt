@@ -91,13 +91,14 @@ fun App(
     val effectiveSettingsRepo = settingsRepository ?: remember { RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged) }
 
     LaunchedEffect(Unit) {
-        coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val current = effectiveSettingsRepo.getSettings()
                 if (current.autoUpdateExchangeRates) {
                     AppLogger.info("Startup", "Auto-refreshing currency exchange rates...")
                     currencyRateService.fetchRates().onSuccess { rates ->
-                        val updated = current.copy(
+                        val latest = effectiveSettingsRepo.getSettings()
+                        val updated = latest.copy(
                             usdExchangeRate = rates.usdRate,
                             eurExchangeRate = rates.eurRate,
                             lastExchangeRateUpdateTimestamp = rates.timestamp

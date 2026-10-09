@@ -188,6 +188,7 @@ class AdminSettingsViewModel(
     }
 
     fun fetchExchangeRates(onSuccess: ((Double, Double) -> Unit)? = null) {
+        if (_isFetchingRates.value) return
         val service = currencyRateService ?: run {
             _errorMessage.value = "${I18n.get().errorFailedToFetchRates}: Service not available"
             return

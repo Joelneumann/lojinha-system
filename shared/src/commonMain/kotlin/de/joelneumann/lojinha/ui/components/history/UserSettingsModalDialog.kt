@@ -4,8 +4,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -482,11 +485,12 @@ fun UserSettingsModalDialog(
                                 onUserInteracted(true)
                                 onLanguageSelect(lang)
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).pointerHoverIcon(PointerIcon.Hand),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = if (isSel) AccentNavy else SurfaceWhite,
                                 contentColor = if (isSel) SurfaceWhite else PrimaryNavy
-                            )
+                            ),
+                            border = BorderStroke(1.dp, if (isSel) AccentNavy else DividerBorder)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -514,18 +518,20 @@ fun UserSettingsModalDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
                                     onUserInteracted(true)
                                     onSecondaryCurrencySelect(curr)
                                 }
-                                .padding(vertical = 4.dp)
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .padding(vertical = 4.dp, horizontal = 4.dp)
                         ) {
                             RadioButton(
                                 selected = selectedSecondaryCurrency == curr,
-                                onClick = {
-                                    onUserInteracted(true)
-                                    onSecondaryCurrencySelect(curr)
-                                }
+                                onClick = null
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(label, fontSize = 14.sp)

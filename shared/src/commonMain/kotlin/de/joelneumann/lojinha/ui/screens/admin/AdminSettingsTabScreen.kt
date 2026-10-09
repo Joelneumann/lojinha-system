@@ -1,8 +1,12 @@
 package de.joelneumann.lojinha.ui.screens.admin
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import de.joelneumann.lojinha.AppVersion
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -85,13 +89,25 @@ fun AdminSettingsTabScreen(
     var isSupportEmailLocked by remember { mutableStateOf(supportEmail.isNotBlank()) }
     var showUnlockSupportEmailDialog by remember { mutableStateOf(false) }
 
+    val inactivityTimeoutValue = inactivityTimeout.toIntOrNull()
+    val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue in 2..1440
+
+    val globalMarkupValue = remember(globalMarkup) { Formatting.parsePercentageInput(globalMarkup) }
+    val isGlobalMarkupValid = globalMarkupValue != null && globalMarkupValue in 0.0..1000.0
+    val parsedUsdRate = remember(usdRate) { usdRate.trim().replace(',', '.').toDoubleOrNull() }
+    val isUsdRateValid = parsedUsdRate != null && parsedUsdRate.isFinite() && parsedUsdRate in 0.0001..100000.0
+    val parsedEurRate = remember(eurRate) { eurRate.trim().replace(',', '.').toDoubleOrNull() }
+    val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate in 0.0001..100000.0
+
     val hasFieldChanges = remember(
-        settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, autoUpdateExchangeRates, inactivityTimeout, supportEmail
+        settings, newPassword, confirmPassword, globalMarkup, globalMarkupValue,
+        usdRate, parsedUsdRate, eurRate, parsedEurRate,
+        autoUpdateExchangeRates, inactivityTimeout, supportEmail
     ) {
         (newPassword.isNotEmpty() || confirmPassword.isNotEmpty()) ||
-                globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent) ||
-                usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate) ||
-                eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate) ||
+                (if (globalMarkupValue != null) globalMarkupValue != settings.globalMarkupPercent else globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent)) ||
+                (if (parsedUsdRate != null) parsedUsdRate != settings.usdExchangeRate else usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate)) ||
+                (if (parsedEurRate != null) parsedEurRate != settings.eurExchangeRate else eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate)) ||
                 autoUpdateExchangeRates != settings.autoUpdateExchangeRates ||
                 inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
                 supportEmail.trim() != (settings.supportEmail ?: "")
@@ -113,15 +129,6 @@ fun AdminSettingsTabScreen(
     val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
     val doPasswordsMatch = newPassword == confirmPassword
     val isPasswordValid = !isPasswordEntered || (newPassword.isNotBlank() && doPasswordsMatch)
-    val inactivityTimeoutValue = inactivityTimeout.toIntOrNull()
-    val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue in 2..1440
-
-    val globalMarkupValue = remember(globalMarkup) { Formatting.parsePercentageInput(globalMarkup) }
-    val isGlobalMarkupValid = globalMarkupValue != null && globalMarkupValue in 0.0..1000.0
-    val parsedUsdRate = remember(usdRate) { usdRate.trim().replace(',', '.').toDoubleOrNull() }
-    val isUsdRateValid = parsedUsdRate != null && parsedUsdRate.isFinite() && parsedUsdRate in 0.0001..100000.0
-    val parsedEurRate = remember(eurRate) { eurRate.trim().replace(',', '.').toDoubleOrNull() }
-    val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate in 0.0001..100000.0
 
     LaunchedEffect(hasFieldChanges) {
         onUnsavedStateChanged(hasFieldChanges)
@@ -216,18 +223,25 @@ fun AdminSettingsTabScreen(
                 Button(
                     onClick = {
                         if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid) {
+                            val newUsd = parsedUsdRate ?: settings.usdExchangeRate
+                            val newEur = parsedEurRate ?: settings.eurExchangeRate
+                            val ratesManuallyChanged = newUsd != settings.usdExchangeRate || newEur != settings.eurExchangeRate
                             val updatedSettings = settings.copy(
                                 adminPasswordHash = if (newPassword.isNotBlank()) de.joelneumann.lojinha.security.PasswordHasher.hash(newPassword) else settings.adminPasswordHash,
                                 globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
-                                usdExchangeRate = parsedUsdRate ?: settings.usdExchangeRate,
-                                eurExchangeRate = parsedEurRate ?: settings.eurExchangeRate,
+                                usdExchangeRate = newUsd,
+                                eurExchangeRate = newEur,
                                 inactivityTimeoutMinutes = (inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes).coerceIn(2, 1440),
                                 supportEmail = supportEmail.trim().takeIf { it.isNotBlank() },
-                                autoUpdateExchangeRates = autoUpdateExchangeRates
+                                autoUpdateExchangeRates = autoUpdateExchangeRates,
+                                lastExchangeRateUpdateTimestamp = if (ratesManuallyChanged) null else settings.lastExchangeRateUpdateTimestamp
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
                             confirmPassword = ""
+                            usdRate = Formatting.formatDecimal(newUsd)
+                            eurRate = Formatting.formatDecimal(newEur)
+                            globalMarkup = Formatting.formatDecimal(updatedSettings.globalMarkupPercent)
                             isSupportEmailLocked = updatedSettings.supportEmail?.isNotBlank() == true
                             onUnsavedStateChanged(false)
                         }
@@ -395,7 +409,8 @@ fun AdminSettingsTabScreen(
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = AccentNavy
                                 ),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -472,15 +487,19 @@ fun AdminSettingsTabScreen(
 
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { autoUpdateExchangeRates = !autoUpdateExchangeRates }
-                                .padding(vertical = 4.dp),
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { autoUpdateExchangeRates = !autoUpdateExchangeRates }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .padding(vertical = 4.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Switch(
                                 checked = autoUpdateExchangeRates,
-                                onCheckedChange = { autoUpdateExchangeRates = it },
+                                onCheckedChange = null,
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = SurfaceWhite,
                                     checkedTrackColor = AccentNavy
@@ -920,7 +939,8 @@ fun AdminSettingsTabScreen(
 
                                                 Switch(
                                                     checked = routine.isEnabled,
-                                                    onCheckedChange = { viewModel.requestToggleRoutine(routine, it) }
+                                                    onCheckedChange = { viewModel.requestToggleRoutine(routine, it) },
+                                                    modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
                                                 )
                                             }
 

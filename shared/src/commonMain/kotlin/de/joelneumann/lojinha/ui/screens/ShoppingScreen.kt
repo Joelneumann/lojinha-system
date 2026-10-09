@@ -218,11 +218,7 @@ fun ShoppingContent(
     val cartTotal = remember(cartItems) { cartItems.sumOf { it.lineTotal } }
     val balanceAfter = remember(user.balance, cartTotal) { user.balance - cartTotal }
 
-    val rate = when (user.secondaryCurrency) {
-        SecondaryCurrency.USD -> settings.usdExchangeRate
-        SecondaryCurrency.EUR -> settings.eurExchangeRate
-        else -> 0.0
-    }
+    val rate = settings.exchangeRateFor(user.secondaryCurrency)
 
     fun isPlusKey(event: KeyEvent): Boolean {
         return event.key == Key.Plus ||
