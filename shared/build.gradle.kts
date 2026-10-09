@@ -83,6 +83,7 @@ kotlin {
             implementation(libs.androidx.room.runtime)
             implementation(libs.androidx.sqlite.bundled)
             implementation(libs.ktor.client.cio)
+            implementation(libs.openpdf)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
