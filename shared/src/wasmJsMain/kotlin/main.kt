@@ -96,6 +96,17 @@ fun main() {
                             transactionsViewModel = transactionsViewModel,
                             bulkBillingViewModel = bulkBillingViewModel,
                             settingsViewModel = null,
+                            defaultSaveDirectory = "Downloads",
+                            onExecutePdfExport = { user, _, fromTimestamp, toTimestamp, language ->
+                                usersViewModel.setIsExportingPdf(true)
+                                val token = networkClient.authToken ?: ""
+                                val fromQuery = if (fromTimestamp != null) "&from=$fromTimestamp" else ""
+                                val toQuery = if (toTimestamp != null) "&to=$toTimestamp" else ""
+                                val url = networkClient.resolveUrl("/api/admin/users/${user.id}/transactions-pdf?lang=${language.name}&token=$token$fromQuery$toQuery")
+                                jsTriggerDownload(url)
+                                usersViewModel.setIsExportingPdf(false)
+                                usersViewModel.setExportResultPath("Extrato_${user.name}.pdf")
+                            },
                             onExitAdmin = {
                                 scope.launch {
                                     networkClient.logout()
@@ -109,3 +120,16 @@ fun main() {
         }
     }
 }
+
+@JsFun("""
+(url) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+""")
+private external fun jsTriggerDownload(url: String)
+

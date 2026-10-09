@@ -235,6 +235,45 @@ class LojinhaAdminServer(
                         val canDelete = userRepository.canHardDeleteUser(id)
                         call.respond(mapOf("canDelete" to canDelete))
                     }
+                    get("/users/{id}/transactions-pdf") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@get
+                        val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                        val fromTimestamp = call.request.queryParameters["from"]?.toLongOrNull()
+                        val toTimestamp = call.request.queryParameters["to"]?.toLongOrNull()
+                        val langStr = call.request.queryParameters["lang"] ?: "BR"
+                        val language = try {
+                            Language.valueOf(langStr.uppercase())
+                        } catch (_: Exception) {
+                            Language.BR
+                        }
+
+                        val user = userRepository.getUserById(id)
+                        if (user == null) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@get
+                        }
+
+                        val txs = transactionRepository.getTransactionsByUserId(id)
+                        try {
+                            val pdfBytes = de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementBytes(
+                                user = user,
+                                transactions = txs,
+                                fromTimestamp = fromTimestamp,
+                                toTimestamp = toTimestamp,
+                                language = language
+                            )
+                            val cleanUserName = user.name.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                            val filename = "Extrato_${cleanUserName}.pdf"
+                            call.response.header(
+                                HttpHeaders.ContentDisposition,
+                                ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
+                            )
+                            call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                        } catch (e: Exception) {
+                            AppLogger.error("LojinhaAdminServer", "Failed to generate transactions PDF: ${e.message}", e)
+                            call.respond(HttpStatusCode.InternalServerError, "Failed to generate transactions PDF")
+                        }
+                    }
 
                     // Transactions
                     get("/transactions") {

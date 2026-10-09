@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
@@ -62,6 +63,10 @@ fun AdminScreen(
     transactionsViewModel: AdminTransactionsViewModel,
     bulkBillingViewModel: AdminBulkBillingViewModel? = null,
     settingsViewModel: AdminSettingsViewModel? = null,
+    defaultSaveDirectory: String = "",
+    onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
+    onOpenExportedPdf: ((String) -> Unit)? = null,
+    onRevealExportedFolder: ((String) -> Unit)? = null,
     onExitAdmin: () -> Unit
 ) {
     val strings = I18n.current
@@ -263,7 +268,11 @@ fun AdminScreen(
                             },
                             onRequestExpandUser = { id -> expandedUserId = id },
                             onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
-                            onRegisterPageScroller = { scroller -> activePageScroller = scroller }
+                            onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                            defaultSaveDirectory = defaultSaveDirectory,
+                            onExecutePdfExport = onExecutePdfExport,
+                            onOpenExportedPdf = onOpenExportedPdf,
+                            onRevealExportedFolder = onRevealExportedFolder
                         )
                     }
 

@@ -628,5 +628,45 @@ interface AppStrings {
     val csvEmptyError: String
     val csvMissingHeadersError: String
     val csvMissingNameHeaderError: String
+
+    // Printable Transactions & PDF Export
+    val exportPdf: String
+    val printTransactions: String
+    val exportTransactionsTitle: String
+    val statementLanguage: String
+    val destinationFolder: String
+    val selectDestinationFolder: String
+    val filterPeriod: String
+    val periodLast30Days: String
+    val periodLast60Days: String
+    val periodLast90Days: String
+    val periodCurrentMonth: String
+    val periodAllTime: String
+    val periodCustom: String
+    val dateFrom: String
+    val dateTo: String
+    fun transactionsCountPreview(count: Int): String
+    val initialBalance: String
+    val finalBalance: String
+    val totalDeposits: String
+    val totalPurchases: String
+    val periodNetLabel: String
+    val pdfExportSuccess: String
+    val openPdf: String
+    val revealInFolder: String
+    val statementPdfTitle: String
+    val statementPdfAccountStatus: String
+    val statementPdfActive: String
+    val statementPdfInactive: String
+    val statementPdfDisclaimer: String
+    fun statementPdfFooterGenerated(date: String): String
+    val statementPdfColDateTime: String
+    val statementPdfColType: String
+    val statementPdfColDescription: String
+    val statementPdfColAmount: String
+    val statementPdfColBalance: String
+    val errInvalidDateRange: String
+    val errNoTransactionsToExport: String
+    val errPdfExportFailed: String
 }
 

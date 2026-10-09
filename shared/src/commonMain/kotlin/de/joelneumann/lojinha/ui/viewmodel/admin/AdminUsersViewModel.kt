@@ -48,6 +48,18 @@ class AdminUsersViewModel(
     private val _customIncomeUser = MutableStateFlow<User?>(null)
     val customIncomeUser: StateFlow<User?> = _customIncomeUser.asStateFlow()
 
+    private val _exportPdfUser = MutableStateFlow<User?>(null)
+    val exportPdfUser: StateFlow<User?> = _exportPdfUser.asStateFlow()
+
+    private val _exportPdfTransactions = MutableStateFlow<List<Transaction>>(emptyList())
+    val exportPdfTransactions: StateFlow<List<Transaction>> = _exportPdfTransactions.asStateFlow()
+
+    private val _isExportingPdf = MutableStateFlow(false)
+    val isExportingPdf: StateFlow<Boolean> = _isExportingPdf.asStateFlow()
+
+    private val _exportResultPath = MutableStateFlow<String?>(null)
+    val exportResultPath: StateFlow<String?> = _exportResultPath.asStateFlow()
+
     private val _userErrorMessage = MutableStateFlow<String?>(null)
     val userErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
     val userDeleteErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
@@ -87,6 +99,34 @@ class AdminUsersViewModel(
     fun closeUserModal() {
         _showUserModal.value = false
         _editUser.value = null
+    }
+
+    fun openExportPdfModal(user: User) {
+        _exportPdfUser.value = user
+        _exportResultPath.value = null
+        viewModelScope.launch {
+            try {
+                _exportPdfTransactions.value = transactionRepository.getTransactionsByUserId(user.id)
+            } catch (e: Exception) {
+                AppLogger.warn("AdminUsersViewModel", "Failed to load transactions for PDF export: ${e.message}", e)
+                _exportPdfTransactions.value = emptyList()
+            }
+        }
+    }
+
+    fun closeExportPdfModal() {
+        _exportPdfUser.value = null
+        _exportPdfTransactions.value = emptyList()
+        _exportResultPath.value = null
+        _isExportingPdf.value = false
+    }
+
+    fun setExportResultPath(path: String?) {
+        _exportResultPath.value = path
+    }
+
+    fun setIsExportingPdf(isExporting: Boolean) {
+        _isExportingPdf.value = isExporting
     }
 
     private suspend fun refreshUsers() {

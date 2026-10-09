@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import de.joelneumann.lojinha.data.database.DatabaseFactory
+import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
@@ -42,6 +43,9 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.*
 import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.security.PasswordHasher
 import de.joelneumann.lojinha.util.AppLogger
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
@@ -461,6 +465,58 @@ fun App(
                             transactionsViewModel = adminTransactionsViewModel,
                             bulkBillingViewModel = adminBulkBillingViewModel,
                             settingsViewModel = adminSettingsViewModel,
+                            defaultSaveDirectory = remember {
+                                val userHome = System.getProperty("user.home")
+                                val downloads = java.io.File(userHome, "Downloads")
+                                if (downloads.exists()) downloads.absolutePath else userHome
+                            },
+                            onExecutePdfExport = { user, destinationFolder, fromTimestamp, toTimestamp, language ->
+                                coroutineScope.launch {
+                                    adminUsersViewModel.setIsExportingPdf(true)
+                                    try {
+                                        val transactions = effectiveTransactionRepo.getTransactionsByUserId(user.id)
+                                        val cleanUserName = user.name.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                                        val dateSuffix = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                                        val targetDir = java.io.File(destinationFolder)
+                                        if (!targetDir.exists()) {
+                                            targetDir.mkdirs()
+                                        }
+                                        val targetFile = java.io.File(targetDir, "Extrato_${cleanUserName}_$dateSuffix.pdf")
+                                        de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementPdf(
+                                            outputFile = targetFile,
+                                            user = user,
+                                            transactions = transactions,
+                                            fromTimestamp = fromTimestamp,
+                                            toTimestamp = toTimestamp,
+                                            language = language
+                                        )
+                                        adminUsersViewModel.setExportResultPath(targetFile.absolutePath)
+                                    } catch (e: Exception) {
+                                        AppLogger.error("App", "Failed to export PDF statement: ${e.message}", e)
+                                        adminUsersViewModel.setExportResultPath(null)
+                                    } finally {
+                                        adminUsersViewModel.setIsExportingPdf(false)
+                                    }
+                                }
+                            },
+                            onOpenExportedPdf = { filePath ->
+                                try {
+                                    val file = java.io.File(filePath)
+                                    if (file.exists() && java.awt.Desktop.isDesktopSupported()) {
+                                        java.awt.Desktop.getDesktop().open(file)
+                                    }
+                                } catch (e: Exception) {
+                                    AppLogger.warn("App", "Failed to open PDF in system viewer: ${e.message}", e)
+                                }
+                            },
+                            onRevealExportedFolder = { filePath ->
+                                try {
+                                    val file = java.io.File(filePath)
+                                    diagnosticsService.revealInFileExplorer(file)
+                                } catch (e: Exception) {
+                                    AppLogger.warn("App", "Failed to reveal PDF in folder: ${e.message}", e)
+                                }
+                            },
                             onExitAdmin = {
                                 appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
                             }
