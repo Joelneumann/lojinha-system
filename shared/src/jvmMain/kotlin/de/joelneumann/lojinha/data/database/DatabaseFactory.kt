@@ -126,6 +126,20 @@ object DatabaseFactory {
         }
     }
 
+    private val MIGRATION_14_15 = object : Migration(14, 15) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v14 -> v15 (creating admin_notes table)...")
+            try {
+                connection.execSQL("CREATE TABLE IF NOT EXISTS `admin_notes` (`id` TEXT NOT NULL, `message` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_admin_notes_timestamp` ON `admin_notes` (`timestamp`)")
+                AppLogger.info(TAG, "Database migration v14 -> v15 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v14 -> v15 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
     @Volatile
     private var instance: AppDatabase? = null
 
@@ -178,7 +192,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")

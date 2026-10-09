@@ -686,5 +686,22 @@ object PortugueseStrings : AppStrings {
     override val errInvalidDateRange = "Intervalo de datas inválido: data inicial deve ser anterior à data final."
     override val errNoTransactionsToExport = "Nenhuma transação encontrada no período selecionado."
     override val errPdfExportFailed = "Falha ao exportar PDF."
+
+    // Admin Notes & Suggestions
+    override val tabNotes = "Recados"
+    override fun notesCountText(count: Int): String = if (count == 1) "1 recado" else "$count recados"
+    override val suggestProductOrNoteBtn = "Sugestões & Recados"
+    override val noteDialogTitle = "Sugestões de Produtos e Recados"
+    override fun noteDialogSubmittingAs(name: String): String = "Enviando como $name"
+    override val noteDialogPlaceholder = "Sugira um produto ou deixe um recado para o administrador (ex: Coca Zero acabou)..."
+    override val noteDialogEmptyError = "Por favor, digite uma mensagem."
+    override val noteDialogSubmit = "Enviar"
+    override val noteDialogSuccess = "Obrigado! Seu recado foi enviado ao administrador."
+    override val noNotesTitle = "Nenhum recado ou sugestão ainda"
+    override val noNotesMsg = "Mensagens e sugestões de produtos enviadas pelos usuários no quiosque aparecerão aqui."
+    override val deleteNote = "Excluir Recado"
+    override val confirmDeleteNoteTitle = "Excluir Recado"
+    override val confirmDeleteNoteMsg = "Tem certeza de que deseja excluir este recado?"
+    override val searchNotesPlaceholder = "Buscar recados..."
 }
 

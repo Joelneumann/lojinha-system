@@ -686,5 +686,22 @@ object EnglishStrings : AppStrings {
     override val errInvalidDateRange = "Invalid date range: start date must be before end date."
     override val errNoTransactionsToExport = "No transactions found in selected period."
     override val errPdfExportFailed = "Failed to export PDF."
+
+    // Admin Notes & Suggestions
+    override val tabNotes = "Notes"
+    override fun notesCountText(count: Int): String = if (count == 1) "1 note" else "$count notes"
+    override val suggestProductOrNoteBtn = "Suggestions & Notes"
+    override val noteDialogTitle = "Product Suggestions & Admin Notes"
+    override fun noteDialogSubmittingAs(name: String): String = "Submitting as $name"
+    override val noteDialogPlaceholder = "Suggest a product or leave a note for the admin (e.g. Coke Zero ran out)..."
+    override val noteDialogEmptyError = "Please enter a message."
+    override val noteDialogSubmit = "Submit"
+    override val noteDialogSuccess = "Thank you! Your note was sent to the Admin."
+    override val noNotesTitle = "No notes or suggestions yet"
+    override val noNotesMsg = "Messages and product suggestions submitted by users on the kiosk will appear here."
+    override val deleteNote = "Delete Note"
+    override val confirmDeleteNoteTitle = "Delete Note"
+    override val confirmDeleteNoteMsg = "Are you sure you want to delete this note?"
+    override val searchNotesPlaceholder = "Search notes..."
 }
 
