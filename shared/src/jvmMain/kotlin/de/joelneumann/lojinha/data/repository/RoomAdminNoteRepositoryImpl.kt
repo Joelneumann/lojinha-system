@@ -23,7 +23,12 @@ class RoomAdminNoteRepositoryImpl(
     }
 
     override suspend fun addNote(note: AdminNote) {
-        adminNoteDao.insertNote(AdminNoteEntity.fromDomain(note))
+        val sanitized = note.copy(
+            id = if (note.id.isBlank()) java.util.UUID.randomUUID().toString() else note.id,
+            message = note.message.trim().take(1000),
+            timestamp = if (note.timestamp <= 0L) System.currentTimeMillis() else note.timestamp
+        )
+        adminNoteDao.insertNote(AdminNoteEntity.fromDomain(sanitized))
         onDataChanged?.invoke()
     }
 

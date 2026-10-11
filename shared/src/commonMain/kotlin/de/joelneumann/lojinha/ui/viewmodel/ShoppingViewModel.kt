@@ -453,12 +453,13 @@ class ShoppingViewModel(
         message: String,
         onSuccess: (() -> Unit)? = null
     ) {
-        val cleanMsg = message.trim()
+        val cleanMsg = message.trim().take(1000)
         if (cleanMsg.isBlank()) return
+        if (_isSubmittingNote.value) return
 
         val repo = adminNoteRepository ?: return
+        _isSubmittingNote.value = true
         activeScope.launch {
-            _isSubmittingNote.value = true
             try {
                 val note = AdminNote(
                     id = generateUuid(),

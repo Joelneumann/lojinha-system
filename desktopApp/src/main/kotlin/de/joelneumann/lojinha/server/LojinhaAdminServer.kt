@@ -402,7 +402,9 @@ class LojinhaAdminServer(
                     // Admin Notes & Suggestions
                     get("/notes") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
-                        val repo = adminNoteRepository ?: database?.let { de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) }
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
                         if (repo == null) {
                             call.respond(emptyList<AdminNote>())
                             return@get
@@ -410,25 +412,33 @@ class LojinhaAdminServer(
                         call.respond(repo.getAllNotes())
                     }
                     post("/notes") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@post
                         val note = call.receive<AdminNote>()
+                        val cleanMessage = note.message.trim().take(1000)
+                        if (cleanMessage.isBlank()) {
+                            return@post call.respond(HttpStatusCode.BadRequest, "Note message cannot be blank")
+                        }
                         val noteToSave = note.copy(
                             id = if (note.id.isBlank()) UUID.randomUUID().toString() else note.id,
+                            message = cleanMessage,
                             timestamp = if (note.timestamp <= 0L) System.currentTimeMillis() else note.timestamp
                         )
-                        val repo = adminNoteRepository ?: database?.let { de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) }
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
                         if (repo != null) {
                             repo.addNote(noteToSave)
-                            DataChangeNotifier.notifyDataChanged()
                         }
                         call.respond(HttpStatusCode.Created, noteToSave)
                     }
                     delete("/notes/{id}") {
                         if (!call.checkAdminAuth(settingsRepository)) return@delete
                         val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
-                        val repo = adminNoteRepository ?: database?.let { de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) }
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
                         if (repo != null) {
                             repo.deleteNote(id)
-                            DataChangeNotifier.notifyDataChanged()
                         }
                         call.respond(HttpStatusCode.OK)
                     }

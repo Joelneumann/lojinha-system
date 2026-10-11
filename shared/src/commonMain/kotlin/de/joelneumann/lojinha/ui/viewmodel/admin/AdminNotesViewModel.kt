@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.domain.model.AdminNote
 import de.joelneumann.lojinha.domain.repository.AdminNoteRepository
-import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.util.AppLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,8 +37,15 @@ class AdminNotesViewModel(
     fun loadNotes() {
         notesJob?.cancel()
         notesJob = viewModelScope.launch {
-            adminNoteRepository.getNotesFlow().collect { list ->
-                _notes.value = list.sortedByDescending { it.timestamp }
+            try {
+                adminNoteRepository.getNotesFlow().collect { list ->
+                    _notes.value = list.sortedByDescending { it.timestamp }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLogger.error("AdminNotesViewModel", "Failed to load notes: ${e.message}", e)
+                _errorMessage.value = e.message
             }
         }
     }
@@ -52,6 +59,7 @@ class AdminNotesViewModel(
             _isDeletingNote.value = true
             try {
                 adminNoteRepository.deleteNote(id)
+                _notes.value = _notes.value.filter { it.id != id }
             } catch (e: Exception) {
                 AppLogger.error("AdminNotesViewModel", "Failed to delete note: ${e.message}", e)
                 _errorMessage.value = e.message

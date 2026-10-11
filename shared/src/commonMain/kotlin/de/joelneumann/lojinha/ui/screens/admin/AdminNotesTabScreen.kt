@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.AdminNote
@@ -39,15 +40,17 @@ fun AdminNotesTabScreen(
 ) {
     val notes by viewModel.notes.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val isDeletingNote by viewModel.isDeletingNote.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
     val strings = I18n.current
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var noteToDelete by remember { mutableStateOf<AdminNote?>(null) }
 
-    LaunchedEffect(onRegisterPageScroller, noteToDelete) {
+    LaunchedEffect(onRegisterPageScroller, noteToDelete, errorMessage) {
         onRegisterPageScroller?.invoke { isDown ->
-            if (noteToDelete == null) {
+            if (noteToDelete == null && errorMessage == null) {
                 coroutineScope.launch {
                     if (isDown) listState.pageDown() else listState.pageUp()
                 }
@@ -68,7 +71,7 @@ fun AdminNotesTabScreen(
         modifier = Modifier
             .fillMaxSize()
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && noteToDelete == null) {
+                if (event.type == KeyEventType.KeyDown && noteToDelete == null && errorMessage == null) {
                     when (event.key) {
                         Key.PageDown -> {
                             coroutineScope.launch { listState.pageDown() }
@@ -109,12 +112,26 @@ fun AdminNotesTabScreen(
                             tint = TextSecondaryMuted,
                             modifier = Modifier.size(36.dp)
                         )
-                        Text(
-                            text = if (searchQuery.isBlank()) strings.noNotesTitle else strings.noNotesMsg,
-                            color = TextSecondaryMuted,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        if (searchQuery.isBlank()) {
+                            Text(
+                                text = strings.noNotesTitle,
+                                color = TextSecondaryMuted,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = strings.noNotesMsg,
+                                color = TextSecondarySubtle,
+                                fontSize = 13.sp
+                            )
+                        } else {
+                            Text(
+                                text = strings.notesCountText(0),
+                                color = TextSecondaryMuted,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             } else {
@@ -143,6 +160,7 @@ fun AdminNotesTabScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Row(
+                                        modifier = Modifier.weight(1f),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
@@ -156,7 +174,10 @@ fun AdminNotesTabScreen(
                                             text = note.userNameSnapshot,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = PrimaryNavy
+                                            color = PrimaryNavy,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
                                         )
                                         Text(
                                             text = "•",
@@ -172,6 +193,7 @@ fun AdminNotesTabScreen(
 
                                     IconButton(
                                         onClick = { noteToDelete = note },
+                                        enabled = !isDeletingNote,
                                         modifier = Modifier.size(32.dp)
                                     ) {
                                         Icon(
@@ -220,6 +242,32 @@ fun AdminNotesTabScreen(
                 viewModel.deleteNote(id)
             },
             confirmButtonColor = ColorDangerCrimson
+        )
+    }
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::clearError,
+            shape = RoundedCornerShape(16.dp),
+            containerColor = SurfaceWhite,
+            title = {
+                Text(
+                    text = strings.errorTitle,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorDangerCrimson
+                )
+            },
+            text = {
+                Text(errorMessage ?: "")
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::clearError,
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson)
+                ) {
+                    Text(strings.ok)
+                }
+            }
         )
     }
 }

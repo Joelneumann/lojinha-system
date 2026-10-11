@@ -359,8 +359,28 @@ class LojinhaAdminServerTest {
         assertEquals(200, getRes.statusCode())
         assertTrue(getRes.body().contains("Need more sugar"))
 
-        // 3. POST /api/admin/notes with payload -> 201 Created
+        // 3a. POST /api/admin/notes without token -> 401
         val postPayload = """{"message":"Ice tea ran out","userId":"u2","userNameSnapshot":"Bob"}"""
+        val unauthPostReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(postPayload))
+            .build()
+        val unauthPostRes = client.send(unauthPostReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(401, unauthPostRes.statusCode())
+
+        // 3b. POST /api/admin/notes with blank message -> 400
+        val blankPayload = """{"message":"   ","userId":"u2","userNameSnapshot":"Bob"}"""
+        val blankPostReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
+            .header("Authorization", "Bearer $token")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(blankPayload))
+            .build()
+        val blankPostRes = client.send(blankPostReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(400, blankPostRes.statusCode())
+
+        // 3c. POST /api/admin/notes with valid payload -> 201 Created
         val postReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
             .header("Authorization", "Bearer $token")

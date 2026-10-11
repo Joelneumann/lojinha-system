@@ -21,6 +21,8 @@ import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.trackUserInteractions
 
+private const val MAX_NOTE_LENGTH = 1000
+
 @Composable
 fun AdminNoteInputDialog(
     user: User,
@@ -40,13 +42,15 @@ fun AdminNoteInputDialog(
     }
 
     val submitAction = {
-        onUserInteracted(true)
-        val clean = text.trim()
-        if (clean.isBlank()) {
-            localError = strings.noteDialogEmptyError
-        } else {
-            localError = null
-            onSubmit(clean)
+        if (!isSubmitting) {
+            onUserInteracted(true)
+            val clean = text.trim()
+            if (clean.isBlank()) {
+                localError = strings.noteDialogEmptyError
+            } else {
+                localError = null
+                onSubmit(clean)
+            }
         }
     }
 
@@ -54,17 +58,17 @@ fun AdminNoteInputDialog(
         onDismissRequest = onDismiss,
         containerColor = SurfaceWhite,
         shape = RoundedCornerShape(16.dp),
-        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        properties = DialogProperties(dismissOnBackPress = !isSubmitting, dismissOnClickOutside = !isSubmitting),
         modifier = Modifier
             .widthIn(min = 400.dp, max = 520.dp)
             .trackUserInteractions(onUserInteracted)
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     onUserInteracted(true)
-                    if (event.key == Key.Escape) {
+                    if (event.key == Key.Escape && !isSubmitting) {
                         onDismiss()
                         true
-                    } else if (event.key == Key.Enter && (event.isCtrlPressed || event.isMetaPressed)) {
+                    } else if (event.key == Key.Enter && (event.isCtrlPressed || event.isMetaPressed) && !isSubmitting) {
                         submitAction()
                         true
                     } else false
@@ -103,7 +107,9 @@ fun AdminNoteInputDialog(
                 OutlinedTextField(
                     value = text,
                     onValueChange = {
-                        text = it
+                        if (it.length <= MAX_NOTE_LENGTH) {
+                            text = it
+                        }
                         if (localError != null) localError = null
                         onUserInteracted(true)
                     },
