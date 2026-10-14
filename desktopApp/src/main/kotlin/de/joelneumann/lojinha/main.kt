@@ -26,11 +26,19 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.util.AppLogger
 import de.joelneumann.lojinha.util.CrashHandler
 import de.joelneumann.lojinha.util.AppVersionTracker
+import de.joelneumann.lojinha.util.SingleInstanceLock
+import kotlin.system.exitProcess
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 fun main() {
     System.setProperty("io.netty.noUnsafe", "true")
     CrashHandler.install()
+
+    if (!SingleInstanceLock.acquire()) {
+        AppLogger.warn("Main", "Another instance of Lojinha is already running or starting up. Exiting secondary instance immediately.")
+        exitProcess(0)
+    }
+
     AppVersionTracker.checkAndTrackVersion()
     AppLogger.info("Main", "Starting Lojinha System v${AppVersion.CURRENT} on ${System.getProperty("os.name")} ${System.getProperty("os.version")} (${System.getProperty("os.arch")})")
     AppLogger.info("Main", "Java Runtime: ${System.getProperty("java.version")} by ${System.getProperty("java.vendor")}")
@@ -73,6 +81,11 @@ fun main() {
                     AppLogger.info("Main", "AppDatabase closed and WAL checkpointed successfully.")
                 } catch (e: Exception) {
                     AppLogger.warn("Main", "Error closing database: ${e.message}", e)
+                }
+                try {
+                    SingleInstanceLock.release()
+                } catch (e: Exception) {
+                    AppLogger.warn("Main", "Error releasing single instance lock: ${e.message}", e)
                 }
             }
         }
