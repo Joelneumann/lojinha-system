@@ -163,8 +163,12 @@ class AdminSettingsViewModel(
         onExitApplication?.invoke()
     }
 
+    private var settingsJob: Job? = null
+    private var routinesJob: Job? = null
+
     fun loadSettings() {
-        viewModelScope.launch {
+        settingsJob?.cancel()
+        settingsJob = viewModelScope.launch {
             settingsRepository.getSettingsFlow().collect {
                 _settings.value = it
             }
@@ -173,7 +177,8 @@ class AdminSettingsViewModel(
 
     fun loadRoutines() {
         val repo = backupRepository ?: return
-        viewModelScope.launch {
+        routinesJob?.cancel()
+        routinesJob = viewModelScope.launch {
             repo.getBackupsFlow().collect {
                 _routines.value = it
             }

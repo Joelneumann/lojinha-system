@@ -1054,4 +1054,59 @@ class AdminViewModelsTest {
         assertFalse(preservedPassword)
         assertEquals("Factory Reset completed.", viewModel.statusMessage.value)
     }
+
+    @Test
+    fun testAdminSettingsViewModel_loadSettingsAndRoutines_reloadsLatestData() = runTest {
+        val settingsRepo = TestSettingsRepository(SystemSettings(globalMarkupPercent = 10.0))
+        val backupRepo = TestBackupRepository(listOf(
+            BackupRoutine(id = "r1", name = "Daily", isEnabled = true, type = BackupType.LOCAL, fileType = BackupFileType.DB, writeMode = BackupWriteMode.CREATE_NEW_FILE, scheduleConfig = BackupScheduleConfig.Timed("02:00"), backupLocationPath = "/tmp")
+        ))
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            backupRepository = backupRepo
+        )
+        assertEquals(10.0, viewModel.settings.value.globalMarkupPercent)
+        assertEquals(1, viewModel.routines.value.size)
+
+        // Simulate restore or wipe changing the backing repository
+        settingsRepo.flow.value = SystemSettings(globalMarkupPercent = 25.0)
+        backupRepo.flow.value = emptyList()
+
+        viewModel.loadSettings()
+        viewModel.loadRoutines()
+
+        assertEquals(25.0, viewModel.settings.value.globalMarkupPercent)
+        assertEquals(0, viewModel.routines.value.size)
+    }
+
+    @Test
+    fun testAppViewModel_reactiveReloadSettingsAndUser() = runTest {
+        val settingsRepo = TestSettingsRepository(SystemSettings(inactivityTimeoutMinutes = 5))
+        val alice = User(id = "u1", name = "Alice", balance = 1000)
+        val userRepo = TestUserRepository(listOf(alice))
+        val appViewModel = de.joelneumann.lojinha.ui.viewmodel.AppViewModel(userRepo, settingsRepo)
+
+        assertEquals(5, appViewModel.settings.value.inactivityTimeoutMinutes)
+        appViewModel.loginUser(alice)
+        assertEquals("u1", appViewModel.currentUser.value?.id)
+
+        // 1. Settings update
+        settingsRepo.flow.value = SystemSettings(inactivityTimeoutMinutes = 15)
+        appViewModel.loadSettings()
+        assertEquals(15, appViewModel.settings.value.inactivityTimeoutMinutes)
+
+        // 2. User update
+        val updatedAlice = alice.copy(name = "Alice Updated", balance = 2000)
+        userRepo.users = listOf(updatedAlice)
+        appViewModel.refreshCurrentUser()
+        assertEquals("Alice Updated", appViewModel.currentUser.value?.name)
+        assertEquals(2000, appViewModel.currentUser.value?.balance)
+
+        // 3. User wiped/deleted triggers logout
+        userRepo.users = emptyList()
+        appViewModel.refreshCurrentUser()
+        assertNull(appViewModel.currentUser.value)
+        assertEquals(de.joelneumann.lojinha.ui.viewmodel.AppScreen.MAIN_USER_SELECT, appViewModel.currentScreen.value)
+    }
 }
+
