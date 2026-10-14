@@ -112,8 +112,52 @@ object DatabaseFactory {
         }
     }
 
+    private val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v13 -> v14 (adding autoUpdateExchangeRates and lastExchangeRateUpdateTimestamp to settings)...")
+            try {
+                connection.execSQL("ALTER TABLE settings ADD COLUMN autoUpdateExchangeRates INTEGER NOT NULL DEFAULT 1")
+                connection.execSQL("ALTER TABLE settings ADD COLUMN lastExchangeRateUpdateTimestamp INTEGER DEFAULT NULL")
+                AppLogger.info(TAG, "Database migration v13 -> v14 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v13 -> v14 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
+    private val MIGRATION_14_15 = object : Migration(14, 15) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v14 -> v15 (creating admin_notes table)...")
+            try {
+                connection.execSQL("CREATE TABLE IF NOT EXISTS `admin_notes` (`id` TEXT NOT NULL, `message` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_admin_notes_timestamp` ON `admin_notes` (`timestamp`)")
+                AppLogger.info(TAG, "Database migration v14 -> v15 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v14 -> v15 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
+    private val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v15 -> v16 (adding balance warning thresholds to settings)...")
+            try {
+                connection.execSQL("ALTER TABLE settings ADD COLUMN yellowBalanceWarningThresholdCents INTEGER NOT NULL DEFAULT 30000")
+                connection.execSQL("ALTER TABLE settings ADD COLUMN redBalanceWarningThresholdCents INTEGER NOT NULL DEFAULT 0")
+                AppLogger.info(TAG, "Database migration v15 -> v16 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v15 -> v16 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
     @Volatile
     private var instance: AppDatabase? = null
+
+    fun getDatabaseFile(): File = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
 
     fun createDatabase(): AppDatabase {
         return instance ?: synchronized(this) {
@@ -125,7 +169,7 @@ object DatabaseFactory {
     }
 
     private fun buildDatabase(): AppDatabase {
-        val dbFile = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
+        val dbFile = getDatabaseFile()
         dbFile.parentFile?.mkdirs()
 
         // 1. Safety snapshot before Room initializes to guard against unexpected migration issues
@@ -164,7 +208,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")
@@ -233,7 +277,9 @@ object DatabaseFactory {
                     globalMarkupPercent = 0.0,
                     usdExchangeRate = 0.18,
                     eurExchangeRate = 0.16,
-                    inactivityTimeoutMinutes = 3
+                    inactivityTimeoutMinutes = 3,
+                    autoUpdateExchangeRates = true,
+                    lastExchangeRateUpdateTimestamp = null
                 )
             )
         } else {

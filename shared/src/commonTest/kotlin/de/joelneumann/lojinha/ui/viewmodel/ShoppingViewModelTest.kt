@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha.ui.viewmodel
 
 import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.domain.repository.AdminNoteRepository
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
@@ -63,6 +64,29 @@ private class FakeShoppingTransactionRepository(
     override suspend fun applyPurchaseCorrection(originalTransactionId: String, newItems: List<TransactionItem>): Boolean = true
     override suspend fun stornoNonPurchase(transactionId: String): Boolean = true
     override suspend fun executeBatchTransactions(requests: List<AtomicTransactionRequest>): Boolean = true
+}
+
+private class FakeShoppingAdminNoteRepository : AdminNoteRepository {
+    val notes = mutableListOf<AdminNote>()
+    var shouldThrow = false
+
+    override fun getNotesFlow(): Flow<List<AdminNote>> = MutableStateFlow(notes)
+    override suspend fun getAllNotes(): List<AdminNote> = notes
+
+    override suspend fun addNote(note: AdminNote) {
+        if (shouldThrow) {
+            throw IllegalStateException("Failed to add note")
+        }
+        notes.add(note)
+    }
+
+    override suspend fun deleteNote(id: String) {
+        notes.removeAll { it.id == id }
+    }
+
+    override suspend fun deleteAllNotes() {
+        notes.clear()
+    }
 }
 
 class ShoppingViewModelTest {
@@ -421,5 +445,152 @@ class ShoppingViewModelTest {
             vm.updateCartItemQuantity("p-limit", 3)
             assertEquals(3L, vm.cartItems.value.first().quantity)
         }
+    }
+
+    @Test
+    fun testSubmitAdminNote_success() = runTest {
+        val productRepo = FakeShoppingProductRepository(allProducts)
+        val userRepo = FakeUserRepository()
+        val txRepo = FakeShoppingTransactionRepository()
+        val noteRepo = FakeShoppingAdminNoteRepository()
+        val vm = ShoppingViewModel(productRepo, userRepo, txRepo, noteRepo, backgroundScope)
+
+        val user = User(
+            id = "u-42",
+            name = "Alice",
+            balance = 1000L,
+            language = Language.EN,
+            secondaryCurrency = SecondaryCurrency.USD,
+            isActive = true
+        )
+
+        var onSuccessCalled = false
+        vm.submitAdminNote(user, "Could we get sparkling water?") {
+            onSuccessCalled = true
+        }
+        delay(50)
+
+        assertEquals(1, noteRepo.notes.size)
+        assertEquals("Could we get sparkling water?", noteRepo.notes.first().message)
+        assertEquals("u-42", noteRepo.notes.first().userId)
+        assertEquals("Alice", noteRepo.notes.first().userNameSnapshot)
+        assertTrue(onSuccessCalled)
+        assertNotNull(vm.noteSubmitSuccess.value)
+
+        vm.clearNoteSubmitState()
+        assertNull(vm.noteSubmitSuccess.value)
+    }
+
+    @Test
+    fun testSubmitAdminNote_blank_doesNotSave() = runTest {
+        val productRepo = FakeShoppingProductRepository(allProducts)
+        val userRepo = FakeUserRepository()
+        val txRepo = FakeShoppingTransactionRepository()
+        val noteRepo = FakeShoppingAdminNoteRepository()
+        val vm = ShoppingViewModel(productRepo, userRepo, txRepo, noteRepo, backgroundScope)
+
+        val user = User(
+            id = "u-42",
+            name = "Alice",
+            balance = 1000L,
+            language = Language.EN,
+            secondaryCurrency = SecondaryCurrency.USD,
+            isActive = true
+        )
+
+        vm.submitAdminNote(user, "   \n  ")
+        delay(50)
+
+        assertEquals(0, noteRepo.notes.size)
+        assertNull(vm.noteSubmitSuccess.value)
+        assertNull(vm.noteSubmitError.value)
+    }
+
+    @Test
+    fun testSubmitAdminNote_failure_setsFeedbackFalse() = runTest {
+        val productRepo = FakeShoppingProductRepository(allProducts)
+        val userRepo = FakeUserRepository()
+        val txRepo = FakeShoppingTransactionRepository()
+        val noteRepo = FakeShoppingAdminNoteRepository().apply { shouldThrow = true }
+        val vm = ShoppingViewModel(productRepo, userRepo, txRepo, noteRepo, backgroundScope)
+
+        val user = User(
+            id = "u-42",
+            name = "Alice",
+            balance = 1000L,
+            language = Language.EN,
+            secondaryCurrency = SecondaryCurrency.USD,
+            isActive = true
+        )
+
+        vm.submitAdminNote(user, "Please stock more coffee")
+        delay(50)
+
+        assertEquals(0, noteRepo.notes.size)
+        assertNotNull(vm.noteSubmitError.value)
+    }
+
+    @Test
+    fun testAddMultipleProducts_addsNewProductsToTopOfCart() = withViewModel { vm, _ ->
+        // Add Product 1 (Club Mate)
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+        val cartAfterFirst = vm.cartItems.value
+        assertEquals(1, cartAfterFirst.size)
+        assertEquals("1", cartAfterFirst[0].product.id)
+
+        // Add Product 2 (Coca-Cola Zero)
+        assertTrue(vm.submitBarcodeOrSearch("5449000000996", 0.0))
+        val cartAfterSecond = vm.cartItems.value
+        assertEquals(2, cartAfterSecond.size)
+        assertEquals("3", cartAfterSecond[0].product.id, "Newly added product must be at the top (index 0)")
+        assertEquals("1", cartAfterSecond[1].product.id, "Previously added product must now be at index 1")
+
+        // Add Product 3 (Guaraná Antarctica)
+        assertTrue(vm.submitBarcodeOrSearch("7891234564821", 0.0))
+        val cartAfterThird = vm.cartItems.value
+        assertEquals(3, cartAfterThird.size)
+        assertEquals("2", cartAfterThird[0].product.id, "Latest added product must be at index 0")
+        assertEquals("3", cartAfterThird[1].product.id)
+        assertEquals("1", cartAfterThird[2].product.id)
+    }
+
+    @Test
+    fun testWeightProduct_addedToTopOfCart() = withViewModel { vm, _ ->
+        // Add a piece product first
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+        assertEquals(1, vm.cartItems.value.size)
+        assertEquals("1", vm.cartItems.value[0].product.id)
+
+        // Open weight product dialog and submit
+        assertTrue(vm.submitBarcodeOrSearch("9001", 0.0))
+        vm.updateWeightInput("500")
+        vm.submitWeightDialog(0.0)
+
+        val cart = vm.cartItems.value
+        assertEquals(2, cart.size)
+        assertEquals("4", cart[0].product.id, "Newly submitted weight product must be at the top (index 0)")
+        assertEquals(500L, cart[0].quantity)
+        assertEquals("1", cart[1].product.id)
+    }
+
+    @Test
+    fun testRescanningExistingProduct_retainsIndexAndIncrementsQuantity() = withViewModel { vm, _ ->
+        // Add Product 1
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+        // Add Product 2 (moves to index 0)
+        assertTrue(vm.submitBarcodeOrSearch("5449000000996", 0.0))
+
+        assertEquals("3", vm.cartItems.value[0].product.id)
+        assertEquals("1", vm.cartItems.value[1].product.id)
+        assertEquals(1L, vm.cartItems.value[1].quantity)
+
+        // Re-scan Product 1 (which is at index 1)
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+
+        val cart = vm.cartItems.value
+        assertEquals(2, cart.size)
+        assertEquals("3", cart[0].product.id, "Index 0 must remain unchanged")
+        assertEquals("1", cart[1].product.id, "Product 1 must remain at index 1")
+        assertEquals(2L, cart[1].quantity, "Quantity should increment to 2")
     }
 }

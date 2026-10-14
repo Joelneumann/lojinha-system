@@ -1,7 +1,12 @@
 package de.joelneumann.lojinha.ui.screens.admin
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import de.joelneumann.lojinha.AppVersion
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,6 +41,25 @@ import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 
+private fun formatCentsToInput(cents: Long): String {
+    val isWhole = (cents % 100L) == 0L
+    return if (isWhole) {
+        (cents / 100L).toString()
+    } else {
+        val reais = cents / 100L
+        val remainder = kotlin.math.abs(cents % 100L).toString().padStart(2, '0')
+        "$reais,$remainder"
+    }
+}
+
+private fun parseBrlInputToCents(input: String): Long? {
+    val cleaned = input.trim().replace(',', '.')
+    if (cleaned.isBlank()) return null
+    val valueDouble = cleaned.toDoubleOrNull() ?: return null
+    if (!valueDouble.isFinite()) return null
+    return kotlin.math.round(valueDouble * 100.0).toLong()
+}
+
 @Composable
 fun AdminSettingsTabScreen(
     viewModel: AdminSettingsViewModel,
@@ -49,6 +73,7 @@ fun AdminSettingsTabScreen(
     val settings by viewModel.settings.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isFetchingRates by viewModel.isFetchingRates.collectAsState()
     val activeRestoreDbFile by viewModel.activeRestoreDbFile.collectAsState()
     val showWipeDataDialog by viewModel.showWipeDataDialog.collectAsState()
     val csvImportPreview by viewModel.csvImportPreview.collectAsState()
@@ -77,37 +102,14 @@ fun AdminSettingsTabScreen(
     var globalMarkup by remember { mutableStateOf(Formatting.formatDecimal(settings.globalMarkupPercent)) }
     var usdRate by remember { mutableStateOf(Formatting.formatDecimal(settings.usdExchangeRate)) }
     var eurRate by remember { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
+    var autoUpdateExchangeRates by remember { mutableStateOf(settings.autoUpdateExchangeRates) }
     var inactivityTimeout by remember { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
+    var yellowWarningThreshold by remember { mutableStateOf(formatCentsToInput(settings.yellowBalanceWarningThresholdCents)) }
+    var redWarningThreshold by remember { mutableStateOf(formatCentsToInput(settings.redBalanceWarningThresholdCents)) }
     var supportEmail by remember { mutableStateOf(settings.supportEmail ?: "") }
     var isSupportEmailLocked by remember { mutableStateOf(supportEmail.isNotBlank()) }
     var showUnlockSupportEmailDialog by remember { mutableStateOf(false) }
 
-    val hasFieldChanges = remember(
-        settings, newPassword, confirmPassword, globalMarkup, usdRate, eurRate, inactivityTimeout, supportEmail
-    ) {
-        (newPassword.isNotEmpty() || confirmPassword.isNotEmpty()) ||
-                globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent) ||
-                usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate) ||
-                eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate) ||
-                inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
-                supportEmail.trim() != (settings.supportEmail ?: "")
-    }
-
-    // Only synchronize baseline fields when the user has NO uncommitted changes
-    LaunchedEffect(settings) {
-        if (!hasFieldChanges) {
-            globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
-            usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
-            eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
-            inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
-            supportEmail = settings.supportEmail ?: ""
-            isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
-        }
-    }
-
-    val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
-    val doPasswordsMatch = newPassword == confirmPassword
-    val isPasswordValid = !isPasswordEntered || (newPassword.isNotBlank() && doPasswordsMatch)
     val inactivityTimeoutValue = inactivityTimeout.toIntOrNull()
     val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue in 2..1440
 
@@ -117,6 +119,48 @@ fun AdminSettingsTabScreen(
     val isUsdRateValid = parsedUsdRate != null && parsedUsdRate.isFinite() && parsedUsdRate in 0.0001..100000.0
     val parsedEurRate = remember(eurRate) { eurRate.trim().replace(',', '.').toDoubleOrNull() }
     val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate in 0.0001..100000.0
+
+    val parsedYellow = remember(yellowWarningThreshold) { parseBrlInputToCents(yellowWarningThreshold) }
+    val isYellowThresholdValid = parsedYellow != null && parsedYellow in -100_000_00L..100_000_00L
+    val parsedRed = remember(redWarningThreshold) { parseBrlInputToCents(redWarningThreshold) }
+    val isRedThresholdValid = parsedRed != null && parsedRed in -100_000_00L..100_000_00L
+    val isThresholdOrderValid = isYellowThresholdValid && isRedThresholdValid && parsedYellow!! > parsedRed!!
+
+    val hasFieldChanges = remember(
+        settings, newPassword, confirmPassword, globalMarkup, globalMarkupValue,
+        usdRate, parsedUsdRate, eurRate, parsedEurRate,
+        autoUpdateExchangeRates, inactivityTimeout, supportEmail,
+        yellowWarningThreshold, parsedYellow, redWarningThreshold, parsedRed
+    ) {
+        (newPassword.isNotEmpty() || confirmPassword.isNotEmpty()) ||
+                (if (globalMarkupValue != null) globalMarkupValue != settings.globalMarkupPercent else globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent)) ||
+                (if (parsedUsdRate != null) parsedUsdRate != settings.usdExchangeRate else usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate)) ||
+                (if (parsedEurRate != null) parsedEurRate != settings.eurExchangeRate else eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate)) ||
+                autoUpdateExchangeRates != settings.autoUpdateExchangeRates ||
+                inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
+                supportEmail.trim() != (settings.supportEmail ?: "") ||
+                (if (parsedYellow != null) parsedYellow != settings.yellowBalanceWarningThresholdCents else yellowWarningThreshold.trim() != formatCentsToInput(settings.yellowBalanceWarningThresholdCents)) ||
+                (if (parsedRed != null) parsedRed != settings.redBalanceWarningThresholdCents else redWarningThreshold.trim() != formatCentsToInput(settings.redBalanceWarningThresholdCents))
+    }
+
+    // Only synchronize baseline fields when the user has NO uncommitted changes
+    LaunchedEffect(settings) {
+        if (!hasFieldChanges) {
+            globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
+            usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
+            eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
+            autoUpdateExchangeRates = settings.autoUpdateExchangeRates
+            inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
+            yellowWarningThreshold = formatCentsToInput(settings.yellowBalanceWarningThresholdCents)
+            redWarningThreshold = formatCentsToInput(settings.redBalanceWarningThresholdCents)
+            supportEmail = settings.supportEmail ?: ""
+            isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
+        }
+    }
+
+    val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
+    val doPasswordsMatch = newPassword == confirmPassword
+    val isPasswordValid = !isPasswordEntered || (newPassword.isNotBlank() && doPasswordsMatch)
 
     LaunchedEffect(hasFieldChanges) {
         onUnsavedStateChanged(hasFieldChanges)
@@ -184,7 +228,10 @@ fun AdminSettingsTabScreen(
                             globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
                             usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
                             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
+                            autoUpdateExchangeRates = settings.autoUpdateExchangeRates
                             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
+                            yellowWarningThreshold = formatCentsToInput(settings.yellowBalanceWarningThresholdCents)
+                            redWarningThreshold = formatCentsToInput(settings.redBalanceWarningThresholdCents)
                             supportEmail = settings.supportEmail ?: ""
                             isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
                             onUnsavedStateChanged(false)
@@ -209,23 +256,37 @@ fun AdminSettingsTabScreen(
 
                 Button(
                     onClick = {
-                        if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid) {
+                        if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid) {
+                            val newUsd = parsedUsdRate ?: settings.usdExchangeRate
+                            val newEur = parsedEurRate ?: settings.eurExchangeRate
+                            val ratesManuallyChanged = newUsd != settings.usdExchangeRate || newEur != settings.eurExchangeRate
+                            val newYellow = parsedYellow ?: settings.yellowBalanceWarningThresholdCents
+                            val newRed = parsedRed ?: settings.redBalanceWarningThresholdCents
                             val updatedSettings = settings.copy(
                                 adminPasswordHash = if (newPassword.isNotBlank()) de.joelneumann.lojinha.security.PasswordHasher.hash(newPassword) else settings.adminPasswordHash,
                                 globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
-                                usdExchangeRate = parsedUsdRate ?: settings.usdExchangeRate,
-                                eurExchangeRate = parsedEurRate ?: settings.eurExchangeRate,
+                                usdExchangeRate = newUsd,
+                                eurExchangeRate = newEur,
                                 inactivityTimeoutMinutes = (inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes).coerceIn(2, 1440),
-                                supportEmail = supportEmail.trim().takeIf { it.isNotBlank() }
+                                supportEmail = supportEmail.trim().takeIf { it.isNotBlank() },
+                                autoUpdateExchangeRates = autoUpdateExchangeRates,
+                                lastExchangeRateUpdateTimestamp = if (ratesManuallyChanged) null else settings.lastExchangeRateUpdateTimestamp,
+                                yellowBalanceWarningThresholdCents = newYellow,
+                                redBalanceWarningThresholdCents = newRed
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
                             confirmPassword = ""
+                            usdRate = Formatting.formatDecimal(newUsd)
+                            eurRate = Formatting.formatDecimal(newEur)
+                            globalMarkup = Formatting.formatDecimal(updatedSettings.globalMarkupPercent)
+                            yellowWarningThreshold = formatCentsToInput(newYellow)
+                            redWarningThreshold = formatCentsToInput(newRed)
                             isSupportEmailLocked = updatedSettings.supportEmail?.isNotBlank() == true
                             onUnsavedStateChanged(false)
                         }
                     },
-                    enabled = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid,
+                    enabled = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentNavy,
                         disabledContainerColor = SurfaceContainerHighLight
@@ -345,8 +406,8 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 2: CURRENCY EXCHANGE RATES
-            item(key = "currency-exchange-card") {
+            // CARD 2: BALANCE WARNING THRESHOLDS
+            item(key = "balance-warnings-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = SurfaceWhite,
@@ -363,13 +424,182 @@ fun AdminSettingsTabScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CurrencyExchange,
+                                imageVector = Icons.Default.Warning,
                                 contentDescription = null,
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Text(strings.currencyExchangeRatesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.balanceWarningsCardTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
+                        Text(
+                            text = strings.balanceWarningsCardSubtitle,
+                            fontSize = 12.sp,
+                            color = TextSecondaryMuted
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                ) {
+                                    AdminStatusBadge(
+                                        text = strings.lowBalanceWarningTitle,
+                                        type = AdminBadgeType.WARNING
+                                    )
+                                }
+                                AdminLabeledField(
+                                    label = strings.balanceWarningYellowLabel,
+                                    value = yellowWarningThreshold,
+                                    onValueChange = { yellowWarningThreshold = it },
+                                    placeholder = strings.balanceWarningYellowPlaceholder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Text(
+                                    text = strings.balanceWarningYellowHelper,
+                                    fontSize = 11.sp,
+                                    color = TextSecondaryMuted,
+                                    modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                                )
+                                if (!isYellowThresholdValid) {
+                                    Text(
+                                        text = strings.invalidThresholdAmountError,
+                                        fontSize = 11.sp,
+                                        color = ColorDangerCrimson,
+                                        modifier = Modifier.padding(top = 2.dp, start = 2.dp)
+                                    )
+                                }
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                ) {
+                                    AdminStatusBadge(
+                                        text = strings.negativeBalanceWarningTitle,
+                                        type = AdminBadgeType.DANGER
+                                    )
+                                }
+                                AdminLabeledField(
+                                    label = strings.balanceWarningRedLabel,
+                                    value = redWarningThreshold,
+                                    onValueChange = { redWarningThreshold = it },
+                                    placeholder = strings.balanceWarningRedPlaceholder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Text(
+                                    text = strings.balanceWarningRedHelper,
+                                    fontSize = 11.sp,
+                                    color = TextSecondaryMuted,
+                                    modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                                )
+                                if (!isRedThresholdValid) {
+                                    Text(
+                                        text = strings.invalidThresholdAmountError,
+                                        fontSize = 11.sp,
+                                        color = ColorDangerCrimson,
+                                        modifier = Modifier.padding(top = 2.dp, start = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (isYellowThresholdValid && isRedThresholdValid && !isThresholdOrderValid) {
+                            Text(
+                                text = strings.yellowMustBeGreaterThanRedError,
+                                fontSize = 11.sp,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(top = 2.dp, start = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // CARD 3: CURRENCY EXCHANGE RATES
+            item(key = "currency-exchange-card") {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CurrencyExchange,
+                                    contentDescription = null,
+                                    tint = PrimaryNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(strings.currencyExchangeRatesTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.fetchExchangeRates { newUsd, newEur ->
+                                        usdRate = Formatting.formatDecimal(newUsd)
+                                        eurRate = Formatting.formatDecimal(newEur)
+                                    }
+                                },
+                                enabled = !isFetchingRates,
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = AccentNavy
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (isFetchingRates) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(14.dp),
+                                            strokeWidth = 2.dp,
+                                            color = AccentNavy
+                                        )
+                                        Text(strings.updatingRatesButton, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.Sync,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(strings.updateRatesFromApiButton, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+
+                        val lastUpdatedText = settings.lastExchangeRateUpdateTimestamp?.let {
+                            strings.ratesLastUpdated(Formatting.formatTimestamp(it))
+                        } ?: strings.ratesNeverUpdated
+                        Text(
+                            text = lastUpdatedText,
+                            fontSize = 12.sp,
+                            color = TextSecondaryMuted
+                        )
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -410,11 +640,39 @@ fun AdminSettingsTabScreen(
                                 }
                             }
                         }
+
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { autoUpdateExchangeRates = !autoUpdateExchangeRates }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .padding(vertical = 4.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Switch(
+                                checked = autoUpdateExchangeRates,
+                                onCheckedChange = null,
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SurfaceWhite,
+                                    checkedTrackColor = AccentNavy
+                                )
+                            )
+                            Text(
+                                text = strings.autoUpdateRatesOnStartupLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = PrimaryNavy
+                            )
+                        }
                     }
                 }
             }
 
-            // CARD 3: KIOSK SYSTEM TIMERS
+            // CARD 4: KIOSK SYSTEM TIMERS
             item(key = "kiosk-timers-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -459,7 +717,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 4: REMOTE WEB ADMINISTRATION (LAN)
+            // CARD 5: REMOTE WEB ADMINISTRATION (LAN)
             if (viewModel.serverUrls.isNotEmpty()) {
                 item(key = "remote-admin-card") {
                     Surface(
@@ -553,7 +811,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 5: MICROSOFT ONEDRIVE INTEGRATION
+            // CARD 6: MICROSOFT ONEDRIVE INTEGRATION
             item(key = "onedrive-integration-card") {
                 val settingsState by viewModel.settings.collectAsState()
 
@@ -672,7 +930,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 6: BACKUP ROUTINES MANAGEMENT
+            // CARD 7: BACKUP ROUTINES MANAGEMENT
             item(key = "backup-routines-card") {
                 val routines by viewModel.routines.collectAsState()
 
@@ -837,7 +1095,8 @@ fun AdminSettingsTabScreen(
 
                                                 Switch(
                                                     checked = routine.isEnabled,
-                                                    onCheckedChange = { viewModel.requestToggleRoutine(routine, it) }
+                                                    onCheckedChange = { viewModel.requestToggleRoutine(routine, it) },
+                                                    modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
                                                 )
                                             }
 
@@ -916,7 +1175,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 7: DATABASE RESTORE (.DB) & DATA WIPE
+            // CARD 8: DATABASE RESTORE (.DB) & DATA WIPE
             item(key = "restore-wipe-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -996,7 +1255,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 8: CSV DATA IMPORT
+            // CARD 9: CSV DATA IMPORT
             item(key = "csv-import-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1077,7 +1336,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 9: ADMIN MASTER PASSWORD
+            // CARD 10: ADMIN MASTER PASSWORD
             item(key = "admin-security-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1176,7 +1435,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 10: SUPPORT CONTACT
+            // CARD 11: SUPPORT CONTACT
             item(key = "support-contact-card") {
                 val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
@@ -1438,7 +1697,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 11: SYSTEM & KIOSK ACTIONS
+            // CARD 12: SYSTEM & KIOSK ACTIONS
             item(key = "kiosk-actions-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1546,8 +1805,8 @@ fun AdminSettingsTabScreen(
             file = activeRestoreDbFile!!,
             adminPasswordHash = settings.adminPasswordHash,
             isExecuting = isRestoringDb,
-            onConfirmRestore = {
-                viewModel.executeDbRestore(activeRestoreDbFile!!)
+            onConfirmRestore = { preserveRoutines, preservePass ->
+                viewModel.executeDbRestore(activeRestoreDbFile!!, preserveRoutines, preservePass)
             },
             onDismiss = {
                 viewModel.setRestoreDbFile(null)
@@ -1559,8 +1818,8 @@ fun AdminSettingsTabScreen(
         WipeDataMultiApprovalDialog(
             adminPasswordHash = settings.adminPasswordHash,
             isExecuting = isWipingData,
-            onConfirmWipe = {
-                viewModel.executeWipeData()
+            onConfirmWipe = { preserveRoutines, preservePass ->
+                viewModel.executeWipeData(preserveRoutines, preservePass)
             },
             onDismiss = {
                 viewModel.setShowWipeDataDialog(false)

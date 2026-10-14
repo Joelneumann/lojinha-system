@@ -6,6 +6,7 @@ import androidx.room.useWriterConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.Converters
+import de.joelneumann.lojinha.data.entity.AdminNoteEntity
 import de.joelneumann.lojinha.data.entity.BackupEntity
 import de.joelneumann.lojinha.data.entity.BillingListEntity
 import de.joelneumann.lojinha.data.entity.BillingListUserEntity
@@ -35,12 +36,18 @@ import java.util.Locale
 
 class BackupRestoreService(
     private val db: AppDatabase,
-    private val dbFile: File = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
+    private val dbFile: File = de.joelneumann.lojinha.data.database.DatabaseFactory.getDatabaseFile()
 ) {
 
     private fun getTimestampString(): String {
         val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
         return sdf.format(Date())
+    }
+
+    fun parseBooleanFlexible(str: String): Boolean? = when (str.trim().lowercase()) {
+        "true", "1", "yes", "sim", "ja" -> true
+        "false", "0", "no", "não", "nao", "nein" -> false
+        else -> null
     }
 
     suspend fun performDbSnapshot(targetFile: File): File = withContext(Dispatchers.IO) {
@@ -141,7 +148,7 @@ class BackupRestoreService(
         // 1. Export Products
         val products = db.productDao().getAllProducts().map { it.toDomain() }
         val productsCsv = File(exportFolder, "products.csv")
-        val productLines = mutableListOf("id,name,barcodes,basePrice,unitType,stockQuantity,customMarkupPercent,isActive")
+        val productLines = mutableListOf("id;name;barcodes;basePrice;unitType;stockQuantity;customMarkupPercent;isActive")
         products.forEach { p ->
             val barcodeStr = p.barcodes.joinToString("|") { "${it.code}:${it.description ?: ""}" }
             val line = listOf(
@@ -153,15 +160,15 @@ class BackupRestoreService(
                 p.stockQuantity.toString(),
                 p.customMarkupPercent?.toString() ?: "",
                 p.isActive.toString()
-            ).joinToString(",")
+            ).joinToString(CSV_DELIMITER)
             productLines.add(line)
         }
-        productsCsv.writeText(productLines.joinToString("\n"))
+        writeCsvFile(productsCsv, productLines)
 
         // 2. Export Users
         val users = db.userDao().getAllUsers().map { it.toDomain() }
         val usersCsv = File(exportFolder, "users.csv")
-        val userLines = mutableListOf("id,name,balance,language,secondaryCurrency,pin,userBarcode,userBarcodeNumber,isActive,isDeleted,avatarType,avatarEmoji,avatarColor")
+        val userLines = mutableListOf("id;name;balance;language;secondaryCurrency;pin;userBarcode;userBarcodeNumber;isActive;isDeleted;avatarType;avatarEmoji;avatarColor")
         users.forEach { u ->
             val line = listOf(
                 escapeCsv(u.id),
@@ -177,15 +184,15 @@ class BackupRestoreService(
                 escapeCsv(u.avatar.type.name),
                 escapeCsv(u.avatar.emoji),
                 escapeCsv(u.avatar.colorHex)
-            ).joinToString(",")
+            ).joinToString(CSV_DELIMITER)
             userLines.add(line)
         }
-        usersCsv.writeText(userLines.joinToString("\n"))
+        writeCsvFile(usersCsv, userLines)
 
         // 3. Export Transactions
         val transactions = db.transactionDao().getAllTransactions().map { it.toDomain() }
         val txCsv = File(exportFolder, "transactions.csv")
-        val txLines = mutableListOf("id,userId,userNameSnapshot,timestamp,type,referenceTransactionId,note,totalAmount,itemCount,items,userBalanceBefore,userBalanceAfter")
+        val txLines = mutableListOf("id;userId;userNameSnapshot;timestamp;type;referenceTransactionId;note;totalAmount;itemCount;items;userBalanceBefore;userBalanceAfter")
         transactions.forEach { t ->
             val itemsSerialized = converters.fromTransactionItemList(t.items)
             val line = listOf(
@@ -201,17 +208,17 @@ class BackupRestoreService(
                 escapeCsv(itemsSerialized),
                 t.userBalanceBefore?.let { escapeCsv(Formatting.formatBrlCanonical(it)) } ?: "",
                 t.userBalanceAfter?.let { escapeCsv(Formatting.formatBrlCanonical(it)) } ?: ""
-            ).joinToString(",")
+            ).joinToString(CSV_DELIMITER)
             txLines.add(line)
         }
-        txCsv.writeText(txLines.joinToString("\n"))
+        writeCsvFile(txCsv, txLines)
 
         // 4. Export Combined Billing Lists & Members (QA-05)
         val billingLists = db.billingListDao().getAllBillingLists()
         val billingListUsers = db.billingListDao().getAllBillingListUsers().groupBy { it.listId }
         val usersMap = users.associateBy { it.id }
         val blCsv = File(exportFolder, "billing_lists.csv")
-        val blLines = mutableListOf("listId,listName,type,basePrice,comment,isDeleted,userId,userName,quantity")
+        val blLines = mutableListOf("listId;listName;type;basePrice;comment;isDeleted;userId;userName;quantity")
         billingLists.forEach { bl ->
             val members = billingListUsers[bl.id]
             val priceStr = bl.basePrice?.let { Formatting.formatBrlCanonical(it) } ?: ""
@@ -227,7 +234,7 @@ class BackupRestoreService(
                         "",
                         "",
                         "0"
-                    ).joinToString(",")
+                    ).joinToString(CSV_DELIMITER)
                 )
             } else {
                 members.forEach { m ->
@@ -242,17 +249,37 @@ class BackupRestoreService(
                             escapeCsv(m.userId),
                             escapeCsv(usersMap[m.userId]?.name ?: ""),
                             m.quantity.toString()
-                        ).joinToString(",")
+                        ).joinToString(CSV_DELIMITER)
                     )
                 }
             }
         }
-        blCsv.writeText(blLines.joinToString("\n"))
+        writeCsvFile(blCsv, blLines)
+
+        // 5. Export Admin Notes & Suggestions
+        val notes = db.adminNoteDao().getAllNotes()
+        val notesCsv = File(exportFolder, "admin_notes.csv")
+        val noteLines = mutableListOf("id;userId;userNameSnapshot;timestamp;message")
+        notes.forEach { n ->
+            val line = listOf(
+                escapeCsv(n.id),
+                escapeCsv(n.userId),
+                escapeCsv(n.userNameSnapshot),
+                n.timestamp.toString(),
+                escapeCsv(n.message)
+            ).joinToString(CSV_DELIMITER)
+            noteLines.add(line)
+        }
+        writeCsvFile(notesCsv, noteLines)
 
         exportFolder
     }
 
-    suspend fun restoreDbFromBackup(backupFile: File) = withContext(Dispatchers.IO) {
+    suspend fun restoreDbFromBackup(
+        backupFile: File,
+        preserveExistingRoutines: Boolean = false,
+        preserveCurrentAdminPassword: Boolean = true
+    ) = withContext(Dispatchers.IO) {
         require(backupFile.exists() && backupFile.isFile) { "Backup file does not exist: ${backupFile.absolutePath}" }
 
         val converters = Converters()
@@ -263,6 +290,7 @@ class BackupRestoreService(
         val backupRoutines = mutableListOf<BackupEntity>()
         val backupBillingLists = mutableListOf<BillingListEntity>()
         val backupBillingListUsers = mutableListOf<BillingListUserEntity>()
+        val backupNotes = mutableListOf<AdminNoteEntity>()
         val tableNames = mutableSetOf<String>()
 
         // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
@@ -288,6 +316,12 @@ class BackupRestoreService(
                 }
             } finally {
                 stmtTables.close()
+            }
+
+            // Guard: Ensure target file is a genuine Lojinha backup before proceeding
+            val requiredTables = setOf("users", "products", "transactions", "settings")
+            require(tableNames.any { it in requiredTables }) {
+                "The selected database file does not contain Lojinha tables and cannot be restored."
             }
 
             // Read users
@@ -460,6 +494,10 @@ class BackupRestoreService(
                     append(if (settingsColumns.contains("onedrivedefaultfolder")) ", oneDriveDefaultFolder" else ", '/LojinhaBackups'")
                     append(if (settingsColumns.contains("onedrivetenant")) ", oneDriveTenant" else ", 'common'")
                     append(if (settingsColumns.contains("supportemail")) ", supportEmail" else ", NULL")
+                    append(if (settingsColumns.contains("autoupdateexchangerates")) ", autoUpdateExchangeRates" else ", 1")
+                    append(if (settingsColumns.contains("lastexchangerateupdatetimestamp")) ", lastExchangeRateUpdateTimestamp" else ", NULL")
+                    append(if (settingsColumns.contains("yellowbalancewarningthresholdcents")) ", yellowBalanceWarningThresholdCents" else ", 30000")
+                    append(if (settingsColumns.contains("redbalancewarningthresholdcents")) ", redBalanceWarningThresholdCents" else ", 0")
                     append(" FROM settings LIMIT 1")
                 }
 
@@ -489,7 +527,11 @@ class BackupRestoreService(
                             oneDriveAccountName = if (stmt.isNull(16)) null else stmt.getText(16),
                             oneDriveDefaultFolder = if (stmt.isNull(17)) "/LojinhaBackups" else stmt.getText(17),
                             oneDriveTenant = if (stmt.isNull(18)) "common" else stmt.getText(18),
-                            supportEmail = if (stmt.isNull(19)) null else stmt.getText(19)
+                            supportEmail = if (stmt.isNull(19)) null else stmt.getText(19),
+                            autoUpdateExchangeRates = if (stmt.isNull(20)) true else stmt.getLong(20) != 0L,
+                            lastExchangeRateUpdateTimestamp = if (stmt.isNull(21)) null else stmt.getLong(21),
+                            yellowBalanceWarningThresholdCents = if (stmt.isNull(22)) 300_00L else stmt.getLong(22),
+                            redBalanceWarningThresholdCents = if (stmt.isNull(23)) 0L else stmt.getLong(23)
                         )
                     }
                 } finally {
@@ -603,6 +645,24 @@ class BackupRestoreService(
                     stmt.close()
                 }
             }
+            // Read admin_notes
+            if (tableNames.contains("admin_notes")) {
+                val stmt = connection.prepare("SELECT id, message, userId, userNameSnapshot, timestamp FROM admin_notes")
+                try {
+                    while (stmt.step()) {
+                        val note = AdminNoteEntity(
+                            id = stmt.getText(0),
+                            message = stmt.getText(1),
+                            userId = stmt.getText(2),
+                            userNameSnapshot = stmt.getText(3),
+                            timestamp = stmt.getLong(4)
+                        )
+                        backupNotes.add(note)
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
         } finally {
             connection.close()
         }
@@ -615,16 +675,18 @@ class BackupRestoreService(
 
         // 3. Atomically clear and restore active database inside an immediate transaction
         val hasBackupRoutinesInBackup = tableNames.contains("backup_routines")
+        val currentSettings = db.settingsDao().getSettings()
         withContext(NonCancellable) {
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     // Clear tables in reverse dependency order (children first)
+                    db.adminNoteDao().deleteAllNotes()
                     db.billingListDao().deleteAllBillingListUsers()
                     db.billingListDao().deleteAllBillingLists()
                     db.userDao().deleteAllUsers()
                     db.productDao().deleteAllProducts()
                     db.transactionDao().deleteAllTransactions()
-                    if (hasBackupRoutinesInBackup) {
+                    if (hasBackupRoutinesInBackup && !preserveExistingRoutines) {
                         db.backupDao().deleteAllBackups()
                     }
 
@@ -639,40 +701,97 @@ class BackupRestoreService(
                         .filter { it.userId in validUserIds && it.listId in validListIds }
                         .distinctBy { it.listId to it.userId }
                         .forEach { db.billingListDao().insertBillingListUser(it) }
-                    if (hasBackupRoutinesInBackup) {
+                    backupNotes.forEach { db.adminNoteDao().insertNote(it) }
+                    if (hasBackupRoutinesInBackup && !preserveExistingRoutines) {
                         backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
                     }
                     if (backupSettings != null) {
-                        db.settingsDao().insertOrUpdateSettings(backupSettings)
+                        val finalPassword = if (preserveCurrentAdminPassword && currentSettings != null) {
+                            currentSettings.adminPasswordHash
+                        } else {
+                            backupSettings.adminPasswordHash
+                        }
+                        val finalSettings = if (preserveExistingRoutines && currentSettings != null) {
+                            backupSettings.copy(
+                                adminPasswordHash = finalPassword,
+                                backupLocationPath = currentSettings.backupLocationPath,
+                                autoBackupEnabled = currentSettings.autoBackupEnabled,
+                                autoBackupFormat = currentSettings.autoBackupFormat,
+                                autoBackupScheduleType = currentSettings.autoBackupScheduleType,
+                                autoBackupTime = currentSettings.autoBackupTime,
+                                autoBackupIntervalHours = currentSettings.autoBackupIntervalHours,
+                                oneDriveClientId = currentSettings.oneDriveClientId,
+                                oneDriveRefreshToken = currentSettings.oneDriveRefreshToken,
+                                oneDriveAccountEmail = currentSettings.oneDriveAccountEmail,
+                                oneDriveAccountName = currentSettings.oneDriveAccountName,
+                                oneDriveDefaultFolder = currentSettings.oneDriveDefaultFolder,
+                                oneDriveTenant = currentSettings.oneDriveTenant
+                            )
+                        } else {
+                            backupSettings.copy(adminPasswordHash = finalPassword)
+                        }
+                        db.settingsDao().insertOrUpdateSettings(finalSettings)
                     }
                 }
             }
         }
     }
 
-    suspend fun wipeAllData() = withContext(Dispatchers.IO) {
+    suspend fun wipeAllData(
+        preserveBackupRoutines: Boolean = true,
+        preserveAdminPassword: Boolean = true
+    ) = withContext(Dispatchers.IO) {
         val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_wipe_safety.db")
         if (dbFile.exists()) {
             performDbSnapshot(safetyFile)
         }
 
+        val existingSettings = db.settingsDao().getSettings()
+        val finalPasswordHash = if (preserveAdminPassword && existingSettings != null) {
+            existingSettings.adminPasswordHash
+        } else {
+            de.joelneumann.lojinha.security.PasswordHasher.hash("admin")
+        }
+
         withContext(NonCancellable) {
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
+                    db.adminNoteDao().deleteAllNotes()
                     db.billingListDao().deleteAllBillingListUsers()
                     db.billingListDao().deleteAllBillingLists()
                     db.userDao().deleteAllUsers()
                     db.productDao().deleteAllProducts()
                     db.transactionDao().deleteAllTransactions()
 
+                    if (!preserveBackupRoutines) {
+                        db.backupDao().deleteAllBackups()
+                    }
+
                     // Reset settings to initial defaults
                     val defaultSettings = SettingsEntity(
                         id = 1,
-                        adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin"),
+                        adminPasswordHash = finalPasswordHash,
                         globalMarkupPercent = 0.0,
                         usdExchangeRate = 0.18,
                         eurExchangeRate = 0.16,
-                        inactivityTimeoutMinutes = 3
+                        inactivityTimeoutMinutes = 3,
+                        autoUpdateExchangeRates = true,
+                        lastExchangeRateUpdateTimestamp = null,
+                        yellowBalanceWarningThresholdCents = 300_00L,
+                        redBalanceWarningThresholdCents = 0L,
+                        backupLocationPath = if (preserveBackupRoutines) existingSettings?.backupLocationPath ?: "" else "",
+                        autoBackupEnabled = if (preserveBackupRoutines) existingSettings?.autoBackupEnabled ?: false else false,
+                        autoBackupFormat = if (preserveBackupRoutines) existingSettings?.autoBackupFormat ?: "DB" else "DB",
+                        autoBackupScheduleType = if (preserveBackupRoutines) existingSettings?.autoBackupScheduleType ?: "DAILY" else "DAILY",
+                        autoBackupTime = if (preserveBackupRoutines) existingSettings?.autoBackupTime ?: "02:00" else "02:00",
+                        autoBackupIntervalHours = if (preserveBackupRoutines) existingSettings?.autoBackupIntervalHours ?: 24 else 24,
+                        oneDriveClientId = existingSettings?.oneDriveClientId ?: "202e1c94-b152-4751-b0e6-a2a4b8eb4901",
+                        oneDriveRefreshToken = if (preserveBackupRoutines) existingSettings?.oneDriveRefreshToken else null,
+                        oneDriveAccountEmail = if (preserveBackupRoutines) existingSettings?.oneDriveAccountEmail else null,
+                        oneDriveAccountName = if (preserveBackupRoutines) existingSettings?.oneDriveAccountName else null,
+                        oneDriveDefaultFolder = if (preserveBackupRoutines) existingSettings?.oneDriveDefaultFolder ?: "/LojinhaBackups" else "/LojinhaBackups",
+                        oneDriveTenant = existingSettings?.oneDriveTenant ?: "common",
+                        supportEmail = existingSettings?.supportEmail
                     )
                     db.settingsDao().insertOrUpdateSettings(defaultSettings)
                 }
@@ -750,10 +869,21 @@ class BackupRestoreService(
             val isExisting = existing != null
 
             val unitTypeStr = if (unitIdx != -1 && unitIdx < cols.size) cols[unitIdx].trim() else ""
-            val unitType = if (unitTypeStr.isNotEmpty()) {
-                try { UnitType.valueOf(unitTypeStr) } catch (e: Exception) { existing?.unitType?.let { runCatching { UnitType.valueOf(it) }.getOrNull() } ?: UnitType.PIECE }
+            val matchedUnit = if (unitTypeStr.isNotEmpty()) {
+                UnitType.entries.firstOrNull { it.name.equals(unitTypeStr, ignoreCase = true) }
+                    ?: when (unitTypeStr.lowercase()) {
+                        "kg", "g", "gram", "kilo", "weight" -> UnitType.WEIGHT
+                        "un", "pc", "stk", "piece" -> UnitType.PIECE
+                        else -> null
+                    }
             } else {
-                existing?.unitType?.let { runCatching { UnitType.valueOf(it) }.getOrNull() } ?: UnitType.PIECE
+                null
+            }
+            val unitType = matchedUnit ?: existing?.unitType?.let { runCatching { UnitType.valueOf(it) }.getOrNull() } ?: run {
+                if (unitTypeStr.isNotEmpty()) {
+                    warnings.add("Row ${i + 1} ('$name'): Unrecognized unit type '$unitTypeStr' defaulted to PIECE.")
+                }
+                UnitType.PIECE
             }
 
             val stockStr = if (stockIdx != -1 && stockIdx < cols.size) cols[stockIdx].trim() else ""
@@ -782,7 +912,7 @@ class BackupRestoreService(
 
             val activeStr = if (activeIdx != -1 && activeIdx < cols.size) cols[activeIdx].trim() else ""
             val isActive = if (activeStr.isNotEmpty()) {
-                activeStr.toBooleanStrictOrNull() ?: existing?.isActive ?: true
+                parseBooleanFlexible(activeStr) ?: existing?.isActive ?: true
             } else {
                 existing?.isActive ?: true
             }
@@ -790,12 +920,17 @@ class BackupRestoreService(
             // Parse Barcodes
             val rawBarcodesStr = if (barcodesIdx != -1 && barcodesIdx < cols.size) cols[barcodesIdx].trim() else ""
             val parsedBarcodes = mutableListOf<Barcode>()
+            if (isExisting && barcodesIdx != -1) {
+                // Evict previously assigned barcodes of this product so reassignment within this CSV works
+                allExistingBarcodesMap.entries.removeAll { it.value == productId }
+            }
+
             if (rawBarcodesStr.isNotEmpty()) {
                 val parts = rawBarcodesStr.split("|")
                 parts.forEach { part ->
                     val pair = part.split(":", limit = 2)
                     val code = pair[0].trim()
-                    val label = if (pair.size > 1 && pair[1].trim().isNotEmpty()) pair[1].trim() else "Barcode"
+                    val label = if (pair.size > 1 && pair[1].trim().isNotEmpty()) pair[1].trim() else null
 
                     if (code.isNotEmpty()) {
                         val assignedProductId = allExistingBarcodesMap[code]
@@ -803,8 +938,10 @@ class BackupRestoreService(
                             strippedBarcodesCount++
                             warnings.add("Row ${i + 1} ('$name'): Barcode '$code' stripped because it is already assigned to product '$assignedProductId'.")
                         } else {
-                            parsedBarcodes.add(Barcode(code, label))
-                            allExistingBarcodesMap[code] = productId
+                            if (parsedBarcodes.none { it.code == code }) {
+                                parsedBarcodes.add(Barcode(code, label))
+                                allExistingBarcodesMap[code] = productId
+                            }
                         }
                     }
                 }
@@ -829,6 +966,10 @@ class BackupRestoreService(
         }
 
         if (!dryRun && productsToInsert.isNotEmpty()) {
+            val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_csv_import_safety.db")
+            if (dbFile.exists()) {
+                performDbSnapshot(safetyFile)
+            }
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     productsToInsert.forEach { db.productDao().insertOrUpdateProduct(it) }
@@ -1020,7 +1161,9 @@ class BackupRestoreService(
             }
 
             val secCurrStr = if (secCurrIdx != -1 && secCurrIdx < cols.size && cols[secCurrIdx].trim().isNotEmpty()) {
-                cols[secCurrIdx].trim()
+                val raw = cols[secCurrIdx].trim()
+                SecondaryCurrency.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) }?.name
+                    ?: existing?.secondaryCurrency ?: SecondaryCurrency.NONE.name
             } else {
                 existing?.secondaryCurrency ?: SecondaryCurrency.NONE.name
             }
@@ -1032,14 +1175,14 @@ class BackupRestoreService(
 
             val activeStr = if (activeIdx != -1 && activeIdx < cols.size && cols[activeIdx].trim().isNotEmpty()) cols[activeIdx].trim() else ""
             val isActive = if (activeStr.isNotEmpty()) {
-                activeStr.toBooleanStrictOrNull() ?: existing?.isActive ?: true
+                parseBooleanFlexible(activeStr) ?: existing?.isActive ?: true
             } else {
                 existing?.isActive ?: true
             }
 
             val isDeletedStr = if (isDeletedIdx != -1 && isDeletedIdx < cols.size && cols[isDeletedIdx].trim().isNotEmpty()) cols[isDeletedIdx].trim() else ""
             val isDeleted = if (isDeletedStr.isNotEmpty()) {
-                isDeletedStr.toBooleanStrictOrNull() ?: existing?.isDeleted ?: false
+                parseBooleanFlexible(isDeletedStr) ?: existing?.isDeleted ?: false
             } else {
                 existing?.isDeleted ?: false
             }
@@ -1073,6 +1216,10 @@ class BackupRestoreService(
                 finalUserBarcode = existing?.userBarcode
                 finalUserBarcodeNumber = existing?.userBarcodeNumber
             } else {
+                if (isExisting) {
+                    // Evict previously assigned barcodes of this user so reassignment within this CSV works
+                    allExistingUserBarcodesMap.entries.removeAll { it.value == userId }
+                }
                 if (rawUserBarcode.isNotEmpty()) {
                     val assignedUserId = allExistingUserBarcodesMap[rawUserBarcode]
                     if (assignedUserId != null && assignedUserId != userId) {
@@ -1137,6 +1284,10 @@ class BackupRestoreService(
         }
 
         if (!dryRun && (usersToInsert.isNotEmpty() || transactionsToInsert.isNotEmpty())) {
+            val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_csv_import_safety.db")
+            if (dbFile.exists()) {
+                performDbSnapshot(safetyFile)
+            }
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     usersToInsert.forEach { db.userDao().insertOrUpdateUser(it) }
@@ -1155,6 +1306,10 @@ class BackupRestoreService(
         )
     }
 
+    private fun writeCsvFile(file: File, lines: List<String>) {
+        file.writeText(UTF8_BOM + lines.joinToString("\n"))
+    }
+
     private fun escapeCsv(value: String): String {
         if (value.contains(",") || value.contains(";") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
             val escaped = value.replace("\"", "\"\"")
@@ -1164,7 +1319,7 @@ class BackupRestoreService(
     }
 
     private fun detectDelimiter(csvText: String): Char {
-        val firstLine = csvText.lineSequence().firstOrNull { it.isNotBlank() } ?: return ','
+        val firstLine = csvText.lineSequence().firstOrNull { it.isNotBlank() } ?: return CSV_DELIMITER.first()
         var inQuotes = false
         var commaCount = 0
         var semicolonCount = 0
@@ -1176,14 +1331,28 @@ class BackupRestoreService(
                 else if (c == ';') semicolonCount++
             }
         }
-        return if (semicolonCount > commaCount) ';' else ','
+        return if (semicolonCount > commaCount) ';' else if (commaCount > 0) ',' else CSV_DELIMITER.first()
     }
 
     fun parseCsvRecords(csvText: String): List<List<String>> {
-        val cleanText = csvText.removePrefix("\uFEFF")
+        var cleanText = csvText.removePrefix(UTF8_BOM)
         if (cleanText.isBlank()) return emptyList()
 
-        val delimiter = detectDelimiter(cleanText)
+        // Check for optional "sep=X" directive on the first line
+        val firstLine = cleanText.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: ""
+        var explicitDelimiter: Char? = null
+        if (firstLine.startsWith("sep=", ignoreCase = true) && firstLine.length == 5) {
+            explicitDelimiter = firstLine[4]
+            val newlineIndex = cleanText.indexOfAny(charArrayOf('\r', '\n'))
+            cleanText = if (newlineIndex >= 0) {
+                cleanText.substring(newlineIndex).trimStart('\r', '\n')
+            } else {
+                ""
+            }
+            if (cleanText.isBlank()) return emptyList()
+        }
+
+        val delimiter = explicitDelimiter ?: detectDelimiter(cleanText)
         val records = mutableListOf<List<String>>()
         val currentRecord = mutableListOf<String>()
         val currentField = StringBuilder()
@@ -1230,5 +1399,10 @@ class BackupRestoreService(
             }
         }
         return records
+    }
+
+    companion object {
+        const val CSV_DELIMITER = ";"
+        const val UTF8_BOM = "\uFEFF"
     }
 }

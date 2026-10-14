@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.AppDatabase_Impl
+import de.joelneumann.lojinha.data.database.DatabaseFactory
 import de.joelneumann.lojinha.data.entity.*
 import de.joelneumann.lojinha.domain.model.*
 import kotlinx.coroutines.Dispatchers
@@ -434,8 +435,9 @@ class BackupRestoreServiceJvmTest {
         val exportedUsersCsv = File(exportedFolder, "users.csv")
         assertTrue(exportedUsersCsv.exists())
         val csvText = exportedUsersCsv.readText()
+        assertTrue(csvText.startsWith(BackupRestoreService.UTF8_BOM), "Exported CSV must start with UTF-8 BOM")
         assertTrue(csvText.contains(expectedHash), "Exported CSV must contain hashed PIN")
-        assertFalse(csvText.contains(",4321,"), "Exported CSV must not contain plain text PIN")
+        assertFalse(csvText.contains(";4321;") || csvText.contains(",4321,"), "Exported CSV must not contain plain text PIN")
         assertTrue(csvText.contains("\"R$ 25,00\"") || csvText.contains("R$ 25,00"), "Exported CSV must contain formatted BRL balance")
 
         // Test User import with already hashed PIN and plain decimal balance
@@ -688,6 +690,7 @@ class BackupRestoreServiceJvmTest {
         assertTrue(File(csvDir, "users.csv").exists())
         assertTrue(File(csvDir, "transactions.csv").exists())
         assertTrue(File(csvDir, "billing_lists.csv").exists())
+        assertTrue(File(csvDir, "admin_notes.csv").exists())
     }
 
     @Test
@@ -702,6 +705,7 @@ class BackupRestoreServiceJvmTest {
         assertNotNull(csvDir)
         assertTrue(csvDir.exists() && csvDir.isDirectory)
         assertTrue(File(csvDir, "products.csv").exists())
+        assertTrue(File(csvDir, "admin_notes.csv").exists())
     }
 
     @Test
@@ -792,4 +796,514 @@ class BackupRestoreServiceJvmTest {
         assertEquals(1, restoredMembers.size, "Duplicate composite key entries must be filtered to a single entry")
         assertEquals("u-dup", restoredMembers.first().userId)
     }
+
+    @Test
+    fun testAdminNotesBackupRestoreAndWipeData() = runTest {
+        val note = AdminNoteEntity(
+            id = "note-test-1",
+            message = "We ran out of Guarana",
+            userId = "u-user-1",
+            userNameSnapshot = "Bob",
+            timestamp = 1700000000000L
+        )
+        db.adminNoteDao().insertNote(note)
+        assertEquals(1, db.adminNoteDao().getAllNotes().size)
+
+        val csvDir = File(tempDir, "csv_notes_test").apply { mkdirs() }
+        val generatedFiles = service.performLocalBackup(csvDir, BackupFileType.CSV, BackupWriteMode.CREATE_NEW_FILE)
+        val backupDir = generatedFiles.first()
+        val notesCsv = File(backupDir, "admin_notes.csv")
+        assertTrue(notesCsv.exists(), "admin_notes.csv must exist in CSV backup")
+        val lines = notesCsv.readLines()
+        assertTrue(lines.size >= 2)
+        assertEquals("id;userId;userNameSnapshot;timestamp;message", lines[0].removePrefix(BackupRestoreService.UTF8_BOM))
+        assertTrue(lines[1].contains("We ran out of Guarana"))
+
+        // Wipe data
+        service.wipeAllData()
+        assertEquals(0, db.adminNoteDao().getAllNotes().size, "wipeAllData must clear admin notes")
+
+        // Also test restoring from a DB backup containing admin_notes
+        val backupDbFile = File(tempDir, "backup_with_notes.db")
+        val driver = BundledSQLiteDriver()
+        val conn = driver.open(backupDbFile.absolutePath)
+        try {
+            val s1 = conn.prepare("CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, balance INTEGER NOT NULL, language TEXT NOT NULL, secondaryCurrency TEXT NOT NULL, pin TEXT, userBarcode TEXT, userBarcodeNumber TEXT, isActive INTEGER NOT NULL, isDeleted INTEGER NOT NULL, avatarType TEXT NOT NULL, avatarEmoji TEXT NOT NULL, avatarColor TEXT NOT NULL)")
+            s1.step(); s1.close()
+            val s2 = conn.prepare("INSERT INTO users VALUES ('u1', 'User 1', 100, 'en', 'USD', NULL, NULL, NULL, 1, 0, 'INITIALS', '😀', '#1E293B')")
+            s2.step(); s2.close()
+
+            val s3 = conn.prepare("CREATE TABLE admin_notes (id TEXT PRIMARY KEY NOT NULL, message TEXT NOT NULL, userId TEXT NOT NULL, userNameSnapshot TEXT NOT NULL, timestamp INTEGER NOT NULL)")
+            s3.step(); s3.close()
+            val s4 = conn.prepare("INSERT INTO admin_notes VALUES ('note-restored', 'Restored note message', 'u1', 'User 1', 1710000000000)")
+            s4.step(); s4.close()
+        } finally {
+            conn.close()
+        }
+
+        service.restoreDbFromBackup(backupDbFile)
+        val restoredNotes = db.adminNoteDao().getAllNotes()
+        assertEquals(1, restoredNotes.size)
+        assertEquals("note-restored", restoredNotes.first().id)
+        assertEquals("Restored note message", restoredNotes.first().message)
+        assertEquals("User 1", restoredNotes.first().userNameSnapshot)
+    }
+
+    @Test
+    fun testAllCsvExportsUseSemicolonAndUtf8BomAndSupportRoundtrip() = runTest {
+        // Seed product and user
+        val product = ProductEntity(
+            id = "p-excel",
+            name = "Guaraná Antarctica, 350ml",
+            barcodes = listOf(Barcode("7891234567890", "Can")),
+            basePrice = 450L,
+            unitType = "PIECE",
+            stockQuantity = 20L,
+            customMarkupPercent = null,
+            isActive = true
+        )
+        db.productDao().insertOrUpdateProduct(product)
+
+        val user = UserEntity(
+            id = "u-excel",
+            name = "José Silva",
+            balance = 1250L,
+            language = "pt-BR",
+            secondaryCurrency = "NONE",
+            pin = "secret_hash",
+            userBarcode = "USR-JOS",
+            userBarcodeNumber = "USR-JOS",
+            isActive = true,
+            isDeleted = false,
+            avatarType = "EMOJI",
+            avatarEmoji = "🚀",
+            avatarColor = "#1E293B"
+        )
+        db.userDao().insertOrUpdateUser(user)
+
+        val exportFolder = service.performCsvBackup(tempDir, BackupWriteMode.CREATE_NEW_FILE)
+        assertTrue(exportFolder.exists() && exportFolder.isDirectory)
+
+        val csvNames = listOf("products.csv", "users.csv", "transactions.csv", "billing_lists.csv", "admin_notes.csv")
+        for (name in csvNames) {
+            val file = File(exportFolder, name)
+            assertTrue(file.exists(), "$name must exist")
+            val text = file.readText()
+            assertTrue(text.startsWith(BackupRestoreService.UTF8_BOM), "$name must start with UTF-8 BOM")
+            val firstLine = text.removePrefix(BackupRestoreService.UTF8_BOM).lineSequence().first()
+            assertTrue(firstLine.contains(";"), "$name header must contain semicolon delimiters")
+            assertFalse(firstLine.contains(","), "$name header must not contain comma delimiters")
+        }
+
+        // Verify parseCsvRecords on products.csv
+        val productsCsvFile = File(exportFolder, "products.csv")
+        val parsedProducts = service.parseCsvRecords(productsCsvFile.readText())
+        assertTrue(parsedProducts.size >= 2)
+        assertEquals("id", parsedProducts[0][0])
+        assertEquals("name", parsedProducts[0][1])
+        assertEquals("Guaraná Antarctica, 350ml", parsedProducts[1][1])
+
+        // Verify parseCsvRecords handles optional "sep=;" and "sep=," directives
+        val csvWithSepSemi = "sep=;\n" +
+                "id;name;basePrice\n" +
+                "p1;Coffee;\"R$ 5,00\"\n"
+        val parsedSemi = service.parseCsvRecords(csvWithSepSemi)
+        assertEquals(2, parsedSemi.size)
+        assertEquals(listOf("id", "name", "basePrice"), parsedSemi[0])
+        assertEquals(listOf("p1", "Coffee", "R$ 5,00"), parsedSemi[1])
+
+        val csvWithSepComma = "sep=,\n" +
+                "id,name,basePrice\n" +
+                "p2,Tea,3.00\n"
+        val parsedComma = service.parseCsvRecords(csvWithSepComma)
+        assertEquals(2, parsedComma.size)
+        assertEquals(listOf("id", "name", "basePrice"), parsedComma[0])
+        assertEquals(listOf("p2", "Tea", "3.00"), parsedComma[1])
+    }
+
+    @Test
+    fun testWipeAllDataPreserveOptions() = runTest {
+        // 1. Seed custom password, cloud settings, routine, and a user
+        val customPassHash = de.joelneumann.lojinha.security.PasswordHasher.hash("custom-secret-pass")
+        val customSettings = SettingsEntity(
+            id = 1,
+            adminPasswordHash = customPassHash,
+            globalMarkupPercent = 10.0,
+            usdExchangeRate = 0.20,
+            eurExchangeRate = 0.18,
+            inactivityTimeoutMinutes = 5,
+            autoUpdateExchangeRates = false,
+            lastExchangeRateUpdateTimestamp = 123456L,
+            oneDriveRefreshToken = "secret-token",
+            oneDriveAccountEmail = "admin@example.com"
+        )
+        db.settingsDao().insertOrUpdateSettings(customSettings)
+
+        val routine = BackupEntity(
+            id = "r-wipe-test",
+            name = "Nightly Cloud",
+            isEnabled = true,
+            type = "TIMED",
+            fileType = "DB",
+            writeMode = "CREATE_NEW_FILE",
+            scheduleConfig = de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed("02:00"),
+            backupLocationPath = "/cloud/backups",
+            lastBackupTimestamp = null
+        )
+        db.backupDao().insertOrUpdateBackup(routine)
+
+        val user = UserEntity("u-wipe", "Wipe User", 1000L, "pt", "NONE", null, null, null, true)
+        db.userDao().insertOrUpdateUser(user)
+
+        // 2. Wipe with preserveBoth = true
+        service.wipeAllData(preserveBackupRoutines = true, preserveAdminPassword = true)
+
+        // User should be wiped
+        assertEquals(0, db.userDao().getAllUsers().size)
+
+        // Routine and custom password must be preserved
+        val routinesKept = db.backupDao().getAllBackups()
+        assertEquals(1, routinesKept.size)
+        assertEquals("r-wipe-test", routinesKept.first().id)
+
+        val settingsKept = db.settingsDao().getSettings()
+        assertNotNull(settingsKept)
+        assertEquals(customPassHash, settingsKept.adminPasswordHash)
+        assertEquals("secret-token", settingsKept.oneDriveRefreshToken)
+        assertEquals("admin@example.com", settingsKept.oneDriveAccountEmail)
+
+        // 3. Wipe with preserveBoth = false
+        service.wipeAllData(preserveBackupRoutines = false, preserveAdminPassword = false)
+
+        // Routine must now be wiped
+        assertEquals(0, db.backupDao().getAllBackups().size)
+
+        // Settings password must be reset to factory default 'admin' and token cleared
+        val settingsWiped = db.settingsDao().getSettings()
+        assertNotNull(settingsWiped)
+        assertEquals(de.joelneumann.lojinha.security.PasswordHasher.hash("admin"), settingsWiped.adminPasswordHash)
+        assertNull(settingsWiped.oneDriveRefreshToken)
+        assertNull(settingsWiped.oneDriveAccountEmail)
+    }
+
+    @Test
+    fun testRestoreDbPreserveOptions() = runTest {
+        // 1. Seed active DB with routine A and active password
+        val activePasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("active-pass")
+        db.settingsDao().insertOrUpdateSettings(
+            SettingsEntity(
+                id = 1,
+                adminPasswordHash = activePasswordHash,
+                globalMarkupPercent = 5.0,
+                usdExchangeRate = 0.18,
+                eurExchangeRate = 0.16,
+                inactivityTimeoutMinutes = 3,
+                autoUpdateExchangeRates = true,
+                lastExchangeRateUpdateTimestamp = null
+            )
+        )
+        val activeRoutine = BackupEntity(
+            id = "r-active",
+            name = "Active Routine A",
+            isEnabled = true,
+            type = "TIMED",
+            fileType = "DB",
+            writeMode = "CREATE_NEW_FILE",
+            scheduleConfig = de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed("01:00"),
+            backupLocationPath = "/active/path",
+            lastBackupTimestamp = null
+        )
+        db.backupDao().insertOrUpdateBackup(activeRoutine)
+
+        // 2. Create a backup file that contains routine B and backup password
+        val backupPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("old-backup-pass")
+        val backupFile = File(tempDir, "test_preserve_backup.db")
+        val driver = androidx.sqlite.driver.bundled.BundledSQLiteDriver()
+        val conn = driver.open(backupFile.absolutePath)
+        try {
+            conn.prepare("CREATE TABLE settings (id INTEGER PRIMARY KEY NOT NULL, adminPasswordHash TEXT NOT NULL, globalMarkupPercent REAL NOT NULL, usdExchangeRate REAL NOT NULL, eurExchangeRate REAL NOT NULL, inactivityTimeoutMinutes INTEGER NOT NULL)").apply { step(); close() }
+            conn.prepare("INSERT INTO settings VALUES (1, '$backupPasswordHash', 0.0, 0.18, 0.16, 3)").apply { step(); close() }
+
+            conn.prepare("CREATE TABLE backup_routines (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, isEnabled INTEGER NOT NULL, type TEXT NOT NULL, fileType TEXT NOT NULL, writeMode TEXT NOT NULL, scheduleConfig TEXT NOT NULL, backupLocationPath TEXT NOT NULL, lastBackupTimestamp INTEGER)").apply { step(); close() }
+            conn.prepare("INSERT INTO backup_routines VALUES ('r-backup-b', 'Backup Routine B', 1, 'TIMED', 'DB', 'CREATE_NEW_FILE', '03:00', '/backup/path', NULL)").apply { step(); close() }
+
+            conn.prepare("CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, balance INTEGER NOT NULL, language TEXT NOT NULL, secondaryCurrency TEXT NOT NULL, pin TEXT, userBarcode TEXT, userBarcodeNumber TEXT, isActive INTEGER NOT NULL, isDeleted INTEGER NOT NULL, avatarType TEXT NOT NULL, avatarEmoji TEXT NOT NULL, avatarColor TEXT NOT NULL)").apply { step(); close() }
+            conn.prepare("INSERT INTO users VALUES ('u-restored', 'Restored User', 500, 'en', 'NONE', NULL, NULL, NULL, 1, 0, 'INITIALS', '😀', '#1E293B')").apply { step(); close() }
+        } finally {
+            conn.close()
+        }
+
+        // 3. Restore with preserveExistingRoutines = true AND preserveCurrentAdminPassword = true
+        service.restoreDbFromBackup(backupFile, preserveExistingRoutines = true, preserveCurrentAdminPassword = true)
+
+        // Assert user was restored
+        assertEquals(1, db.userDao().getAllUsers().size)
+
+        // Assert routine A was kept (not replaced by routine B)
+        val routinesKept = db.backupDao().getAllBackups()
+        assertEquals(1, routinesKept.size)
+        assertEquals("r-active", routinesKept.first().id)
+
+        // Assert active password was kept
+        val settingsKept = db.settingsDao().getSettings()
+        assertNotNull(settingsKept)
+        assertEquals(activePasswordHash, settingsKept.adminPasswordHash)
+
+        // 4. Restore with preserveExistingRoutines = false AND preserveCurrentAdminPassword = false
+        service.restoreDbFromBackup(backupFile, preserveExistingRoutines = false, preserveCurrentAdminPassword = false)
+
+        // Assert routine B was restored
+        val routinesRestored = db.backupDao().getAllBackups()
+        assertEquals(1, routinesRestored.size)
+        assertEquals("r-backup-b", routinesRestored.first().id)
+
+        // Assert backup password was applied
+        val settingsRestored = db.settingsDao().getSettings()
+        assertNotNull(settingsRestored)
+        assertEquals(backupPasswordHash, settingsRestored.adminPasswordHash)
+    }
+
+    @Test
+    fun testCsvImportCreatesSafetySnapshot() = runTest {
+        val safetySnapshot = File(tempDir, "lojinha_room_pre_csv_import_safety.db")
+        if (safetySnapshot.exists()) safetySnapshot.delete()
+
+        // 1. Dry run should NOT create safety snapshot
+        val dryRunCsv = File(tempDir, "dryrun.csv")
+        dryRunCsv.writeText("name,basePrice\nCoffee,R$ 5,00\n")
+        service.importProductsFromCsv(dryRunCsv, dryRun = true)
+        assertFalse(safetySnapshot.exists(), "Dry run must NOT create safety snapshot")
+
+        // 2. Real import should create safety snapshot
+        service.importProductsFromCsv(dryRunCsv, dryRun = false)
+        assertTrue(safetySnapshot.exists(), "Real product CSV import MUST create pre-import safety snapshot")
+
+        // 3. Real user import should also create safety snapshot
+        safetySnapshot.delete()
+        val userCsv = File(tempDir, "users_import.csv")
+        userCsv.writeText("name,balance\nNew User,R$ 10,00\n")
+        service.importUsersFromCsv(userCsv, dryRun = false)
+        assertTrue(safetySnapshot.exists(), "Real user CSV import MUST create pre-import safety snapshot")
+    }
+
+    @Test
+    fun testRestoreDbRejectsNonLojinhaDatabaseWithoutWipingData() = runTest {
+        // Seed active production user
+        val activeUser = UserEntity(
+            id = "u-prod-1",
+            name = "Production User",
+            balance = 5000L,
+            language = "de",
+            secondaryCurrency = "EUR",
+            pin = null,
+            userBarcode = null,
+            userBarcodeNumber = null,
+            isActive = true
+        )
+        db.userDao().insertOrUpdateUser(activeUser)
+        assertEquals(1, db.userDao().getAllUsers().size)
+
+        // Create an unrelated SQLite DB (e.g. from another app)
+        val foreignDb = File(tempDir, "foreign_app.db")
+        val driver = BundledSQLiteDriver()
+        val conn = driver.open(foreignDb.absolutePath)
+        try {
+            val stmt = conn.prepare("CREATE TABLE foreign_notes (id INTEGER PRIMARY KEY, note TEXT)")
+            stmt.step()
+            stmt.close()
+        } finally {
+            conn.close()
+        }
+
+        // Attempting to restore foreign DB must fail with IllegalArgumentException
+        var exceptionThrown = false
+        try {
+            service.restoreDbFromBackup(foreignDb)
+        } catch (e: IllegalArgumentException) {
+            exceptionThrown = true
+            assertTrue(e.message?.contains("does not contain Lojinha tables") == true)
+        }
+        assertTrue(exceptionThrown, "Restoring foreign database must throw IllegalArgumentException")
+
+        // Crucial assertion: Active production data was NOT wiped!
+        val usersAfter = db.userDao().getAllUsers()
+        assertEquals(1, usersAfter.size, "Active user data must remain untouched when restore is rejected")
+        assertEquals("Production User", usersAfter.first().name)
+    }
+
+    @Test
+    fun testRestoreDbPreservesOneDriveAndAutoBackupSettingsWhenPreserveExistingRoutinesIsTrue() = runTest {
+        // Setup current settings with active OneDrive token and local backup path
+        val currentSettings = SettingsEntity(
+            id = 1,
+            adminPasswordHash = "hash123",
+            globalMarkupPercent = 10.0,
+            usdExchangeRate = 0.20,
+            eurExchangeRate = 0.18,
+            inactivityTimeoutMinutes = 5,
+            backupLocationPath = "/current/backup/path",
+            autoBackupEnabled = true,
+            autoBackupFormat = "DB",
+            autoBackupScheduleType = "HOURLY",
+            autoBackupTime = "03:00",
+            autoBackupIntervalHours = 6,
+            oneDriveClientId = "client-id-123",
+            oneDriveRefreshToken = "active-onedrive-token",
+            oneDriveAccountEmail = "user@live.com",
+            oneDriveAccountName = "Live User",
+            oneDriveDefaultFolder = "/CloudLojinha",
+            oneDriveTenant = "consumers"
+        )
+        db.settingsDao().insertOrUpdateSettings(currentSettings)
+
+        // Create backup database with user, settings lacking OneDrive, and backup routines
+        val backupFile = File(tempDir, "backup_with_empty_onedrive.db")
+        val driver = BundledSQLiteDriver()
+        val conn = driver.open(backupFile.absolutePath)
+        try {
+            conn.prepare("CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, balance INTEGER NOT NULL, language TEXT NOT NULL, secondaryCurrency TEXT NOT NULL, pin TEXT, userBarcode TEXT, userBarcodeNumber TEXT, isActive INTEGER NOT NULL, isDeleted INTEGER NOT NULL, avatarType TEXT NOT NULL, avatarEmoji TEXT NOT NULL, avatarColor TEXT NOT NULL)").apply { step(); close() }
+            conn.prepare("INSERT INTO users VALUES ('u-from-backup', 'Restored User', 1000, 'en', 'NONE', NULL, NULL, NULL, 1, 0, 'INITIALS', '😀', '#1E293B')").apply { step(); close() }
+
+            conn.prepare("CREATE TABLE settings (id INTEGER PRIMARY KEY NOT NULL, adminPasswordHash TEXT NOT NULL, globalMarkupPercent REAL NOT NULL, usdExchangeRate REAL NOT NULL, eurExchangeRate REAL NOT NULL, inactivityTimeoutMinutes INTEGER NOT NULL, backupLocationPath TEXT, autoBackupEnabled INTEGER, autoBackupFormat TEXT, autoBackupScheduleType TEXT, autoBackupTime TEXT, autoBackupIntervalHours INTEGER, lastBackupTimestamp INTEGER, oneDriveClientId TEXT, oneDriveRefreshToken TEXT, oneDriveAccountEmail TEXT, oneDriveAccountName TEXT, oneDriveDefaultFolder TEXT, oneDriveTenant TEXT, supportEmail TEXT, autoUpdateExchangeRates INTEGER, lastExchangeRateUpdateTimestamp INTEGER)").apply { step(); close() }
+            conn.prepare("INSERT INTO settings VALUES (1, 'backupPasswordHash', 0.0, 0.18, 0.16, 3, '', 0, 'DB', 'DAILY', '02:00', 24, NULL, 'default-client', NULL, NULL, NULL, '/DefaultFolder', 'common', NULL, 1, NULL)").apply { step(); close() }
+        } finally {
+            conn.close()
+        }
+
+        // Restore with preserveExistingRoutines = true
+        service.restoreDbFromBackup(backupFile, preserveExistingRoutines = true, preserveCurrentAdminPassword = true)
+
+        val restoredSettings = db.settingsDao().getSettings()
+        assertNotNull(restoredSettings)
+        assertEquals("active-onedrive-token", restoredSettings.oneDriveRefreshToken, "Active OneDrive token must be preserved")
+        assertEquals("user@live.com", restoredSettings.oneDriveAccountEmail, "Active OneDrive email must be preserved")
+        assertEquals("/current/backup/path", restoredSettings.backupLocationPath, "Current backup path must be preserved")
+        assertTrue(restoredSettings.autoBackupEnabled, "Current auto-backup flag must be preserved")
+        assertEquals("/CloudLojinha", restoredSettings.oneDriveDefaultFolder, "Current OneDrive folder must be preserved")
+    }
+
+    @Test
+    fun testFlexibleBooleanParsingInCsvImports() = runTest {
+        // 1. Direct unit test of parseBooleanFlexible
+        assertTrue(service.parseBooleanFlexible("TRUE") == true)
+        assertTrue(service.parseBooleanFlexible("true") == true)
+        assertTrue(service.parseBooleanFlexible("1") == true)
+        assertTrue(service.parseBooleanFlexible("yes") == true)
+        assertTrue(service.parseBooleanFlexible("ja") == true)
+        assertTrue(service.parseBooleanFlexible("sim") == true)
+
+        assertTrue(service.parseBooleanFlexible("FALSE") == false)
+        assertTrue(service.parseBooleanFlexible("false") == false)
+        assertTrue(service.parseBooleanFlexible("0") == false)
+        assertTrue(service.parseBooleanFlexible("no") == false)
+        assertTrue(service.parseBooleanFlexible("nein") == false)
+        assertTrue(service.parseBooleanFlexible("não") == false)
+
+        assertNull(service.parseBooleanFlexible("unknown"))
+
+        // 2. CSV product import with uppercase FALSE
+        val prodCsv = File(tempDir, "prod_bool.csv")
+        prodCsv.writeText("name,basePrice,isActive\nInactiveItem,R$ 10,00,FALSE\n")
+        val prodRes = service.importProductsFromCsv(prodCsv, dryRun = false)
+        assertEquals(1, prodRes.addedCount)
+        val prod = db.productDao().getAllProducts().first { it.name == "InactiveItem" }
+        assertFalse(prod.isActive, "Product with isActive=FALSE must be imported as inactive")
+
+        // 3. CSV user import with uppercase TRUE for isDeleted
+        val userCsv = File(tempDir, "user_bool.csv")
+        userCsv.writeText("name,balance,isDeleted\nDeletedUser,R$ 0,00,TRUE\n")
+        val userRes = service.importUsersFromCsv(userCsv, dryRun = false)
+        assertEquals(1, userRes.addedCount)
+        val user = db.userDao().getAllUsers().first { it.name == "DeletedUser" }
+        assertTrue(user.isDeleted, "User with isDeleted=TRUE must be imported as deleted")
+    }
+
+    @Test
+    fun testUnitTypeParsingCaseInsensitivityAndWarnings() = runTest {
+        val prodCsv = File(tempDir, "prod_units.csv")
+        prodCsv.writeText(
+            """
+            name,basePrice,unitType
+            Apple,R$ 2,00,weight
+            Banana,R$ 1,50,kg
+            Orange,R$ 3,00,Piece
+            Grape,R$ 5,00,unrecognized_unit
+            """.trimIndent()
+        )
+        val res = service.importProductsFromCsv(prodCsv, dryRun = false)
+        assertEquals(4, res.addedCount)
+        assertEquals(1, res.warnings.size)
+        assertTrue(res.warnings.first().contains("Unrecognized unit type 'unrecognized_unit' defaulted to PIECE"))
+
+        val apple = db.productDao().getAllProducts().first { it.name == "Apple" }
+        assertEquals("WEIGHT", apple.unitType)
+
+        val banana = db.productDao().getAllProducts().first { it.name == "Banana" }
+        assertEquals("WEIGHT", banana.unitType)
+
+        val orange = db.productDao().getAllProducts().first { it.name == "Orange" }
+        assertEquals("PIECE", orange.unitType)
+
+        val grape = db.productDao().getAllProducts().first { it.name == "Grape" }
+        assertEquals("PIECE", grape.unitType)
+    }
+
+    @Test
+    fun testBarcodeReassignmentWithinSameCsv() = runTest {
+        // Setup existing product P1 with barcode 999888
+        val existingProduct = ProductEntity(
+            id = "p-1",
+            name = "Old Owner",
+            barcodes = listOf(Barcode("999888", "Main")),
+            basePrice = 1000L,
+            unitType = "PIECE",
+            stockQuantity = 5L,
+            customMarkupPercent = null,
+            isActive = true
+        )
+        db.productDao().insertOrUpdateProduct(existingProduct)
+
+        // CSV where P1 changes barcode to 111222, and P2 takes 999888
+        val prodCsv = File(tempDir, "barcode_reassign.csv")
+        prodCsv.writeText(
+            """
+            id,name,basePrice,barcodes
+            p-1,Old Owner,R$ 10,00,111222:NewBarcode
+            p-2,New Owner,R$ 20,00,999888:ReassignedBarcode
+            """.trimIndent()
+        )
+
+        val res = service.importProductsFromCsv(prodCsv, dryRun = false)
+        assertEquals(1, res.updatedCount)
+        assertEquals(1, res.addedCount)
+        assertEquals(0, res.strippedBarcodesCount, "Reassigned barcode must NOT be stripped")
+
+        val p1 = db.productDao().getProductById("p-1")
+        assertNotNull(p1)
+        assertEquals("111222", p1.barcodes.first().code)
+
+        val p2 = db.productDao().getProductById("p-2")
+        assertNotNull(p2)
+        assertEquals("999888", p2.barcodes.first().code)
+    }
+
+    @Test
+    fun testBarcodeDescriptionNullByDefaultOnImport() = runTest {
+        val prodCsv = File(tempDir, "barcode_nodesc.csv")
+        prodCsv.writeText("name,basePrice,barcodes\nItemWithoutDesc,R$ 5,00,777888:\n")
+
+        val res = service.importProductsFromCsv(prodCsv, dryRun = false)
+        assertEquals(1, res.addedCount)
+
+        val prod = db.productDao().getAllProducts().first { it.name == "ItemWithoutDesc" }
+        assertEquals("777888", prod.barcodes.first().code)
+        assertNull(prod.barcodes.first().description, "Empty barcode description in CSV must import as null, not 'Barcode'")
+    }
+
+    @Test
+    fun testDatabaseFactoryGetDatabaseFile() {
+        val file = DatabaseFactory.getDatabaseFile()
+        assertTrue(file.absolutePath.endsWith(".lojinha/lojinha_room.db"))
+    }
 }
+

@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.ui.viewmodel.admin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import de.joelneumann.lojinha.data.service.CurrencyRateService
 import de.joelneumann.lojinha.data.service.OneDriveBackupService
 import de.joelneumann.lojinha.domain.model.DeviceCodeResponse
 import de.joelneumann.lojinha.domain.model.BackupRoutine
@@ -25,10 +26,11 @@ class AdminSettingsViewModel(
     private val onRunRoutineNow: (suspend (BackupRoutine) -> Unit)? = null,
     private val onExecuteBackupNowLocal: (suspend (destinationPath: String, fileType: BackupFileType, writeMode: BackupWriteMode) -> List<String>)? = null,
     private val oneDriveBackupService: OneDriveBackupService? = null,
+    private val currencyRateService: CurrencyRateService? = null,
     private val onPreviewCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
     private val onExecuteCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
-    private val onExecuteDbRestore: (suspend (PlatformFile) -> Unit)? = null,
-    private val onExecuteWipeData: (suspend () -> Unit)? = null,
+    private val onExecuteDbRestore: (suspend (file: PlatformFile, preserveExistingRoutines: Boolean, preserveCurrentAdminPassword: Boolean) -> Unit)? = null,
+    private val onExecuteWipeData: (suspend (preserveBackupRoutines: Boolean, preserveAdminPassword: Boolean) -> Unit)? = null,
     private val onExportSupportBundle: (suspend (prepareEmail: Boolean, recipientEmail: String) -> Unit)? = null,
     private val onOpenLogFolder: (() -> Unit)? = null,
     val logDirectoryPath: String = "",
@@ -39,6 +41,9 @@ class AdminSettingsViewModel(
 
     private val _settings = MutableStateFlow(SystemSettings())
     val settings: StateFlow<SystemSettings> = _settings.asStateFlow()
+
+    private val _isFetchingRates = MutableStateFlow(false)
+    val isFetchingRates: StateFlow<Boolean> = _isFetchingRates.asStateFlow()
 
     private val _showOneDriveAuthDialog = MutableStateFlow(false)
     val showOneDriveAuthDialog: StateFlow<Boolean> = _showOneDriveAuthDialog.asStateFlow()
@@ -158,8 +163,12 @@ class AdminSettingsViewModel(
         onExitApplication?.invoke()
     }
 
+    private var settingsJob: Job? = null
+    private var routinesJob: Job? = null
+
     fun loadSettings() {
-        viewModelScope.launch {
+        settingsJob?.cancel()
+        settingsJob = viewModelScope.launch {
             settingsRepository.getSettingsFlow().collect {
                 _settings.value = it
             }
@@ -168,7 +177,8 @@ class AdminSettingsViewModel(
 
     fun loadRoutines() {
         val repo = backupRepository ?: return
-        viewModelScope.launch {
+        routinesJob?.cancel()
+        routinesJob = viewModelScope.launch {
             repo.getBackupsFlow().collect {
                 _routines.value = it
             }
@@ -179,6 +189,42 @@ class AdminSettingsViewModel(
         viewModelScope.launch {
             settingsRepository.updateSettings(newSettings)
             _statusMessage.value = I18n.get().statusSystemSettingsUpdated
+        }
+    }
+
+    fun fetchExchangeRates(onSuccess: ((Double, Double) -> Unit)? = null) {
+        if (_isFetchingRates.value) return
+        val service = currencyRateService ?: run {
+            _errorMessage.value = "${I18n.get().errorFailedToFetchRates}: Service not available"
+            return
+        }
+        viewModelScope.launch {
+            _isFetchingRates.value = true
+            _statusMessage.value = null
+            _errorMessage.value = null
+            try {
+                val result = service.fetchRates()
+                result.fold(
+                    onSuccess = { rates ->
+                        val current = _settings.value
+                        val updated = current.copy(
+                            usdExchangeRate = rates.usdRate,
+                            eurExchangeRate = rates.eurRate,
+                            lastExchangeRateUpdateTimestamp = rates.timestamp
+                        )
+                        settingsRepository.updateSettings(updated)
+                        _statusMessage.value = I18n.get().statusRatesUpdatedSuccess(rates.usdRate, rates.eurRate, rates.provider)
+                        onSuccess?.invoke(rates.usdRate, rates.eurRate)
+                    },
+                    onFailure = { error ->
+                        _errorMessage.value = "${I18n.get().errorFailedToFetchRates}: ${error.message}"
+                    }
+                )
+            } catch (e: Exception) {
+                _errorMessage.value = "${I18n.get().errorFailedToFetchRates}: ${e.message}"
+            } finally {
+                _isFetchingRates.value = false
+            }
         }
     }
 
@@ -379,13 +425,13 @@ class AdminSettingsViewModel(
         }
     }
 
-    fun executeDbRestore(file: PlatformFile) {
+    fun executeDbRestore(file: PlatformFile, preserveExistingRoutines: Boolean = false, preserveCurrentAdminPassword: Boolean = true) {
         if (_isRestoringDb.value) return
         _isRestoringDb.value = true
         viewModelScope.launch {
             try {
                 if (onExecuteDbRestore != null) {
-                    onExecuteDbRestore.invoke(file)
+                    onExecuteDbRestore.invoke(file, preserveExistingRoutines, preserveCurrentAdminPassword)
                     _statusMessage.value = "Database restored successfully from ${file.name}."
                 } else {
                     _statusMessage.value = "Database restore requested for ${file.name}."
@@ -400,13 +446,13 @@ class AdminSettingsViewModel(
         }
     }
 
-    fun executeWipeData() {
+    fun executeWipeData(preserveBackupRoutines: Boolean = true, preserveAdminPassword: Boolean = true) {
         if (_isWipingData.value) return
         _isWipingData.value = true
         viewModelScope.launch {
             try {
                 if (onExecuteWipeData != null) {
-                    onExecuteWipeData.invoke()
+                    onExecuteWipeData.invoke(preserveBackupRoutines, preserveAdminPassword)
                     _statusMessage.value = "Factory Reset completed."
                 } else {
                     _statusMessage.value = "Factory Reset completed."

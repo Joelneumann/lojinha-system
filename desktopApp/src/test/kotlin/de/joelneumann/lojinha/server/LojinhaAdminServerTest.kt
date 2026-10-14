@@ -84,6 +84,23 @@ class LojinhaAdminServerTest {
         override suspend fun updateUserQuantity(listId: String, userId: String, quantity: Int) {}
     }
 
+    private val fakeAdminNoteRepo = object : AdminNoteRepository {
+        val notes = mutableListOf(
+            AdminNote("note-init", "Need more sugar", "u1", "Alice", 1700000000000L)
+        )
+        override fun getNotesFlow(): Flow<List<AdminNote>> = flowOf(notes)
+        override suspend fun getAllNotes(): List<AdminNote> = notes
+        override suspend fun addNote(note: AdminNote) {
+            notes.add(note)
+        }
+        override suspend fun deleteNote(id: String) {
+            notes.removeIf { it.id == id }
+        }
+        override suspend fun deleteAllNotes() {
+            notes.clear()
+        }
+    }
+
     @BeforeTest
     fun setUp() {
         server = LojinhaAdminServer(
@@ -92,6 +109,7 @@ class LojinhaAdminServerTest {
             transactionRepository = fakeTransactionRepo,
             billingListRepository = fakeBillingListRepo,
             settingsRepository = fakeSettingsRepo,
+            adminNoteRepository = fakeAdminNoteRepo,
             port = testPort
         )
         server.start()
@@ -317,6 +335,71 @@ class LojinhaAdminServerTest {
         assertTrue(contentType.contains("text/html"), "Content-Type must be text/html, was: $contentType")
         assertTrue(res.body().contains("<html") || res.body().contains("<!DOCTYPE html>"), "Body must contain HTML")
         assertFalse(res.body().contains("037f170986f544477491.wasm\n"), "Body must not be a directory listing")
+    }
+
+    @Test
+    fun testAdminNotesEndpoints() {
+        val token = getValidToken()
+
+        // 1. GET /api/admin/notes without token -> 401
+        val unauthReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
+            .GET()
+            .build()
+        val unauthRes = client.send(unauthReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(401, unauthRes.statusCode())
+
+        // 2. GET /api/admin/notes with token -> 200 and returns note list
+        val getReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
+            .header("Authorization", "Bearer $token")
+            .GET()
+            .build()
+        val getRes = client.send(getReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, getRes.statusCode())
+        assertTrue(getRes.body().contains("Need more sugar"))
+
+        // 3a. POST /api/admin/notes without token -> 401
+        val postPayload = """{"message":"Ice tea ran out","userId":"u2","userNameSnapshot":"Bob"}"""
+        val unauthPostReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(postPayload))
+            .build()
+        val unauthPostRes = client.send(unauthPostReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(401, unauthPostRes.statusCode())
+
+        // 3b. POST /api/admin/notes with blank message -> 400
+        val blankPayload = """{"message":"   ","userId":"u2","userNameSnapshot":"Bob"}"""
+        val blankPostReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
+            .header("Authorization", "Bearer $token")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(blankPayload))
+            .build()
+        val blankPostRes = client.send(blankPostReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(400, blankPostRes.statusCode())
+
+        // 3c. POST /api/admin/notes with valid payload -> 201 Created
+        val postReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
+            .header("Authorization", "Bearer $token")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(postPayload))
+            .build()
+        val postRes = client.send(postReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(201, postRes.statusCode())
+        assertTrue(postRes.body().contains("Ice tea ran out"))
+
+        // 4. DELETE /api/admin/notes/{id} -> 200
+        val delReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/notes/note-init"))
+            .header("Authorization", "Bearer $token")
+            .DELETE()
+            .build()
+        val delRes = client.send(delReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, delRes.statusCode())
+        assertFalse(fakeAdminNoteRepo.notes.any { it.id == "note-init" })
     }
 }
 

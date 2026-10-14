@@ -30,6 +30,7 @@ class LojinhaAdminServer(
     private val transactionRepository: TransactionRepository,
     private val billingListRepository: BillingListRepository,
     private val settingsRepository: SettingsRepository,
+    private val adminNoteRepository: AdminNoteRepository? = null,
     private val database: AppDatabase? = null,
     private val port: Int = 8080
 ) {
@@ -235,6 +236,45 @@ class LojinhaAdminServer(
                         val canDelete = userRepository.canHardDeleteUser(id)
                         call.respond(mapOf("canDelete" to canDelete))
                     }
+                    get("/users/{id}/transactions-pdf") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@get
+                        val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                        val fromTimestamp = call.request.queryParameters["from"]?.toLongOrNull()
+                        val toTimestamp = call.request.queryParameters["to"]?.toLongOrNull()
+                        val langStr = call.request.queryParameters["lang"] ?: "BR"
+                        val language = try {
+                            Language.valueOf(langStr.uppercase())
+                        } catch (_: Exception) {
+                            Language.BR
+                        }
+
+                        val user = userRepository.getUserById(id)
+                        if (user == null) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@get
+                        }
+
+                        val txs = transactionRepository.getTransactionsByUserId(id)
+                        try {
+                            val pdfBytes = de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementBytes(
+                                user = user,
+                                transactions = txs,
+                                fromTimestamp = fromTimestamp,
+                                toTimestamp = toTimestamp,
+                                language = language
+                            )
+                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
+                            val filename = "Extrato_${cleanUserName}.pdf"
+                            call.response.header(
+                                HttpHeaders.ContentDisposition,
+                                ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
+                            )
+                            call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                        } catch (e: Exception) {
+                            AppLogger.error("LojinhaAdminServer", "Failed to generate transactions PDF: ${e.message}", e)
+                            call.respond(HttpStatusCode.InternalServerError, "Failed to generate transactions PDF")
+                        }
+                    }
 
                     // Transactions
                     get("/transactions") {
@@ -356,6 +396,50 @@ class LojinhaAdminServer(
                         val body = call.receive<Map<String, Long?>>()
                         val timestamp = body["lastExecutionTime"]
                         billingListRepository.updateLastExecutionTime(id, timestamp)
+                        call.respond(HttpStatusCode.OK)
+                    }
+
+                    // Admin Notes & Suggestions
+                    get("/notes") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@get
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
+                        if (repo == null) {
+                            call.respond(emptyList<AdminNote>())
+                            return@get
+                        }
+                        call.respond(repo.getAllNotes())
+                    }
+                    post("/notes") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@post
+                        val note = call.receive<AdminNote>()
+                        val cleanMessage = note.message.trim().take(1000)
+                        if (cleanMessage.isBlank()) {
+                            return@post call.respond(HttpStatusCode.BadRequest, "Note message cannot be blank")
+                        }
+                        val noteToSave = note.copy(
+                            id = if (note.id.isBlank()) UUID.randomUUID().toString() else note.id,
+                            message = cleanMessage,
+                            timestamp = if (note.timestamp <= 0L) System.currentTimeMillis() else note.timestamp
+                        )
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
+                        if (repo != null) {
+                            repo.addNote(noteToSave)
+                        }
+                        call.respond(HttpStatusCode.Created, noteToSave)
+                    }
+                    delete("/notes/{id}") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@delete
+                        val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
+                        if (repo != null) {
+                            repo.deleteNote(id)
+                        }
                         call.respond(HttpStatusCode.OK)
                     }
 

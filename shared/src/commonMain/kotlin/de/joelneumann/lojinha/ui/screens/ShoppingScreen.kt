@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -68,6 +69,10 @@ fun ShoppingScreen(
     val weightError by viewModel.weightError.collectAsState()
     val completedPurchase by viewModel.completedPurchase.collectAsState()
     val stockNotice by viewModel.stockNotice.collectAsState()
+    val isSubmittingNote by viewModel.isSubmittingNote.collectAsState()
+    val noteSubmitSuccess by viewModel.noteSubmitSuccess.collectAsState()
+    val noteSubmitError by viewModel.noteSubmitError.collectAsState()
+    var showNoteDialog by remember { mutableStateOf(false) }
 
     ShoppingContent(
         user = user,
@@ -81,6 +86,29 @@ fun ShoppingScreen(
         stockNotice = stockNotice,
         onDismissStockNotice = viewModel::clearStockNotice,
         onShowStockNotice = viewModel::showStockNotice,
+        isSubmittingNote = isSubmittingNote,
+        noteSubmitSuccess = noteSubmitSuccess,
+        noteSubmitError = noteSubmitError,
+        showNoteDialog = showNoteDialog,
+        onOpenNoteDialog = {
+            onUserInteracted(true)
+            showNoteDialog = true
+        },
+        onDismissNoteDialog = {
+            onUserInteracted(true)
+            showNoteDialog = false
+            viewModel.clearNoteSubmitState()
+        },
+        onSubmitNote = { msg ->
+            onUserInteracted(true)
+            viewModel.submitAdminNote(user, msg) {
+                showNoteDialog = false
+            }
+        },
+        onDismissNoteSuccess = {
+            onUserInteracted(true)
+            viewModel.clearNoteSubmitState()
+        },
         weightProductDialog = weightProductDialog,
         weightInput = weightInput,
         weightError = weightError,
@@ -152,6 +180,14 @@ fun ShoppingContent(
     weightInput: String,
     weightError: String?,
     completedPurchase: Transaction? = null,
+    isSubmittingNote: Boolean = false,
+    noteSubmitSuccess: String? = null,
+    noteSubmitError: String? = null,
+    showNoteDialog: Boolean = false,
+    onOpenNoteDialog: () -> Unit = {},
+    onDismissNoteDialog: () -> Unit = {},
+    onSubmitNote: (String) -> Unit = {},
+    onDismissNoteSuccess: () -> Unit = {},
     onLogout: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmitted: () -> Unit,
@@ -189,7 +225,7 @@ fun ShoppingContent(
 
     fun selectProductInCart(productId: String) {
         val idx = cartItems.indexOfFirst { it.product.id == productId }
-        selectedCartIndex = if (idx >= 0) idx else cartItems.size
+        selectedCartIndex = if (idx >= 0) idx else 0
     }
 
     LaunchedEffect(cartItems) {
@@ -218,11 +254,7 @@ fun ShoppingContent(
     val cartTotal = remember(cartItems) { cartItems.sumOf { it.lineTotal } }
     val balanceAfter = remember(user.balance, cartTotal) { user.balance - cartTotal }
 
-    val rate = when (user.secondaryCurrency) {
-        SecondaryCurrency.USD -> settings.usdExchangeRate
-        SecondaryCurrency.EUR -> settings.eurExchangeRate
-        else -> 0.0
-    }
+    val rate = settings.exchangeRateFor(user.secondaryCurrency)
 
     fun isPlusKey(event: KeyEvent): Boolean {
         return event.key == Key.Plus ||
@@ -358,6 +390,31 @@ fun ShoppingContent(
                 coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
             },
             actions = {
+                Button(
+                    onClick = onOpenNoteDialog,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lightbulb,
+                            contentDescription = null,
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = strings.suggestProductOrNoteBtn,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SurfaceWhite
+                        )
+                    }
+                }
+
                 Button(
                     onClick = onNavigateToHistory,
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
@@ -679,6 +736,31 @@ fun ShoppingContent(
                     onDismissCompletedPurchase()
                     onLogout()
                 }
+            )
+        }
+
+        // Product Suggestion & Admin Note Modal Dialog
+        if (showNoteDialog) {
+            AdminNoteInputDialog(
+                user = user,
+                isSubmitting = isSubmittingNote,
+                errorMessage = noteSubmitError,
+                onDismiss = onDismissNoteDialog,
+                onSubmit = onSubmitNote,
+                onUserInteracted = onUserInteracted
+            )
+        }
+
+        // Note Submit Success Feedback Dialog
+        noteSubmitSuccess?.let { successMsg ->
+            ConfirmationDialog(
+                title = strings.confirm,
+                message = successMsg,
+                confirmText = strings.ok,
+                cancelText = null,
+                onDismiss = onDismissNoteSuccess,
+                onConfirm = onDismissNoteSuccess,
+                confirmButtonColor = ColorSuccessEmerald
             )
         }
     }

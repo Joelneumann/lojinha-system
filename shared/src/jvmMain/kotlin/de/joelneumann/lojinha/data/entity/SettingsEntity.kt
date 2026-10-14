@@ -25,7 +25,11 @@ data class SettingsEntity(
     val oneDriveAccountName: String? = null,
     val oneDriveDefaultFolder: String = "/LojinhaBackups",
     val oneDriveTenant: String = "common",
-    val supportEmail: String? = null
+    val supportEmail: String? = null,
+    val autoUpdateExchangeRates: Boolean = true,
+    val lastExchangeRateUpdateTimestamp: Long? = null,
+    val yellowBalanceWarningThresholdCents: Long = 300_00L,
+    val redBalanceWarningThresholdCents: Long = 0L
 ) {
     fun toDomain(): SystemSettings = SystemSettings(
         adminPasswordHash = adminPasswordHash,
@@ -46,7 +50,11 @@ data class SettingsEntity(
         oneDriveAccountName = oneDriveAccountName,
         oneDriveDefaultFolder = oneDriveDefaultFolder,
         oneDriveTenant = oneDriveTenant,
-        supportEmail = supportEmail
+        supportEmail = supportEmail,
+        autoUpdateExchangeRates = autoUpdateExchangeRates,
+        lastExchangeRateUpdateTimestamp = lastExchangeRateUpdateTimestamp,
+        yellowBalanceWarningThresholdCents = yellowBalanceWarningThresholdCents,
+        redBalanceWarningThresholdCents = redBalanceWarningThresholdCents
     )
 
     companion object {
@@ -70,7 +78,11 @@ data class SettingsEntity(
             oneDriveAccountName = settings.oneDriveAccountName,
             oneDriveDefaultFolder = settings.oneDriveDefaultFolder,
             oneDriveTenant = settings.oneDriveTenant,
-            supportEmail = settings.supportEmail
+            supportEmail = settings.supportEmail,
+            autoUpdateExchangeRates = settings.autoUpdateExchangeRates,
+            lastExchangeRateUpdateTimestamp = settings.lastExchangeRateUpdateTimestamp,
+            yellowBalanceWarningThresholdCents = settings.yellowBalanceWarningThresholdCents,
+            redBalanceWarningThresholdCents = settings.redBalanceWarningThresholdCents
         )
     }
 }

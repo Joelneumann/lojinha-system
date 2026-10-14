@@ -32,6 +32,7 @@ fun AdminUserAccordionCard(
     onAdjustBalance: (User, Long, String, Boolean) -> Unit,
     onToggleActive: (User) -> Unit,
     onDeleteUser: (User) -> Unit,
+    onRequestExportPdf: ((User) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -134,6 +135,7 @@ fun AdminUserAccordionCard(
             onEdit = { onEditUser(user) },
             onCustomExpense = { onCustomExpense(user) },
             onCustomIncome = { onCustomIncome(user) },
+            onExportPdf = onRequestExportPdf?.let { { it(user) } },
             toggleStatusText = if (user.isActive) strings.deactivate else strings.activate,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = user.isActive,

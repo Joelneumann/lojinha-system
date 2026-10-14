@@ -14,9 +14,10 @@ import de.joelneumann.lojinha.data.entity.*
         SettingsEntity::class, 
         BackupEntity::class,
         BillingListEntity::class,
-        BillingListUserEntity::class
+        BillingListUserEntity::class,
+        AdminNoteEntity::class
     ],
-    version = 13,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -27,4 +28,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun settingsDao(): SettingsDao
     abstract fun backupDao(): BackupDao
     abstract fun billingListDao(): BillingListDao
+    abstract fun adminNoteDao(): AdminNoteDao
 }

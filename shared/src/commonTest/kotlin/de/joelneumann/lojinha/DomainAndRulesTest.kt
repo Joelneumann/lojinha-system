@@ -58,6 +58,49 @@ class DomainAndRulesTest {
     }
 
     @Test
+    fun testUserBalanceWarningLevel() {
+        val userNegativeLarge = User(id = "1", name = "Test", balance = -5000L)
+        val userNegativeSmall = User(id = "2", name = "Test", balance = -1L)
+        val userZero = User(id = "3", name = "Test", balance = 0L)
+        val userLowMid = User(id = "4", name = "Test", balance = 15000L) // R$ 150,00
+        val userAtThreshold = User(id = "5", name = "Test", balance = 30000L) // R$ 300,00
+        val userAboveThreshold = User(id = "6", name = "Test", balance = 30001L) // R$ 300,01
+        val userHealthy = User(id = "7", name = "Test", balance = 50000L) // R$ 500,00
+
+        assertEquals(BalanceWarningLevel.NEGATIVE, userNegativeLarge.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.NEGATIVE, userNegativeSmall.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userZero.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userLowMid.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userAtThreshold.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.NORMAL, userAboveThreshold.balanceWarningLevel)
+        assertEquals(BalanceWarningLevel.NORMAL, userHealthy.balanceWarningLevel)
+    }
+
+    @Test
+    fun testUserBalanceWarningLevel_withCustomThresholds() {
+        val customYellow = 150_00L // R$ 150,00
+        val customRed = -20_00L   // -R$ 20,00
+
+        val userHealthy = User(id = "1", name = "Healthy", balance = 200_00L)
+        val userJustAboveYellow = User(id = "2", name = "Just Above", balance = 150_01L)
+        val userAtYellow = User(id = "3", name = "At Yellow", balance = 150_00L)
+        val userMidLow = User(id = "4", name = "Mid Low", balance = 50_00L)
+        val userZero = User(id = "5", name = "Zero", balance = 0L)
+        val userAtRed = User(id = "6", name = "At Red", balance = -20_00L)
+        val userJustBelowRed = User(id = "7", name = "Below Red", balance = -20_01L)
+        val userVeryNegative = User(id = "8", name = "Very Negative", balance = -50_00L)
+
+        assertEquals(BalanceWarningLevel.NORMAL, userHealthy.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.NORMAL, userJustAboveYellow.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userAtYellow.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userMidLow.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userZero.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userAtRed.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.NEGATIVE, userJustBelowRed.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.NEGATIVE, userVeryNegative.balanceWarningLevel(customYellow, customRed))
+    }
+
+    @Test
     fun testProductMarkupCalculations() {
         val product = Product(
             id = "p1",
@@ -243,6 +286,24 @@ class DomainAndRulesTest {
         assertEquals(" (≈ US$ 3.00)", edgeCaseEn)
         val edgeCaseBr = Formatting.formatSecondaryCurrency(1665L, SecondaryCurrency.USD, 0.18, Language.BR)
         assertEquals(" (≈ US$ 3,00)", edgeCaseBr)
+
+        // Test small negative cents (prevents negative zero -US$ 0.00)
+        val smallNegativeEn = Formatting.formatSecondaryCurrency(-1L, SecondaryCurrency.USD, 0.18, Language.EN)
+        assertEquals(" (≈ US$ 0.00)", smallNegativeEn)
+        val genuineNegativeEn = Formatting.formatSecondaryCurrency(-500L, SecondaryCurrency.USD, 0.18, Language.EN)
+        assertEquals(" (≈ -US$ 0.90)", genuineNegativeEn)
+
+        // Test non-finite rates
+        val nanRate = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.USD, Double.NaN)
+        assertEquals("", nanRate)
+        val infRate = Formatting.formatSecondaryCurrency(1550L, SecondaryCurrency.USD, Double.POSITIVE_INFINITY)
+        assertEquals("", infRate)
+
+        // Test SystemSettings.exchangeRateFor helper
+        val testSettings = SystemSettings(usdExchangeRate = 0.20, eurExchangeRate = 0.17)
+        assertEquals(0.20, testSettings.exchangeRateFor(SecondaryCurrency.USD))
+        assertEquals(0.17, testSettings.exchangeRateFor(SecondaryCurrency.EUR))
+        assertEquals(0.0, testSettings.exchangeRateFor(SecondaryCurrency.NONE))
     }
 
     @Test

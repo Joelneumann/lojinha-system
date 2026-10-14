@@ -45,10 +45,11 @@ object LojinhaViewModelFactory {
     fun createShoppingViewModelFactory(
         productRepository: ProductRepository,
         userRepository: UserRepository,
-        transactionRepository: TransactionRepository
+        transactionRepository: TransactionRepository,
+        adminNoteRepository: AdminNoteRepository? = null
     ): ViewModelProvider.Factory = viewModelFactory {
         initializer {
-            ShoppingViewModel(productRepository, userRepository, transactionRepository)
+            ShoppingViewModel(productRepository, userRepository, transactionRepository, adminNoteRepository)
         }
     }
 

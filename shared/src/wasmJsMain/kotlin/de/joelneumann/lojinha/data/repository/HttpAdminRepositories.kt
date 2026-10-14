@@ -692,3 +692,55 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
         // Managed through saveBillingList
     }
 }
+
+class HttpAdminNoteRepository(private val client: AdminNetworkClient) : AdminNoteRepository {
+    override fun getNotesFlow(): Flow<List<AdminNote>> = flow {
+        emit(getAllNotes())
+    }
+
+    override suspend fun getAllNotes(): List<AdminNote> {
+        return try {
+            client.httpClient.get(client.resolveUrl("/api/admin/notes")) {
+                client.run { appendAdminAuth() }
+            }.body()
+        } catch (e: Exception) {
+            AppLogger.error("HttpAdminNoteRepository", "getAllNotes failed: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    override suspend fun addNote(note: AdminNote) {
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/notes")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(note)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("addNote failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpAdminNoteRepository", "addNote failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun deleteNote(id: String) {
+        try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/notes/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("deleteNote failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpAdminNoteRepository", "deleteNote failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun deleteAllNotes() {
+        // Not used by admin client directly
+    }
+}
+

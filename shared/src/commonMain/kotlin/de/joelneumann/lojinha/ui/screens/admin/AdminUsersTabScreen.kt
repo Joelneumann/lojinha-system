@@ -25,6 +25,9 @@ import de.joelneumann.lojinha.ui.components.admin.users.DeletedUserCard
 import de.joelneumann.lojinha.ui.components.admin.users.UserCustomExpenseDialog
 import de.joelneumann.lojinha.ui.components.admin.users.UserCustomIncomeDialog
 import de.joelneumann.lojinha.ui.components.admin.users.UserEditDialog
+import de.joelneumann.lojinha.ui.components.admin.users.UserTransactionsPdfExportDialog
+import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
 import de.joelneumann.lojinha.ui.theme.ColorWarningAmber
@@ -42,7 +45,11 @@ fun AdminUsersTabScreen(
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandUser: (String) -> Unit,
     onUnsavedStateChanged: (Boolean) -> Unit,
-    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null
+    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
+    defaultSaveDirectory: String = "",
+    onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
+    onOpenExportedPdf: ((String) -> Unit)? = null,
+    onRevealExportedFolder: ((String) -> Unit)? = null
 ) {
     val users by viewModel.users.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -54,11 +61,17 @@ fun AdminUsersTabScreen(
     val customIncomeUser by viewModel.customIncomeUser.collectAsState()
     val userErrorMessage by viewModel.userErrorMessage.collectAsState()
 
+    val exportPdfUser by viewModel.exportPdfUser.collectAsState()
+    val exportPdfTransactions by viewModel.exportPdfTransactions.collectAsState()
+    val isExportingPdf by viewModel.isExportingPdf.collectAsState()
+    val exportResultPath by viewModel.exportResultPath.collectAsState()
+    val exportPdfError by viewModel.exportPdfError.collectAsState()
+
     val strings = I18n.current
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    val isModalOpen = showUserModal || customExpenseUser != null || customIncomeUser != null
+    val isModalOpen = showUserModal || customExpenseUser != null || customIncomeUser != null || exportPdfUser != null
 
     LaunchedEffect(onRegisterPageScroller, isModalOpen) {
         onRegisterPageScroller?.invoke { isDown ->
@@ -178,7 +191,8 @@ fun AdminUsersTabScreen(
                                 viewModel.adjustUserBalance(u.id, u.name, delta, note)
                             },
                             onToggleActive = viewModel::toggleUserActive,
-                            onDeleteUser = { viewModel.softDeleteUser(it.id) }
+                            onDeleteUser = { viewModel.softDeleteUser(it.id) },
+                            onRequestExportPdf = { viewModel.openExportPdfModal(it) }
                         )
                     }
                 }
@@ -264,6 +278,24 @@ fun AdminUsersTabScreen(
                 viewModel.submitCustomIncome(targetUser, amountCents, description)
             },
             onDismiss = { viewModel.closeCustomIncomeModal() }
+        )
+    }
+
+    if (exportPdfUser != null) {
+        val targetUser = exportPdfUser!!
+        UserTransactionsPdfExportDialog(
+            user = targetUser,
+            userTransactions = exportPdfTransactions,
+            defaultSaveDirectory = defaultSaveDirectory,
+            isExporting = isExportingPdf,
+            exportResultPath = exportResultPath,
+            errorMessage = exportPdfError,
+            onExportPdf = { folder, from, to, lang ->
+                onExecutePdfExport?.invoke(targetUser, folder, from, to, lang)
+            },
+            onOpenExportedPdf = onOpenExportedPdf,
+            onRevealExportedFolder = onRevealExportedFolder,
+            onDismiss = { viewModel.closeExportPdfModal() }
         )
     }
 

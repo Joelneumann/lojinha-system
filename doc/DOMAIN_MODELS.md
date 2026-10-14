@@ -60,6 +60,11 @@ Defined in [`User.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/do
 * **Hard Delete (Permanent Removal):**
   * Allowed **only** if the user has **zero** historical transactions.
   * If transactions exist, hard delete is blocked and soft delete is enforced to preserve the immutable audit ledger.
+* **Balance Warning Levels (`balanceWarningLevel`):**
+  * Dynamically computes the user's warning status based on configurable thresholds in `SystemSettings`:
+    $$\text{level} = \begin{cases} \text{NEGATIVE} & \text{if } \text{balance} < \text{redThresholdCents} \\ \text{LOW\_BALANCE} & \text{if } \text{balance} \le \text{yellowThresholdCents} \\ \text{NORMAL} & \text{otherwise} \end{cases}$$
+  * Default baseline thresholds: **Yellow** = R$ 300,00 (`30000L`), **Red** = R$ 0,00 (`0L`).
+  * Triggers visual amber or red warning banners in the kiosk shopping view, user history view, and admin tables.
 
 ---
 
@@ -174,8 +179,12 @@ Single-row configuration entity persisted in Room SQLite.
 |---|---|---|---|
 | `adminPasswordHash` | `String` | SHA-256 of `"admin"` | Master admin password hash. |
 | `globalMarkupPercent` | `Double` | `0.0` | Default markup percentage applied to catalog items without custom markup. |
-| `usdExchangeRate` | `Double` | `0.18` | Static conversion rate: 1 BRL = X USD. |
-| `eurExchangeRate` | `Double` | `0.16` | Static conversion rate: 1 BRL = X EUR. |
+| `usdExchangeRate` | `Double` | `0.18` | Conversion rate: 1 BRL = X USD (manual or via API). |
+| `eurExchangeRate` | `Double` | `0.16` | Conversion rate: 1 BRL = X EUR (manual or via API). |
+| `autoUpdateExchangeRates` | `Boolean` | `true` | Automatically fetch latest exchange rates on application startup. |
+| `lastExchangeRateUpdateTimestamp` | `Long?` | `null` | Unix epoch milliseconds of when rates were last refreshed via API. |
+| `yellowBalanceWarningThresholdCents` | `Long` | `30000L` | Balance threshold in cents for displaying yellow low-balance warning banner (R$ 300,00). |
+| `redBalanceWarningThresholdCents` | `Long` | `0L` | Balance threshold in cents for displaying red negative-balance warning banner (R$ 0,00). |
 | `inactivityTimeoutMinutes` | `Int` | `3` | Kiosk idle timeout before auto-logout (min: 2 min). |
 | `supportEmail` | `String?` | `null` | Administrator/developer email for crash reports and diagnostics. |
 | `oneDriveClientId` | `String` | `"202e1c94-..."` | Microsoft Entra Application (Client) ID. |
@@ -209,3 +218,25 @@ Configures automated and manual backup jobs.
 1. **`Timed(timeOfDay = "HH:mm")`:** Fires once daily at the specified 24-hour time.
 2. **`Interval(intervalHours, intervalMinutes)`:** Fires periodically at the specified elapsed interval.
 3. **`OnDataChange(debounceMs = 1000)`:** Listens to database mutation events and fires automatically after a short debounce window.
+
+---
+
+## 📝 7. Admin Note & Customer Suggestion
+
+Defined in [`AdminNote.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/domain/model/AdminNote.kt).
+
+Stores customer wishlist requests, restock suggestions, or general notes submitted directly from the kiosk shopping screen or admin dashboard.
+
+### Fields
+| Field | Type | Description |
+|---|---|---|
+| `id` | `String` (UUID) | Unique primary key. |
+| `message` | `String` | Note or suggestion message (maximum 1000 characters). |
+| `userId` | `String` (UUID) | ID of the user submitting the note. |
+| `userNameSnapshot` | `String` | Snapshot of the user name at the time of submission. |
+| `timestamp` | `Long` | Epoch milliseconds when the note was created. |
+
+### Rules & Integration
+* Users can submit suggestions via the lightbulb button in the Shopping Screen header without requiring admin privileges.
+* All notes are persisted in the `admin_notes` table in SQLite Room and exported during CSV backups as `admin_notes.csv`.
+* The Admin Notes tab (`F6`) provides search, review, and deletion with instant reactive UI updates and LAN Server-Sent Events sync.

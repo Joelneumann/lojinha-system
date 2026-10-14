@@ -9,6 +9,8 @@ import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.data.service.CurrencyRateService
+import de.joelneumann.lojinha.data.service.CurrencyRates
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
@@ -672,6 +674,26 @@ class AdminViewModelsTest {
     }
 
     @Test
+    fun testAdminSettingsViewModel_updateSystemSettings_updatesBalanceWarningThresholds() = runTest {
+        val initialSettings = SystemSettings(
+            yellowBalanceWarningThresholdCents = 300_00L,
+            redBalanceWarningThresholdCents = 0L
+        )
+        val settingsRepo = TestSettingsRepository(initialSettings)
+        val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo)
+
+        val updated = initialSettings.copy(
+            yellowBalanceWarningThresholdCents = 150_00L,
+            redBalanceWarningThresholdCents = -20_00L
+        )
+        viewModel.updateSystemSettings(updated)
+
+        assertEquals(150_00L, settingsRepo.updatedSettings?.yellowBalanceWarningThresholdCents)
+        assertEquals(-20_00L, settingsRepo.updatedSettings?.redBalanceWarningThresholdCents)
+        assertEquals(I18n.get().statusSystemSettingsUpdated, viewModel.statusMessage.value)
+    }
+
+    @Test
     fun testAdminSettingsViewModel_routineLifecycle_createsEditsAndDeletes() = runTest {
         val backupRepo = TestBackupRepository()
         val settingsRepo = TestSettingsRepository()
@@ -911,4 +933,200 @@ class AdminViewModelsTest {
         assertEquals("Failed to create local backup: Read-only filesystem", viewModel.errorMessage.value)
         assertNull(viewModel.statusMessage.value)
     }
+
+    private class FakeCurrencyRateService(
+        var result: Result<CurrencyRates> = Result.success(CurrencyRates(usdRate = 0.1993, eurRate = 0.1782, timestamp = 1700000000000L, provider = "Frankfurter API"))
+    ) : CurrencyRateService {
+        var fetchCount = 0
+        override suspend fun fetchRates(): Result<CurrencyRates> {
+            fetchCount++
+            return result
+        }
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_fetchExchangeRates_success_updatesSettingsAndSetsStatusMessage() = runTest {
+        val initialSettings = SystemSettings(usdExchangeRate = 0.18, eurExchangeRate = 0.16)
+        val settingsRepo = TestSettingsRepository(initialSettings)
+        val fakeService = FakeCurrencyRateService(
+            Result.success(CurrencyRates(usdRate = 0.205, eurRate = 0.185, timestamp = 1720000000000L, provider = "Frankfurter API"))
+        )
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            currencyRateService = fakeService
+        )
+
+        var callbackUsd = 0.0
+        var callbackEur = 0.0
+        viewModel.fetchExchangeRates { u, e ->
+            callbackUsd = u
+            callbackEur = e
+        }
+
+        assertEquals(1, fakeService.fetchCount)
+        assertEquals(0.205, callbackUsd)
+        assertEquals(0.185, callbackEur)
+        assertEquals(0.205, settingsRepo.updatedSettings?.usdExchangeRate)
+        assertEquals(0.185, settingsRepo.updatedSettings?.eurExchangeRate)
+        assertEquals(1720000000000L, settingsRepo.updatedSettings?.lastExchangeRateUpdateTimestamp)
+        assertEquals(I18n.get().statusRatesUpdatedSuccess(0.205, 0.185, "Frankfurter API"), viewModel.statusMessage.value)
+        assertNull(viewModel.errorMessage.value)
+        assertFalse(viewModel.isFetchingRates.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_fetchExchangeRates_failure_setsErrorMessageAndPreservesSettings() = runTest {
+        val initialSettings = SystemSettings(usdExchangeRate = 0.18, eurExchangeRate = 0.16)
+        val settingsRepo = TestSettingsRepository(initialSettings)
+        val fakeService = FakeCurrencyRateService(
+            Result.failure(IllegalStateException("No internet connection"))
+        )
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            currencyRateService = fakeService
+        )
+
+        viewModel.fetchExchangeRates()
+
+        assertEquals(1, fakeService.fetchCount)
+        assertNull(settingsRepo.updatedSettings)
+        assertTrue(viewModel.errorMessage.value?.contains("No internet connection") == true)
+        assertNull(viewModel.statusMessage.value)
+        assertFalse(viewModel.isFetchingRates.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_fetchExchangeRates_serviceNotConfigured_setsErrorMessage() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            currencyRateService = null
+        )
+
+        viewModel.fetchExchangeRates()
+
+        assertNull(settingsRepo.updatedSettings)
+        assertTrue(viewModel.errorMessage.value?.contains("Service not available") == true)
+        assertNull(viewModel.statusMessage.value)
+        assertFalse(viewModel.isFetchingRates.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_fetchExchangeRates_reentranceGuarded() = runTest {
+        val settingsRepo = TestSettingsRepository()
+        val fakeService = object : CurrencyRateService {
+            var fetchCount = 0
+            override suspend fun fetchRates(): Result<CurrencyRates> {
+                fetchCount++
+                kotlinx.coroutines.delay(100)
+                return Result.success(CurrencyRates(usdRate = 0.20, eurRate = 0.18))
+            }
+        }
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            currencyRateService = fakeService
+        )
+
+        viewModel.fetchExchangeRates()
+        assertTrue(viewModel.isFetchingRates.value)
+
+        // Call again while fetching
+        viewModel.fetchExchangeRates()
+        assertEquals(1, fakeService.fetchCount)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_executeDbRestore_invokesCallbackWithPreserveParams() = runTest {
+        val settingsRepo = TestSettingsRepository(SystemSettings())
+        var restoredFile: de.joelneumann.lojinha.ui.utils.PlatformFile? = null
+        var preservedRoutines = false
+        var preservedPassword = false
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onExecuteDbRestore = { file, keepRoutines, keepPassword ->
+                restoredFile = file
+                preservedRoutines = keepRoutines
+                preservedPassword = keepPassword
+            }
+        )
+        val fakeFile = de.joelneumann.lojinha.ui.utils.PlatformFile("backup.db", "/path/to/backup.db")
+        viewModel.executeDbRestore(fakeFile, preserveExistingRoutines = true, preserveCurrentAdminPassword = true)
+        assertEquals(fakeFile, restoredFile)
+        assertTrue(preservedRoutines)
+        assertTrue(preservedPassword)
+        assertEquals("Database restored successfully from backup.db.", viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_executeWipeData_invokesCallbackWithPreserveParams() = runTest {
+        val settingsRepo = TestSettingsRepository(SystemSettings())
+        var preservedRoutines = true
+        var preservedPassword = true
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onExecuteWipeData = { keepRoutines, keepPassword ->
+                preservedRoutines = keepRoutines
+                preservedPassword = keepPassword
+            }
+        )
+        viewModel.executeWipeData(preserveBackupRoutines = false, preserveAdminPassword = false)
+        assertFalse(preservedRoutines)
+        assertFalse(preservedPassword)
+        assertEquals("Factory Reset completed.", viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_loadSettingsAndRoutines_reloadsLatestData() = runTest {
+        val settingsRepo = TestSettingsRepository(SystemSettings(globalMarkupPercent = 10.0))
+        val backupRepo = TestBackupRepository(listOf(
+            BackupRoutine(id = "r1", name = "Daily", isEnabled = true, type = BackupType.LOCAL, fileType = BackupFileType.DB, writeMode = BackupWriteMode.CREATE_NEW_FILE, scheduleConfig = BackupScheduleConfig.Timed("02:00"), backupLocationPath = "/tmp")
+        ))
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            backupRepository = backupRepo
+        )
+        assertEquals(10.0, viewModel.settings.value.globalMarkupPercent)
+        assertEquals(1, viewModel.routines.value.size)
+
+        // Simulate restore or wipe changing the backing repository
+        settingsRepo.flow.value = SystemSettings(globalMarkupPercent = 25.0)
+        backupRepo.flow.value = emptyList()
+
+        viewModel.loadSettings()
+        viewModel.loadRoutines()
+
+        assertEquals(25.0, viewModel.settings.value.globalMarkupPercent)
+        assertEquals(0, viewModel.routines.value.size)
+    }
+
+    @Test
+    fun testAppViewModel_reactiveReloadSettingsAndUser() = runTest {
+        val settingsRepo = TestSettingsRepository(SystemSettings(inactivityTimeoutMinutes = 5))
+        val alice = User(id = "u1", name = "Alice", balance = 1000)
+        val userRepo = TestUserRepository(listOf(alice))
+        val appViewModel = de.joelneumann.lojinha.ui.viewmodel.AppViewModel(userRepo, settingsRepo)
+
+        assertEquals(5, appViewModel.settings.value.inactivityTimeoutMinutes)
+        appViewModel.loginUser(alice)
+        assertEquals("u1", appViewModel.currentUser.value?.id)
+
+        // 1. Settings update
+        settingsRepo.flow.value = SystemSettings(inactivityTimeoutMinutes = 15)
+        appViewModel.loadSettings()
+        assertEquals(15, appViewModel.settings.value.inactivityTimeoutMinutes)
+
+        // 2. User update
+        val updatedAlice = alice.copy(name = "Alice Updated", balance = 2000)
+        userRepo.users = listOf(updatedAlice)
+        appViewModel.refreshCurrentUser()
+        assertEquals("Alice Updated", appViewModel.currentUser.value?.name)
+        assertEquals(2000, appViewModel.currentUser.value?.balance)
+
+        // 3. User wiped/deleted triggers logout
+        userRepo.users = emptyList()
+        appViewModel.refreshCurrentUser()
+        assertNull(appViewModel.currentUser.value)
+        assertEquals(de.joelneumann.lojinha.ui.viewmodel.AppScreen.MAIN_USER_SELECT, appViewModel.currentScreen.value)
+    }
 }
+

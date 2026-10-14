@@ -1,15 +1,19 @@
 package de.joelneumann.lojinha.ui.components.admin
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.ui.theme.AccentNavy
+import de.joelneumann.lojinha.ui.theme.DividerBorder
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
@@ -82,12 +86,13 @@ fun <T> AdminSegmentedOptionsRow(
                 val isSel = selected == option
                 OutlinedButton(
                     onClick = { onSelect(option) },
-                    modifier = Modifier.weight(1f).height(38.dp),
+                    modifier = Modifier.weight(1f).height(38.dp).pointerHoverIcon(PointerIcon.Hand),
                     contentPadding = PaddingValues(0.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = if (isSel) AccentNavy else SurfaceWhite,
                         contentColor = if (isSel) SurfaceWhite else PrimaryNavy
                     ),
+                    border = BorderStroke(1.dp, if (isSel) AccentNavy else DividerBorder),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     optionContent(option)

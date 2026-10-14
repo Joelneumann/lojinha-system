@@ -22,13 +22,16 @@ import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.Transaction
+import de.joelneumann.lojinha.domain.model.BalanceWarningLevel
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
+import de.joelneumann.lojinha.domain.model.balanceWarningLevel
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
 import de.joelneumann.lojinha.ui.components.general.LogoutButton
 import de.joelneumann.lojinha.ui.components.history.TransactionFilterBar
 import de.joelneumann.lojinha.ui.components.history.TransactionItemCard
+import de.joelneumann.lojinha.ui.components.history.UserBalanceWarningBanner
 import de.joelneumann.lojinha.ui.components.history.UserSettingsModalDialog
 import de.joelneumann.lojinha.ui.components.shopping.UserBalanceHeader
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -185,11 +188,7 @@ fun TransactionHistoryContent(
         }
     }
 
-    val rate = when (user.secondaryCurrency) {
-        SecondaryCurrency.USD -> settings.usdExchangeRate
-        SecondaryCurrency.EUR -> settings.eurExchangeRate
-        else -> 0.0
-    }
+    val rate = settings.exchangeRateFor(user.secondaryCurrency)
 
     val allTransactionsMap = remember(transactions, relatedTransactionsMap) {
         (transactions + relatedTransactionsMap.values).associateBy { it.id }
@@ -331,10 +330,19 @@ fun TransactionHistoryContent(
                     }
                 }
 
+                val warningLevel = user.balanceWarningLevel(
+                    yellowThresholdCents = settings.yellowBalanceWarningThresholdCents,
+                    redThresholdCents = settings.redBalanceWarningThresholdCents
+                )
+                if (warningLevel != BalanceWarningLevel.NORMAL) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    UserBalanceWarningBanner(user = user, settings = settings)
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
-            // Search & Filter Bar reusing SearchInputField
-            TransactionFilterBar(
+                // Search & Filter Bar reusing SearchInputField
+                TransactionFilterBar(
                 searchFilter = searchFilter,
                 selectedTypeFilter = selectedTypeFilter,
                 onSearchFilterChange = onSearchFilterChange,

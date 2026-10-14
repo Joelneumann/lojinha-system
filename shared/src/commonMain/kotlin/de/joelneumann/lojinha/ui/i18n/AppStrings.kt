@@ -47,6 +47,10 @@ interface AppStrings {
     val historyTypeCorrection: String
     fun cancellationNote(type: String, date: String): String
     val continueShopping: String
+    val lowBalanceWarningTitle: String
+    val lowBalanceWarningMsg: String
+    val negativeBalanceWarningTitle: String
+    val negativeBalanceWarningMsg: String
     val userSettings: String
     val userSettingsTitle: String
     val setPin: String
@@ -145,6 +149,16 @@ interface AppStrings {
     val productPricingRulesTitle: String
     val globalProductMarkupLabel: String
     val globalProductMarkupPlaceholder: String
+    val balanceWarningsCardTitle: String
+    val balanceWarningsCardSubtitle: String
+    val balanceWarningYellowLabel: String
+    val balanceWarningYellowPlaceholder: String
+    val balanceWarningYellowHelper: String
+    val balanceWarningRedLabel: String
+    val balanceWarningRedPlaceholder: String
+    val balanceWarningRedHelper: String
+    val invalidThresholdAmountError: String
+    val yellowMustBeGreaterThanRedError: String
     val currencyExchangeRatesTitle: String
     val usdRateLabel: String
     val usdRatePlaceholder: String
@@ -418,6 +432,16 @@ interface AppStrings {
     val wipeAuthMsg: String
     val typeWipeConfirmLabel: String
     val typeWipeExactly: String
+    val preserveBackupRoutinesLabel: String
+    val preserveBackupRoutinesDesc: String
+    val preserveAdminPasswordLabel: String
+    val preserveAdminPasswordDesc: String
+    val adminPasswordWillResetNotice: String
+    val adminPasswordWillBeKeptNotice: String
+    val keepCurrentRoutinesOnRestoreLabel: String
+    val keepCurrentRoutinesOnRestoreDesc: String
+    val keepCurrentAdminPasswordOnRestoreLabel: String
+    val keepCurrentAdminPasswordOnRestoreDesc: String
     fun step1CsvImportTitle(importType: String): String
     val step2AdminApprovalTitle: String
     val csvUserSecurityNote: String
@@ -533,6 +557,13 @@ interface AppStrings {
     val invalidPriceError: String
     val invalidStockError: String
     val invalidExchangeRateError: String
+    val updateRatesFromApiButton: String
+    val updatingRatesButton: String
+    val autoUpdateRatesOnStartupLabel: String
+    fun ratesLastUpdated(timestamp: String): String
+    val ratesNeverUpdated: String
+    fun statusRatesUpdatedSuccess(usd: Double, eur: Double, provider: String): String
+    val errorFailedToFetchRates: String
     val fatalImportErrorsHeader: String
     val lastExecutionTimeLabel: String
 
@@ -617,5 +648,62 @@ interface AppStrings {
     val csvEmptyError: String
     val csvMissingHeadersError: String
     val csvMissingNameHeaderError: String
+
+    // Printable Transactions & PDF Export
+    val exportPdf: String
+    val printTransactions: String
+    val exportTransactionsTitle: String
+    val statementLanguage: String
+    val destinationFolder: String
+    val selectDestinationFolder: String
+    val filterPeriod: String
+    val periodLast30Days: String
+    val periodLast60Days: String
+    val periodLast90Days: String
+    val periodCurrentMonth: String
+    val periodAllTime: String
+    val periodCustom: String
+    val dateFrom: String
+    val dateTo: String
+    fun transactionsCountPreview(count: Int): String
+    val initialBalance: String
+    val finalBalance: String
+    val totalDeposits: String
+    val totalPurchases: String
+    val periodNetLabel: String
+    val pdfExportSuccess: String
+    val openPdf: String
+    val revealInFolder: String
+    val statementPdfTitle: String
+    val statementPdfAccountStatus: String
+    val statementPdfActive: String
+    val statementPdfInactive: String
+    val statementPdfDisclaimer: String
+    fun statementPdfFooterGenerated(date: String): String
+    val statementPdfColDateTime: String
+    val statementPdfColType: String
+    val statementPdfColDescription: String
+    val statementPdfColAmount: String
+    val statementPdfColBalance: String
+    val errInvalidDateRange: String
+    val errNoTransactionsToExport: String
+    val errPdfExportFailed: String
+
+    // Admin Notes & Suggestions
+    val tabNotes: String
+    fun notesCountText(count: Int): String
+    val suggestProductOrNoteBtn: String
+    val noteDialogTitle: String
+    fun noteDialogSubmittingAs(name: String): String
+    val noteDialogPlaceholder: String
+    val noteDialogEmptyError: String
+    val noteDialogSubmit: String
+    val noteDialogSuccess: String
+    val noNotesTitle: String
+    val noNotesMsg: String
+    val deleteNote: String
+    val confirmDeleteNoteTitle: String
+    val confirmDeleteNoteMsg: String
+    val searchNotesPlaceholder: String
 }
 

@@ -6,16 +6,19 @@ A local, offline-first Point-of-Sale (POS) and prepaid balance management system
 
 ## 🌟 Key Features
 
-* **Prepaid Balance System:** Users deposit funds with an administrator and shop on credit. Negative balances are supported with clear debit tracking.
+* **Prepaid Balance System & Visual Warning Banners:** Users deposit funds with an administrator and shop on credit. Negative balances are supported with clear debit tracking. Customizable **amber (low balance)** and **red (negative balance)** warning banners notify users in shopping and account history views based on configurable threshold settings.
 * **100% Offline-First Architecture:** Operates completely independently of an internet connection using local SQLite storage with WAL (Write-Ahead Logging) checkpointing via AndroidX Room.
 * **Dual Interface (Desktop Kiosk & Remote Web Admin):**
   * **Desktop POS Terminal:** Fullscreen Compose Multiplatform kiosk optimized for keyboard-wedge USB barcode scanners and rapid touchscreen or mouse navigation.
   * **Remote Web Admin (Kotlin/Wasm):** Embedded Ktor Netty server running on port `8080` (or `8081`) serving a production WebAssembly admin application over LAN, complete with token session authentication, brute-force rate limiting, and real-time Server-Sent Events (SSE).
+* **Product Suggestions & Admin Notes:** Kiosk users can submit wishlist requests, restock suggestions, or messages to the administration directly from the shopping screen (via a lightbulb icon in the header). Admins can view, search, and manage notes in a dedicated Admin Notes tab with full CSV export support.
+* **Printable PDF Transaction Statements:** Admins can generate and export localized A4 PDF account statements for any user directly from the desktop app or Web Admin. Features flexible date filters (Last 30/60/90 days, Current Month, All Time, or Custom Range), language selection (PT-BR, EN, DE), and one-click "Open PDF" / "Reveal in Folder" actions.
 * **Bulk Billing Lists:** Create recurring charge groups (fixed fees or variable usage) with per-user multiplier quantities and execute batch charges in a single atomic transaction.
 * **Automated & Cloud Backups (OneDrive Integration):**
   * Multi-routine backup engine supporting local directories and 1-click **Microsoft OneDrive cloud backup via PKCE OAuth2** (see [Setup Guide](doc/ONEDRIVE_SETUP.md)).
   * Flexible schedules: **Timed** (daily at specific hours), **Interval** (every $X$ hours/minutes), or real-time **On Data Change**.
   * Formats: Full SQLite database snapshot (`.db`), CSV exports, or both; write modes: `OVERWRITE_LATEST` or `CREATE_NEW_FILE`.
+  * **On-Demand Local Backup ("Backup Now Local"):** Immediate one-click snapshot to any selected directory without creating a permanent routine.
 * **Safe Database Restore, Reset & CSV Import:**
   * Table-level SQLite database restore from `.db` backup files to avoid open file locks.
   * Factory reset / data wipe with double-confirmation safeguards.
@@ -29,8 +32,10 @@ A local, offline-first Point-of-Sale (POS) and prepaid balance management system
   * Complete localized UI in **Brazilian Portuguese (🇧🇷 BR)**, **English (🇺🇸 EN)**, and **German (🇩🇪 DE)** with instant flag-based switching in the header.
 * **Currency & Unit Localization:**
   * Primary accounting strictly in **Brazilian Real (BRL / R$)** using integer cents (`Long`) to prevent floating-point rounding errors.
-  * Optional **Secondary Reference Currency** (`USD` or `EUR`) calculated from configurable static exchange rates and displayed in muted text (e.g. `R$ 15,50` `(≈ US$ 2,79)`).
+  * **Dynamic Exchange Rates API:** Automatically fetches latest live USD and EUR rates on startup (configurable) or on-demand in Admin Settings, rendering secondary reference amounts (e.g. `R$ 15,50` `(≈ US$ 2,79)`).
   * Fractional weight support with comma decimal representations (e.g., `1,5 kg` → `1500 g`).
+* **Ergonomic Shopping Cart:**
+  * Newly scanned or selected items are automatically placed at the **top of the cart** (index 0) for immediate visibility on POS touchscreens and kiosk displays.
 * **Diagnostics & Reliability:**
   * Persistent rolling file logger and uncaught JVM exception crash interceptor (see [Storage Locations](doc/STORAGE_LOCATIONS.md)).
   * One-click **Diagnostic Support Bundle** export (`.zip`) containing logs, database stats, and system environment info.
@@ -45,7 +50,8 @@ A local, offline-first Point-of-Sale (POS) and prepaid balance management system
 | **Desktop UI (Terminal)** | Compose Multiplatform (Desktop / JVM) | Hardware-accelerated desktop kiosk interface |
 | **Remote Web Admin UI** | Compose Multiplatform for Web (**Kotlin/Wasm**) | Browser-based administrative single-page application |
 | **Embedded Web Server** | Ktor Server (Netty engine) | Content negotiation, CORS, token authentication, static asset serving, and SSE |
-| **HTTP & Cloud Client** | Ktor Client (CIO engine) | Microsoft Graph / OneDrive PKCE OAuth2 cloud backup integration |
+| **HTTP & Cloud Client** | Ktor Client (CIO engine) | Microsoft Graph / OneDrive PKCE OAuth2 and dynamic currency exchange rates API |
+| **Document Generation** | OpenPDF (JVM) | Server/Desktop PDF rendering for printable transaction account statements |
 | **Database & Storage** | AndroidX Room (KMP) with SQLite Bundled Driver | Local relational persistence with Room migrations |
 | **Serialization & Time** | `kotlinx.serialization` & `kotlinx.datetime` | JSON serialization and timezone-aware schedule calculations |
 | **Hardware & Input** | USB Barcode Scanner (Keyboard Wedge) / Mouse / Keyboard | Fast auto-focus text fields and accent-insensitive search |
@@ -72,6 +78,7 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 
 ### Header Bar (Present on all screens)
 * **Language Switcher:** Instant vector flag buttons (🇧🇷 BR / 🇺🇸 EN / 🇩🇪 DE) to switch UI localization dynamically.
+* **Product Suggestions & Notes:** Lightbulb icon opens a modal dialog allowing users to leave notes, restocking requests, or suggestions for the admin directly from the kiosk.
 * **Inactivity Auto-Logout:** Listens for user inactivity (mouse movement, clicks, keypresses). Triggers a **1-minute warning countdown modal** before automatic logout to the Main Screen.
 * **Logout & Main Menu:** Always accessible to terminate user sessions and return to the Main Screen.
 
@@ -83,11 +90,13 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 │ (Select / Scan Barcode + Enter / PIN)
 ▼
 [Shopping Screen] ──(Checkout)──► [Purchase Overview Modal]
-│          │                                   │                 │
-│ (Account)│                                   ▼                 ▼
-│          └─────────────► [Main Screen] ◄── [Logout]  [Transaction History]
-▼                                                                │
-[User Settings Modal] ◄──────────────────────────────────────────┘
+│   │      │                                   │                 │
+│   │      │                                   ▼                 ▼
+│   │      └─────────────► [Main Screen] ◄── [Logout]  [Transaction History]
+│   ▼                                                                    │
+│ [Note Input Dialog]                                                    │
+▼                                                                        │
+[User Settings Modal] ◄──────────────────────────────────────────────────┘
 ```
 
 #### 1. Main Screen (User Selection & Instant Login)
@@ -99,11 +108,13 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 
 #### 2. Shopping Screen (Landing Screen After Login)
 * **Top Bar Header:** Displays logged-in user name and **Current Account Balance** (with secondary currency if enabled).
+* **Balance Warning Banner:** Automatically displays an **amber warning** (if balance $\le$ yellow threshold, e.g. R$ 300,00) or **red warning** (if balance $<$ red threshold, e.g. R$ 0,00) to keep users aware of their prepaid account standing.
 * **Product Input:**
   * Catalog items are displayed dynamically on search or barcode scan to keep the view clean.
   * **Piece Goods (`PIECE`):** Adds 1 unit on scan/click; repeated scans increment quantity (+1).
   * **Weighted Goods (`WEIGHT`):** Prompts a dialog for weight input in kg on scan/click (accepts `,` and `.` decimal points, e.g. `1,5` → `1500 g`), with quick preset buttons (`250g`, `500g`, `1kg`, `1.5kg`).
 * **Cart View (Right Side):**
+  * Newly added items appear at the **top of the cart** (index 0) for instant verification.
   * Shows item name, quantity, unit price (with markup applied), and total line price.
   * Stepper controls for adjusting quantity or removing items.
   * Bottom summary displays total cart amount and projected **Balance After Purchase**.
@@ -114,6 +125,7 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 * **Abandon Cart Protection:** If a user attempts to log out with items remaining in the cart, a warning dialog prompts confirmation before discarding the cart.
 
 #### 3. User Account & Transaction History Screen
+* **Balance Warning Banner:** Persistently indicates low or negative balance status based on admin thresholds.
 * **Paginated Ledger:** Database-backed pagination (`PaginationBar`) showing purchases, deposits, cancellations, and corrections.
 * **Line Item Breakdown:** Purchased items and quantities are visible directly within each transaction entry.
 * **Balance Flow Tracker:** Displays before-and-after balance progression on every entry (e.g. `R$ 50,00 → R$ 34,50`).
@@ -129,10 +141,10 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 
 ### Admin Management
 
-*Protected by the master Admin Password.* Accessible via the desktop app or the remote Kotlin/Wasm web console. Includes an **Unsaved Changes Guard** modal preventing accidental tab navigation or logout with uncommitted edits.
+*Protected by the master Admin Password.* Accessible via the desktop app or the remote Kotlin/Wasm web console. Includes an **Unsaved Changes Guard** modal preventing accidental tab navigation or logout with uncommitted edits, persistent scrollbars, and **PageUp / PageDown** keyboard navigation across all admin views.
 
 ```
-[ F1: Products ]  [ F2: Users ]  [ F3: Bulk Billing ]  [ F4: Transactions ]  [ F5: Settings ]
+[ F1: Products ]  [ F2: Users ]  [ F3: Bulk Billing ]  [ F4: Transactions ]  [ F5: Settings ]  [ F6: Notes ]
 ```
 
 #### 1. Products Tab (`F1`)
@@ -148,6 +160,7 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 * Segregated collapsible sections: **Active Accounts**, **Deactivated Accounts**, and **Deleted Accounts** with 1-click reactivate/restore workflows.
 * Inline quick balance adjustment (`+` / `-`) with Enter key support.
 * **Custom Income / Expense Dialogs:** Add deposits or deductions with customizable note descriptions.
+* **Printable PDF Transaction Statement:** Generate localized A4 statements for any user with date range presets (Last 30/60/90 days, Current Month, All Time, or Custom Range), language selection, custom destination folder, and one-click "Open PDF" / "Reveal in Folder" actions.
 * Admin Reset PIN checkbox and PIN visibility toggle.
 
 #### 3. Bulk Billing Tab (`F3`)
@@ -165,19 +178,29 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 
 #### 5. Settings Tab (`F5`)
 * **Admin Security:** Update master admin password with double-confirmation.
-* **Pricing & Exchange Rates:** Configure Global Markup %, USD exchange rate, and EUR exchange rate.
+* **Pricing & Currency Exchange Rates:**
+  * Configure Global Markup %, USD exchange rate, and EUR exchange rate.
+  * **Dynamic Exchange Rates API:** Toggle automatic rates update on startup, or click **Fetch Latest Rates** for immediate live conversion rate updates.
+* **Balance Warning Thresholds:** Configure the **Yellow Warning Threshold** (default: R$ 300,00) and **Red Warning Threshold** (default: R$ 0,00) to control warning banners throughout the app.
 * **Kiosk Timers:** Configure user inactivity auto-logout timeout.
 * **Support Email:** Configure diagnostic contact address with security lock/unlock flow.
 * **Remote Web Administration:** Displays LAN server URL (`http://<ip>:8080`), QR code, and token status.
-* **Automated & Cloud Backups:**
-  * Configure multiple backup routines (Local folder or Microsoft OneDrive).
+* **Automated & On-Demand Backups:**
+  * **Backup Now Local:** Create an immediate on-demand local backup (`.db`, CSV, or both) to any selected folder.
+  * Configure multiple recurring backup routines (Local folder or Microsoft OneDrive).
   * 1-click Microsoft OneDrive PKCE OAuth2 authentication with popup authorization (see [OneDrive Setup Guide](doc/ONEDRIVE_SETUP.md)).
   * Manual "Run Now" trigger, edit, and delete routines.
 * **Database Restore & Factory Reset:**
-  * Safe table-level SQLite database restore from `.db` files without schema drops or file locks (see [Storage Locations & Database Architecture](doc/STORAGE_LOCATIONS.md)).
+  * Safe table-level SQLite database restore from `.db` files without schema drops or file locks, with automatic safety snapshot creation (see [Storage Locations & Database Architecture](doc/STORAGE_LOCATIONS.md)).
   * Factory reset data wipe with safety challenge prompt.
-* **CSV Data Import & Export:** Full CSV import/export for users, products, billing lists, and transactions with duplicate barcode validation and audit tracking (see [CSV Import/Export Specification](doc/CSV_IMPORT_EXPORT.md)).
+* **CSV Data Import & Export:** Full CSV import/export for users, products, billing lists, transactions, and notes with duplicate barcode validation and audit tracking (see [CSV Import/Export Specification](doc/CSV_IMPORT_EXPORT.md)).
 * **Diagnostics & Logs:** Export comprehensive Diagnostic Support Bundle (`.zip`) and inspect persistent log storage metrics (see [Storage Locations & Diagnostics](doc/STORAGE_LOCATIONS.md)).
+
+#### 6. Notes Tab (`F6`)
+* Review customer wishlist requests, restocking suggestions, and admin notes submitted from the kiosk.
+* Search filter for quick discovery by message content or user name.
+* One-click note deletion.
+* Real-time reactive updates via `DataChangeNotifier` and LAN Server-Sent Events.
 
 ---
 

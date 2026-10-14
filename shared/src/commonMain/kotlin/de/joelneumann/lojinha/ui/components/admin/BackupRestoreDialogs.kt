@@ -26,11 +26,13 @@ fun DbRestoreMultiApprovalDialog(
     file: PlatformFile,
     adminPasswordHash: String,
     isExecuting: Boolean = false,
-    onConfirmRestore: () -> Unit,
+    onConfirmRestore: (preserveExistingRoutines: Boolean, preserveCurrentAdminPassword: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val strings = I18n.current
     var step by remember { mutableStateOf(1) }
+    var preserveRoutines by remember { mutableStateOf(false) }
+    var preserveAdminPassword by remember { mutableStateOf(true) }
     var inputPassword by remember { mutableStateOf("") }
     var inputPhrase by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -48,7 +50,7 @@ fun DbRestoreMultiApprovalDialog(
                 } else if (!isPhraseCorrect) {
                     errorMessage = strings.typeRestoreExactly
                 } else {
-                    onConfirmRestore()
+                    onConfirmRestore(preserveRoutines, preserveAdminPassword)
                 }
             }
         }
@@ -128,6 +130,43 @@ fun DbRestoreMultiApprovalDialog(
                             Text(strings.backupFileDetailsHeader, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryNavy)
                             Text(strings.filenameLabel(file.name), fontSize = 12.sp, color = AccentNavy)
                             Text(strings.filePathLabel(file.absolutePath), fontSize = 11.sp, color = PrimaryNavy.copy(alpha = 0.7f))
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighLight),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Checkbox(
+                                    checked = preserveRoutines,
+                                    onCheckedChange = { preserveRoutines = it },
+                                    colors = CheckboxDefaults.colors(checkedColor = PrimaryNavy)
+                                )
+                                Column(modifier = Modifier.padding(start = 6.dp)) {
+                                    Text(strings.keepCurrentRoutinesOnRestoreLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.keepCurrentRoutinesOnRestoreDesc, fontSize = 11.sp, color = AccentNavy)
+                                }
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Checkbox(
+                                    checked = preserveAdminPassword,
+                                    onCheckedChange = { preserveAdminPassword = it },
+                                    colors = CheckboxDefaults.colors(checkedColor = PrimaryNavy)
+                                )
+                                Column(modifier = Modifier.padding(start = 6.dp)) {
+                                    Text(strings.keepCurrentAdminPasswordOnRestoreLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.keepCurrentAdminPasswordOnRestoreDesc, fontSize = 11.sp, color = AccentNavy)
+                                }
+                            }
                         }
                     }
                 } else {
@@ -216,11 +255,13 @@ fun DbRestoreMultiApprovalDialog(
 fun WipeDataMultiApprovalDialog(
     adminPasswordHash: String,
     isExecuting: Boolean = false,
-    onConfirmWipe: () -> Unit,
+    onConfirmWipe: (preserveBackupRoutines: Boolean, preserveAdminPassword: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val strings = I18n.current
     var step by remember { mutableStateOf(1) }
+    var preserveRoutines by remember { mutableStateOf(true) }
+    var preserveAdminPassword by remember { mutableStateOf(true) }
     var inputPassword by remember { mutableStateOf("") }
     var inputPhrase by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -238,7 +279,7 @@ fun WipeDataMultiApprovalDialog(
                 } else if (!isPhraseCorrect) {
                     errorMessage = strings.typeWipeExactly
                 } else {
-                    onConfirmWipe()
+                    onConfirmWipe(preserveRoutines, preserveAdminPassword)
                 }
             }
         }
@@ -302,6 +343,48 @@ fun WipeDataMultiApprovalDialog(
                             )
                             Text(strings.wipeWarningDetails, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ColorDangerCrimson)
                             Text(strings.actionCannotBeUndone, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighLight),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Checkbox(
+                                    checked = preserveRoutines,
+                                    onCheckedChange = { preserveRoutines = it },
+                                    colors = CheckboxDefaults.colors(checkedColor = PrimaryNavy)
+                                )
+                                Column(modifier = Modifier.padding(start = 6.dp)) {
+                                    Text(strings.preserveBackupRoutinesLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(strings.preserveBackupRoutinesDesc, fontSize = 11.sp, color = AccentNavy)
+                                }
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Checkbox(
+                                    checked = preserveAdminPassword,
+                                    onCheckedChange = { preserveAdminPassword = it },
+                                    colors = CheckboxDefaults.colors(checkedColor = PrimaryNavy)
+                                )
+                                Column(modifier = Modifier.padding(start = 6.dp)) {
+                                    Text(strings.preserveAdminPasswordLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                    Text(
+                                        if (preserveAdminPassword) strings.adminPasswordWillBeKeptNotice else strings.adminPasswordWillResetNotice,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (!preserveAdminPassword) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (!preserveAdminPassword) ColorDangerCrimson else AccentNavy
+                                    )
+                                }
+                            }
                         }
                     }
                 } else {

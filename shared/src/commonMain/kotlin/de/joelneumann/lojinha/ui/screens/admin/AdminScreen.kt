@@ -19,12 +19,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
 import de.joelneumann.lojinha.ui.components.general.LogoutButton
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminNotesViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
@@ -40,6 +42,7 @@ import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 enum class AdminTab {
+    NOTES,
     PRODUCTS,
     USERS,
     BULK_BILLING,
@@ -52,25 +55,34 @@ private data class AdminTabDefinition(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val label: String,
     val key: Key,
-    val keyLabel: String
+    val keyLabel: String,
+    val badgeCount: Int? = null
 )
 
 @Composable
 fun AdminScreen(
+    notesViewModel: AdminNotesViewModel? = null,
     productsViewModel: AdminProductsViewModel,
     usersViewModel: AdminUsersViewModel,
     transactionsViewModel: AdminTransactionsViewModel,
     bulkBillingViewModel: AdminBulkBillingViewModel? = null,
     settingsViewModel: AdminSettingsViewModel? = null,
+    defaultSaveDirectory: String = "",
+    onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
+    onOpenExportedPdf: ((String) -> Unit)? = null,
+    onRevealExportedFolder: ((String) -> Unit)? = null,
     onExitAdmin: () -> Unit
 ) {
     val strings = I18n.current
     val focusRequester = remember { FocusRequester() }
-    var currentTab by remember { mutableStateOf(AdminTab.PRODUCTS) }
+    val initialTab = if (notesViewModel != null) AdminTab.NOTES else AdminTab.PRODUCTS
+    var currentTab by remember { mutableStateOf(initialTab) }
 
     LaunchedEffect(Unit) {
         focusRequester.safeRequestFocus()
     }
+
+    val notes by (notesViewModel?.notes?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
 
     var expandedProductId by remember { mutableStateOf<String?>(null) }
     var expandedUserId by remember { mutableStateOf<String?>(null) }
@@ -81,16 +93,34 @@ fun AdminScreen(
     var isExitAdminPending by remember { mutableStateOf(false) }
     var activePageScroller by remember { mutableStateOf<((Boolean) -> Boolean)?>(null) }
 
-    val tabItems = remember(strings, bulkBillingViewModel, settingsViewModel) {
+    val tabItems = remember(strings, notes, bulkBillingViewModel, settingsViewModel, notesViewModel) {
         buildList {
-            add(AdminTabDefinition(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts, Key.F1, "F1"))
-            add(AdminTabDefinition(AdminTab.USERS, Icons.Default.People, strings.tabUsers, Key.F2, "F2"))
-            if (bulkBillingViewModel != null) {
-                add(AdminTabDefinition(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling, Key.F3, "F3"))
+            var fKeyIndex = 1
+            if (notesViewModel != null) {
+                add(
+                    AdminTabDefinition(
+                        tab = AdminTab.NOTES,
+                        icon = Icons.Default.ChatBubbleOutline,
+                        label = strings.tabNotes,
+                        key = Key.F1,
+                        keyLabel = "F1",
+                        badgeCount = notes.size.takeIf { it > 0 }
+                    )
+                )
+                fKeyIndex++
             }
-            add(AdminTabDefinition(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions, Key.F4, "F4"))
+            add(AdminTabDefinition(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts, if (fKeyIndex == 1) Key.F1 else Key.F2, "F$fKeyIndex"))
+            fKeyIndex++
+            add(AdminTabDefinition(AdminTab.USERS, Icons.Default.People, strings.tabUsers, if (fKeyIndex == 2) Key.F2 else Key.F3, "F$fKeyIndex"))
+            fKeyIndex++
+            if (bulkBillingViewModel != null) {
+                add(AdminTabDefinition(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling, if (fKeyIndex == 3) Key.F3 else Key.F4, "F$fKeyIndex"))
+                fKeyIndex++
+            }
+            add(AdminTabDefinition(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions, if (fKeyIndex == 4) Key.F4 else Key.F5, "F$fKeyIndex"))
+            fKeyIndex++
             if (settingsViewModel != null) {
-                add(AdminTabDefinition(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings, Key.F5, "F5"))
+                add(AdminTabDefinition(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings, if (fKeyIndex == 5) Key.F5 else Key.F6, "F$fKeyIndex"))
             }
         }
     }
@@ -211,7 +241,17 @@ fun AdminScreen(
                                 softWrap = false,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (shortcutLabel != null && !isNarrow) {
+                            if (item.badgeCount != null && item.badgeCount > 0) {
+                                Text(
+                                    text = "(${item.badgeCount})",
+                                    fontSize = if (isNarrow) 12.sp else 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) SurfaceWhite else ColorWarningAmber,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                            if (!isNarrow) {
                                 Text(
                                     text = "($shortcutLabel)",
                                     fontSize = 11.sp,
@@ -241,6 +281,15 @@ fun AdminScreen(
                     .padding(if (isMobile) 10.dp else ScreenPadding)
             ) {
                 when (currentTab) {
+                    AdminTab.NOTES -> {
+                        if (notesViewModel != null) {
+                            AdminNotesTabScreen(
+                                viewModel = notesViewModel,
+                                onRegisterPageScroller = { scroller -> activePageScroller = scroller }
+                            )
+                        }
+                    }
+
                     AdminTab.PRODUCTS -> {
                         AdminProductsTabScreen(
                             viewModel = productsViewModel,
@@ -263,7 +312,11 @@ fun AdminScreen(
                             },
                             onRequestExpandUser = { id -> expandedUserId = id },
                             onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
-                            onRegisterPageScroller = { scroller -> activePageScroller = scroller }
+                            onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                            defaultSaveDirectory = defaultSaveDirectory,
+                            onExecutePdfExport = onExecutePdfExport,
+                            onOpenExportedPdf = onOpenExportedPdf,
+                            onRevealExportedFolder = onRevealExportedFolder
                         )
                     }
 

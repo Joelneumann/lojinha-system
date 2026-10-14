@@ -22,5 +22,17 @@ data class SystemSettings(
     val oneDriveAccountName: String? = null,
     val oneDriveDefaultFolder: String = "/LojinhaBackups",
     val oneDriveTenant: String = "common",
-    val supportEmail: String? = null
-)
+    val supportEmail: String? = null,
+    val autoUpdateExchangeRates: Boolean = true,
+    val lastExchangeRateUpdateTimestamp: Long? = null,
+    val yellowBalanceWarningThresholdCents: Long = 300_00L,
+    val redBalanceWarningThresholdCents: Long = 0L
+) {
+    fun exchangeRateFor(currency: SecondaryCurrency): Double {
+        return when (currency) {
+            SecondaryCurrency.USD -> usdExchangeRate
+            SecondaryCurrency.EUR -> eurExchangeRate
+            SecondaryCurrency.NONE -> 0.0
+        }
+    }
+}

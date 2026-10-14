@@ -17,11 +17,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import de.joelneumann.lojinha.data.database.DatabaseFactory
+import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
+import de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.general.InactivityWarningDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -42,6 +44,9 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.*
 import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.security.PasswordHasher
 import de.joelneumann.lojinha.util.AppLogger
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
@@ -54,6 +59,7 @@ fun App(
     transactionRepository: TransactionRepository? = null,
     billingListRepository: BillingListRepository? = null,
     settingsRepository: SettingsRepository? = null,
+    adminNoteRepository: AdminNoteRepository? = null,
     showExitAuthDialog: Boolean = false,
     onDismissExitAuthDialog: () -> Unit = {}
 ) {
@@ -77,11 +83,44 @@ fun App(
     val backupRepository = remember { de.joelneumann.lojinha.data.repository.RoomBackupRepositoryImpl(database.backupDao()) }
     val backupRestoreService = remember { de.joelneumann.lojinha.data.service.BackupRestoreService(database) }
     val oneDriveBackupService = remember { de.joelneumann.lojinha.data.service.OneDriveBackupService() }
+    val currencyRateService = remember { de.joelneumann.lojinha.data.service.KtorCurrencyRateService() }
     val diagnosticsService = remember { de.joelneumann.lojinha.data.service.DiagnosticsService(database) }
     val coroutineScope = rememberCoroutineScope()
 
+    DisposableEffect(currencyRateService) {
+        onDispose {
+            currencyRateService.close()
+        }
+    }
+
     val onDataChanged = remember { { de.joelneumann.lojinha.data.service.DataChangeNotifier.notifyDataChanged() } }
     val effectiveSettingsRepo = settingsRepository ?: remember { RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged) }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val current = effectiveSettingsRepo.getSettings()
+                if (current.autoUpdateExchangeRates) {
+                    AppLogger.info("Startup", "Auto-refreshing currency exchange rates...")
+                    currencyRateService.fetchRates().onSuccess { rates ->
+                        val latest = effectiveSettingsRepo.getSettings()
+                        val updated = latest.copy(
+                            usdExchangeRate = rates.usdRate,
+                            eurExchangeRate = rates.eurRate,
+                            lastExchangeRateUpdateTimestamp = rates.timestamp
+                        )
+                        effectiveSettingsRepo.updateSettings(updated)
+                        AppLogger.info("Startup", "Exchange rates updated on startup: 1 BRL = ${rates.usdRate} USD, ${rates.eurRate} EUR (${rates.provider})")
+                    }.onFailure { err ->
+                        AppLogger.warn("Startup", "Could not update exchange rates on startup: ${err.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.warn("Startup", "Exchange rate startup check error: ${e.message}")
+            }
+        }
+    }
+
     val autoBackupScheduler = remember {
         de.joelneumann.lojinha.data.service.AutoBackupScheduler(
             backupRestoreService = backupRestoreService,
@@ -106,10 +145,22 @@ fun App(
     val effectiveUserRepo = userRepository ?: remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
     val effectiveTransactionRepo = transactionRepository ?: remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
     val effectiveBillingListRepo = billingListRepository ?: remember { de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged) }
+    val effectiveAdminNoteRepo = adminNoteRepository ?: remember { RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged) }
 
     val appViewModel: AppViewModel = viewModel(
         factory = LojinhaViewModelFactory.createAppViewModelFactory(effectiveUserRepo, effectiveSettingsRepo)
     )
+
+    DisposableEffect(appViewModel) {
+        val listener = {
+            appViewModel.loadSettings()
+            appViewModel.refreshCurrentUser()
+        }
+        de.joelneumann.lojinha.data.service.DataChangeNotifier.addListener(listener)
+        onDispose {
+            de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
+        }
+    }
 
     val currentScreen by appViewModel.currentScreen.collectAsState()
     val settings by appViewModel.settings.collectAsState()
@@ -151,6 +202,7 @@ fun App(
                         )
                         LaunchedEffect(Unit) {
                             userSelectionViewModel.resetState()
+                            userSelectionViewModel.loadUsers()
                         }
                         DisposableEffect(userSelectionViewModel) {
                             val listener = {
@@ -191,7 +243,12 @@ fun App(
 
                             val shoppingViewModel: ShoppingViewModel = viewModel(
                                 key = "shopping_${sessionUser.id}_$sessionNonce",
-                                factory = LojinhaViewModelFactory.createShoppingViewModelFactory(effectiveProductRepo, effectiveUserRepo, effectiveTransactionRepo)
+                                factory = LojinhaViewModelFactory.createShoppingViewModelFactory(
+                                    effectiveProductRepo,
+                                    effectiveUserRepo,
+                                    effectiveTransactionRepo,
+                                    effectiveAdminNoteRepo
+                                )
                             )
                             val historyViewModel: TransactionHistoryViewModel = viewModel(
                                 key = "history_${sessionUser.id}_$sessionNonce",
@@ -203,7 +260,13 @@ fun App(
                             }
 
                             DisposableEffect(sessionUser.id, sessionNonce) {
+                                val listener = {
+                                    shoppingViewModel.loadProducts()
+                                    historyViewModel.loadUserTransactions(sessionUser.id, resetFilters = false)
+                                }
+                                de.joelneumann.lojinha.data.service.DataChangeNotifier.addListener(listener)
                                 onDispose {
+                                    de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
                                     onUserInteractedSession = null
                                     userSessionViewModel.stopInactivityTimer()
                                     shoppingViewModel.teardown()
@@ -336,6 +399,9 @@ fun App(
                     }
 
                     AppScreen.ADMIN_PANEL -> {
+                        val adminNotesViewModel = remember {
+                            AdminNotesViewModel(effectiveAdminNoteRepo)
+                        }
                         val adminProductsViewModel = remember {
                             AdminProductsViewModel(effectiveProductRepo, effectiveSettingsRepo)
                         }
@@ -363,6 +429,7 @@ fun App(
                                     generatedFiles.map { it.name }
                                 },
                                 oneDriveBackupService = oneDriveBackupService,
+                                currencyRateService = currencyRateService,
                                 onPreviewCsvImport = { platformFile, type ->
                                     val file = java.io.File(platformFile.absolutePath)
                                     if (type.equals("Products", ignoreCase = true)) {
@@ -381,13 +448,13 @@ fun App(
                                     onDataChanged()
                                     result
                                 },
-                                onExecuteDbRestore = { platformFile ->
+                                onExecuteDbRestore = { platformFile, preserveExistingRoutines, preserveCurrentAdminPassword ->
                                     val file = java.io.File(platformFile.absolutePath)
-                                    backupRestoreService.restoreDbFromBackup(file)
+                                    backupRestoreService.restoreDbFromBackup(file, preserveExistingRoutines, preserveCurrentAdminPassword)
                                     onDataChanged()
                                 },
-                                onExecuteWipeData = {
-                                    backupRestoreService.wipeAllData()
+                                onExecuteWipeData = { preserveBackupRoutines, preserveAdminPassword ->
+                                    backupRestoreService.wipeAllData(preserveBackupRoutines, preserveAdminPassword)
                                     onDataChanged()
                                 },
                                 onExportSupportBundle = { prepareEmail, recipientEmail ->
@@ -411,8 +478,28 @@ fun App(
                             )
                         }
 
-                        DisposableEffect(Unit) {
+                        DisposableEffect(
+                            adminNotesViewModel,
+                            adminProductsViewModel,
+                            adminUsersViewModel,
+                            adminTransactionsViewModel,
+                            adminBulkBillingViewModel,
+                            adminSettingsViewModel
+                        ) {
+                            val listener = {
+                                adminNotesViewModel.loadNotes()
+                                adminProductsViewModel.loadData()
+                                adminUsersViewModel.loadData()
+                                adminTransactionsViewModel.loadData()
+                                adminBulkBillingViewModel.loadData()
+                                adminSettingsViewModel.loadSettings()
+                                adminSettingsViewModel.loadRoutines()
+                                adminSettingsViewModel.refreshLogSize()
+                            }
+                            de.joelneumann.lojinha.data.service.DataChangeNotifier.addListener(listener)
                             onDispose {
+                                de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
+                                adminNotesViewModel.viewModelScope.cancel()
                                 adminProductsViewModel.viewModelScope.cancel()
                                 adminUsersViewModel.viewModelScope.cancel()
                                 adminTransactionsViewModel.viewModelScope.cancel()
@@ -422,11 +509,68 @@ fun App(
                         }
 
                         de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
+                            notesViewModel = adminNotesViewModel,
                             productsViewModel = adminProductsViewModel,
                             usersViewModel = adminUsersViewModel,
                             transactionsViewModel = adminTransactionsViewModel,
                             bulkBillingViewModel = adminBulkBillingViewModel,
                             settingsViewModel = adminSettingsViewModel,
+                            defaultSaveDirectory = remember {
+                                val userHome = System.getProperty("user.home")
+                                val downloads = java.io.File(userHome, "Downloads")
+                                if (downloads.exists()) downloads.absolutePath else userHome
+                            },
+                            onExecutePdfExport = { user, destinationFolder, fromTimestamp, toTimestamp, language ->
+                                if (!adminUsersViewModel.isExportingPdf.value) {
+                                    coroutineScope.launch {
+                                        adminUsersViewModel.setIsExportingPdf(true)
+                                        adminUsersViewModel.setExportPdfError(null)
+                                        try {
+                                            val transactions = effectiveTransactionRepo.getTransactionsByUserId(user.id)
+                                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
+                                            val dateSuffix = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                                            val targetDir = java.io.File(destinationFolder)
+                                            if (!targetDir.exists()) {
+                                                targetDir.mkdirs()
+                                            }
+                                            val targetFile = java.io.File(targetDir, "Extrato_${cleanUserName}_$dateSuffix.pdf")
+                                            de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementPdf(
+                                                outputFile = targetFile,
+                                                user = user,
+                                                transactions = transactions,
+                                                fromTimestamp = fromTimestamp,
+                                                toTimestamp = toTimestamp,
+                                                language = language
+                                            )
+                                            adminUsersViewModel.setExportResultPath(targetFile.absolutePath)
+                                        } catch (e: Exception) {
+                                            AppLogger.error("App", "Failed to export PDF statement: ${e.message}", e)
+                                            adminUsersViewModel.setExportResultPath(null)
+                                            adminUsersViewModel.setExportPdfError(e.message ?: "Failed to export PDF statement")
+                                        } finally {
+                                            adminUsersViewModel.setIsExportingPdf(false)
+                                        }
+                                    }
+                                }
+                            },
+                            onOpenExportedPdf = { filePath ->
+                                try {
+                                    val file = java.io.File(filePath)
+                                    if (file.exists() && java.awt.Desktop.isDesktopSupported()) {
+                                        java.awt.Desktop.getDesktop().open(file)
+                                    }
+                                } catch (e: Exception) {
+                                    AppLogger.warn("App", "Failed to open PDF in system viewer: ${e.message}", e)
+                                }
+                            },
+                            onRevealExportedFolder = { filePath ->
+                                try {
+                                    val file = java.io.File(filePath)
+                                    diagnosticsService.revealInFileExplorer(file)
+                                } catch (e: Exception) {
+                                    AppLogger.warn("App", "Failed to reveal PDF in folder: ${e.message}", e)
+                                }
+                            },
                             onExitAdmin = {
                                 appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
                             }
