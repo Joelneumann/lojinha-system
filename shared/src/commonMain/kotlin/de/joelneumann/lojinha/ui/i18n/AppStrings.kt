@@ -422,6 +422,16 @@ interface AppStrings {
     val wipeAuthMsg: String
     val typeWipeConfirmLabel: String
     val typeWipeExactly: String
+    val preserveBackupRoutinesLabel: String
+    val preserveBackupRoutinesDesc: String
+    val preserveAdminPasswordLabel: String
+    val preserveAdminPasswordDesc: String
+    val adminPasswordWillResetNotice: String
+    val adminPasswordWillBeKeptNotice: String
+    val keepCurrentRoutinesOnRestoreLabel: String
+    val keepCurrentRoutinesOnRestoreDesc: String
+    val keepCurrentAdminPasswordOnRestoreLabel: String
+    val keepCurrentAdminPasswordOnRestoreDesc: String
     fun step1CsvImportTitle(importType: String): String
     val step2AdminApprovalTitle: String
     val csvUserSecurityNote: String

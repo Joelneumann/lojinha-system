@@ -1649,8 +1649,8 @@ fun AdminSettingsTabScreen(
             file = activeRestoreDbFile!!,
             adminPasswordHash = settings.adminPasswordHash,
             isExecuting = isRestoringDb,
-            onConfirmRestore = {
-                viewModel.executeDbRestore(activeRestoreDbFile!!)
+            onConfirmRestore = { preserveRoutines, preservePass ->
+                viewModel.executeDbRestore(activeRestoreDbFile!!, preserveRoutines, preservePass)
             },
             onDismiss = {
                 viewModel.setRestoreDbFile(null)
@@ -1662,8 +1662,8 @@ fun AdminSettingsTabScreen(
         WipeDataMultiApprovalDialog(
             adminPasswordHash = settings.adminPasswordHash,
             isExecuting = isWipingData,
-            onConfirmWipe = {
-                viewModel.executeWipeData()
+            onConfirmWipe = { preserveRoutines, preservePass ->
+                viewModel.executeWipeData(preserveRoutines, preservePass)
             },
             onDismiss = {
                 viewModel.setShowWipeDataDialog(false)

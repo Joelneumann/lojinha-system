@@ -1014,4 +1014,44 @@ class AdminViewModelsTest {
         viewModel.fetchExchangeRates()
         assertEquals(1, fakeService.fetchCount)
     }
+
+    @Test
+    fun testAdminSettingsViewModel_executeDbRestore_invokesCallbackWithPreserveParams() = runTest {
+        val settingsRepo = TestSettingsRepository(SystemSettings())
+        var restoredFile: de.joelneumann.lojinha.ui.utils.PlatformFile? = null
+        var preservedRoutines = false
+        var preservedPassword = false
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onExecuteDbRestore = { file, keepRoutines, keepPassword ->
+                restoredFile = file
+                preservedRoutines = keepRoutines
+                preservedPassword = keepPassword
+            }
+        )
+        val fakeFile = de.joelneumann.lojinha.ui.utils.PlatformFile("backup.db", "/path/to/backup.db")
+        viewModel.executeDbRestore(fakeFile, preserveExistingRoutines = true, preserveCurrentAdminPassword = true)
+        assertEquals(fakeFile, restoredFile)
+        assertTrue(preservedRoutines)
+        assertTrue(preservedPassword)
+        assertEquals("Database restored successfully from backup.db.", viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminSettingsViewModel_executeWipeData_invokesCallbackWithPreserveParams() = runTest {
+        val settingsRepo = TestSettingsRepository(SystemSettings())
+        var preservedRoutines = true
+        var preservedPassword = true
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onExecuteWipeData = { keepRoutines, keepPassword ->
+                preservedRoutines = keepRoutines
+                preservedPassword = keepPassword
+            }
+        )
+        viewModel.executeWipeData(preserveBackupRoutines = false, preserveAdminPassword = false)
+        assertFalse(preservedRoutines)
+        assertFalse(preservedPassword)
+        assertEquals("Factory Reset completed.", viewModel.statusMessage.value)
+    }
 }

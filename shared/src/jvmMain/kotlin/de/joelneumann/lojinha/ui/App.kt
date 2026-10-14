@@ -430,13 +430,13 @@ fun App(
                                     onDataChanged()
                                     result
                                 },
-                                onExecuteDbRestore = { platformFile ->
+                                onExecuteDbRestore = { platformFile, preserveExistingRoutines, preserveCurrentAdminPassword ->
                                     val file = java.io.File(platformFile.absolutePath)
-                                    backupRestoreService.restoreDbFromBackup(file)
+                                    backupRestoreService.restoreDbFromBackup(file, preserveExistingRoutines, preserveCurrentAdminPassword)
                                     onDataChanged()
                                 },
-                                onExecuteWipeData = {
-                                    backupRestoreService.wipeAllData()
+                                onExecuteWipeData = { preserveBackupRoutines, preserveAdminPassword ->
+                                    backupRestoreService.wipeAllData(preserveBackupRoutines, preserveAdminPassword)
                                     onDataChanged()
                                 },
                                 onExportSupportBundle = { prepareEmail, recipientEmail ->

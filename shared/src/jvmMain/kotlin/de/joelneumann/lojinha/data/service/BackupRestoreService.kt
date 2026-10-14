@@ -269,7 +269,11 @@ class BackupRestoreService(
         exportFolder
     }
 
-    suspend fun restoreDbFromBackup(backupFile: File) = withContext(Dispatchers.IO) {
+    suspend fun restoreDbFromBackup(
+        backupFile: File,
+        preserveExistingRoutines: Boolean = false,
+        preserveCurrentAdminPassword: Boolean = true
+    ) = withContext(Dispatchers.IO) {
         require(backupFile.exists() && backupFile.isFile) { "Backup file does not exist: ${backupFile.absolutePath}" }
 
         val converters = Converters()
@@ -655,6 +659,7 @@ class BackupRestoreService(
 
         // 3. Atomically clear and restore active database inside an immediate transaction
         val hasBackupRoutinesInBackup = tableNames.contains("backup_routines")
+        val currentSettings = db.settingsDao().getSettings()
         withContext(NonCancellable) {
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
@@ -665,7 +670,7 @@ class BackupRestoreService(
                     db.userDao().deleteAllUsers()
                     db.productDao().deleteAllProducts()
                     db.transactionDao().deleteAllTransactions()
-                    if (hasBackupRoutinesInBackup) {
+                    if (hasBackupRoutinesInBackup && !preserveExistingRoutines) {
                         db.backupDao().deleteAllBackups()
                     }
 
@@ -681,21 +686,37 @@ class BackupRestoreService(
                         .distinctBy { it.listId to it.userId }
                         .forEach { db.billingListDao().insertBillingListUser(it) }
                     backupNotes.forEach { db.adminNoteDao().insertNote(it) }
-                    if (hasBackupRoutinesInBackup) {
+                    if (hasBackupRoutinesInBackup && !preserveExistingRoutines) {
                         backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
                     }
                     if (backupSettings != null) {
-                        db.settingsDao().insertOrUpdateSettings(backupSettings)
+                        val finalPassword = if (preserveCurrentAdminPassword && currentSettings != null) {
+                            currentSettings.adminPasswordHash
+                        } else {
+                            backupSettings.adminPasswordHash
+                        }
+                        val finalSettings = backupSettings.copy(adminPasswordHash = finalPassword)
+                        db.settingsDao().insertOrUpdateSettings(finalSettings)
                     }
                 }
             }
         }
     }
 
-    suspend fun wipeAllData() = withContext(Dispatchers.IO) {
+    suspend fun wipeAllData(
+        preserveBackupRoutines: Boolean = true,
+        preserveAdminPassword: Boolean = true
+    ) = withContext(Dispatchers.IO) {
         val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_wipe_safety.db")
         if (dbFile.exists()) {
             performDbSnapshot(safetyFile)
+        }
+
+        val existingSettings = db.settingsDao().getSettings()
+        val finalPasswordHash = if (preserveAdminPassword && existingSettings != null) {
+            existingSettings.adminPasswordHash
+        } else {
+            de.joelneumann.lojinha.security.PasswordHasher.hash("admin")
         }
 
         withContext(NonCancellable) {
@@ -708,16 +729,33 @@ class BackupRestoreService(
                     db.productDao().deleteAllProducts()
                     db.transactionDao().deleteAllTransactions()
 
+                    if (!preserveBackupRoutines) {
+                        db.backupDao().deleteAllBackups()
+                    }
+
                     // Reset settings to initial defaults
                     val defaultSettings = SettingsEntity(
                         id = 1,
-                        adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin"),
+                        adminPasswordHash = finalPasswordHash,
                         globalMarkupPercent = 0.0,
                         usdExchangeRate = 0.18,
                         eurExchangeRate = 0.16,
                         inactivityTimeoutMinutes = 3,
                         autoUpdateExchangeRates = true,
-                        lastExchangeRateUpdateTimestamp = null
+                        lastExchangeRateUpdateTimestamp = null,
+                        backupLocationPath = if (preserveBackupRoutines) existingSettings?.backupLocationPath ?: "" else "",
+                        autoBackupEnabled = if (preserveBackupRoutines) existingSettings?.autoBackupEnabled ?: false else false,
+                        autoBackupFormat = if (preserveBackupRoutines) existingSettings?.autoBackupFormat ?: "DB" else "DB",
+                        autoBackupScheduleType = if (preserveBackupRoutines) existingSettings?.autoBackupScheduleType ?: "DAILY" else "DAILY",
+                        autoBackupTime = if (preserveBackupRoutines) existingSettings?.autoBackupTime ?: "02:00" else "02:00",
+                        autoBackupIntervalHours = if (preserveBackupRoutines) existingSettings?.autoBackupIntervalHours ?: 24 else 24,
+                        oneDriveClientId = existingSettings?.oneDriveClientId ?: "202e1c94-b152-4751-b0e6-a2a4b8eb4901",
+                        oneDriveRefreshToken = if (preserveBackupRoutines) existingSettings?.oneDriveRefreshToken else null,
+                        oneDriveAccountEmail = if (preserveBackupRoutines) existingSettings?.oneDriveAccountEmail else null,
+                        oneDriveAccountName = if (preserveBackupRoutines) existingSettings?.oneDriveAccountName else null,
+                        oneDriveDefaultFolder = if (preserveBackupRoutines) existingSettings?.oneDriveDefaultFolder ?: "/LojinhaBackups" else "/LojinhaBackups",
+                        oneDriveTenant = existingSettings?.oneDriveTenant ?: "common",
+                        supportEmail = existingSettings?.supportEmail
                     )
                     db.settingsDao().insertOrUpdateSettings(defaultSettings)
                 }
@@ -874,6 +912,10 @@ class BackupRestoreService(
         }
 
         if (!dryRun && productsToInsert.isNotEmpty()) {
+            val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_csv_import_safety.db")
+            if (dbFile.exists()) {
+                performDbSnapshot(safetyFile)
+            }
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     productsToInsert.forEach { db.productDao().insertOrUpdateProduct(it) }
@@ -1182,6 +1224,10 @@ class BackupRestoreService(
         }
 
         if (!dryRun && (usersToInsert.isNotEmpty() || transactionsToInsert.isNotEmpty())) {
+            val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_csv_import_safety.db")
+            if (dbFile.exists()) {
+                performDbSnapshot(safetyFile)
+            }
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     usersToInsert.forEach { db.userDao().insertOrUpdateUser(it) }

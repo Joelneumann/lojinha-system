@@ -919,5 +919,170 @@ class BackupRestoreServiceJvmTest {
         assertEquals(listOf("id", "name", "basePrice"), parsedComma[0])
         assertEquals(listOf("p2", "Tea", "3.00"), parsedComma[1])
     }
+
+    @Test
+    fun testWipeAllDataPreserveOptions() = runTest {
+        // 1. Seed custom password, cloud settings, routine, and a user
+        val customPassHash = de.joelneumann.lojinha.security.PasswordHasher.hash("custom-secret-pass")
+        val customSettings = SettingsEntity(
+            id = 1,
+            adminPasswordHash = customPassHash,
+            globalMarkupPercent = 10.0,
+            usdExchangeRate = 0.20,
+            eurExchangeRate = 0.18,
+            inactivityTimeoutMinutes = 5,
+            autoUpdateExchangeRates = false,
+            lastExchangeRateUpdateTimestamp = 123456L,
+            oneDriveRefreshToken = "secret-token",
+            oneDriveAccountEmail = "admin@example.com"
+        )
+        db.settingsDao().insertOrUpdateSettings(customSettings)
+
+        val routine = BackupEntity(
+            id = "r-wipe-test",
+            name = "Nightly Cloud",
+            isEnabled = true,
+            type = "TIMED",
+            fileType = "DB",
+            writeMode = "CREATE_NEW_FILE",
+            scheduleConfig = de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed("02:00"),
+            backupLocationPath = "/cloud/backups",
+            lastBackupTimestamp = null
+        )
+        db.backupDao().insertOrUpdateBackup(routine)
+
+        val user = UserEntity("u-wipe", "Wipe User", 1000L, "pt", "NONE", null, null, null, true)
+        db.userDao().insertOrUpdateUser(user)
+
+        // 2. Wipe with preserveBoth = true
+        service.wipeAllData(preserveBackupRoutines = true, preserveAdminPassword = true)
+
+        // User should be wiped
+        assertEquals(0, db.userDao().getAllUsers().size)
+
+        // Routine and custom password must be preserved
+        val routinesKept = db.backupDao().getAllBackups()
+        assertEquals(1, routinesKept.size)
+        assertEquals("r-wipe-test", routinesKept.first().id)
+
+        val settingsKept = db.settingsDao().getSettings()
+        assertNotNull(settingsKept)
+        assertEquals(customPassHash, settingsKept.adminPasswordHash)
+        assertEquals("secret-token", settingsKept.oneDriveRefreshToken)
+        assertEquals("admin@example.com", settingsKept.oneDriveAccountEmail)
+
+        // 3. Wipe with preserveBoth = false
+        service.wipeAllData(preserveBackupRoutines = false, preserveAdminPassword = false)
+
+        // Routine must now be wiped
+        assertEquals(0, db.backupDao().getAllBackups().size)
+
+        // Settings password must be reset to factory default 'admin' and token cleared
+        val settingsWiped = db.settingsDao().getSettings()
+        assertNotNull(settingsWiped)
+        assertEquals(de.joelneumann.lojinha.security.PasswordHasher.hash("admin"), settingsWiped.adminPasswordHash)
+        assertNull(settingsWiped.oneDriveRefreshToken)
+        assertNull(settingsWiped.oneDriveAccountEmail)
+    }
+
+    @Test
+    fun testRestoreDbPreserveOptions() = runTest {
+        // 1. Seed active DB with routine A and active password
+        val activePasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("active-pass")
+        db.settingsDao().insertOrUpdateSettings(
+            SettingsEntity(
+                id = 1,
+                adminPasswordHash = activePasswordHash,
+                globalMarkupPercent = 5.0,
+                usdExchangeRate = 0.18,
+                eurExchangeRate = 0.16,
+                inactivityTimeoutMinutes = 3,
+                autoUpdateExchangeRates = true,
+                lastExchangeRateUpdateTimestamp = null
+            )
+        )
+        val activeRoutine = BackupEntity(
+            id = "r-active",
+            name = "Active Routine A",
+            isEnabled = true,
+            type = "TIMED",
+            fileType = "DB",
+            writeMode = "CREATE_NEW_FILE",
+            scheduleConfig = de.joelneumann.lojinha.domain.model.BackupScheduleConfig.Timed("01:00"),
+            backupLocationPath = "/active/path",
+            lastBackupTimestamp = null
+        )
+        db.backupDao().insertOrUpdateBackup(activeRoutine)
+
+        // 2. Create a backup file that contains routine B and backup password
+        val backupPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("old-backup-pass")
+        val backupFile = File(tempDir, "test_preserve_backup.db")
+        val driver = androidx.sqlite.driver.bundled.BundledSQLiteDriver()
+        val conn = driver.open(backupFile.absolutePath)
+        try {
+            conn.prepare("CREATE TABLE settings (id INTEGER PRIMARY KEY NOT NULL, adminPasswordHash TEXT NOT NULL, globalMarkupPercent REAL NOT NULL, usdExchangeRate REAL NOT NULL, eurExchangeRate REAL NOT NULL, inactivityTimeoutMinutes INTEGER NOT NULL)").apply { step(); close() }
+            conn.prepare("INSERT INTO settings VALUES (1, '$backupPasswordHash', 0.0, 0.18, 0.16, 3)").apply { step(); close() }
+
+            conn.prepare("CREATE TABLE backup_routines (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, isEnabled INTEGER NOT NULL, type TEXT NOT NULL, fileType TEXT NOT NULL, writeMode TEXT NOT NULL, scheduleConfig TEXT NOT NULL, backupLocationPath TEXT NOT NULL, lastBackupTimestamp INTEGER)").apply { step(); close() }
+            conn.prepare("INSERT INTO backup_routines VALUES ('r-backup-b', 'Backup Routine B', 1, 'TIMED', 'DB', 'CREATE_NEW_FILE', '03:00', '/backup/path', NULL)").apply { step(); close() }
+
+            conn.prepare("CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, balance INTEGER NOT NULL, language TEXT NOT NULL, secondaryCurrency TEXT NOT NULL, pin TEXT, userBarcode TEXT, userBarcodeNumber TEXT, isActive INTEGER NOT NULL, isDeleted INTEGER NOT NULL, avatarType TEXT NOT NULL, avatarEmoji TEXT NOT NULL, avatarColor TEXT NOT NULL)").apply { step(); close() }
+            conn.prepare("INSERT INTO users VALUES ('u-restored', 'Restored User', 500, 'en', 'NONE', NULL, NULL, NULL, 1, 0, 'INITIALS', '😀', '#1E293B')").apply { step(); close() }
+        } finally {
+            conn.close()
+        }
+
+        // 3. Restore with preserveExistingRoutines = true AND preserveCurrentAdminPassword = true
+        service.restoreDbFromBackup(backupFile, preserveExistingRoutines = true, preserveCurrentAdminPassword = true)
+
+        // Assert user was restored
+        assertEquals(1, db.userDao().getAllUsers().size)
+
+        // Assert routine A was kept (not replaced by routine B)
+        val routinesKept = db.backupDao().getAllBackups()
+        assertEquals(1, routinesKept.size)
+        assertEquals("r-active", routinesKept.first().id)
+
+        // Assert active password was kept
+        val settingsKept = db.settingsDao().getSettings()
+        assertNotNull(settingsKept)
+        assertEquals(activePasswordHash, settingsKept.adminPasswordHash)
+
+        // 4. Restore with preserveExistingRoutines = false AND preserveCurrentAdminPassword = false
+        service.restoreDbFromBackup(backupFile, preserveExistingRoutines = false, preserveCurrentAdminPassword = false)
+
+        // Assert routine B was restored
+        val routinesRestored = db.backupDao().getAllBackups()
+        assertEquals(1, routinesRestored.size)
+        assertEquals("r-backup-b", routinesRestored.first().id)
+
+        // Assert backup password was applied
+        val settingsRestored = db.settingsDao().getSettings()
+        assertNotNull(settingsRestored)
+        assertEquals(backupPasswordHash, settingsRestored.adminPasswordHash)
+    }
+
+    @Test
+    fun testCsvImportCreatesSafetySnapshot() = runTest {
+        val safetySnapshot = File(tempDir, "lojinha_room_pre_csv_import_safety.db")
+        if (safetySnapshot.exists()) safetySnapshot.delete()
+
+        // 1. Dry run should NOT create safety snapshot
+        val dryRunCsv = File(tempDir, "dryrun.csv")
+        dryRunCsv.writeText("name,basePrice\nCoffee,R$ 5,00\n")
+        service.importProductsFromCsv(dryRunCsv, dryRun = true)
+        assertFalse(safetySnapshot.exists(), "Dry run must NOT create safety snapshot")
+
+        // 2. Real import should create safety snapshot
+        service.importProductsFromCsv(dryRunCsv, dryRun = false)
+        assertTrue(safetySnapshot.exists(), "Real product CSV import MUST create pre-import safety snapshot")
+
+        // 3. Real user import should also create safety snapshot
+        safetySnapshot.delete()
+        val userCsv = File(tempDir, "users_import.csv")
+        userCsv.writeText("name,balance\nNew User,R$ 10,00\n")
+        service.importUsersFromCsv(userCsv, dryRun = false)
+        assertTrue(safetySnapshot.exists(), "Real user CSV import MUST create pre-import safety snapshot")
+    }
 }
 

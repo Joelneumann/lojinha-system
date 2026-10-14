@@ -29,8 +29,8 @@ class AdminSettingsViewModel(
     private val currencyRateService: CurrencyRateService? = null,
     private val onPreviewCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
     private val onExecuteCsvImport: (suspend (PlatformFile, String) -> CsvImportResult)? = null,
-    private val onExecuteDbRestore: (suspend (PlatformFile) -> Unit)? = null,
-    private val onExecuteWipeData: (suspend () -> Unit)? = null,
+    private val onExecuteDbRestore: (suspend (file: PlatformFile, preserveExistingRoutines: Boolean, preserveCurrentAdminPassword: Boolean) -> Unit)? = null,
+    private val onExecuteWipeData: (suspend (preserveBackupRoutines: Boolean, preserveAdminPassword: Boolean) -> Unit)? = null,
     private val onExportSupportBundle: (suspend (prepareEmail: Boolean, recipientEmail: String) -> Unit)? = null,
     private val onOpenLogFolder: (() -> Unit)? = null,
     val logDirectoryPath: String = "",
@@ -420,13 +420,13 @@ class AdminSettingsViewModel(
         }
     }
 
-    fun executeDbRestore(file: PlatformFile) {
+    fun executeDbRestore(file: PlatformFile, preserveExistingRoutines: Boolean = false, preserveCurrentAdminPassword: Boolean = true) {
         if (_isRestoringDb.value) return
         _isRestoringDb.value = true
         viewModelScope.launch {
             try {
                 if (onExecuteDbRestore != null) {
-                    onExecuteDbRestore.invoke(file)
+                    onExecuteDbRestore.invoke(file, preserveExistingRoutines, preserveCurrentAdminPassword)
                     _statusMessage.value = "Database restored successfully from ${file.name}."
                 } else {
                     _statusMessage.value = "Database restore requested for ${file.name}."
@@ -441,13 +441,13 @@ class AdminSettingsViewModel(
         }
     }
 
-    fun executeWipeData() {
+    fun executeWipeData(preserveBackupRoutines: Boolean = true, preserveAdminPassword: Boolean = true) {
         if (_isWipingData.value) return
         _isWipingData.value = true
         viewModelScope.launch {
             try {
                 if (onExecuteWipeData != null) {
-                    onExecuteWipeData.invoke()
+                    onExecuteWipeData.invoke(preserveBackupRoutines, preserveAdminPassword)
                     _statusMessage.value = "Factory Reset completed."
                 } else {
                     _statusMessage.value = "Factory Reset completed."
