@@ -143,6 +143,8 @@ object DatabaseFactory {
     @Volatile
     private var instance: AppDatabase? = null
 
+    fun getDatabaseFile(): File = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
+
     fun createDatabase(): AppDatabase {
         return instance ?: synchronized(this) {
             instance ?: buildDatabase().also {
@@ -153,7 +155,7 @@ object DatabaseFactory {
     }
 
     private fun buildDatabase(): AppDatabase {
-        val dbFile = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
+        val dbFile = getDatabaseFile()
         dbFile.parentFile?.mkdirs()
 
         // 1. Safety snapshot before Room initializes to guard against unexpected migration issues

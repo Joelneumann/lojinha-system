@@ -151,6 +151,17 @@ fun App(
         factory = LojinhaViewModelFactory.createAppViewModelFactory(effectiveUserRepo, effectiveSettingsRepo)
     )
 
+    DisposableEffect(appViewModel) {
+        val listener = {
+            appViewModel.loadSettings()
+            appViewModel.refreshCurrentUser()
+        }
+        de.joelneumann.lojinha.data.service.DataChangeNotifier.addListener(listener)
+        onDispose {
+            de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
+        }
+    }
+
     val currentScreen by appViewModel.currentScreen.collectAsState()
     val settings by appViewModel.settings.collectAsState()
     val currentUser by appViewModel.currentUser.collectAsState()
@@ -191,6 +202,7 @@ fun App(
                         )
                         LaunchedEffect(Unit) {
                             userSelectionViewModel.resetState()
+                            userSelectionViewModel.loadUsers()
                         }
                         DisposableEffect(userSelectionViewModel) {
                             val listener = {
@@ -248,7 +260,13 @@ fun App(
                             }
 
                             DisposableEffect(sessionUser.id, sessionNonce) {
+                                val listener = {
+                                    shoppingViewModel.loadProducts()
+                                    historyViewModel.loadUserTransactions(sessionUser.id, resetFilters = false)
+                                }
+                                de.joelneumann.lojinha.data.service.DataChangeNotifier.addListener(listener)
                                 onDispose {
+                                    de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
                                     onUserInteractedSession = null
                                     userSessionViewModel.stopInactivityTimer()
                                     shoppingViewModel.teardown()
@@ -430,13 +448,13 @@ fun App(
                                     onDataChanged()
                                     result
                                 },
-                                onExecuteDbRestore = { platformFile ->
+                                onExecuteDbRestore = { platformFile, preserveExistingRoutines, preserveCurrentAdminPassword ->
                                     val file = java.io.File(platformFile.absolutePath)
-                                    backupRestoreService.restoreDbFromBackup(file)
+                                    backupRestoreService.restoreDbFromBackup(file, preserveExistingRoutines, preserveCurrentAdminPassword)
                                     onDataChanged()
                                 },
-                                onExecuteWipeData = {
-                                    backupRestoreService.wipeAllData()
+                                onExecuteWipeData = { preserveBackupRoutines, preserveAdminPassword ->
+                                    backupRestoreService.wipeAllData(preserveBackupRoutines, preserveAdminPassword)
                                     onDataChanged()
                                 },
                                 onExportSupportBundle = { prepareEmail, recipientEmail ->
@@ -460,8 +478,27 @@ fun App(
                             )
                         }
 
-                        DisposableEffect(Unit) {
+                        DisposableEffect(
+                            adminNotesViewModel,
+                            adminProductsViewModel,
+                            adminUsersViewModel,
+                            adminTransactionsViewModel,
+                            adminBulkBillingViewModel,
+                            adminSettingsViewModel
+                        ) {
+                            val listener = {
+                                adminNotesViewModel.loadNotes()
+                                adminProductsViewModel.loadData()
+                                adminUsersViewModel.loadData()
+                                adminTransactionsViewModel.loadData()
+                                adminBulkBillingViewModel.loadData()
+                                adminSettingsViewModel.loadSettings()
+                                adminSettingsViewModel.loadRoutines()
+                                adminSettingsViewModel.refreshLogSize()
+                            }
+                            de.joelneumann.lojinha.data.service.DataChangeNotifier.addListener(listener)
                             onDispose {
+                                de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
                                 adminNotesViewModel.viewModelScope.cancel()
                                 adminProductsViewModel.viewModelScope.cancel()
                                 adminUsersViewModel.viewModelScope.cancel()

@@ -36,8 +36,15 @@ class AppViewModel(
     private val _settings = MutableStateFlow(SystemSettings())
     val settings: StateFlow<SystemSettings> = _settings.asStateFlow()
 
+    private var settingsJob: Job? = null
+
     init {
-        viewModelScope.launch {
+        loadSettings()
+    }
+
+    fun loadSettings() {
+        settingsJob?.cancel()
+        settingsJob = viewModelScope.launch {
             settingsRepository.getSettingsFlow().collect { updatedSettings ->
                 _settings.value = updatedSettings
             }
@@ -101,9 +108,11 @@ class AppViewModel(
         val user = _currentUser.value ?: return
         viewModelScope.launch {
             val updated = userRepository.getUserById(user.id)
-            if (updated != null) {
+            if (updated != null && updated.isActive && !updated.isDeleted) {
                 _currentUser.value = updated
                 LanguageManager.setLanguage(updated.language)
+            } else {
+                logout()
             }
         }
     }
