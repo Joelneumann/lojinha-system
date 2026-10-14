@@ -28,6 +28,7 @@ fun main() {
         val userRepository = remember { HttpUserRepository(networkClient) }
         val transactionRepository = remember { HttpTransactionRepository(networkClient) }
         val billingListRepository = remember { HttpBillingListRepository(networkClient) }
+        val adminNoteRepository = remember { HttpAdminNoteRepository(networkClient) }
 
         // Session restoration on startup
         LaunchedEffect(Unit) {
@@ -62,6 +63,7 @@ fun main() {
                             }
                         )
                     } else {
+                        val notesViewModel = remember { AdminNotesViewModel(adminNoteRepository) }
                         val productsViewModel = remember { AdminProductsViewModel(productRepository) }
                         val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository) }
                         val transactionsViewModel = remember { AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
@@ -71,6 +73,7 @@ fun main() {
                             networkClient.startRealtimeSync(this)
                             launch {
                                 networkClient.onDataChanged.collect {
+                                    notesViewModel.loadNotes()
                                     productsViewModel.loadData()
                                     usersViewModel.loadData()
                                     transactionsViewModel.loadData()
@@ -91,6 +94,7 @@ fun main() {
                         }
 
                         AdminScreen(
+                            notesViewModel = notesViewModel,
                             productsViewModel = productsViewModel,
                             usersViewModel = usersViewModel,
                             transactionsViewModel = transactionsViewModel,

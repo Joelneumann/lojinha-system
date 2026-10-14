@@ -668,5 +668,22 @@ interface AppStrings {
     val errInvalidDateRange: String
     val errNoTransactionsToExport: String
     val errPdfExportFailed: String
+
+    // Admin Notes & Suggestions
+    val tabNotes: String
+    fun notesCountText(count: Int): String
+    val suggestProductOrNoteBtn: String
+    val noteDialogTitle: String
+    fun noteDialogSubmittingAs(name: String): String
+    val noteDialogPlaceholder: String
+    val noteDialogEmptyError: String
+    val noteDialogSubmit: String
+    val noteDialogSuccess: String
+    val noNotesTitle: String
+    val noNotesMsg: String
+    val deleteNote: String
+    val confirmDeleteNoteTitle: String
+    val confirmDeleteNoteMsg: String
+    val searchNotesPlaceholder: String
 }
 

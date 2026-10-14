@@ -688,6 +688,7 @@ class BackupRestoreServiceJvmTest {
         assertTrue(File(csvDir, "users.csv").exists())
         assertTrue(File(csvDir, "transactions.csv").exists())
         assertTrue(File(csvDir, "billing_lists.csv").exists())
+        assertTrue(File(csvDir, "admin_notes.csv").exists())
     }
 
     @Test
@@ -702,6 +703,7 @@ class BackupRestoreServiceJvmTest {
         assertNotNull(csvDir)
         assertTrue(csvDir.exists() && csvDir.isDirectory)
         assertTrue(File(csvDir, "products.csv").exists())
+        assertTrue(File(csvDir, "admin_notes.csv").exists())
     }
 
     @Test
@@ -791,5 +793,57 @@ class BackupRestoreServiceJvmTest {
         val restoredMembers = db.billingListDao().getAllBillingListUsers()
         assertEquals(1, restoredMembers.size, "Duplicate composite key entries must be filtered to a single entry")
         assertEquals("u-dup", restoredMembers.first().userId)
+    }
+
+    @Test
+    fun testAdminNotesBackupRestoreAndWipeData() = runTest {
+        val note = AdminNoteEntity(
+            id = "note-test-1",
+            message = "We ran out of Guarana",
+            userId = "u-user-1",
+            userNameSnapshot = "Bob",
+            timestamp = 1700000000000L
+        )
+        db.adminNoteDao().insertNote(note)
+        assertEquals(1, db.adminNoteDao().getAllNotes().size)
+
+        val csvDir = File(tempDir, "csv_notes_test").apply { mkdirs() }
+        val generatedFiles = service.performLocalBackup(csvDir, BackupFileType.CSV, BackupWriteMode.CREATE_NEW_FILE)
+        val backupDir = generatedFiles.first()
+        val notesCsv = File(backupDir, "admin_notes.csv")
+        assertTrue(notesCsv.exists(), "admin_notes.csv must exist in CSV backup")
+        val lines = notesCsv.readLines()
+        assertTrue(lines.size >= 2)
+        assertEquals("id,userId,userNameSnapshot,timestamp,message", lines[0])
+        assertTrue(lines[1].contains("We ran out of Guarana"))
+
+        // Wipe data
+        service.wipeAllData()
+        assertEquals(0, db.adminNoteDao().getAllNotes().size, "wipeAllData must clear admin notes")
+
+        // Also test restoring from a DB backup containing admin_notes
+        val backupDbFile = File(tempDir, "backup_with_notes.db")
+        val driver = BundledSQLiteDriver()
+        val conn = driver.open(backupDbFile.absolutePath)
+        try {
+            val s1 = conn.prepare("CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, balance INTEGER NOT NULL, language TEXT NOT NULL, secondaryCurrency TEXT NOT NULL, pin TEXT, userBarcode TEXT, userBarcodeNumber TEXT, isActive INTEGER NOT NULL, isDeleted INTEGER NOT NULL, avatarType TEXT NOT NULL, avatarEmoji TEXT NOT NULL, avatarColor TEXT NOT NULL)")
+            s1.step(); s1.close()
+            val s2 = conn.prepare("INSERT INTO users VALUES ('u1', 'User 1', 100, 'en', 'USD', NULL, NULL, NULL, 1, 0, 'INITIALS', '😀', '#1E293B')")
+            s2.step(); s2.close()
+
+            val s3 = conn.prepare("CREATE TABLE admin_notes (id TEXT PRIMARY KEY NOT NULL, message TEXT NOT NULL, userId TEXT NOT NULL, userNameSnapshot TEXT NOT NULL, timestamp INTEGER NOT NULL)")
+            s3.step(); s3.close()
+            val s4 = conn.prepare("INSERT INTO admin_notes VALUES ('note-restored', 'Restored note message', 'u1', 'User 1', 1710000000000)")
+            s4.step(); s4.close()
+        } finally {
+            conn.close()
+        }
+
+        service.restoreDbFromBackup(backupDbFile)
+        val restoredNotes = db.adminNoteDao().getAllNotes()
+        assertEquals(1, restoredNotes.size)
+        assertEquals("note-restored", restoredNotes.first().id)
+        assertEquals("Restored note message", restoredNotes.first().message)
+        assertEquals("User 1", restoredNotes.first().userNameSnapshot)
     }
 }

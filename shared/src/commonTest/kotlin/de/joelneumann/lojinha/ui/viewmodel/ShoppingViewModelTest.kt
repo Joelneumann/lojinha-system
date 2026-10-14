@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha.ui.viewmodel
 
 import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.domain.repository.AdminNoteRepository
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
@@ -63,6 +64,29 @@ private class FakeShoppingTransactionRepository(
     override suspend fun applyPurchaseCorrection(originalTransactionId: String, newItems: List<TransactionItem>): Boolean = true
     override suspend fun stornoNonPurchase(transactionId: String): Boolean = true
     override suspend fun executeBatchTransactions(requests: List<AtomicTransactionRequest>): Boolean = true
+}
+
+private class FakeShoppingAdminNoteRepository : AdminNoteRepository {
+    val notes = mutableListOf<AdminNote>()
+    var shouldThrow = false
+
+    override fun getNotesFlow(): Flow<List<AdminNote>> = MutableStateFlow(notes)
+    override suspend fun getAllNotes(): List<AdminNote> = notes
+
+    override suspend fun addNote(note: AdminNote) {
+        if (shouldThrow) {
+            throw IllegalStateException("Failed to add note")
+        }
+        notes.add(note)
+    }
+
+    override suspend fun deleteNote(id: String) {
+        notes.removeAll { it.id == id }
+    }
+
+    override suspend fun deleteAllNotes() {
+        notes.clear()
+    }
 }
 
 class ShoppingViewModelTest {
@@ -421,5 +445,88 @@ class ShoppingViewModelTest {
             vm.updateCartItemQuantity("p-limit", 3)
             assertEquals(3L, vm.cartItems.value.first().quantity)
         }
+    }
+
+    @Test
+    fun testSubmitAdminNote_success() = runTest {
+        val productRepo = FakeShoppingProductRepository(allProducts)
+        val userRepo = FakeUserRepository()
+        val txRepo = FakeShoppingTransactionRepository()
+        val noteRepo = FakeShoppingAdminNoteRepository()
+        val vm = ShoppingViewModel(productRepo, userRepo, txRepo, noteRepo, backgroundScope)
+
+        val user = User(
+            id = "u-42",
+            name = "Alice",
+            balance = 1000L,
+            language = Language.EN,
+            secondaryCurrency = SecondaryCurrency.USD,
+            isActive = true
+        )
+
+        var onSuccessCalled = false
+        vm.submitAdminNote(user, "Could we get sparkling water?") {
+            onSuccessCalled = true
+        }
+        delay(50)
+
+        assertEquals(1, noteRepo.notes.size)
+        assertEquals("Could we get sparkling water?", noteRepo.notes.first().message)
+        assertEquals("u-42", noteRepo.notes.first().userId)
+        assertEquals("Alice", noteRepo.notes.first().userNameSnapshot)
+        assertTrue(onSuccessCalled)
+        assertNotNull(vm.noteSubmitSuccess.value)
+
+        vm.clearNoteSubmitState()
+        assertNull(vm.noteSubmitSuccess.value)
+    }
+
+    @Test
+    fun testSubmitAdminNote_blank_doesNotSave() = runTest {
+        val productRepo = FakeShoppingProductRepository(allProducts)
+        val userRepo = FakeUserRepository()
+        val txRepo = FakeShoppingTransactionRepository()
+        val noteRepo = FakeShoppingAdminNoteRepository()
+        val vm = ShoppingViewModel(productRepo, userRepo, txRepo, noteRepo, backgroundScope)
+
+        val user = User(
+            id = "u-42",
+            name = "Alice",
+            balance = 1000L,
+            language = Language.EN,
+            secondaryCurrency = SecondaryCurrency.USD,
+            isActive = true
+        )
+
+        vm.submitAdminNote(user, "   \n  ")
+        delay(50)
+
+        assertEquals(0, noteRepo.notes.size)
+        assertNull(vm.noteSubmitSuccess.value)
+        assertNull(vm.noteSubmitError.value)
+    }
+
+    @Test
+    fun testSubmitAdminNote_failure_setsFeedbackFalse() = runTest {
+        val productRepo = FakeShoppingProductRepository(allProducts)
+        val userRepo = FakeUserRepository()
+        val txRepo = FakeShoppingTransactionRepository()
+        val noteRepo = FakeShoppingAdminNoteRepository().apply { shouldThrow = true }
+        val vm = ShoppingViewModel(productRepo, userRepo, txRepo, noteRepo, backgroundScope)
+
+        val user = User(
+            id = "u-42",
+            name = "Alice",
+            balance = 1000L,
+            language = Language.EN,
+            secondaryCurrency = SecondaryCurrency.USD,
+            isActive = true
+        )
+
+        vm.submitAdminNote(user, "Please stock more coffee")
+        delay(50)
+
+        assertEquals(0, noteRepo.notes.size)
+        assertNotNull(vm.noteSubmitError.value)
     }
 }

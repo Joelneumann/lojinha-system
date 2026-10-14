@@ -3,12 +3,14 @@ package de.joelneumann.lojinha.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.domain.repository.AdminNoteRepository
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.removeAccents
@@ -39,8 +41,16 @@ class ShoppingViewModel(
     private val productRepository: ProductRepository,
     private val userRepository: UserRepository,
     private val transactionRepository: TransactionRepository,
+    private val adminNoteRepository: AdminNoteRepository? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
+
+    constructor(
+        productRepository: ProductRepository,
+        userRepository: UserRepository,
+        transactionRepository: TransactionRepository,
+        coroutineScope: CoroutineScope
+    ) : this(productRepository, userRepository, transactionRepository, null, coroutineScope)
 
     private val activeScope = coroutineScope ?: viewModelScope
 
@@ -75,6 +85,15 @@ class ShoppingViewModel(
 
     private val _completedPurchase = MutableStateFlow<Transaction?>(null)
     val completedPurchase: StateFlow<Transaction?> = _completedPurchase.asStateFlow()
+
+    private val _isSubmittingNote = MutableStateFlow(false)
+    val isSubmittingNote: StateFlow<Boolean> = _isSubmittingNote.asStateFlow()
+
+    private val _noteSubmitSuccess = MutableStateFlow<String?>(null)
+    val noteSubmitSuccess: StateFlow<String?> = _noteSubmitSuccess.asStateFlow()
+
+    private val _noteSubmitError = MutableStateFlow<String?>(null)
+    val noteSubmitError: StateFlow<String?> = _noteSubmitError.asStateFlow()
 
     init {
         loadProducts()
@@ -429,6 +448,43 @@ class ShoppingViewModel(
         }
     }
 
+    fun submitAdminNote(
+        user: User,
+        message: String,
+        onSuccess: (() -> Unit)? = null
+    ) {
+        val cleanMsg = message.trim().take(1000)
+        if (cleanMsg.isBlank()) return
+        if (_isSubmittingNote.value) return
+
+        val repo = adminNoteRepository ?: return
+        _isSubmittingNote.value = true
+        activeScope.launch {
+            try {
+                val note = AdminNote(
+                    id = generateUuid(),
+                    message = cleanMsg,
+                    userId = user.id,
+                    userNameSnapshot = user.name,
+                    timestamp = currentTimeMillis()
+                )
+                repo.addNote(note)
+                _noteSubmitSuccess.value = I18n.get().noteDialogSuccess
+                onSuccess?.invoke()
+            } catch (e: Exception) {
+                AppLogger.error("ShoppingViewModel", "Failed to submit admin note: ${e.message}", e)
+                _noteSubmitError.value = e.message
+            } finally {
+                _isSubmittingNote.value = false
+            }
+        }
+    }
+
+    fun clearNoteSubmitState() {
+        _noteSubmitSuccess.value = null
+        _noteSubmitError.value = null
+    }
+
     fun teardown() {
         productsJob?.cancel()
         productsJob = null
@@ -438,6 +494,7 @@ class ShoppingViewModel(
         clearCart()
         dismissCompletedPurchase()
         clearPurchaseError()
+        clearNoteSubmitState()
     }
 
     override fun onCleared() {

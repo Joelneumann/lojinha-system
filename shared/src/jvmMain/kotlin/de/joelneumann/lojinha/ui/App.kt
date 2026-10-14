@@ -23,6 +23,7 @@ import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
+import de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.general.InactivityWarningDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -58,6 +59,7 @@ fun App(
     transactionRepository: TransactionRepository? = null,
     billingListRepository: BillingListRepository? = null,
     settingsRepository: SettingsRepository? = null,
+    adminNoteRepository: AdminNoteRepository? = null,
     showExitAuthDialog: Boolean = false,
     onDismissExitAuthDialog: () -> Unit = {}
 ) {
@@ -143,6 +145,7 @@ fun App(
     val effectiveUserRepo = userRepository ?: remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
     val effectiveTransactionRepo = transactionRepository ?: remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
     val effectiveBillingListRepo = billingListRepository ?: remember { de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged) }
+    val effectiveAdminNoteRepo = adminNoteRepository ?: remember { RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged) }
 
     val appViewModel: AppViewModel = viewModel(
         factory = LojinhaViewModelFactory.createAppViewModelFactory(effectiveUserRepo, effectiveSettingsRepo)
@@ -228,7 +231,12 @@ fun App(
 
                             val shoppingViewModel: ShoppingViewModel = viewModel(
                                 key = "shopping_${sessionUser.id}_$sessionNonce",
-                                factory = LojinhaViewModelFactory.createShoppingViewModelFactory(effectiveProductRepo, effectiveUserRepo, effectiveTransactionRepo)
+                                factory = LojinhaViewModelFactory.createShoppingViewModelFactory(
+                                    effectiveProductRepo,
+                                    effectiveUserRepo,
+                                    effectiveTransactionRepo,
+                                    effectiveAdminNoteRepo
+                                )
                             )
                             val historyViewModel: TransactionHistoryViewModel = viewModel(
                                 key = "history_${sessionUser.id}_$sessionNonce",
@@ -373,6 +381,9 @@ fun App(
                     }
 
                     AppScreen.ADMIN_PANEL -> {
+                        val adminNotesViewModel = remember {
+                            AdminNotesViewModel(effectiveAdminNoteRepo)
+                        }
                         val adminProductsViewModel = remember {
                             AdminProductsViewModel(effectiveProductRepo, effectiveSettingsRepo)
                         }
@@ -451,6 +462,7 @@ fun App(
 
                         DisposableEffect(Unit) {
                             onDispose {
+                                adminNotesViewModel.viewModelScope.cancel()
                                 adminProductsViewModel.viewModelScope.cancel()
                                 adminUsersViewModel.viewModelScope.cancel()
                                 adminTransactionsViewModel.viewModelScope.cancel()
@@ -460,6 +472,7 @@ fun App(
                         }
 
                         de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
+                            notesViewModel = adminNotesViewModel,
                             productsViewModel = adminProductsViewModel,
                             usersViewModel = adminUsersViewModel,
                             transactionsViewModel = adminTransactionsViewModel,

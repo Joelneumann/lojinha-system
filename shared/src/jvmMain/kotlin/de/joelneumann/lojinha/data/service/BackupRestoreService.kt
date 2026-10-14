@@ -6,6 +6,7 @@ import androidx.room.useWriterConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.Converters
+import de.joelneumann.lojinha.data.entity.AdminNoteEntity
 import de.joelneumann.lojinha.data.entity.BackupEntity
 import de.joelneumann.lojinha.data.entity.BillingListEntity
 import de.joelneumann.lojinha.data.entity.BillingListUserEntity
@@ -249,6 +250,22 @@ class BackupRestoreService(
         }
         blCsv.writeText(blLines.joinToString("\n"))
 
+        // 5. Export Admin Notes & Suggestions
+        val notes = db.adminNoteDao().getAllNotes()
+        val notesCsv = File(exportFolder, "admin_notes.csv")
+        val noteLines = mutableListOf("id,userId,userNameSnapshot,timestamp,message")
+        notes.forEach { n ->
+            val line = listOf(
+                escapeCsv(n.id),
+                escapeCsv(n.userId),
+                escapeCsv(n.userNameSnapshot),
+                n.timestamp.toString(),
+                escapeCsv(n.message)
+            ).joinToString(",")
+            noteLines.add(line)
+        }
+        notesCsv.writeText(noteLines.joinToString("\n"))
+
         exportFolder
     }
 
@@ -263,6 +280,7 @@ class BackupRestoreService(
         val backupRoutines = mutableListOf<BackupEntity>()
         val backupBillingLists = mutableListOf<BillingListEntity>()
         val backupBillingListUsers = mutableListOf<BillingListUserEntity>()
+        val backupNotes = mutableListOf<AdminNoteEntity>()
         val tableNames = mutableSetOf<String>()
 
         // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
@@ -607,6 +625,24 @@ class BackupRestoreService(
                     stmt.close()
                 }
             }
+            // Read admin_notes
+            if (tableNames.contains("admin_notes")) {
+                val stmt = connection.prepare("SELECT id, message, userId, userNameSnapshot, timestamp FROM admin_notes")
+                try {
+                    while (stmt.step()) {
+                        val note = AdminNoteEntity(
+                            id = stmt.getText(0),
+                            message = stmt.getText(1),
+                            userId = stmt.getText(2),
+                            userNameSnapshot = stmt.getText(3),
+                            timestamp = stmt.getLong(4)
+                        )
+                        backupNotes.add(note)
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
         } finally {
             connection.close()
         }
@@ -623,6 +659,7 @@ class BackupRestoreService(
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     // Clear tables in reverse dependency order (children first)
+                    db.adminNoteDao().deleteAllNotes()
                     db.billingListDao().deleteAllBillingListUsers()
                     db.billingListDao().deleteAllBillingLists()
                     db.userDao().deleteAllUsers()
@@ -643,6 +680,7 @@ class BackupRestoreService(
                         .filter { it.userId in validUserIds && it.listId in validListIds }
                         .distinctBy { it.listId to it.userId }
                         .forEach { db.billingListDao().insertBillingListUser(it) }
+                    backupNotes.forEach { db.adminNoteDao().insertNote(it) }
                     if (hasBackupRoutinesInBackup) {
                         backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
                     }
@@ -663,6 +701,7 @@ class BackupRestoreService(
         withContext(NonCancellable) {
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
+                    db.adminNoteDao().deleteAllNotes()
                     db.billingListDao().deleteAllBillingListUsers()
                     db.billingListDao().deleteAllBillingLists()
                     db.userDao().deleteAllUsers()

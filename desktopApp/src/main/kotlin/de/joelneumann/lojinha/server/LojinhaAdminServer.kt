@@ -30,6 +30,7 @@ class LojinhaAdminServer(
     private val transactionRepository: TransactionRepository,
     private val billingListRepository: BillingListRepository,
     private val settingsRepository: SettingsRepository,
+    private val adminNoteRepository: AdminNoteRepository? = null,
     private val database: AppDatabase? = null,
     private val port: Int = 8080
 ) {
@@ -395,6 +396,50 @@ class LojinhaAdminServer(
                         val body = call.receive<Map<String, Long?>>()
                         val timestamp = body["lastExecutionTime"]
                         billingListRepository.updateLastExecutionTime(id, timestamp)
+                        call.respond(HttpStatusCode.OK)
+                    }
+
+                    // Admin Notes & Suggestions
+                    get("/notes") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@get
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
+                        if (repo == null) {
+                            call.respond(emptyList<AdminNote>())
+                            return@get
+                        }
+                        call.respond(repo.getAllNotes())
+                    }
+                    post("/notes") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@post
+                        val note = call.receive<AdminNote>()
+                        val cleanMessage = note.message.trim().take(1000)
+                        if (cleanMessage.isBlank()) {
+                            return@post call.respond(HttpStatusCode.BadRequest, "Note message cannot be blank")
+                        }
+                        val noteToSave = note.copy(
+                            id = if (note.id.isBlank()) UUID.randomUUID().toString() else note.id,
+                            message = cleanMessage,
+                            timestamp = if (note.timestamp <= 0L) System.currentTimeMillis() else note.timestamp
+                        )
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
+                        if (repo != null) {
+                            repo.addNote(noteToSave)
+                        }
+                        call.respond(HttpStatusCode.Created, noteToSave)
+                    }
+                    delete("/notes/{id}") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@delete
+                        val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
+                        if (repo != null) {
+                            repo.deleteNote(id)
+                        }
                         call.respond(HttpStatusCode.OK)
                     }
 
