@@ -434,8 +434,9 @@ class BackupRestoreServiceJvmTest {
         val exportedUsersCsv = File(exportedFolder, "users.csv")
         assertTrue(exportedUsersCsv.exists())
         val csvText = exportedUsersCsv.readText()
+        assertTrue(csvText.startsWith(BackupRestoreService.UTF8_BOM), "Exported CSV must start with UTF-8 BOM")
         assertTrue(csvText.contains(expectedHash), "Exported CSV must contain hashed PIN")
-        assertFalse(csvText.contains(",4321,"), "Exported CSV must not contain plain text PIN")
+        assertFalse(csvText.contains(";4321;") || csvText.contains(",4321,"), "Exported CSV must not contain plain text PIN")
         assertTrue(csvText.contains("\"R$ 25,00\"") || csvText.contains("R$ 25,00"), "Exported CSV must contain formatted BRL balance")
 
         // Test User import with already hashed PIN and plain decimal balance
@@ -814,7 +815,7 @@ class BackupRestoreServiceJvmTest {
         assertTrue(notesCsv.exists(), "admin_notes.csv must exist in CSV backup")
         val lines = notesCsv.readLines()
         assertTrue(lines.size >= 2)
-        assertEquals("id,userId,userNameSnapshot,timestamp,message", lines[0])
+        assertEquals("id;userId;userNameSnapshot;timestamp;message", lines[0].removePrefix(BackupRestoreService.UTF8_BOM))
         assertTrue(lines[1].contains("We ran out of Guarana"))
 
         // Wipe data
@@ -846,4 +847,77 @@ class BackupRestoreServiceJvmTest {
         assertEquals("Restored note message", restoredNotes.first().message)
         assertEquals("User 1", restoredNotes.first().userNameSnapshot)
     }
+
+    @Test
+    fun testAllCsvExportsUseSemicolonAndUtf8BomAndSupportRoundtrip() = runTest {
+        // Seed product and user
+        val product = ProductEntity(
+            id = "p-excel",
+            name = "Guaraná Antarctica, 350ml",
+            barcodes = listOf(Barcode("7891234567890", "Can")),
+            basePrice = 450L,
+            unitType = "PIECE",
+            stockQuantity = 20L,
+            customMarkupPercent = null,
+            isActive = true
+        )
+        db.productDao().insertOrUpdateProduct(product)
+
+        val user = UserEntity(
+            id = "u-excel",
+            name = "José Silva",
+            balance = 1250L,
+            language = "pt-BR",
+            secondaryCurrency = "NONE",
+            pin = "secret_hash",
+            userBarcode = "USR-JOS",
+            userBarcodeNumber = "USR-JOS",
+            isActive = true,
+            isDeleted = false,
+            avatarType = "EMOJI",
+            avatarEmoji = "🚀",
+            avatarColor = "#1E293B"
+        )
+        db.userDao().insertOrUpdateUser(user)
+
+        val exportFolder = service.performCsvBackup(tempDir, BackupWriteMode.CREATE_NEW_FILE)
+        assertTrue(exportFolder.exists() && exportFolder.isDirectory)
+
+        val csvNames = listOf("products.csv", "users.csv", "transactions.csv", "billing_lists.csv", "admin_notes.csv")
+        for (name in csvNames) {
+            val file = File(exportFolder, name)
+            assertTrue(file.exists(), "$name must exist")
+            val text = file.readText()
+            assertTrue(text.startsWith(BackupRestoreService.UTF8_BOM), "$name must start with UTF-8 BOM")
+            val firstLine = text.removePrefix(BackupRestoreService.UTF8_BOM).lineSequence().first()
+            assertTrue(firstLine.contains(";"), "$name header must contain semicolon delimiters")
+            assertFalse(firstLine.contains(","), "$name header must not contain comma delimiters")
+        }
+
+        // Verify parseCsvRecords on products.csv
+        val productsCsvFile = File(exportFolder, "products.csv")
+        val parsedProducts = service.parseCsvRecords(productsCsvFile.readText())
+        assertTrue(parsedProducts.size >= 2)
+        assertEquals("id", parsedProducts[0][0])
+        assertEquals("name", parsedProducts[0][1])
+        assertEquals("Guaraná Antarctica, 350ml", parsedProducts[1][1])
+
+        // Verify parseCsvRecords handles optional "sep=;" and "sep=," directives
+        val csvWithSepSemi = "sep=;\n" +
+                "id;name;basePrice\n" +
+                "p1;Coffee;\"R$ 5,00\"\n"
+        val parsedSemi = service.parseCsvRecords(csvWithSepSemi)
+        assertEquals(2, parsedSemi.size)
+        assertEquals(listOf("id", "name", "basePrice"), parsedSemi[0])
+        assertEquals(listOf("p1", "Coffee", "R$ 5,00"), parsedSemi[1])
+
+        val csvWithSepComma = "sep=,\n" +
+                "id,name,basePrice\n" +
+                "p2,Tea,3.00\n"
+        val parsedComma = service.parseCsvRecords(csvWithSepComma)
+        assertEquals(2, parsedComma.size)
+        assertEquals(listOf("id", "name", "basePrice"), parsedComma[0])
+        assertEquals(listOf("p2", "Tea", "3.00"), parsedComma[1])
+    }
 }
+

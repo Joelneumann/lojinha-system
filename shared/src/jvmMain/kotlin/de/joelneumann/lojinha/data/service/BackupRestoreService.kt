@@ -142,7 +142,7 @@ class BackupRestoreService(
         // 1. Export Products
         val products = db.productDao().getAllProducts().map { it.toDomain() }
         val productsCsv = File(exportFolder, "products.csv")
-        val productLines = mutableListOf("id,name,barcodes,basePrice,unitType,stockQuantity,customMarkupPercent,isActive")
+        val productLines = mutableListOf("id;name;barcodes;basePrice;unitType;stockQuantity;customMarkupPercent;isActive")
         products.forEach { p ->
             val barcodeStr = p.barcodes.joinToString("|") { "${it.code}:${it.description ?: ""}" }
             val line = listOf(
@@ -154,15 +154,15 @@ class BackupRestoreService(
                 p.stockQuantity.toString(),
                 p.customMarkupPercent?.toString() ?: "",
                 p.isActive.toString()
-            ).joinToString(",")
+            ).joinToString(CSV_DELIMITER)
             productLines.add(line)
         }
-        productsCsv.writeText(productLines.joinToString("\n"))
+        writeCsvFile(productsCsv, productLines)
 
         // 2. Export Users
         val users = db.userDao().getAllUsers().map { it.toDomain() }
         val usersCsv = File(exportFolder, "users.csv")
-        val userLines = mutableListOf("id,name,balance,language,secondaryCurrency,pin,userBarcode,userBarcodeNumber,isActive,isDeleted,avatarType,avatarEmoji,avatarColor")
+        val userLines = mutableListOf("id;name;balance;language;secondaryCurrency;pin;userBarcode;userBarcodeNumber;isActive;isDeleted;avatarType;avatarEmoji;avatarColor")
         users.forEach { u ->
             val line = listOf(
                 escapeCsv(u.id),
@@ -178,15 +178,15 @@ class BackupRestoreService(
                 escapeCsv(u.avatar.type.name),
                 escapeCsv(u.avatar.emoji),
                 escapeCsv(u.avatar.colorHex)
-            ).joinToString(",")
+            ).joinToString(CSV_DELIMITER)
             userLines.add(line)
         }
-        usersCsv.writeText(userLines.joinToString("\n"))
+        writeCsvFile(usersCsv, userLines)
 
         // 3. Export Transactions
         val transactions = db.transactionDao().getAllTransactions().map { it.toDomain() }
         val txCsv = File(exportFolder, "transactions.csv")
-        val txLines = mutableListOf("id,userId,userNameSnapshot,timestamp,type,referenceTransactionId,note,totalAmount,itemCount,items,userBalanceBefore,userBalanceAfter")
+        val txLines = mutableListOf("id;userId;userNameSnapshot;timestamp;type;referenceTransactionId;note;totalAmount;itemCount;items;userBalanceBefore;userBalanceAfter")
         transactions.forEach { t ->
             val itemsSerialized = converters.fromTransactionItemList(t.items)
             val line = listOf(
@@ -202,17 +202,17 @@ class BackupRestoreService(
                 escapeCsv(itemsSerialized),
                 t.userBalanceBefore?.let { escapeCsv(Formatting.formatBrlCanonical(it)) } ?: "",
                 t.userBalanceAfter?.let { escapeCsv(Formatting.formatBrlCanonical(it)) } ?: ""
-            ).joinToString(",")
+            ).joinToString(CSV_DELIMITER)
             txLines.add(line)
         }
-        txCsv.writeText(txLines.joinToString("\n"))
+        writeCsvFile(txCsv, txLines)
 
         // 4. Export Combined Billing Lists & Members (QA-05)
         val billingLists = db.billingListDao().getAllBillingLists()
         val billingListUsers = db.billingListDao().getAllBillingListUsers().groupBy { it.listId }
         val usersMap = users.associateBy { it.id }
         val blCsv = File(exportFolder, "billing_lists.csv")
-        val blLines = mutableListOf("listId,listName,type,basePrice,comment,isDeleted,userId,userName,quantity")
+        val blLines = mutableListOf("listId;listName;type;basePrice;comment;isDeleted;userId;userName;quantity")
         billingLists.forEach { bl ->
             val members = billingListUsers[bl.id]
             val priceStr = bl.basePrice?.let { Formatting.formatBrlCanonical(it) } ?: ""
@@ -228,7 +228,7 @@ class BackupRestoreService(
                         "",
                         "",
                         "0"
-                    ).joinToString(",")
+                    ).joinToString(CSV_DELIMITER)
                 )
             } else {
                 members.forEach { m ->
@@ -243,17 +243,17 @@ class BackupRestoreService(
                             escapeCsv(m.userId),
                             escapeCsv(usersMap[m.userId]?.name ?: ""),
                             m.quantity.toString()
-                        ).joinToString(",")
+                        ).joinToString(CSV_DELIMITER)
                     )
                 }
             }
         }
-        blCsv.writeText(blLines.joinToString("\n"))
+        writeCsvFile(blCsv, blLines)
 
         // 5. Export Admin Notes & Suggestions
         val notes = db.adminNoteDao().getAllNotes()
         val notesCsv = File(exportFolder, "admin_notes.csv")
-        val noteLines = mutableListOf("id,userId,userNameSnapshot,timestamp,message")
+        val noteLines = mutableListOf("id;userId;userNameSnapshot;timestamp;message")
         notes.forEach { n ->
             val line = listOf(
                 escapeCsv(n.id),
@@ -261,10 +261,10 @@ class BackupRestoreService(
                 escapeCsv(n.userNameSnapshot),
                 n.timestamp.toString(),
                 escapeCsv(n.message)
-            ).joinToString(",")
+            ).joinToString(CSV_DELIMITER)
             noteLines.add(line)
         }
-        notesCsv.writeText(noteLines.joinToString("\n"))
+        writeCsvFile(notesCsv, noteLines)
 
         exportFolder
     }
@@ -1200,6 +1200,10 @@ class BackupRestoreService(
         )
     }
 
+    private fun writeCsvFile(file: File, lines: List<String>) {
+        file.writeText(UTF8_BOM + lines.joinToString("\n"))
+    }
+
     private fun escapeCsv(value: String): String {
         if (value.contains(",") || value.contains(";") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
             val escaped = value.replace("\"", "\"\"")
@@ -1209,7 +1213,7 @@ class BackupRestoreService(
     }
 
     private fun detectDelimiter(csvText: String): Char {
-        val firstLine = csvText.lineSequence().firstOrNull { it.isNotBlank() } ?: return ','
+        val firstLine = csvText.lineSequence().firstOrNull { it.isNotBlank() } ?: return CSV_DELIMITER.first()
         var inQuotes = false
         var commaCount = 0
         var semicolonCount = 0
@@ -1221,14 +1225,28 @@ class BackupRestoreService(
                 else if (c == ';') semicolonCount++
             }
         }
-        return if (semicolonCount > commaCount) ';' else ','
+        return if (semicolonCount > commaCount) ';' else if (commaCount > 0) ',' else CSV_DELIMITER.first()
     }
 
     fun parseCsvRecords(csvText: String): List<List<String>> {
-        val cleanText = csvText.removePrefix("\uFEFF")
+        var cleanText = csvText.removePrefix(UTF8_BOM)
         if (cleanText.isBlank()) return emptyList()
 
-        val delimiter = detectDelimiter(cleanText)
+        // Check for optional "sep=X" directive on the first line
+        val firstLine = cleanText.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: ""
+        var explicitDelimiter: Char? = null
+        if (firstLine.startsWith("sep=", ignoreCase = true) && firstLine.length == 5) {
+            explicitDelimiter = firstLine[4]
+            val newlineIndex = cleanText.indexOfAny(charArrayOf('\r', '\n'))
+            cleanText = if (newlineIndex >= 0) {
+                cleanText.substring(newlineIndex).trimStart('\r', '\n')
+            } else {
+                ""
+            }
+            if (cleanText.isBlank()) return emptyList()
+        }
+
+        val delimiter = explicitDelimiter ?: detectDelimiter(cleanText)
         val records = mutableListOf<List<String>>()
         val currentRecord = mutableListOf<String>()
         val currentField = StringBuilder()
@@ -1275,5 +1293,10 @@ class BackupRestoreService(
             }
         }
         return records
+    }
+
+    companion object {
+        const val CSV_DELIMITER = ";"
+        const val UTF8_BOM = "\uFEFF"
     }
 }

@@ -94,15 +94,26 @@ Ana Costa,0.00,pt-BR,NONE,,,true,INITIALS,,#DC2626
 
 ## 📜 3. Export Formats (Backup Routines)
 
-When running a CSV backup routine, Lojinha creates a folder (`lojinha_csv_export_<timestamp>/` or `lojinha_csv_export_latest/`) containing:
+When running a CSV backup routine, Lojinha creates a folder (`lojinha_csv_export_<timestamp>/` or `lojinha_csv_export_latest/`) containing standard Excel-compatible CSV files.
 
-1. **`products.csv`**: Full product catalog.
-2. **`users.csv`**: All accounts including balances, avatar configs, and hashed PINs.
+> [!NOTE]
+> All exported CSV files use **semicolon (`;`)** as the field delimiter and are encoded with a **UTF-8 Byte Order Mark (`\uFEFF`)**. This allows Microsoft Excel (particularly in European and Latin American locales where comma is the decimal separator) to immediately open the files with correctly aligned columns and intact special characters / currency symbols (`R$`).
+>
+> When **importing**, Lojinha continues to automatically detect both semicolon (`;`) and comma (`,`) delimiters, and supports optional `sep=` directives seamlessly.
+
+Exported files include:
+
+1. **`products.csv`**: Full product catalog (`id;name;barcodes;basePrice;unitType;stockQuantity;customMarkupPercent;isActive`).
+2. **`users.csv`**: All accounts including balances, avatar configs, and hashed PINs (`id;name;balance;language;secondaryCurrency;pin;userBarcode;userBarcodeNumber;isActive;isDeleted;avatarType;avatarEmoji;avatarColor`).
 3. **`transactions.csv`**: Complete audit ledger with columns:
    ```csv
-   id,userId,userNameSnapshot,timestamp,type,referenceTransactionId,note,totalAmount,itemCount,items,userBalanceBefore,userBalanceAfter
+   id;userId;userNameSnapshot;timestamp;type;referenceTransactionId;note;totalAmount;itemCount;items;userBalanceBefore;userBalanceAfter
    ```
 4. **`billing_lists.csv`**: Bulk billing groups and assigned member quantities with columns:
    ```csv
-   listId,listName,type,basePrice,comment,isDeleted,userId,userName,quantity
+   listId;listName;type;basePrice;comment;isDeleted;userId;userName;quantity
+   ```
+5. **`admin_notes.csv`**: Suggestions, customer requests, and admin notes:
+   ```csv
+   id;userId;userNameSnapshot;timestamp;message
    ```
