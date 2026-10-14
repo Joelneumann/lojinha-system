@@ -30,6 +30,7 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 ├── lojinha_room.db.startup_backup-shm # SHM companion for safety backup
 ├── lojinha_room_pre_restore_safety.db # Atomic safety snapshot created before database restore
 ├── lojinha_room_pre_wipe_safety.db    # Atomic safety snapshot created before factory reset / wipe
+├── .lojinha.lock                      # OS kernel-level single-instance file lock
 └── logs/
     ├── lojinha.log                    # Current active log file
     ├── lojinha_2026-09-29_12-00-00.log# Archived rolling log file (up to 5x 5MB)
@@ -47,13 +48,18 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 * **Pre-Startup Snapshot (`lojinha_room.db.startup_backup`):** Before initializing Room and executing any database migrations on application launch, Lojinha automatically creates a point-in-time snapshot of the `.db`, `-wal`, and `-shm` files. If an unexpected power failure or migration error occurs, this file acts as an immediate fallback recovery point.
 * **Pre-Restore & Pre-Wipe Snapshots (`lojinha_room_pre_restore_safety.db`, `lojinha_room_pre_wipe_safety.db`):** Captured via SQLite native `VACUUM INTO` immediately before restoring an external backup or performing a factory reset, ensuring zero risk of unrecoverable data loss.
 
-### 3. Persistent Rolling Logs (`logs/`)
+### 3. Single-Instance File Lock (`.lojinha.lock`)
+* **Purpose:** Ensures only a single instance of Lojinha can run or start on the machine at any given time.
+* **Mechanism:** Handled via OS kernel file locking (`FileChannel.tryLock()`). If a secondary instance is launched (e.g. rapid double-clicking on a slow machine), the OS denies the lock and the secondary process immediately terminates before initializing SQLite or opening a window.
+* **Lifecycle:** The file remains permanently on disk (0 bytes) to avoid Windows file-sharing violations; the OS automatically releases the kernel lock if the app terminates or is killed.
+
+### 4. Persistent Rolling Logs (`logs/`)
 * **Location:** `~/.lojinha/logs/lojinha.log`
 * **Size Cap:** Maximum **5 MB** per log file.
 * **Retention Policy:** Retains the **5 most recent** archived log files (total log storage is capped at ~25 MB).
 * **Crash Interception:** Uncaught JVM exceptions and system termination signals are caught by [`CrashHandler`](../desktopApp/src/main/kotlin/de/joelneumann/lojinha/util/CrashHandler.kt) and flushed to disk before exit.
 
-### 4. Diagnostics Support Bundle (`.zip`)
+### 5. Diagnostics Support Bundle (`.zip`)
 * When an admin clicks **Export Diagnostic Bundle** in the Settings tab (or via `GET /api/admin/diagnostics/export`), a timestamped ZIP archive (`lojinha_diagnostic_bundle_<timestamp>.zip`) is generated containing:
   * System metrics (Java version, OS architecture, memory usage, display resolution).
   * The current database file snapshot.
