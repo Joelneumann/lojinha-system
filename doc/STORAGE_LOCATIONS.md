@@ -28,6 +28,8 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 ├── lojinha_room.db.startup_backup     # Safety snapshot created before every startup
 ├── lojinha_room.db.startup_backup-wal # WAL companion for safety backup
 ├── lojinha_room.db.startup_backup-shm # SHM companion for safety backup
+├── lojinha_room_pre_restore_safety.db # Atomic safety snapshot created before database restore
+├── lojinha_room_pre_wipe_safety.db    # Atomic safety snapshot created before factory reset / wipe
 └── logs/
     ├── lojinha.log                    # Current active log file
     ├── lojinha_2026-09-29_12-00-00.log# Archived rolling log file (up to 5x 5MB)
@@ -38,12 +40,12 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 
 ### 1. Primary Database (`lojinha_room.db`)
 * **Format:** Standard SQLite 3 relational database managed by **AndroidX Room (KMP)** using the bundled C SQLite driver.
-* **Tables:** `users`, `products`, `transactions`, `billing_lists`, `billing_list_users`, `settings`, `backups`.
+* **Tables:** `users`, `products`, `transactions`, `billing_lists`, `billing_list_users`, `settings`, `backups`, `admin_notes`.
 * **WAL Mode:** Operates in Write-Ahead Logging (`PRAGMA journal_mode=WAL;`). When backing up manually, ensure you copy `lojinha_room.db`, `lojinha_room.db-wal`, and `lojinha_room.db-shm` together, or perform a checkpoint before copying.
 
-### 2. Pre-Startup Safety Backup (`lojinha_room.db.startup_backup`)
-* Before initializing Room and executing any database migrations on application launch, Lojinha automatically creates a point-in-time snapshot of the `.db`, `-wal`, and `-shm` files.
-* If an unexpected power failure, hardware crash, or migration failure occurs, this file acts as an immediate fallback recovery point.
+### 2. Pre-Startup, Pre-Restore & Pre-Wipe Safety Backups
+* **Pre-Startup Snapshot (`lojinha_room.db.startup_backup`):** Before initializing Room and executing any database migrations on application launch, Lojinha automatically creates a point-in-time snapshot of the `.db`, `-wal`, and `-shm` files. If an unexpected power failure or migration error occurs, this file acts as an immediate fallback recovery point.
+* **Pre-Restore & Pre-Wipe Snapshots (`lojinha_room_pre_restore_safety.db`, `lojinha_room_pre_wipe_safety.db`):** Captured via SQLite native `VACUUM INTO` immediately before restoring an external backup or performing a factory reset, ensuring zero risk of unrecoverable data loss.
 
 ### 3. Persistent Rolling Logs (`logs/`)
 * **Location:** `~/.lojinha/logs/lojinha.log`
