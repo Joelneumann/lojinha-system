@@ -149,6 +149,16 @@ interface AppStrings {
     val productPricingRulesTitle: String
     val globalProductMarkupLabel: String
     val globalProductMarkupPlaceholder: String
+    val balanceWarningsCardTitle: String
+    val balanceWarningsCardSubtitle: String
+    val balanceWarningYellowLabel: String
+    val balanceWarningYellowPlaceholder: String
+    val balanceWarningYellowHelper: String
+    val balanceWarningRedLabel: String
+    val balanceWarningRedPlaceholder: String
+    val balanceWarningRedHelper: String
+    val invalidThresholdAmountError: String
+    val yellowMustBeGreaterThanRedError: String
     val currencyExchangeRatesTitle: String
     val usdRateLabel: String
     val usdRatePlaceholder: String

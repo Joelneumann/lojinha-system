@@ -24,7 +24,9 @@ data class SystemSettings(
     val oneDriveTenant: String = "common",
     val supportEmail: String? = null,
     val autoUpdateExchangeRates: Boolean = true,
-    val lastExchangeRateUpdateTimestamp: Long? = null
+    val lastExchangeRateUpdateTimestamp: Long? = null,
+    val yellowBalanceWarningThresholdCents: Long = 300_00L,
+    val redBalanceWarningThresholdCents: Long = 0L
 ) {
     fun exchangeRateFor(currency: SecondaryCurrency): Double {
         return when (currency) {

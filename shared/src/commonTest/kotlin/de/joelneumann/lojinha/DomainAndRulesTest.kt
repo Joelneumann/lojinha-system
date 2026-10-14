@@ -77,6 +77,30 @@ class DomainAndRulesTest {
     }
 
     @Test
+    fun testUserBalanceWarningLevel_withCustomThresholds() {
+        val customYellow = 150_00L // R$ 150,00
+        val customRed = -20_00L   // -R$ 20,00
+
+        val userHealthy = User(id = "1", name = "Healthy", balance = 200_00L)
+        val userJustAboveYellow = User(id = "2", name = "Just Above", balance = 150_01L)
+        val userAtYellow = User(id = "3", name = "At Yellow", balance = 150_00L)
+        val userMidLow = User(id = "4", name = "Mid Low", balance = 50_00L)
+        val userZero = User(id = "5", name = "Zero", balance = 0L)
+        val userAtRed = User(id = "6", name = "At Red", balance = -20_00L)
+        val userJustBelowRed = User(id = "7", name = "Below Red", balance = -20_01L)
+        val userVeryNegative = User(id = "8", name = "Very Negative", balance = -50_00L)
+
+        assertEquals(BalanceWarningLevel.NORMAL, userHealthy.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.NORMAL, userJustAboveYellow.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userAtYellow.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userMidLow.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userZero.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.LOW_BALANCE, userAtRed.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.NEGATIVE, userJustBelowRed.balanceWarningLevel(customYellow, customRed))
+        assertEquals(BalanceWarningLevel.NEGATIVE, userVeryNegative.balanceWarningLevel(customYellow, customRed))
+    }
+
+    @Test
     fun testProductMarkupCalculations() {
         val product = Product(
             id = "p1",

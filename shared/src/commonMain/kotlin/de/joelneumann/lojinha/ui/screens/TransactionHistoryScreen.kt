@@ -330,9 +330,13 @@ fun TransactionHistoryContent(
                     }
                 }
 
-                if (user.balanceWarningLevel != BalanceWarningLevel.NORMAL) {
+                val warningLevel = user.balanceWarningLevel(
+                    yellowThresholdCents = settings.yellowBalanceWarningThresholdCents,
+                    redThresholdCents = settings.redBalanceWarningThresholdCents
+                )
+                if (warningLevel != BalanceWarningLevel.NORMAL) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    UserBalanceWarningBanner(user = user)
+                    UserBalanceWarningBanner(user = user, settings = settings)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

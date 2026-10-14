@@ -27,7 +27,9 @@ data class SettingsEntity(
     val oneDriveTenant: String = "common",
     val supportEmail: String? = null,
     val autoUpdateExchangeRates: Boolean = true,
-    val lastExchangeRateUpdateTimestamp: Long? = null
+    val lastExchangeRateUpdateTimestamp: Long? = null,
+    val yellowBalanceWarningThresholdCents: Long = 300_00L,
+    val redBalanceWarningThresholdCents: Long = 0L
 ) {
     fun toDomain(): SystemSettings = SystemSettings(
         adminPasswordHash = adminPasswordHash,
@@ -50,7 +52,9 @@ data class SettingsEntity(
         oneDriveTenant = oneDriveTenant,
         supportEmail = supportEmail,
         autoUpdateExchangeRates = autoUpdateExchangeRates,
-        lastExchangeRateUpdateTimestamp = lastExchangeRateUpdateTimestamp
+        lastExchangeRateUpdateTimestamp = lastExchangeRateUpdateTimestamp,
+        yellowBalanceWarningThresholdCents = yellowBalanceWarningThresholdCents,
+        redBalanceWarningThresholdCents = redBalanceWarningThresholdCents
     )
 
     companion object {
@@ -76,7 +80,9 @@ data class SettingsEntity(
             oneDriveTenant = settings.oneDriveTenant,
             supportEmail = settings.supportEmail,
             autoUpdateExchangeRates = settings.autoUpdateExchangeRates,
-            lastExchangeRateUpdateTimestamp = settings.lastExchangeRateUpdateTimestamp
+            lastExchangeRateUpdateTimestamp = settings.lastExchangeRateUpdateTimestamp,
+            yellowBalanceWarningThresholdCents = settings.yellowBalanceWarningThresholdCents,
+            redBalanceWarningThresholdCents = settings.redBalanceWarningThresholdCents
         )
     }
 }

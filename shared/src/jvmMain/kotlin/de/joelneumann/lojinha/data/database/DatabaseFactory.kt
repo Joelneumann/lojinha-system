@@ -140,6 +140,20 @@ object DatabaseFactory {
         }
     }
 
+    private val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v15 -> v16 (adding balance warning thresholds to settings)...")
+            try {
+                connection.execSQL("ALTER TABLE settings ADD COLUMN yellowBalanceWarningThresholdCents INTEGER NOT NULL DEFAULT 30000")
+                connection.execSQL("ALTER TABLE settings ADD COLUMN redBalanceWarningThresholdCents INTEGER NOT NULL DEFAULT 0")
+                AppLogger.info(TAG, "Database migration v15 -> v16 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v15 -> v16 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
     @Volatile
     private var instance: AppDatabase? = null
 
@@ -194,7 +208,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")

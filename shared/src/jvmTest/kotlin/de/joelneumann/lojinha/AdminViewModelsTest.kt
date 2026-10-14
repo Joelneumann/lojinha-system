@@ -674,6 +674,26 @@ class AdminViewModelsTest {
     }
 
     @Test
+    fun testAdminSettingsViewModel_updateSystemSettings_updatesBalanceWarningThresholds() = runTest {
+        val initialSettings = SystemSettings(
+            yellowBalanceWarningThresholdCents = 300_00L,
+            redBalanceWarningThresholdCents = 0L
+        )
+        val settingsRepo = TestSettingsRepository(initialSettings)
+        val viewModel = AdminSettingsViewModel(settingsRepository = settingsRepo)
+
+        val updated = initialSettings.copy(
+            yellowBalanceWarningThresholdCents = 150_00L,
+            redBalanceWarningThresholdCents = -20_00L
+        )
+        viewModel.updateSystemSettings(updated)
+
+        assertEquals(150_00L, settingsRepo.updatedSettings?.yellowBalanceWarningThresholdCents)
+        assertEquals(-20_00L, settingsRepo.updatedSettings?.redBalanceWarningThresholdCents)
+        assertEquals(I18n.get().statusSystemSettingsUpdated, viewModel.statusMessage.value)
+    }
+
+    @Test
     fun testAdminSettingsViewModel_routineLifecycle_createsEditsAndDeletes() = runTest {
         val backupRepo = TestBackupRepository()
         val settingsRepo = TestSettingsRepository()

@@ -41,6 +41,25 @@ import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 
+private fun formatCentsToInput(cents: Long): String {
+    val isWhole = (cents % 100L) == 0L
+    return if (isWhole) {
+        (cents / 100L).toString()
+    } else {
+        val reais = cents / 100L
+        val remainder = kotlin.math.abs(cents % 100L).toString().padStart(2, '0')
+        "$reais,$remainder"
+    }
+}
+
+private fun parseBrlInputToCents(input: String): Long? {
+    val cleaned = input.trim().replace(',', '.')
+    if (cleaned.isBlank()) return null
+    val valueDouble = cleaned.toDoubleOrNull() ?: return null
+    if (!valueDouble.isFinite()) return null
+    return kotlin.math.round(valueDouble * 100.0).toLong()
+}
+
 @Composable
 fun AdminSettingsTabScreen(
     viewModel: AdminSettingsViewModel,
@@ -85,6 +104,8 @@ fun AdminSettingsTabScreen(
     var eurRate by remember { mutableStateOf(Formatting.formatDecimal(settings.eurExchangeRate)) }
     var autoUpdateExchangeRates by remember { mutableStateOf(settings.autoUpdateExchangeRates) }
     var inactivityTimeout by remember { mutableStateOf(settings.inactivityTimeoutMinutes.toString()) }
+    var yellowWarningThreshold by remember { mutableStateOf(formatCentsToInput(settings.yellowBalanceWarningThresholdCents)) }
+    var redWarningThreshold by remember { mutableStateOf(formatCentsToInput(settings.redBalanceWarningThresholdCents)) }
     var supportEmail by remember { mutableStateOf(settings.supportEmail ?: "") }
     var isSupportEmailLocked by remember { mutableStateOf(supportEmail.isNotBlank()) }
     var showUnlockSupportEmailDialog by remember { mutableStateOf(false) }
@@ -99,10 +120,17 @@ fun AdminSettingsTabScreen(
     val parsedEurRate = remember(eurRate) { eurRate.trim().replace(',', '.').toDoubleOrNull() }
     val isEurRateValid = parsedEurRate != null && parsedEurRate.isFinite() && parsedEurRate in 0.0001..100000.0
 
+    val parsedYellow = remember(yellowWarningThreshold) { parseBrlInputToCents(yellowWarningThreshold) }
+    val isYellowThresholdValid = parsedYellow != null && parsedYellow in -100_000_00L..100_000_00L
+    val parsedRed = remember(redWarningThreshold) { parseBrlInputToCents(redWarningThreshold) }
+    val isRedThresholdValid = parsedRed != null && parsedRed in -100_000_00L..100_000_00L
+    val isThresholdOrderValid = isYellowThresholdValid && isRedThresholdValid && parsedYellow!! > parsedRed!!
+
     val hasFieldChanges = remember(
         settings, newPassword, confirmPassword, globalMarkup, globalMarkupValue,
         usdRate, parsedUsdRate, eurRate, parsedEurRate,
-        autoUpdateExchangeRates, inactivityTimeout, supportEmail
+        autoUpdateExchangeRates, inactivityTimeout, supportEmail,
+        yellowWarningThreshold, parsedYellow, redWarningThreshold, parsedRed
     ) {
         (newPassword.isNotEmpty() || confirmPassword.isNotEmpty()) ||
                 (if (globalMarkupValue != null) globalMarkupValue != settings.globalMarkupPercent else globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent)) ||
@@ -110,7 +138,9 @@ fun AdminSettingsTabScreen(
                 (if (parsedEurRate != null) parsedEurRate != settings.eurExchangeRate else eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate)) ||
                 autoUpdateExchangeRates != settings.autoUpdateExchangeRates ||
                 inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
-                supportEmail.trim() != (settings.supportEmail ?: "")
+                supportEmail.trim() != (settings.supportEmail ?: "") ||
+                (if (parsedYellow != null) parsedYellow != settings.yellowBalanceWarningThresholdCents else yellowWarningThreshold.trim() != formatCentsToInput(settings.yellowBalanceWarningThresholdCents)) ||
+                (if (parsedRed != null) parsedRed != settings.redBalanceWarningThresholdCents else redWarningThreshold.trim() != formatCentsToInput(settings.redBalanceWarningThresholdCents))
     }
 
     // Only synchronize baseline fields when the user has NO uncommitted changes
@@ -121,6 +151,8 @@ fun AdminSettingsTabScreen(
             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
             autoUpdateExchangeRates = settings.autoUpdateExchangeRates
             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
+            yellowWarningThreshold = formatCentsToInput(settings.yellowBalanceWarningThresholdCents)
+            redWarningThreshold = formatCentsToInput(settings.redBalanceWarningThresholdCents)
             supportEmail = settings.supportEmail ?: ""
             isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
         }
@@ -198,6 +230,8 @@ fun AdminSettingsTabScreen(
                             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
                             autoUpdateExchangeRates = settings.autoUpdateExchangeRates
                             inactivityTimeout = settings.inactivityTimeoutMinutes.toString()
+                            yellowWarningThreshold = formatCentsToInput(settings.yellowBalanceWarningThresholdCents)
+                            redWarningThreshold = formatCentsToInput(settings.redBalanceWarningThresholdCents)
                             supportEmail = settings.supportEmail ?: ""
                             isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
                             onUnsavedStateChanged(false)
@@ -222,10 +256,12 @@ fun AdminSettingsTabScreen(
 
                 Button(
                     onClick = {
-                        if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid) {
+                        if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid) {
                             val newUsd = parsedUsdRate ?: settings.usdExchangeRate
                             val newEur = parsedEurRate ?: settings.eurExchangeRate
                             val ratesManuallyChanged = newUsd != settings.usdExchangeRate || newEur != settings.eurExchangeRate
+                            val newYellow = parsedYellow ?: settings.yellowBalanceWarningThresholdCents
+                            val newRed = parsedRed ?: settings.redBalanceWarningThresholdCents
                             val updatedSettings = settings.copy(
                                 adminPasswordHash = if (newPassword.isNotBlank()) de.joelneumann.lojinha.security.PasswordHasher.hash(newPassword) else settings.adminPasswordHash,
                                 globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
@@ -234,7 +270,9 @@ fun AdminSettingsTabScreen(
                                 inactivityTimeoutMinutes = (inactivityTimeout.toIntOrNull() ?: settings.inactivityTimeoutMinutes).coerceIn(2, 1440),
                                 supportEmail = supportEmail.trim().takeIf { it.isNotBlank() },
                                 autoUpdateExchangeRates = autoUpdateExchangeRates,
-                                lastExchangeRateUpdateTimestamp = if (ratesManuallyChanged) null else settings.lastExchangeRateUpdateTimestamp
+                                lastExchangeRateUpdateTimestamp = if (ratesManuallyChanged) null else settings.lastExchangeRateUpdateTimestamp,
+                                yellowBalanceWarningThresholdCents = newYellow,
+                                redBalanceWarningThresholdCents = newRed
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
@@ -242,11 +280,13 @@ fun AdminSettingsTabScreen(
                             usdRate = Formatting.formatDecimal(newUsd)
                             eurRate = Formatting.formatDecimal(newEur)
                             globalMarkup = Formatting.formatDecimal(updatedSettings.globalMarkupPercent)
+                            yellowWarningThreshold = formatCentsToInput(newYellow)
+                            redWarningThreshold = formatCentsToInput(newRed)
                             isSupportEmailLocked = updatedSettings.supportEmail?.isNotBlank() == true
                             onUnsavedStateChanged(false)
                         }
                     },
-                    enabled = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid,
+                    enabled = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentNavy,
                         disabledContainerColor = SurfaceContainerHighLight
@@ -366,7 +406,123 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 2: CURRENCY EXCHANGE RATES
+            // CARD 2: BALANCE WARNING THRESHOLDS
+            item(key = "balance-warnings-card") {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.balanceWarningsCardTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+                        Text(
+                            text = strings.balanceWarningsCardSubtitle,
+                            fontSize = 12.sp,
+                            color = TextSecondaryMuted
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                ) {
+                                    AdminStatusBadge(
+                                        text = strings.lowBalanceWarningTitle,
+                                        type = AdminBadgeType.WARNING
+                                    )
+                                }
+                                AdminLabeledField(
+                                    label = strings.balanceWarningYellowLabel,
+                                    value = yellowWarningThreshold,
+                                    onValueChange = { yellowWarningThreshold = it },
+                                    placeholder = strings.balanceWarningYellowPlaceholder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Text(
+                                    text = strings.balanceWarningYellowHelper,
+                                    fontSize = 11.sp,
+                                    color = TextSecondaryMuted,
+                                    modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                                )
+                                if (!isYellowThresholdValid) {
+                                    Text(
+                                        text = strings.invalidThresholdAmountError,
+                                        fontSize = 11.sp,
+                                        color = ColorDangerCrimson,
+                                        modifier = Modifier.padding(top = 2.dp, start = 2.dp)
+                                    )
+                                }
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                ) {
+                                    AdminStatusBadge(
+                                        text = strings.negativeBalanceWarningTitle,
+                                        type = AdminBadgeType.DANGER
+                                    )
+                                }
+                                AdminLabeledField(
+                                    label = strings.balanceWarningRedLabel,
+                                    value = redWarningThreshold,
+                                    onValueChange = { redWarningThreshold = it },
+                                    placeholder = strings.balanceWarningRedPlaceholder,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Text(
+                                    text = strings.balanceWarningRedHelper,
+                                    fontSize = 11.sp,
+                                    color = TextSecondaryMuted,
+                                    modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                                )
+                                if (!isRedThresholdValid) {
+                                    Text(
+                                        text = strings.invalidThresholdAmountError,
+                                        fontSize = 11.sp,
+                                        color = ColorDangerCrimson,
+                                        modifier = Modifier.padding(top = 2.dp, start = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (isYellowThresholdValid && isRedThresholdValid && !isThresholdOrderValid) {
+                            Text(
+                                text = strings.yellowMustBeGreaterThanRedError,
+                                fontSize = 11.sp,
+                                color = ColorDangerCrimson,
+                                modifier = Modifier.padding(top = 2.dp, start = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // CARD 3: CURRENCY EXCHANGE RATES
             item(key = "currency-exchange-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -516,7 +672,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 3: KIOSK SYSTEM TIMERS
+            // CARD 4: KIOSK SYSTEM TIMERS
             item(key = "kiosk-timers-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -561,7 +717,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 4: REMOTE WEB ADMINISTRATION (LAN)
+            // CARD 5: REMOTE WEB ADMINISTRATION (LAN)
             if (viewModel.serverUrls.isNotEmpty()) {
                 item(key = "remote-admin-card") {
                     Surface(
@@ -655,7 +811,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 5: MICROSOFT ONEDRIVE INTEGRATION
+            // CARD 6: MICROSOFT ONEDRIVE INTEGRATION
             item(key = "onedrive-integration-card") {
                 val settingsState by viewModel.settings.collectAsState()
 
@@ -774,7 +930,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 6: BACKUP ROUTINES MANAGEMENT
+            // CARD 7: BACKUP ROUTINES MANAGEMENT
             item(key = "backup-routines-card") {
                 val routines by viewModel.routines.collectAsState()
 
@@ -1019,7 +1175,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 7: DATABASE RESTORE (.DB) & DATA WIPE
+            // CARD 8: DATABASE RESTORE (.DB) & DATA WIPE
             item(key = "restore-wipe-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1099,7 +1255,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 8: CSV DATA IMPORT
+            // CARD 9: CSV DATA IMPORT
             item(key = "csv-import-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1180,7 +1336,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 9: ADMIN MASTER PASSWORD
+            // CARD 10: ADMIN MASTER PASSWORD
             item(key = "admin-security-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1279,7 +1435,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 10: SUPPORT CONTACT
+            // CARD 11: SUPPORT CONTACT
             item(key = "support-contact-card") {
                 val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
@@ -1541,7 +1697,7 @@ fun AdminSettingsTabScreen(
                 }
             }
 
-            // CARD 11: SYSTEM & KIOSK ACTIONS
+            // CARD 12: SYSTEM & KIOSK ACTIONS
             item(key = "kiosk-actions-card") {
                 Surface(
                     shape = RoundedCornerShape(12.dp),

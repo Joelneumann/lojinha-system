@@ -40,11 +40,19 @@ data class User(
         }
 }
 
-const val LOW_BALANCE_WARNING_THRESHOLD_CENTS: Long = 300_00L // R$ 300,00
+const val DEFAULT_YELLOW_BALANCE_WARNING_THRESHOLD_CENTS: Long = 300_00L // R$ 300,00
+const val DEFAULT_RED_BALANCE_WARNING_THRESHOLD_CENTS: Long = 0L        // R$ 0,00
+const val LOW_BALANCE_WARNING_THRESHOLD_CENTS: Long = DEFAULT_YELLOW_BALANCE_WARNING_THRESHOLD_CENTS
+
+fun User.balanceWarningLevel(
+    yellowThresholdCents: Long = DEFAULT_YELLOW_BALANCE_WARNING_THRESHOLD_CENTS,
+    redThresholdCents: Long = DEFAULT_RED_BALANCE_WARNING_THRESHOLD_CENTS
+): BalanceWarningLevel = when {
+    balance < redThresholdCents -> BalanceWarningLevel.NEGATIVE
+    balance <= yellowThresholdCents -> BalanceWarningLevel.LOW_BALANCE
+    else -> BalanceWarningLevel.NORMAL
+}
 
 val User.balanceWarningLevel: BalanceWarningLevel
-    get() = when {
-        balance < 0L -> BalanceWarningLevel.NEGATIVE
-        balance <= LOW_BALANCE_WARNING_THRESHOLD_CENTS -> BalanceWarningLevel.LOW_BALANCE
-        else -> BalanceWarningLevel.NORMAL
-    }
+    get() = balanceWarningLevel(DEFAULT_YELLOW_BALANCE_WARNING_THRESHOLD_CENTS, DEFAULT_RED_BALANCE_WARNING_THRESHOLD_CENTS)
+

@@ -496,6 +496,8 @@ class BackupRestoreService(
                     append(if (settingsColumns.contains("supportemail")) ", supportEmail" else ", NULL")
                     append(if (settingsColumns.contains("autoupdateexchangerates")) ", autoUpdateExchangeRates" else ", 1")
                     append(if (settingsColumns.contains("lastexchangerateupdatetimestamp")) ", lastExchangeRateUpdateTimestamp" else ", NULL")
+                    append(if (settingsColumns.contains("yellowbalancewarningthresholdcents")) ", yellowBalanceWarningThresholdCents" else ", 30000")
+                    append(if (settingsColumns.contains("redbalancewarningthresholdcents")) ", redBalanceWarningThresholdCents" else ", 0")
                     append(" FROM settings LIMIT 1")
                 }
 
@@ -527,7 +529,9 @@ class BackupRestoreService(
                             oneDriveTenant = if (stmt.isNull(18)) "common" else stmt.getText(18),
                             supportEmail = if (stmt.isNull(19)) null else stmt.getText(19),
                             autoUpdateExchangeRates = if (stmt.isNull(20)) true else stmt.getLong(20) != 0L,
-                            lastExchangeRateUpdateTimestamp = if (stmt.isNull(21)) null else stmt.getLong(21)
+                            lastExchangeRateUpdateTimestamp = if (stmt.isNull(21)) null else stmt.getLong(21),
+                            yellowBalanceWarningThresholdCents = if (stmt.isNull(22)) 300_00L else stmt.getLong(22),
+                            redBalanceWarningThresholdCents = if (stmt.isNull(23)) 0L else stmt.getLong(23)
                         )
                     }
                 } finally {
@@ -773,6 +777,8 @@ class BackupRestoreService(
                         inactivityTimeoutMinutes = 3,
                         autoUpdateExchangeRates = true,
                         lastExchangeRateUpdateTimestamp = null,
+                        yellowBalanceWarningThresholdCents = 300_00L,
+                        redBalanceWarningThresholdCents = 0L,
                         backupLocationPath = if (preserveBackupRoutines) existingSettings?.backupLocationPath ?: "" else "",
                         autoBackupEnabled = if (preserveBackupRoutines) existingSettings?.autoBackupEnabled ?: false else false,
                         autoBackupFormat = if (preserveBackupRoutines) existingSettings?.autoBackupFormat ?: "DB" else "DB",

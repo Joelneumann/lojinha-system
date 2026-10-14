@@ -17,7 +17,7 @@ import de.joelneumann.lojinha.data.entity.*
         BillingListUserEntity::class,
         AdminNoteEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

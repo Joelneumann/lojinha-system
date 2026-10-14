@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.BalanceWarningLevel
+import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.balanceWarningLevel
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -28,9 +29,13 @@ import de.joelneumann.lojinha.ui.theme.PrimaryNavy
 @Composable
 fun UserBalanceWarningBanner(
     user: User,
+    settings: SystemSettings = SystemSettings(),
     modifier: Modifier = Modifier
 ) {
-    val level = user.balanceWarningLevel
+    val level = user.balanceWarningLevel(
+        yellowThresholdCents = settings.yellowBalanceWarningThresholdCents,
+        redThresholdCents = settings.redBalanceWarningThresholdCents
+    )
     if (level == BalanceWarningLevel.NORMAL) return
 
     val strings = I18n.current
