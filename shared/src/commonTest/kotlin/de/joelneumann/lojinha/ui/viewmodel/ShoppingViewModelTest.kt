@@ -529,4 +529,68 @@ class ShoppingViewModelTest {
         assertEquals(0, noteRepo.notes.size)
         assertNotNull(vm.noteSubmitError.value)
     }
+
+    @Test
+    fun testAddMultipleProducts_addsNewProductsToTopOfCart() = withViewModel { vm, _ ->
+        // Add Product 1 (Club Mate)
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+        val cartAfterFirst = vm.cartItems.value
+        assertEquals(1, cartAfterFirst.size)
+        assertEquals("1", cartAfterFirst[0].product.id)
+
+        // Add Product 2 (Coca-Cola Zero)
+        assertTrue(vm.submitBarcodeOrSearch("5449000000996", 0.0))
+        val cartAfterSecond = vm.cartItems.value
+        assertEquals(2, cartAfterSecond.size)
+        assertEquals("3", cartAfterSecond[0].product.id, "Newly added product must be at the top (index 0)")
+        assertEquals("1", cartAfterSecond[1].product.id, "Previously added product must now be at index 1")
+
+        // Add Product 3 (Guaraná Antarctica)
+        assertTrue(vm.submitBarcodeOrSearch("7891234564821", 0.0))
+        val cartAfterThird = vm.cartItems.value
+        assertEquals(3, cartAfterThird.size)
+        assertEquals("2", cartAfterThird[0].product.id, "Latest added product must be at index 0")
+        assertEquals("3", cartAfterThird[1].product.id)
+        assertEquals("1", cartAfterThird[2].product.id)
+    }
+
+    @Test
+    fun testWeightProduct_addedToTopOfCart() = withViewModel { vm, _ ->
+        // Add a piece product first
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+        assertEquals(1, vm.cartItems.value.size)
+        assertEquals("1", vm.cartItems.value[0].product.id)
+
+        // Open weight product dialog and submit
+        assertTrue(vm.submitBarcodeOrSearch("9001", 0.0))
+        vm.updateWeightInput("500")
+        vm.submitWeightDialog(0.0)
+
+        val cart = vm.cartItems.value
+        assertEquals(2, cart.size)
+        assertEquals("4", cart[0].product.id, "Newly submitted weight product must be at the top (index 0)")
+        assertEquals(500L, cart[0].quantity)
+        assertEquals("1", cart[1].product.id)
+    }
+
+    @Test
+    fun testRescanningExistingProduct_retainsIndexAndIncrementsQuantity() = withViewModel { vm, _ ->
+        // Add Product 1
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+        // Add Product 2 (moves to index 0)
+        assertTrue(vm.submitBarcodeOrSearch("5449000000996", 0.0))
+
+        assertEquals("3", vm.cartItems.value[0].product.id)
+        assertEquals("1", vm.cartItems.value[1].product.id)
+        assertEquals(1L, vm.cartItems.value[1].quantity)
+
+        // Re-scan Product 1 (which is at index 1)
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+
+        val cart = vm.cartItems.value
+        assertEquals(2, cart.size)
+        assertEquals("3", cart[0].product.id, "Index 0 must remain unchanged")
+        assertEquals("1", cart[1].product.id, "Product 1 must remain at index 1")
+        assertEquals(2L, cart[1].quantity, "Quantity should increment to 2")
+    }
 }

@@ -270,7 +270,7 @@ class ShoppingViewModel(
                 showStockNotice(I18n.get().errProductOutOfStock(product.name))
                 return
             }
-            currentList.add(CartItem(product = product, quantity = 1, unitPriceWithMarkup = unitPrice))
+            currentList.add(0, CartItem(product = product, quantity = 1, unitPriceWithMarkup = unitPrice))
         }
         _cartItems.value = currentList
     }
@@ -318,7 +318,7 @@ class ShoppingViewModel(
                 unitPriceWithMarkup = unitPrice
             )
         } else {
-            currentList.add(CartItem(product = product, quantity = grams, unitPriceWithMarkup = unitPrice))
+            currentList.add(0, CartItem(product = product, quantity = grams, unitPriceWithMarkup = unitPrice))
         }
         _cartItems.value = currentList
         _searchQuery.value = ""

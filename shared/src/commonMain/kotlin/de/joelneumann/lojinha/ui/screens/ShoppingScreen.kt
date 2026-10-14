@@ -225,7 +225,7 @@ fun ShoppingContent(
 
     fun selectProductInCart(productId: String) {
         val idx = cartItems.indexOfFirst { it.product.id == productId }
-        selectedCartIndex = if (idx >= 0) idx else cartItems.size
+        selectedCartIndex = if (idx >= 0) idx else 0
     }
 
     LaunchedEffect(cartItems) {
