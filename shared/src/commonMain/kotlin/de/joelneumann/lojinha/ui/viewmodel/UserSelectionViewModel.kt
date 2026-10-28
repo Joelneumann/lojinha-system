@@ -2,22 +2,36 @@ package de.joelneumann.lojinha.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.removeAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+data class ScannedProductInfo(
+    val product: Product,
+    val effectivePrice: Long
+)
+
 class UserSelectionViewModel(
     private val userRepository: UserRepository,
+    private val productRepository: ProductRepository? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
+
+    constructor(
+        userRepository: UserRepository,
+        coroutineScope: CoroutineScope? = null
+    ) : this(userRepository, null, coroutineScope)
 
     private val activeScope = coroutineScope ?: viewModelScope
 
@@ -26,6 +40,12 @@ class UserSelectionViewModel(
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _scannedProduct = MutableStateFlow<ScannedProductInfo?>(null)
+    val scannedProduct: StateFlow<ScannedProductInfo?> = _scannedProduct.asStateFlow()
+
+    private val _notFoundNotice = MutableStateFlow(false)
+    val notFoundNotice: StateFlow<Boolean> = _notFoundNotice.asStateFlow()
 
     private val _selectedUserForPin = MutableStateFlow<User?>(null)
     val selectedUserForPin: StateFlow<User?> = _selectedUserForPin.asStateFlow()
@@ -47,6 +67,7 @@ class UserSelectionViewModel(
 
     private var loadUsersJob: Job? = null
     private var searchSubmitJob: Job? = null
+    private var feedbackJob: Job? = null
     private var isLoggingIn: Boolean = false
 
     init {
@@ -66,6 +87,7 @@ class UserSelectionViewModel(
         isLoggingIn = false
         searchSubmitJob?.cancel()
         searchSubmitJob = null
+        dismissFeedback()
         _searchQuery.value = ""
         _selectedUserForPin.value = null
         _pinInput.value = ""
@@ -77,9 +99,43 @@ class UserSelectionViewModel(
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+        if (_scannedProduct.value != null || _notFoundNotice.value) {
+            dismissFeedback()
+        }
+    }
+
+    fun showScannedProduct(product: Product, effectivePrice: Long) {
+        feedbackJob?.cancel()
+        _notFoundNotice.value = false
+        _scannedProduct.value = ScannedProductInfo(product, effectivePrice)
+        feedbackJob = activeScope.launch {
+            delay(4000)
+            _scannedProduct.value = null
+        }
+    }
+
+    fun showNotFoundNotice() {
+        feedbackJob?.cancel()
+        _scannedProduct.value = null
+        _notFoundNotice.value = true
+        feedbackJob = activeScope.launch {
+            delay(3500)
+            _notFoundNotice.value = false
+        }
+    }
+
+    fun dismissFeedback() {
+        feedbackJob?.cancel()
+        feedbackJob = null
+        _scannedProduct.value = null
+        _notFoundNotice.value = false
     }
 
     fun onSearchSubmitted(onLoginSuccess: (User) -> Unit) {
+        onSearchSubmitted(0.0, onLoginSuccess)
+    }
+
+    fun onSearchSubmitted(globalMarkup: Double, onLoginSuccess: (User) -> Unit) {
         if (isLoggingIn) return
         val query = _searchQuery.value.trim()
         if (query.isBlank()) return
@@ -89,6 +145,7 @@ class UserSelectionViewModel(
             // 1. Try matching user by barcode first
             val userByBarcode = userRepository.getUserByBarcode(query)
             if (userByBarcode != null && userByBarcode.isActive && !userByBarcode.isDeleted) {
+                dismissFeedback()
                 onUserCardClicked(userByBarcode, onLoginSuccess)
                 return@launch
             }
@@ -97,15 +154,33 @@ class UserSelectionViewModel(
             val filtered = _users.value.filter { it.name.containsIgnoreAccents(query) }
             val exactMatch = filtered.firstOrNull { it.name.trim().removeAccents().equals(query.removeAccents(), ignoreCase = true) }
             if (exactMatch != null) {
+                dismissFeedback()
                 onUserCardClicked(exactMatch, onLoginSuccess)
+                return@launch
             } else if (filtered.size == 1) {
+                dismissFeedback()
                 onUserCardClicked(filtered.first(), onLoginSuccess)
+                return@launch
             }
+
+            // 3. User not found -> Check product barcode
+            val product = productRepository?.getProductByBarcode(query)
+            if (product != null && product.isActive) {
+                val effectivePrice = product.calculateEffectiveUnitPrice(globalMarkup)
+                showScannedProduct(product, effectivePrice)
+                _searchQuery.value = ""
+                return@launch
+            }
+
+            // 4. Neither user nor product found -> Show toast notice
+            _searchQuery.value = ""
+            showNotFoundNotice()
         }
     }
 
     fun onUserCardClicked(user: User, onLoginSuccess: (User) -> Unit) {
         if (isLoggingIn) return
+        dismissFeedback()
         if (user.pin.isNullOrBlank()) {
             isLoggingIn = true
             _searchQuery.value = ""
@@ -157,6 +232,7 @@ class UserSelectionViewModel(
     }
 
     fun openAdminAuthDialog() {
+        dismissFeedback()
         _showAdminAuthDialog.value = true
         _adminPasswordInput.value = ""
         _adminPasswordError.value = null
@@ -191,6 +267,8 @@ class UserSelectionViewModel(
         loadUsersJob = null
         searchSubmitJob?.cancel()
         searchSubmitJob = null
+        feedbackJob?.cancel()
+        feedbackJob = null
         resetState()
     }
 }

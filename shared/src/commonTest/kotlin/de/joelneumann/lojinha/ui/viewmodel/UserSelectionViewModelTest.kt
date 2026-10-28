@@ -1,6 +1,10 @@
 package de.joelneumann.lojinha.ui.viewmodel
 
+import de.joelneumann.lojinha.domain.model.Barcode
+import de.joelneumann.lojinha.domain.model.Product
+import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +41,29 @@ class FakeUserRepository(initialUsers: List<User> = emptyList()) : UserRepositor
     override suspend fun updateBalance(userId: String, amountDelta: Long) {}
 }
 
+class FakeUserSelectionProductRepository(initialProducts: List<Product> = emptyList()) : ProductRepository {
+    val productsFlow = MutableStateFlow(initialProducts)
+
+    override fun getProductsFlow(): Flow<List<Product>> = productsFlow
+    override suspend fun getAllProducts(): List<Product> = productsFlow.value
+    override suspend fun getProductById(id: String): Product? = productsFlow.value.firstOrNull { it.id == id }
+    override suspend fun getProductByBarcode(barcode: String): Product? {
+        val clean = barcode.trim()
+        return productsFlow.value.firstOrNull { entity ->
+            entity.isActive && entity.barcodes.any { it.code.trim().equals(clean, ignoreCase = true) }
+        }
+    }
+    override suspend fun saveProduct(product: Product) {
+        val list = productsFlow.value.toMutableList()
+        val idx = list.indexOfFirst { it.id == product.id }
+        if (idx != -1) list[idx] = product else list.add(product)
+        productsFlow.value = list
+    }
+    override suspend fun deactivateProduct(id: String) {}
+    override suspend fun hardDeleteProduct(id: String) {}
+    override suspend fun updateStock(productId: String, delta: Long) {}
+}
+
 class UserSelectionViewModelTest {
 
     private val userAlice = User(id = "1", name = "Alice", pin = null)
@@ -60,6 +87,17 @@ class UserSelectionViewModelTest {
         val repo = FakeUserRepository(users)
         val vm = UserSelectionViewModel(repo, backgroundScope)
         block(vm, repo)
+    }
+
+    private fun withViewModel(
+        users: List<User> = allTestUsers,
+        products: List<Product> = emptyList(),
+        block: suspend (UserSelectionViewModel, FakeUserRepository, FakeUserSelectionProductRepository) -> Unit
+    ) = runTest {
+        val userRepo = FakeUserRepository(users)
+        val prodRepo = FakeUserSelectionProductRepository(products)
+        val vm = UserSelectionViewModel(userRepo, prodRepo, backgroundScope)
+        block(vm, userRepo, prodRepo)
     }
 
     @Test
@@ -327,5 +365,146 @@ class UserSelectionViewModelTest {
         assertFalse(vm.showAdminAuthDialog.value)
         assertEquals("", vm.adminPasswordInput.value)
         assertNull(vm.adminPasswordError.value)
+    }
+
+    @Test
+    fun testSearchSubmitted_userTakesPrecedenceOverProductWithSameBarcode() = withViewModel(
+        users = listOf(userBarcode),
+        products = listOf(Product(id = "p1", name = "Test Product", barcodes = listOf(Barcode("BAR-100")), basePrice = 500))
+    ) { vm, _, _ ->
+        delay(50)
+
+        var loggedInUser: User? = null
+        vm.updateSearchQuery("BAR-100")
+        vm.onSearchSubmitted { loggedInUser = it }
+
+        delay(50)
+        assertNotNull(loggedInUser)
+        assertEquals("6", loggedInUser?.id)
+        assertNull(vm.scannedProduct.value)
+        assertFalse(vm.notFoundNotice.value)
+        assertEquals("", vm.searchQuery.value)
+    }
+
+    @Test
+    fun testSearchSubmitted_productPieceMatchesBarcode() = withViewModel(
+        products = listOf(
+            Product(id = "p1", name = "Chocolate Bar", barcodes = listOf(Barcode("78910001")), basePrice = 450, unitType = UnitType.PIECE)
+        )
+    ) { vm, _, _ ->
+        delay(50)
+
+        var loggedInUser: User? = null
+        vm.updateSearchQuery("78910001")
+        vm.onSearchSubmitted { loggedInUser = it }
+
+        delay(50)
+        assertNull(loggedInUser)
+        val scanned = vm.scannedProduct.value
+        assertNotNull(scanned)
+        assertEquals("p1", scanned?.product?.id)
+        assertEquals("Chocolate Bar", scanned?.product?.name)
+        assertEquals(UnitType.PIECE, scanned?.product?.unitType)
+        assertEquals(450L, scanned?.effectivePrice)
+        assertFalse(vm.notFoundNotice.value)
+        assertEquals("", vm.searchQuery.value)
+    }
+
+    @Test
+    fun testSearchSubmitted_productWeightMatchesBarcodeWithMarkup() = withViewModel(
+        products = listOf(
+            Product(id = "p2", name = "Fresh Apples", barcodes = listOf(Barcode("99990002")), basePrice = 1000, unitType = UnitType.WEIGHT)
+        )
+    ) { vm, _, _ ->
+        delay(50)
+
+        var loggedInUser: User? = null
+        vm.updateSearchQuery("99990002")
+        vm.onSearchSubmitted(globalMarkup = 20.0) { loggedInUser = it }
+
+        delay(50)
+        assertNull(loggedInUser)
+        val scanned = vm.scannedProduct.value
+        assertNotNull(scanned)
+        assertEquals("p2", scanned?.product?.id)
+        assertEquals("Fresh Apples", scanned?.product?.name)
+        assertEquals(UnitType.WEIGHT, scanned?.product?.unitType)
+        assertEquals(1200L, scanned?.effectivePrice)
+        assertFalse(vm.notFoundNotice.value)
+        assertEquals("", vm.searchQuery.value)
+    }
+
+    @Test
+    fun testSearchSubmitted_customMarkupTakesPrecedenceOverGlobalMarkup() = withViewModel(
+        products = listOf(
+            Product(id = "p3", name = "Imported Cheese", barcodes = listOf(Barcode("55550003")), basePrice = 1000, customMarkupPercent = 10.0)
+        )
+    ) { vm, _, _ ->
+        delay(50)
+
+        vm.updateSearchQuery("55550003")
+        vm.onSearchSubmitted(globalMarkup = 50.0) {}
+
+        delay(50)
+        val scanned = vm.scannedProduct.value
+        assertNotNull(scanned)
+        assertEquals(1100L, scanned?.effectivePrice)
+    }
+
+    @Test
+    fun testSearchSubmitted_inactiveProductShowsNotFoundNotice() = withViewModel(
+        products = listOf(
+            Product(id = "p4", name = "Discontinued Item", barcodes = listOf(Barcode("INACTIVE-PROD")), basePrice = 500, isActive = false)
+        )
+    ) { vm, _, _ ->
+        delay(50)
+
+        vm.updateSearchQuery("INACTIVE-PROD")
+        vm.onSearchSubmitted {}
+
+        delay(50)
+        assertNull(vm.scannedProduct.value)
+        assertTrue(vm.notFoundNotice.value)
+        assertEquals("", vm.searchQuery.value)
+    }
+
+    @Test
+    fun testSearchSubmitted_unknownBarcodeShowsNotFoundNotice() = withViewModel(
+        products = listOf(
+            Product(id = "p1", name = "Item", barcodes = listOf(Barcode("1234")), basePrice = 500)
+        )
+    ) { vm, _, _ ->
+        delay(50)
+
+        vm.updateSearchQuery("999999999")
+        vm.onSearchSubmitted {}
+
+        delay(50)
+        assertNull(vm.scannedProduct.value)
+        assertTrue(vm.notFoundNotice.value)
+        assertEquals("", vm.searchQuery.value)
+    }
+
+    @Test
+    fun testFeedbackDismissalOnNewInputAndResetState() = withViewModel(
+        products = listOf(
+            Product(id = "p1", name = "Item", barcodes = listOf(Barcode("1234")), basePrice = 500)
+        )
+    ) { vm, _, _ ->
+        delay(50)
+
+        vm.updateSearchQuery("1234")
+        vm.onSearchSubmitted {}
+        delay(50)
+        assertNotNull(vm.scannedProduct.value)
+
+        vm.updateSearchQuery("a")
+        assertNull(vm.scannedProduct.value)
+        assertFalse(vm.notFoundNotice.value)
+
+        vm.showNotFoundNotice()
+        assertTrue(vm.notFoundNotice.value)
+        vm.resetState()
+        assertFalse(vm.notFoundNotice.value)
     }
 }

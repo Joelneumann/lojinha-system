@@ -198,7 +198,7 @@ fun App(
                 when (targetContext) {
                     AppScreen.MAIN_USER_SELECT -> {
                         val userSelectionViewModel: UserSelectionViewModel = viewModel(
-                            factory = LojinhaViewModelFactory.createUserSelectionViewModelFactory(effectiveUserRepo)
+                            factory = LojinhaViewModelFactory.createUserSelectionViewModelFactory(effectiveUserRepo, effectiveProductRepo)
                         )
                         LaunchedEffect(Unit) {
                             userSelectionViewModel.resetState()

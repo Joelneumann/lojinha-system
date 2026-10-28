@@ -1203,7 +1203,7 @@ class BackupRestoreServiceJvmTest {
 
         // 2. CSV product import with uppercase FALSE
         val prodCsv = File(tempDir, "prod_bool.csv")
-        prodCsv.writeText("name,basePrice,isActive\nInactiveItem,R$ 10,00,FALSE\n")
+        prodCsv.writeText("name,basePrice,isActive\nInactiveItem,\"R$ 10,00\",FALSE\n")
         val prodRes = service.importProductsFromCsv(prodCsv, dryRun = false)
         assertEquals(1, prodRes.addedCount)
         val prod = db.productDao().getAllProducts().first { it.name == "InactiveItem" }
@@ -1211,7 +1211,7 @@ class BackupRestoreServiceJvmTest {
 
         // 3. CSV user import with uppercase TRUE for isDeleted
         val userCsv = File(tempDir, "user_bool.csv")
-        userCsv.writeText("name,balance,isDeleted\nDeletedUser,R$ 0,00,TRUE\n")
+        userCsv.writeText("name,balance,isDeleted\nDeletedUser,\"R$ 0,00\",TRUE\n")
         val userRes = service.importUsersFromCsv(userCsv, dryRun = false)
         assertEquals(1, userRes.addedCount)
         val user = db.userDao().getAllUsers().first { it.name == "DeletedUser" }
@@ -1224,10 +1224,10 @@ class BackupRestoreServiceJvmTest {
         prodCsv.writeText(
             """
             name,basePrice,unitType
-            Apple,R$ 2,00,weight
-            Banana,R$ 1,50,kg
-            Orange,R$ 3,00,Piece
-            Grape,R$ 5,00,unrecognized_unit
+            Apple,"R$ 2,00",weight
+            Banana,"R$ 1,50",kg
+            Orange,"R$ 3,00",Piece
+            Grape,"R$ 5,00",unrecognized_unit
             """.trimIndent()
         )
         val res = service.importProductsFromCsv(prodCsv, dryRun = false)
@@ -1268,8 +1268,8 @@ class BackupRestoreServiceJvmTest {
         prodCsv.writeText(
             """
             id,name,basePrice,barcodes
-            p-1,Old Owner,R$ 10,00,111222:NewBarcode
-            p-2,New Owner,R$ 20,00,999888:ReassignedBarcode
+            p-1,Old Owner,"R$ 10,00",111222:NewBarcode
+            p-2,New Owner,"R$ 20,00",999888:ReassignedBarcode
             """.trimIndent()
         )
 
@@ -1290,7 +1290,7 @@ class BackupRestoreServiceJvmTest {
     @Test
     fun testBarcodeDescriptionNullByDefaultOnImport() = runTest {
         val prodCsv = File(tempDir, "barcode_nodesc.csv")
-        prodCsv.writeText("name,basePrice,barcodes\nItemWithoutDesc,R$ 5,00,777888:\n")
+        prodCsv.writeText("name,basePrice,barcodes\nItemWithoutDesc,\"R$ 5,00\",777888:\n")
 
         val res = service.importProductsFromCsv(prodCsv, dryRun = false)
         assertEquals(1, res.addedCount)

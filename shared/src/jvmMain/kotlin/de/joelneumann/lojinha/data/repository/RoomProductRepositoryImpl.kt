@@ -30,9 +30,10 @@ class RoomProductRepositoryImpl(
     }
 
     override suspend fun getProductByBarcode(barcode: String): Product? {
+        val clean = barcode.trim()
         val all = productDao.getAllProducts()
         return all.firstOrNull { entity ->
-            entity.barcodes.any { it.code.equals(barcode, ignoreCase = true) }
+            entity.isActive && entity.barcodes.any { it.code.trim().equals(clean, ignoreCase = true) }
         }?.toDomain()
     }
 

@@ -525,6 +525,8 @@ interface AppStrings {
     val searchUserToAdd: String
     val noUsersInList: String
     val noUsersFound: String
+    val noUserOrProductFound: String
+    val priceCheckLabel: String
     val quantity: String
     val amount: String
     val deleteListTitle: String
