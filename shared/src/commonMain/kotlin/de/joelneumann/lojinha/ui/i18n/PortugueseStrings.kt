@@ -507,7 +507,7 @@ object PortugueseStrings : AppStrings {
         "Nota: O código de barras deste usuário está atualmente atribuído a outro usuário ativo e será redefinido após a restauração."
 
     // --- Custom Expense & Custom Income Modals ---
-    override val customExpense = "Despesa Avulsa"
+    override val customExpense = "Despesa Avulsa (+ Comentário)"
     override val customExpenseDialogTitle = "Despesa Avulsa"
     override val customExpenseDescriptionLabel = "Descrição / Item:"
     override val customExpenseDescriptionPlaceholder = "ex: Bolo de chocolate, Café, Lanche especial..."

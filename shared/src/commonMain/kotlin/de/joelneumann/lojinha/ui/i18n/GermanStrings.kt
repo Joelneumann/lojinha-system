@@ -507,7 +507,7 @@ object GermanStrings : AppStrings {
         "Hinweis: Der Barcode dieses Benutzers ist derzeit einem anderen aktiven Benutzer zugewiesen und wird bei der Wiederherstellung zurückgesetzt."
 
     // --- Custom Expense & Custom Income Modals ---
-    override val customExpense = "Sonderausgabe"
+    override val customExpense = "Sonderausgabe (+ Kommentar)"
     override val customExpenseDialogTitle = "Sonderausgabe"
     override val customExpenseDescriptionLabel = "Beschreibung / Posten:"
     override val customExpenseDescriptionPlaceholder = "z.B. Schokokuchen, Kaffee, Sonderposten..."

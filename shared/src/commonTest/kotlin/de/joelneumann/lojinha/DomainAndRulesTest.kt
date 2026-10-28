@@ -917,6 +917,12 @@ class DomainAndRulesTest {
             assertTrue(s.historyTypeCustomExpense.isNotBlank())
             assertTrue(s.historyTypeCustomIncome.isNotBlank())
         }
+        assertEquals("Custom Expense (+ Comment)", de.joelneumann.lojinha.ui.i18n.EnglishStrings.customExpense)
+        assertEquals("Sonderausgabe (+ Kommentar)", de.joelneumann.lojinha.ui.i18n.GermanStrings.customExpense)
+        assertEquals("Despesa Avulsa (+ Comentário)", de.joelneumann.lojinha.ui.i18n.PortugueseStrings.customExpense)
+        assertEquals("Custom Expense", de.joelneumann.lojinha.ui.i18n.EnglishStrings.customExpenseDialogTitle)
+        assertEquals("Sonderausgabe", de.joelneumann.lojinha.ui.i18n.GermanStrings.customExpenseDialogTitle)
+        assertEquals("Despesa Avulsa", de.joelneumann.lojinha.ui.i18n.PortugueseStrings.customExpenseDialogTitle)
     }
 
     @Test

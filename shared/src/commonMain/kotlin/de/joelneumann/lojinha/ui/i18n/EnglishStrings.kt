@@ -507,7 +507,7 @@ object EnglishStrings : AppStrings {
         "Note: This user's barcode is currently assigned to another active user and will be reset upon restoration."
 
     // --- Custom Expense & Custom Income Modals ---
-    override val customExpense = "Custom Expense"
+    override val customExpense = "Custom Expense (+ Comment)"
     override val customExpenseDialogTitle = "Custom Expense"
     override val customExpenseDescriptionLabel = "Description / Item:"
     override val customExpenseDescriptionPlaceholder = "e.g. Chocolate Cake, Coffee, Special Snack..."
