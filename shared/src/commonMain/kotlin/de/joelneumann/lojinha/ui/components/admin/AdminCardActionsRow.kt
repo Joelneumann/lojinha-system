@@ -22,6 +22,7 @@ fun AdminCardActionsRow(
     onToggleStatus: () -> Unit,
     isStatusActive: Boolean,
     onDelete: () -> Unit,
+    onHistory: (() -> Unit)? = null,
     onCustomExpense: (() -> Unit)? = null,
     onCustomIncome: (() -> Unit)? = null,
     onExportPdf: (() -> Unit)? = null,
@@ -60,6 +61,35 @@ fun AdminCardActionsRow(
                         fontWeight = FontWeight.Bold,
                         color = SurfaceWhite
                     )
+                }
+            }
+
+            if (onHistory != null) {
+                OutlinedButton(
+                    onClick = onHistory,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(40.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = PrimaryNavy
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = PrimaryNavy,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = strings.history,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryNavy
+                        )
+                    }
                 }
             }
 

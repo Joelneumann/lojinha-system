@@ -726,5 +726,19 @@ interface AppStrings {
     val confirmDeleteNoteTitle: String
     val confirmDeleteNoteMsg: String
     val searchNotesPlaceholder: String
+
+    // Product History
+    val productHistoryTitle: String
+    fun productHistoryForTitle(productName: String): String
+    val historyTypeStockAdjustment: String
+    val historyNoData: String
+    val historyColDate: String
+    val historyColType: String
+    val historyColUserOrDetails: String
+    val historyColQuantity: String
+    val stockAdjustmentInitial: String
+    val stockAdjustmentManual: String
+    val errFailedToLoadProductHistory: String
 }
+
 

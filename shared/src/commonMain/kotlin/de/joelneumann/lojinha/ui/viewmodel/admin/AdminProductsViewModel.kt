@@ -2,7 +2,9 @@ package de.joelneumann.lojinha.ui.viewmodel.admin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import de.joelneumann.lojinha.domain.model.PagedResult
 import de.joelneumann.lojinha.domain.model.Product
+import de.joelneumann.lojinha.domain.model.ProductHistoryEntry
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.repository.ProductRepository
@@ -46,6 +48,21 @@ class AdminProductsViewModel(
 
     private val _productErrorMessage = MutableStateFlow<String?>(null)
     val productErrorMessage: StateFlow<String?> = _productErrorMessage.asStateFlow()
+
+    private val _historyProduct = MutableStateFlow<Product?>(null)
+    val historyProduct: StateFlow<Product?> = _historyProduct.asStateFlow()
+
+    private val _historyResult = MutableStateFlow<PagedResult<ProductHistoryEntry>?>(null)
+    val historyResult: StateFlow<PagedResult<ProductHistoryEntry>?> = _historyResult.asStateFlow()
+
+    private val _isLoadingHistory = MutableStateFlow(false)
+    val isLoadingHistory: StateFlow<Boolean> = _isLoadingHistory.asStateFlow()
+
+    private val _historyPage = MutableStateFlow(0)
+    val historyPage: StateFlow<Int> = _historyPage.asStateFlow()
+
+    private val _historyPageSize = MutableStateFlow(25)
+    val historyPageSize: StateFlow<Int> = _historyPageSize.asStateFlow()
 
     private var productsJob: Job? = null
     private var settingsJob: Job? = null
@@ -170,12 +187,59 @@ class AdminProductsViewModel(
                     productRepository.saveProduct(prod.copy(basePrice = newBasePrice))
                 }
                 refreshProducts()
+                if (_historyProduct.value?.id == productId) {
+                    loadProductHistory()
+                }
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "adjustProductStock error: ${e.message}", e)
                 _productErrorMessage.value = e.message ?: I18n.get().errFailedToAdjustStock
             }
         }
     }
+
+    fun openProductHistoryModal(product: Product) {
+        _historyProduct.value = product
+        _historyPage.value = 0
+        loadProductHistory()
+    }
+
+    fun closeProductHistoryModal() {
+        _historyProduct.value = null
+        _historyResult.value = null
+        _historyPage.value = 0
+    }
+
+    fun setHistoryPage(page: Int) {
+        _historyPage.value = page
+        loadProductHistory()
+    }
+
+    fun setHistoryPageSize(pageSize: Int) {
+        _historyPageSize.value = pageSize
+        _historyPage.value = 0
+        loadProductHistory()
+    }
+
+    fun loadProductHistory() {
+        val prod = _historyProduct.value ?: return
+        viewModelScope.launch {
+            _isLoadingHistory.value = true
+            try {
+                val result = productRepository.getProductHistory(
+                    productId = prod.id,
+                    page = _historyPage.value,
+                    pageSize = _historyPageSize.value
+                )
+                _historyResult.value = result
+            } catch (e: Exception) {
+                AppLogger.error("AdminProductsViewModel", "loadProductHistory error: ${e.message}", e)
+                _productErrorMessage.value = e.message ?: I18n.get().errFailedToLoadProductHistory
+            } finally {
+                _isLoadingHistory.value = false
+            }
+        }
+    }
+
 
 
 

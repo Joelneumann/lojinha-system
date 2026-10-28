@@ -1,9 +1,6 @@
 package de.joelneumann.lojinha.ui.viewmodel
 
-import de.joelneumann.lojinha.domain.model.Barcode
-import de.joelneumann.lojinha.domain.model.Product
-import de.joelneumann.lojinha.domain.model.UnitType
-import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import kotlinx.coroutines.*
@@ -62,6 +59,9 @@ class FakeUserSelectionProductRepository(initialProducts: List<Product> = emptyL
     override suspend fun deactivateProduct(id: String) {}
     override suspend fun hardDeleteProduct(id: String) {}
     override suspend fun updateStock(productId: String, delta: Long) {}
+    override suspend fun getProductHistory(productId: String, page: Int, pageSize: Int): PagedResult<ProductHistoryEntry> =
+        PagedResult(emptyList<ProductHistoryEntry>(), 0, page, pageSize, 0)
+    override suspend fun recordStockAdjustment(adjustment: ProductStockAdjustment) {}
 }
 
 class UserSelectionViewModelTest {

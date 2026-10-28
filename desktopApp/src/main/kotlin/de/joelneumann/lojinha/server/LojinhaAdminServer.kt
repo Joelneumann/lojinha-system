@@ -162,6 +162,14 @@ class LojinhaAdminServer(
                         productRepository.hardDeleteProduct(id)
                         call.respond(HttpStatusCode.OK)
                     }
+                    get("/products/{id}/history") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@get
+                        val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                        val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 0
+                        val pageSize = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 25
+                        val result = productRepository.getProductHistory(id, page, pageSize)
+                        call.respond(result)
+                    }
 
                     // Users
                     get("/users") {

@@ -32,6 +32,9 @@ private class FakeShoppingProductRepository(initialProducts: List<Product> = emp
     override suspend fun deactivateProduct(id: String) {}
     override suspend fun hardDeleteProduct(id: String) {}
     override suspend fun updateStock(productId: String, delta: Long) {}
+    override suspend fun getProductHistory(productId: String, page: Int, pageSize: Int): PagedResult<ProductHistoryEntry> =
+        PagedResult(emptyList<ProductHistoryEntry>(), 0, page, pageSize, 0)
+    override suspend fun recordStockAdjustment(adjustment: ProductStockAdjustment) {}
 }
 
 private class FakeShoppingTransactionRepository(

@@ -27,6 +27,7 @@ import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.components.admin.products.AdminProductAccordionCard
 import de.joelneumann.lojinha.ui.components.admin.products.DisabledProductCard
 import de.joelneumann.lojinha.ui.components.admin.products.ProductEditDialog
+import de.joelneumann.lojinha.ui.components.admin.products.ProductHistoryDialog
 import de.joelneumann.lojinha.ui.components.admin.products.ProductSortButton
 import de.joelneumann.lojinha.ui.components.admin.products.sortWithOption
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -58,6 +59,10 @@ fun AdminProductsTabScreen(
     val isSavingProduct by viewModel.isSavingProduct.collectAsState()
     val editProduct by viewModel.editProduct.collectAsState()
     val productErrorMessage by viewModel.productErrorMessage.collectAsState()
+
+    val historyProduct by viewModel.historyProduct.collectAsState()
+    val historyResult by viewModel.historyResult.collectAsState()
+    val isLoadingHistory by viewModel.isLoadingHistory.collectAsState()
 
     val strings = I18n.current
 
@@ -190,7 +195,8 @@ fun AdminProductsTabScreen(
                             },
 
                             onToggleActive = viewModel::toggleProductActive,
-                            onDeleteProduct = { viewModel.deleteProduct(it.id) }
+                            onDeleteProduct = { viewModel.deleteProduct(it.id) },
+                            onViewHistory = { viewModel.openProductHistoryModal(it) }
                         )
                     }
                 }
@@ -257,6 +263,17 @@ fun AdminProductsTabScreen(
                     Text(strings.ok, color = SurfaceWhite, fontWeight = FontWeight.Bold)
                 }
             }
+        )
+    }
+
+    if (historyProduct != null) {
+        ProductHistoryDialog(
+            product = historyProduct!!,
+            historyResult = historyResult,
+            isLoading = isLoadingHistory,
+            onPageChange = viewModel::setHistoryPage,
+            onPageSizeChange = viewModel::setHistoryPageSize,
+            onDismiss = { viewModel.closeProductHistoryModal() }
         )
     }
 }

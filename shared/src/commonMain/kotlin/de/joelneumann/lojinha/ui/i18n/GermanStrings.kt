@@ -747,5 +747,19 @@ object GermanStrings : AppStrings {
     override val confirmDeleteNoteTitle = "Notiz löschen"
     override val confirmDeleteNoteMsg = "Möchtest du diese Notiz wirklich löschen?"
     override val searchNotesPlaceholder = "Notizen durchsuchen..."
+
+    // Product History
+    override val productHistoryTitle = "Produkthistorie"
+    override fun productHistoryForTitle(productName: String): String = "Produkthistorie: $productName"
+    override val historyTypeStockAdjustment = "Bestandsänderung"
+    override val historyNoData = "Keine Historie für dieses Produkt vorhanden."
+    override val historyColDate = "Datum & Uhrzeit"
+    override val historyColType = "Ereignistyp"
+    override val historyColUserOrDetails = "Benutzer / Details"
+    override val historyColQuantity = "Menge"
+    override val stockAdjustmentInitial = "Anfangsbestand"
+    override val stockAdjustmentManual = "Manuelle Bestandsänderung"
+    override val errFailedToLoadProductHistory = "Produkthistorie konnte nicht geladen werden."
 }
+
 

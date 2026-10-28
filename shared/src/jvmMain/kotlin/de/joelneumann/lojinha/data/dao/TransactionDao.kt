@@ -79,6 +79,14 @@ interface TransactionDao {
     """)
     suspend fun getTransactionCountForProduct(productId: String): Int
 
+    @Query("""
+        SELECT transactions.* FROM transactions, json_each(CASE WHEN items IS NULL OR items = '' THEN '[]' ELSE items END) 
+        WHERE json_extract(value, '$.productId') = :productId
+        ORDER BY timestamp DESC
+    """)
+    suspend fun getTransactionsForProduct(productId: String): List<TransactionEntity>
+
+
 
     @Query("SELECT balance FROM users WHERE id = :id")
     suspend fun getUserBalance(id: String): Long?
