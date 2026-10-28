@@ -185,7 +185,10 @@ fun AdminProductsTabScreen(
                             isExpanded = isExpanded,
                             onExpandToggle = { onRequestToggleExpand(product.id) },
                             onEditProduct = { viewModel.openEditProductModal(it) },
-                            onAdjustStock = viewModel::adjustProductStock,
+                            onAdjustStock = { id, delta, newPrice ->
+                                viewModel.adjustProductStock(id, delta, newPrice)
+                            },
+
                             onToggleActive = viewModel::toggleProductActive,
                             onDeleteProduct = { viewModel.deleteProduct(it.id) }
                         )

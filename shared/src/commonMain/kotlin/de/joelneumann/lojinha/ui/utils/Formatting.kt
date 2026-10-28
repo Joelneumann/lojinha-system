@@ -290,5 +290,40 @@ object Formatting {
         val suffix = if (isCustom) strings.markupCustomSuffix else strings.markupStandardSuffix
         return "${strings.markupPercent}: $pct ($suffix)"
     }
+
+    fun parsePriceInputToCents(input: String): Long? {
+        val clean = input.trim().removePrefix("R$").trim()
+        if (clean.isBlank()) return null
+        val normalized = if (clean.contains('.') && clean.contains(',')) {
+            if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) clean.replace(".", "").replace(',', '.')
+            else clean.replace(",", "")
+        } else {
+            clean.replace(',', '.')
+        }
+        val d = normalized.toDoubleOrNull()
+        if (d != null && d.isFinite() && d >= 0.0 && d <= 100_000.0) {
+            return round(d * 100.0).toLong()
+        }
+        return null
+    }
+
+    fun calculateMovingAveragePrice(
+        oldStock: Long,
+        oldPriceCents: Long,
+        addedStock: Long,
+        incomingPriceCents: Long
+    ): Long {
+        require(addedStock > 0L) { "Added stock must be positive to calculate moving average price" }
+        require(incomingPriceCents >= 0L) { "Incoming price cannot be negative" }
+        if (oldStock <= 0L) return incomingPriceCents
+
+        val currentTotal = oldStock.toDouble() * oldPriceCents.toDouble()
+        val incomingTotal = addedStock.toDouble() * incomingPriceCents.toDouble()
+        val totalUnits = (oldStock + addedStock).toDouble()
+
+        val average = (currentTotal + incomingTotal) / totalUnits
+        return round(average).toLong()
+    }
 }
+
 

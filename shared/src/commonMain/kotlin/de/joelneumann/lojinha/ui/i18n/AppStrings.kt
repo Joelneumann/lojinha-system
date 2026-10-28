@@ -465,8 +465,22 @@ interface AppStrings {
     val stockDeltaWeightLabel: String
     val stockDeltaPiecePlaceholder: String
     val stockDeltaWeightPlaceholder: String
+    val stockNewPurchasePriceLabel: String
+    val stockNewPurchasePricePlaceholder: String
+    val stockPriceDisabledForNegativeHint: String
     val confirmStockAdjustmentTitle: String
     fun confirmStockAdjustmentMsg(isAddition: Boolean, formattedDelta: String, productName: String): String
+    val confirmStockAndPriceAdjustmentTitle: String
+    fun confirmStockAndPriceMsg(productName: String): String
+    val stockPriceCurrentStockLabel: String
+    val stockPriceIncomingStockLabel: String
+    val stockPriceTotalStockLabel: String
+    val stockPriceCurrentPriceLabel: String
+    val stockPriceIncomingPriceLabel: String
+    val stockPriceCalculationLabel: String
+    val stockPriceNewBasePriceLabel: String
+    val stockPriceNewSellingPriceLabel: String
+
     val confirmProductStatusChangeTitle: String
     fun confirmProductStatusChangeMsg(isDisabling: Boolean, productName: String): String
     val confirmDeleteProductTitle: String

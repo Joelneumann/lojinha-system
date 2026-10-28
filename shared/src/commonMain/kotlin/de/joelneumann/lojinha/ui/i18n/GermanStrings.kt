@@ -471,9 +471,25 @@ object GermanStrings : AppStrings {
     override val stockDeltaWeightLabel = "Bestandsänderung (+/- kg):"
     override val stockDeltaPiecePlaceholder = "z.B. +10 oder -5"
     override val stockDeltaWeightPlaceholder = "z.B. +2.500 oder -0.500"
+    override val stockNewPurchasePriceLabel = "Neuer Einkaufspreis (optional):"
+    override val stockNewPurchasePricePlaceholder = "z.B. 2,50"
+    override val stockPriceDisabledForNegativeHint = "Preisaktualisierung nur beim Hinzufügen von Bestand möglich"
     override val confirmStockAdjustmentTitle = "Bestandsänderung bestätigen"
     override fun confirmStockAdjustmentMsg(isAddition: Boolean, formattedDelta: String, productName: String) =
         "Möchtest du wirklich $formattedDelta zum Bestand von '$productName' ${if (isAddition) "HINZUFÜGEN" else "ABZIEHEN"}?"
+    override val confirmStockAndPriceAdjustmentTitle = "Bestands- und Preisänderung bestätigen"
+    override fun confirmStockAndPriceMsg(productName: String) =
+        "Überprüfe den neu berechneten durchschnittlichen Einkaufspreis für '$productName':"
+    override val stockPriceCurrentStockLabel = "Aktueller Bestand"
+    override val stockPriceIncomingStockLabel = "Hinzukommender Bestand"
+    override val stockPriceTotalStockLabel = "Gesamtbestand"
+    override val stockPriceCurrentPriceLabel = "Bisheriger Einkaufspreis"
+    override val stockPriceIncomingPriceLabel = "Neuer Einkaufspreis"
+    override val stockPriceCalculationLabel = "Gewichtete Durchschnittsberechnung"
+    override val stockPriceNewBasePriceLabel = "Neuer Preis"
+    override val stockPriceNewSellingPriceLabel = "Neuer Verkaufspreis"
+
+
     override val confirmProductStatusChangeTitle = "Produktstatus ändern bestätigen"
     override fun confirmProductStatusChangeMsg(isDisabling: Boolean, productName: String) =
         "Möchtest du das Produkt '$productName' wirklich ${if (isDisabling) "deaktivieren" else "aktivieren"}?"
