@@ -11,6 +11,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -33,6 +35,7 @@ fun CartLineItemRow(
     onQtyChange: (Long) -> Unit,
     onRemove: () -> Unit,
     onClick: () -> Unit = {},
+    onEditQuantity: () -> Unit = {},
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     onMaxStockNotice: (CartItem) -> Unit = {}
@@ -95,6 +98,7 @@ fun CartLineItemRow(
                                     modifier = Modifier
                                         .fillMaxHeight()
                                         .width(30.dp)
+                                        .pointerHoverIcon(PointerIcon.Hand)
                                         .pointerInput(cartItem.product.id, cartItem.quantity) {
                                             detectTapGestures { onQtyChange(cartItem.quantity - 1) }
                                         },
@@ -105,14 +109,25 @@ fun CartLineItemRow(
 
                                 VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
 
-                                Text(
-                                    text = "${cartItem.quantity}",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PrimaryNavy,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.widthIn(min = 36.dp).padding(horizontal = 4.dp)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .widthIn(min = 36.dp)
+                                        .padding(horizontal = 4.dp)
+                                        .pointerHoverIcon(PointerIcon.Hand)
+                                        .pointerInput(cartItem.product.id, cartItem.quantity) {
+                                            detectTapGestures { onEditQuantity() }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${cartItem.quantity}",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrimaryNavy,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
 
                                 VerticalDivider(color = DividerBorder, modifier = Modifier.fillMaxHeight().width(1.dp))
 
@@ -120,6 +135,7 @@ fun CartLineItemRow(
                                     modifier = Modifier
                                         .fillMaxHeight()
                                         .width(30.dp)
+                                        .pointerHoverIcon(if (isMaxPiece) PointerIcon.Default else PointerIcon.Hand)
                                         .pointerInput(cartItem.product.id, cartItem.quantity, isMaxPiece) {
                                             detectTapGestures {
                                                 if (isMaxPiece) {
@@ -148,7 +164,12 @@ fun CartLineItemRow(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.height(30.dp)
+                                modifier = Modifier
+                                    .height(30.dp)
+                                    .pointerHoverIcon(PointerIcon.Hand)
+                                    .pointerInput(cartItem.product.id, cartItem.quantity) {
+                                        detectTapGestures { onEditQuantity() }
+                                    }
                             ) {
                                 Text(
                                     text = Formatting.formatQuantity(cartItem.quantity, UnitType.WEIGHT),
@@ -172,6 +193,7 @@ fun CartLineItemRow(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .pointerHoverIcon(PointerIcon.Hand)
                                 .pointerInput(cartItem.product.id) {
                                     detectTapGestures { onRemove() }
                                 },

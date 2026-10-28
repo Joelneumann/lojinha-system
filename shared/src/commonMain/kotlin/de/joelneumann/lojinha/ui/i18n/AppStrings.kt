@@ -32,6 +32,10 @@ interface AppStrings {
     val weightInputHint: String
     val weightTooltip: String
     val invalidWeightFormat: String
+    val unitDialogTitle: String
+    fun unitDialogMsg(productName: String): String
+    val unitPieceBadge: String
+    val invalidQuantityFormat: String
     fun pieceUnitSuffix(quantity: Long): String
     val history: String
     val account: String
@@ -639,6 +643,7 @@ interface AppStrings {
     fun errProductOutOfStock(productName: String): String
     fun errProductMaxStockReached(productName: String, maxQuantity: String): String
     fun errWeightExceedsStock(maxQuantity: String): String
+    fun errQuantityExceedsStock(maxQuantity: String): String
     fun errProductNotFound(barcode: String): String
     fun availableStockLabel(quantity: String): String
 

@@ -32,6 +32,10 @@ object PortugueseStrings : AppStrings {
     override val weightInputHint = ""
     override val weightTooltip = "• Decimais (1,5 / 0,25) ou ≤20 = kg\n• Números inteiros >20 (500) = gramas (g)\n• Ou digite unidades diretamente (1,5 kg / 500g)"
     override val invalidWeightFormat = "Formato de peso inválido"
+    override val unitDialogTitle = "Inserir Quantidade"
+    override fun unitDialogMsg(productName: String) = "Digite a quantidade para $productName:"
+    override val unitPieceBadge = "un"
+    override val invalidQuantityFormat = "Por favor, insira um número inteiro válido"
     override fun pieceUnitSuffix(quantity: Long) = "$quantity un."
     override val history = "Histórico de Transações"
     override val account = "Conta"
@@ -655,6 +659,8 @@ object PortugueseStrings : AppStrings {
         "Estoque máximo disponível atingido para $productName ($maxQuantity)"
     override fun errWeightExceedsStock(maxQuantity: String): String =
         "Peso excede o estoque disponível (máx. $maxQuantity)"
+    override fun errQuantityExceedsStock(maxQuantity: String): String =
+        "Quantidade excede o estoque disponível (máx. $maxQuantity)"
     override fun errProductNotFound(barcode: String): String =
         "Nenhum produto encontrado para o código de barras '$barcode'"
     override fun availableStockLabel(quantity: String): String =

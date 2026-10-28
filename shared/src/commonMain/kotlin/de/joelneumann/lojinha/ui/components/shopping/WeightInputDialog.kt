@@ -12,13 +12,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +48,26 @@ fun WeightInputDialog(
     val weightFocusRequester = remember { FocusRequester() }
     var showWeightTooltip by remember { mutableStateOf(false) }
     val canSubmit = weightError == null && weightInput.isNotBlank()
+
+    var textFieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = weightInput,
+                selection = TextRange(0, weightInput.length)
+            )
+        )
+    }
+    var hadFocus by remember { mutableStateOf(false) }
+    var justFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(weightInput) {
+        if (weightInput != textFieldValue.text) {
+            textFieldValue = textFieldValue.copy(
+                text = weightInput,
+                selection = TextRange(0, weightInput.length)
+            )
+        }
+    }
 
     LaunchedEffect(Unit) {
         weightFocusRequester.safeRequestFocus()
@@ -113,8 +136,21 @@ fun WeightInputDialog(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedTextField(
-                        value = weightInput,
-                        onValueChange = onWeightInputChange,
+                        value = textFieldValue,
+                        onValueChange = { newValue ->
+                            if (justFocused && newValue.text == textFieldValue.text) {
+                                textFieldValue = newValue.copy(
+                                    selection = TextRange(0, newValue.text.length)
+                                )
+                                justFocused = false
+                            } else {
+                                justFocused = false
+                                textFieldValue = newValue
+                                if (newValue.text != weightInput) {
+                                    onWeightInputChange(newValue.text)
+                                }
+                            }
+                        },
                         textStyle = LocalTextStyle.current.copy(fontSize = 15.sp),
                         singleLine = true,
                         isError = weightError != null,
@@ -149,6 +185,20 @@ fun WeightInputDialog(
                             .weight(1f)
                             .height(56.dp)
                             .focusRequester(weightFocusRequester)
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    if (!hadFocus) {
+                                        hadFocus = true
+                                        justFocused = true
+                                        textFieldValue = textFieldValue.copy(
+                                            selection = TextRange(0, textFieldValue.text.length)
+                                        )
+                                    }
+                                } else {
+                                    hadFocus = false
+                                    justFocused = false
+                                }
+                            }
                             .onKeyEvent { keyEvent ->
                                 if (keyEvent.type == KeyEventType.KeyDown && (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
                                     if (canSubmit) {

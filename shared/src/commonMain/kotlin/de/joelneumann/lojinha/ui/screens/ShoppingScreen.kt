@@ -68,6 +68,10 @@ fun ShoppingScreen(
     val weightProductDialog by viewModel.weightProductDialog.collectAsState()
     val weightInput by viewModel.weightInput.collectAsState()
     val weightError by viewModel.weightError.collectAsState()
+    val editingCartItem by viewModel.editingCartItem.collectAsState()
+    val unitCartItemDialog by viewModel.unitCartItemDialog.collectAsState()
+    val unitInput by viewModel.unitInput.collectAsState()
+    val unitError by viewModel.unitError.collectAsState()
     val completedPurchase by viewModel.completedPurchase.collectAsState()
     val stockNotice by viewModel.stockNotice.collectAsState()
     val isSubmittingNote by viewModel.isSubmittingNote.collectAsState()
@@ -113,6 +117,10 @@ fun ShoppingScreen(
         weightProductDialog = weightProductDialog,
         weightInput = weightInput,
         weightError = weightError,
+        editingCartItem = editingCartItem,
+        unitCartItemDialog = unitCartItemDialog,
+        unitInput = unitInput,
+        unitError = unitError,
         completedPurchase = completedPurchase,
         onLogout = onLogout,
         onSearchQueryChange = { query ->
@@ -156,6 +164,26 @@ fun ShoppingScreen(
             onUserInteracted(true)
             viewModel.submitWeightDialog(settings.globalMarkupPercent)
         },
+        onUnitInputChange = { input ->
+            onUserInteracted(true)
+            viewModel.updateUnitInput(input)
+        },
+        onCloseUnitDialog = {
+            onUserInteracted(true)
+            viewModel.closeUnitDialog()
+        },
+        onSubmitUnitDialog = {
+            onUserInteracted(true)
+            viewModel.submitUnitDialog()
+        },
+        onEditCartItem = { cartItem ->
+            onUserInteracted(true)
+            if (cartItem.product.unitType == UnitType.WEIGHT) {
+                viewModel.openEditWeightDialog(cartItem)
+            } else {
+                viewModel.openEditUnitDialog(cartItem)
+            }
+        },
         onNavigateToHistory = onNavigateToHistory,
         onUserUpdated = onUserUpdated,
         onUserInteracted = onUserInteracted,
@@ -180,6 +208,10 @@ fun ShoppingContent(
     weightProductDialog: Product?,
     weightInput: String,
     weightError: String?,
+    editingCartItem: CartItem? = null,
+    unitCartItemDialog: CartItem? = null,
+    unitInput: String = "",
+    unitError: String? = null,
     completedPurchase: Transaction? = null,
     isSubmittingNote: Boolean = false,
     noteSubmitSuccess: String? = null,
@@ -201,6 +233,10 @@ fun ShoppingContent(
     onWeightInputChange: (String) -> Unit,
     onCloseWeightDialog: () -> Unit,
     onSubmitWeightDialog: () -> Unit,
+    onUnitInputChange: (String) -> Unit = {},
+    onCloseUnitDialog: () -> Unit = {},
+    onSubmitUnitDialog: () -> Unit = {},
+    onEditCartItem: (CartItem) -> Unit = {},
     onNavigateToHistory: () -> Unit,
     onUserUpdated: (User) -> Unit = {},
     onUserInteracted: (force: Boolean) -> Unit = {},
@@ -248,6 +284,7 @@ fun ShoppingContent(
 
     LaunchedEffect(
         weightProductDialog,
+        unitCartItemDialog,
         showCheckoutConfirmation,
         completedPurchase,
         showNoteDialog,
@@ -256,6 +293,7 @@ fun ShoppingContent(
         LanguageManager.currentLanguage
     ) {
         if (weightProductDialog == null &&
+            unitCartItemDialog == null &&
             !showCheckoutConfirmation &&
             completedPurchase == null &&
             !showNoteDialog &&
@@ -388,7 +426,7 @@ fun ShoppingContent(
                 } else if (handleCartNavigation(keyEvent)) {
                     true
                 } else if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
-                    if (weightProductDialog == null && !showCheckoutConfirmation && completedPurchase == null) {
+                    if (weightProductDialog == null && unitCartItemDialog == null && !showCheckoutConfirmation && completedPurchase == null) {
                         onLogout()
                         true
                     } else false
@@ -678,6 +716,10 @@ fun ShoppingContent(
                     highlightedProductIndex = -1
                     coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
                 },
+                onEditCartItem = { cartItem ->
+                    selectProductInCart(cartItem.product.id)
+                    onEditCartItem(cartItem)
+                },
                 modifier = Modifier.weight(0.9f),
                 selectedCartIndex = selectedCartIndex,
                 isProcessing = isProcessingPurchase,
@@ -692,8 +734,12 @@ fun ShoppingContent(
 
         // Weight Input Modal Dialog
         weightProductDialog?.let { product ->
-            val inCart = cartItems.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
-            val maxAvailable = (product.stockQuantity - inCart).coerceAtLeast(0L)
+            val maxAvailable = if (editingCartItem != null) {
+                product.stockQuantity
+            } else {
+                val inCart = cartItems.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
+                (product.stockQuantity - inCart).coerceAtLeast(0L)
+            }
             WeightInputDialog(
                 productName = product.name,
                 weightInput = weightInput,
@@ -705,6 +751,22 @@ fun ShoppingContent(
                     onSubmitWeightDialog()
                 },
                 maxAvailableQuantityText = Formatting.formatQuantity(maxAvailable, UnitType.WEIGHT)
+            )
+        }
+
+        // Unit Input Modal Dialog
+        unitCartItemDialog?.let { item ->
+            UnitInputDialog(
+                productName = item.product.name,
+                unitInput = unitInput,
+                unitError = unitError,
+                onUnitInputChange = onUnitInputChange,
+                onDismiss = onCloseUnitDialog,
+                onSubmit = {
+                    selectProductInCart(item.product.id)
+                    onSubmitUnitDialog()
+                },
+                maxAvailableQuantityText = Formatting.formatQuantity(item.product.stockQuantity, UnitType.PIECE)
             )
         }
 

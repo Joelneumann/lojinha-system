@@ -348,6 +348,18 @@ class DomainAndRulesTest {
     }
 
     @Test
+    fun testFormatWeightForInput() {
+        assertEquals("0,5", Formatting.formatWeightForInput(500L))
+        assertEquals("0,25", Formatting.formatWeightForInput(250L))
+        assertEquals("1,0", Formatting.formatWeightForInput(1000L))
+        assertEquals("2,0", Formatting.formatWeightForInput(2000L))
+        assertEquals("1,5", Formatting.formatWeightForInput(1500L))
+        assertEquals("30,0", Formatting.formatWeightForInput(30000L))
+        assertEquals("", Formatting.formatWeightForInput(0L))
+        assertEquals("", Formatting.formatWeightForInput(-100L))
+    }
+
+    @Test
     fun testDetectWeightUnit() {
         // Decimals -> always KG
         assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1,5"))

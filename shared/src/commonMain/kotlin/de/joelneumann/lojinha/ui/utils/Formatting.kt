@@ -191,6 +191,13 @@ object Formatting {
         return grams
     }
 
+    fun formatWeightForInput(grams: Long): String {
+        if (grams <= 0L) return ""
+        val kg = grams / 1000.0
+        val str = kg.toString().replace('.', ',')
+        return if (str.contains(',')) str else "$str,0"
+    }
+
     enum class WeightUnitDisplay(val symbol: String) {
         KG("KG"),
         G("G")

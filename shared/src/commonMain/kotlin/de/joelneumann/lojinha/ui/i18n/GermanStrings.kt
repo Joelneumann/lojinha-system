@@ -32,6 +32,10 @@ object GermanStrings : AppStrings {
     override val weightInputHint = ""
     override val weightTooltip = "• Kommazahlen (1,5 / 0,25) oder ≤20 = kg\n• Ganzzahlen >20 (500) = Gramm (g)\n• Einheiten auch direkt tippbar (1,5 kg / 500g)"
     override val invalidWeightFormat = "Ungültiges Gewichtsformat"
+    override val unitDialogTitle = "Menge eingeben"
+    override fun unitDialogMsg(productName: String) = "Geben Sie die Menge für $productName ein:"
+    override val unitPieceBadge = "Stk."
+    override val invalidQuantityFormat = "Bitte eine gültige Ganzzahl eingeben"
     override fun pieceUnitSuffix(quantity: Long) = "$quantity Stk."
     override val history = "Transaktionsverlauf"
     override val account = "Konto"
@@ -655,6 +659,8 @@ object GermanStrings : AppStrings {
         "Maximal verfügbarer Bestand für $productName erreicht ($maxQuantity)"
     override fun errWeightExceedsStock(maxQuantity: String): String =
         "Gewicht überschreitet den verfügbaren Bestand (max. $maxQuantity)"
+    override fun errQuantityExceedsStock(maxQuantity: String): String =
+        "Menge überschreitet den verfügbaren Bestand (max. $maxQuantity)"
     override fun errProductNotFound(barcode: String): String =
         "Kein Produkt gefunden für Barcode '$barcode'"
     override fun availableStockLabel(quantity: String): String =

@@ -593,4 +593,113 @@ class ShoppingViewModelTest {
         assertEquals("1", cart[1].product.id, "Product 1 must remain at index 1")
         assertEquals(2L, cart[1].quantity, "Quantity should increment to 2")
     }
+
+    @Test
+    fun testOpenEditWeightDialog_formatsWeightAndReplacesQuantityOnSubmit() = withViewModel { vm, _ ->
+        // Add weight product to cart (500g)
+        assertTrue(vm.submitBarcodeOrSearch("9001", 0.0))
+        vm.updateWeightInput("500")
+        vm.submitWeightDialog(0.0)
+
+        val item = vm.cartItems.value.first()
+        assertEquals(500L, item.quantity)
+
+        // Open edit weight dialog
+        vm.openEditWeightDialog(item)
+        assertEquals("4", vm.weightProductDialog.value?.id)
+        assertEquals(item, vm.editingCartItem.value)
+        assertEquals("0,5", vm.weightInput.value)
+        assertNull(vm.weightError.value)
+
+        // Update to 0,8 and submit
+        vm.updateWeightInput("0,8")
+        assertNull(vm.weightError.value)
+        vm.submitWeightDialog(0.0)
+
+        assertNull(vm.weightProductDialog.value)
+        assertNull(vm.editingCartItem.value)
+        val updatedItem = vm.cartItems.value.first()
+        assertEquals(800L, updatedItem.quantity, "Quantity must be replaced, not added")
+    }
+
+    @Test
+    fun testEditWeightDialog_allowsUpToFullProductStock() = withViewModel { vm, _ ->
+        // Product 4 has stockQuantity = 10000. Add 6000g to cart.
+        assertTrue(vm.submitBarcodeOrSearch("9001", 0.0))
+        vm.updateWeightInput("6kg")
+        vm.submitWeightDialog(0.0)
+        assertEquals(6000L, vm.cartItems.value.first().quantity)
+
+        // Open edit dialog
+        vm.openEditWeightDialog(vm.cartItems.value.first())
+
+        // If it used remaining stock (10000 - 6000 = 4000), 8000g would fail.
+        // But since it's editing the existing item, it allows up to 10000g!
+        vm.updateWeightInput("8kg")
+        assertNull(vm.weightError.value, "Editing allows up to total product stock")
+        vm.submitWeightDialog(0.0)
+        assertEquals(8000L, vm.cartItems.value.first().quantity)
+
+        // If we try 11kg (exceeds 10000g):
+        vm.openEditWeightDialog(vm.cartItems.value.first())
+        vm.updateWeightInput("11kg")
+        assertNotNull(vm.weightError.value, "Exceeding total stock must set error")
+        vm.submitWeightDialog(0.0) // submit should fail
+        assertEquals(8000L, vm.cartItems.value.first().quantity, "Cart must remain unchanged when error exists")
+    }
+
+    @Test
+    fun testOpenEditUnitDialog_setsQuantityAndReplacesQuantityOnSubmit() = withViewModel { vm, _ ->
+        // Add piece product (Club Mate, stock = 50)
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+        val item = vm.cartItems.value.first()
+        assertEquals(1L, item.quantity)
+
+        // Open edit unit dialog
+        vm.openEditUnitDialog(item)
+        assertEquals(item, vm.unitCartItemDialog.value)
+        assertEquals("1", vm.unitInput.value)
+        assertNull(vm.unitError.value)
+
+        // Update to 7 and submit
+        vm.updateUnitInput("7")
+        assertNull(vm.unitError.value)
+        vm.submitUnitDialog()
+
+        assertNull(vm.unitCartItemDialog.value)
+        assertEquals(7L, vm.cartItems.value.first().quantity)
+    }
+
+    @Test
+    fun testEditUnitDialog_validation() = withViewModel { vm, _ ->
+        // Add piece product (Club Mate, stock = 50)
+        assertTrue(vm.submitBarcodeOrSearch("4029764001807", 0.0))
+        val item = vm.cartItems.value.first()
+
+        vm.openEditUnitDialog(item)
+
+        // Zero should give error
+        vm.updateUnitInput("0")
+        assertNotNull(vm.unitError.value)
+        vm.submitUnitDialog()
+        assertEquals(1L, vm.cartItems.value.first().quantity, "Submit must not succeed with 0")
+
+        // Exceeding stock (50) should give error
+        vm.updateUnitInput("51")
+        assertNotNull(vm.unitError.value)
+        vm.submitUnitDialog()
+        assertEquals(1L, vm.cartItems.value.first().quantity, "Submit must not succeed when exceeding stock")
+
+        // Blank input should clear error but not allow submit
+        vm.updateUnitInput("")
+        assertNull(vm.unitError.value)
+        vm.submitUnitDialog()
+        assertEquals(1L, vm.cartItems.value.first().quantity)
+
+        // Close dialog resets state
+        vm.closeUnitDialog()
+        assertNull(vm.unitCartItemDialog.value)
+        assertEquals("", vm.unitInput.value)
+        assertNull(vm.unitError.value)
+    }
 }
