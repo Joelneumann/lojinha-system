@@ -348,6 +348,18 @@ class DomainAndRulesTest {
     }
 
     @Test
+    fun testFormatWeightForInput() {
+        assertEquals("0,5", Formatting.formatWeightForInput(500L))
+        assertEquals("0,25", Formatting.formatWeightForInput(250L))
+        assertEquals("1,0", Formatting.formatWeightForInput(1000L))
+        assertEquals("2,0", Formatting.formatWeightForInput(2000L))
+        assertEquals("1,5", Formatting.formatWeightForInput(1500L))
+        assertEquals("30,0", Formatting.formatWeightForInput(30000L))
+        assertEquals("", Formatting.formatWeightForInput(0L))
+        assertEquals("", Formatting.formatWeightForInput(-100L))
+    }
+
+    @Test
     fun testDetectWeightUnit() {
         // Decimals -> always KG
         assertEquals(Formatting.WeightUnitDisplay.KG, Formatting.detectWeightUnit("1,5"))
@@ -396,6 +408,82 @@ class DomainAndRulesTest {
         assertEquals(2500L, Formatting.parseAdminStockToDb("2.5", UnitType.WEIGHT))
         assertEquals(750L, Formatting.parseAdminStockToDb("0,75", UnitType.WEIGHT))
     }
+
+    @Test
+    fun testParsePriceInputToCents() {
+        assertEquals(250L, Formatting.parsePriceInputToCents("2,50"))
+        assertEquals(250L, Formatting.parsePriceInputToCents("2.50"))
+        assertEquals(250L, Formatting.parsePriceInputToCents("R$ 2,50"))
+        assertEquals(1000L, Formatting.parsePriceInputToCents("10"))
+        assertEquals(123450L, Formatting.parsePriceInputToCents("1.234,50"))
+        assertEquals(123450L, Formatting.parsePriceInputToCents("1,234.50"))
+        assertEquals(0L, Formatting.parsePriceInputToCents("0"))
+        assertNull(Formatting.parsePriceInputToCents(""))
+        assertNull(Formatting.parsePriceInputToCents("   "))
+        assertNull(Formatting.parsePriceInputToCents("invalid"))
+        assertNull(Formatting.parsePriceInputToCents("-5"))
+    }
+
+    @Test
+    fun testCalculateMovingAveragePrice() {
+        // Normal case (pieces): 10 units @ R$ 2.00 (200 cents) + 10 units @ R$ 3.00 (300 cents) -> 20 units @ R$ 2.50 (250 cents)
+        val p1 = Formatting.calculateMovingAveragePrice(
+            oldStock = 10L,
+            oldPriceCents = 200L,
+            addedStock = 10L,
+            incomingPriceCents = 300L
+        )
+        assertEquals(250L, p1)
+
+        // Asymmetric quantities: 10 units @ R$ 2.00 + 5 units @ R$ 3.50 -> (2000 + 1750) / 15 = 250 cents
+        val p2 = Formatting.calculateMovingAveragePrice(
+            oldStock = 10L,
+            oldPriceCents = 200L,
+            addedStock = 5L,
+            incomingPriceCents = 350L
+        )
+        assertEquals(250L, p2)
+
+        // Existing stock is 0: price becomes the incoming price directly
+        val pZeroStock = Formatting.calculateMovingAveragePrice(
+            oldStock = 0L,
+            oldPriceCents = 500L,
+            addedStock = 5L,
+            incomingPriceCents = 350L
+        )
+        assertEquals(350L, pZeroStock)
+
+        // Existing stock is negative: price becomes incoming price directly
+        val pNegStock = Formatting.calculateMovingAveragePrice(
+            oldStock = -2L,
+            oldPriceCents = 500L,
+            addedStock = 5L,
+            incomingPriceCents = 400L
+        )
+        assertEquals(400L, pNegStock)
+
+        // Rounding: 10 units @ 100 cents + 15 units @ 101 cents -> 2515 / 25 = 100.6 cents -> rounds to 101
+        val pRounding = Formatting.calculateMovingAveragePrice(
+            oldStock = 10L,
+            oldPriceCents = 100L,
+            addedStock = 15L,
+            incomingPriceCents = 101L
+        )
+        assertEquals(101L, pRounding)
+
+
+        // Weighted items (grams in DB, cents/kg):
+        // 2500g (2.5kg) @ R$ 10.00/kg (1000 cents) + 1500g (1.5kg) @ R$ 12.00/kg (1200 cents)
+        // (2500 * 1000 + 1500 * 1200) / 4000 = (2,500,000 + 1,800,000) / 4000 = 1075 cents (R$ 10.75/kg)
+        val pWeight = Formatting.calculateMovingAveragePrice(
+            oldStock = 2500L,
+            oldPriceCents = 1000L,
+            addedStock = 1500L,
+            incomingPriceCents = 1200L
+        )
+        assertEquals(1075L, pWeight)
+    }
+
 
     @Test
     fun testTransactionLineTotal() {
@@ -917,6 +1005,12 @@ class DomainAndRulesTest {
             assertTrue(s.historyTypeCustomExpense.isNotBlank())
             assertTrue(s.historyTypeCustomIncome.isNotBlank())
         }
+        assertEquals("Custom Expense (+ Comment)", de.joelneumann.lojinha.ui.i18n.EnglishStrings.customExpense)
+        assertEquals("Sonderausgabe (+ Kommentar)", de.joelneumann.lojinha.ui.i18n.GermanStrings.customExpense)
+        assertEquals("Despesa Avulsa (+ Comentário)", de.joelneumann.lojinha.ui.i18n.PortugueseStrings.customExpense)
+        assertEquals("Custom Expense", de.joelneumann.lojinha.ui.i18n.EnglishStrings.customExpenseDialogTitle)
+        assertEquals("Sonderausgabe", de.joelneumann.lojinha.ui.i18n.GermanStrings.customExpenseDialogTitle)
+        assertEquals("Despesa Avulsa", de.joelneumann.lojinha.ui.i18n.PortugueseStrings.customExpenseDialogTitle)
     }
 
     @Test

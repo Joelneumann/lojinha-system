@@ -33,6 +33,7 @@ fun CartPanel(
     onRemoveItem: (productId: String) -> Unit,
     onCompletePurchase: () -> Unit,
     onSelectCartItem: (Int) -> Unit = {},
+    onEditCartItem: (CartItem) -> Unit = {},
     modifier: Modifier = Modifier,
     selectedCartIndex: Int = -1,
     isProcessing: Boolean = false,
@@ -97,6 +98,7 @@ fun CartPanel(
                                 onQtyChange = { newQty -> onQtyChange(cartItem.product.id, newQty) },
                                 onRemove = { onRemoveItem(cartItem.product.id) },
                                 onClick = { onSelectCartItem(index) },
+                                onEditQuantity = { onEditCartItem(cartItem) },
                                 isSelected = (index == selectedCartIndex),
                                 onMaxStockNotice = onMaxStockNotice
                             )

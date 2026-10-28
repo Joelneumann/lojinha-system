@@ -157,7 +157,7 @@ class AdminProductsViewModel(
         }
     }
 
-    fun adjustProductStock(productId: String, deltaQuantity: Long) {
+    fun adjustProductStock(productId: String, deltaQuantity: Long, newBasePrice: Long? = null) {
         viewModelScope.launch {
             try {
                 val prod = _products.value.firstOrNull { it.id == productId } ?: return@launch
@@ -166,6 +166,9 @@ class AdminProductsViewModel(
                 if (actualDelta != 0L) {
                     productRepository.updateStock(productId, actualDelta)
                 }
+                if (newBasePrice != null && newBasePrice != prod.basePrice) {
+                    productRepository.saveProduct(prod.copy(basePrice = newBasePrice))
+                }
                 refreshProducts()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "adjustProductStock error: ${e.message}", e)
@@ -173,6 +176,7 @@ class AdminProductsViewModel(
             }
         }
     }
+
 
 
 

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.AdminNote
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
+import androidx.compose.ui.focus.FocusRequester
 import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -30,13 +31,15 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.pageDown
 import de.joelneumann.lojinha.ui.utils.pageUp
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminNotesViewModel
 import kotlinx.coroutines.launch
 
 @Composable
 fun AdminNotesTabScreen(
     viewModel: AdminNotesViewModel,
-    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null
+    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
+    focusTrigger: Int = 0
 ) {
     val notes by viewModel.notes.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -47,6 +50,13 @@ fun AdminNotesTabScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var noteToDelete by remember { mutableStateOf<AdminNote?>(null) }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(noteToDelete, errorMessage, focusTrigger) {
+        if (noteToDelete == null && errorMessage == null) {
+            searchFocusRequester.safeRequestFocus()
+        }
+    }
 
     LaunchedEffect(onRegisterPageScroller, noteToDelete, errorMessage) {
         onRegisterPageScroller?.invoke { isDown ->
@@ -91,7 +101,8 @@ fun AdminNotesTabScreen(
             onQueryChange = viewModel::updateSearchQuery,
             placeholder = strings.searchNotesPlaceholder,
             countText = strings.notesCountText(filteredNotes.size),
-            onSearchSubmitted = {}
+            onSearchSubmitted = {},
+            focusRequester = searchFocusRequester
         )
 
         Spacer(modifier = Modifier.height(14.dp))

@@ -23,6 +23,7 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
+import de.joelneumann.lojinha.ui.components.userselection.ProductScanFeedbackBanner
 import de.joelneumann.lojinha.ui.components.userselection.UserGrid
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
@@ -30,6 +31,7 @@ import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import de.joelneumann.lojinha.ui.viewmodel.ScannedProductInfo
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 import kotlinx.coroutines.launch
 
@@ -48,10 +50,14 @@ fun UserSelectionScreen(
     val showAdminAuthDialog by viewModel.showAdminAuthDialog.collectAsState()
     val adminPasswordInput by viewModel.adminPasswordInput.collectAsState()
     val adminPasswordError by viewModel.adminPasswordError.collectAsState()
+    val scannedProduct by viewModel.scannedProduct.collectAsState()
+    val notFoundNotice by viewModel.notFoundNotice.collectAsState()
 
     UserSelectionContent(
         users = users,
         searchQuery = searchQuery,
+        scannedProduct = scannedProduct,
+        notFoundNotice = notFoundNotice,
         selectedUserForPin = selectedUserForPin,
         pinInput = pinInput,
         pinError = pinError,
@@ -60,14 +66,15 @@ fun UserSelectionScreen(
         adminPasswordError = adminPasswordError,
         onOpenAdminAuthDialog = viewModel::openAdminAuthDialog,
         onSearchQueryChange = viewModel::updateSearchQuery,
-        onSearchSubmitted = { viewModel.onSearchSubmitted(onUserLoggedIn) },
+        onSearchSubmitted = { viewModel.onSearchSubmitted(settings.globalMarkupPercent, onUserLoggedIn) },
         onUserClick = { user -> viewModel.onUserCardClicked(user, onUserLoggedIn) },
         onPinChange = viewModel::updatePinInput,
         onPinSubmit = { viewModel.submitPin(settings.adminPasswordHash, onUserLoggedIn) },
         onPinDismiss = viewModel::cancelPinDialog,
         onAdminPasswordChange = viewModel::updateAdminPassword,
         onAdminPasswordSubmit = { viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin) },
-        onAdminPasswordDismiss = viewModel::closeAdminAuthDialog
+        onAdminPasswordDismiss = viewModel::closeAdminAuthDialog,
+        onDismissFeedback = viewModel::dismissFeedback
     )
 }
 
@@ -75,6 +82,8 @@ fun UserSelectionScreen(
 fun UserSelectionContent(
     users: List<User>,
     searchQuery: String,
+    scannedProduct: ScannedProductInfo? = null,
+    notFoundNotice: Boolean = false,
     selectedUserForPin: User?,
     pinInput: String,
     pinError: String?,
@@ -90,7 +99,8 @@ fun UserSelectionContent(
     onPinDismiss: () -> Unit,
     onAdminPasswordChange: (String) -> Unit,
     onAdminPasswordSubmit: () -> Unit,
-    onAdminPasswordDismiss: () -> Unit
+    onAdminPasswordDismiss: () -> Unit,
+    onDismissFeedback: () -> Unit = {}
 ) {
     val strings = I18n.current
     val focusRequester = remember { FocusRequester() }
@@ -226,6 +236,15 @@ fun UserSelectionContent(
                     onSubmit = onAdminPasswordSubmit
                 )
             }
+
+            ProductScanFeedbackBanner(
+                scannedProduct = scannedProduct,
+                notFoundNotice = notFoundNotice,
+                onDismiss = onDismissFeedback,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp)
+            )
         }
     }
 }

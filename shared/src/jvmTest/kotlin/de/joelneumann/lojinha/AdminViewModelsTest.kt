@@ -222,7 +222,54 @@ class AdminViewModelsTest {
     }
 
     @Test
+    fun testAdjustProductStock_withNewBasePrice_updatesStockAndSavesProduct() = runTest {
+        val initialProduct = Product(
+            id = "prod-wac",
+            name = "Coffee Beans",
+            barcodes = emptyList(),
+            basePrice = 200,
+            unitType = UnitType.PIECE,
+            stockQuantity = 10
+        )
+        val productRepo = TestProductRepository(listOf(initialProduct))
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        // Adjust stock by +10 with calculated new base price 250
+        viewModel.adjustProductStock("prod-wac", 10, newBasePrice = 250L)
+
+        // Verify stock delta was updated
+        assertEquals(1, productRepo.recordedStockDeltas.size)
+        assertEquals("prod-wac" to 10L, productRepo.recordedStockDeltas.first())
+
+        // Verify saveProduct was called to update basePrice
+        assertEquals(1, productRepo.savedProducts.size)
+        assertEquals(250L, productRepo.savedProducts.first().basePrice)
+    }
+
+    @Test
+    fun testAdjustProductStock_withSameBasePrice_doesNotCallSaveProduct() = runTest {
+        val initialProduct = Product(
+            id = "prod-same-price",
+            name = "Sugar",
+            barcodes = emptyList(),
+            basePrice = 200,
+            unitType = UnitType.PIECE,
+            stockQuantity = 10
+        )
+        val productRepo = TestProductRepository(listOf(initialProduct))
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        // Adjust stock by +5 but newBasePrice is identical to existing (200L)
+        viewModel.adjustProductStock("prod-same-price", 5, newBasePrice = 200L)
+
+        assertEquals(1, productRepo.recordedStockDeltas.size)
+        assertEquals("prod-same-price" to 5L, productRepo.recordedStockDeltas.first())
+        assertTrue(productRepo.savedProducts.isEmpty())
+    }
+
+    @Test
     fun testSaveProduct_newProduct_doesNotCallUpdateStockAndSetsInitialStockCorrectly() = runTest {
+
         val productRepo = TestProductRepository(emptyList())
         val viewModel = AdminProductsViewModel(productRepo)
 

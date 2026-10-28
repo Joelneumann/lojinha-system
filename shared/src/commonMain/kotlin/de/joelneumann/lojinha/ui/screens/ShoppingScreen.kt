@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,6 +68,10 @@ fun ShoppingScreen(
     val weightProductDialog by viewModel.weightProductDialog.collectAsState()
     val weightInput by viewModel.weightInput.collectAsState()
     val weightError by viewModel.weightError.collectAsState()
+    val editingCartItem by viewModel.editingCartItem.collectAsState()
+    val unitCartItemDialog by viewModel.unitCartItemDialog.collectAsState()
+    val unitInput by viewModel.unitInput.collectAsState()
+    val unitError by viewModel.unitError.collectAsState()
     val completedPurchase by viewModel.completedPurchase.collectAsState()
     val stockNotice by viewModel.stockNotice.collectAsState()
     val isSubmittingNote by viewModel.isSubmittingNote.collectAsState()
@@ -112,6 +117,10 @@ fun ShoppingScreen(
         weightProductDialog = weightProductDialog,
         weightInput = weightInput,
         weightError = weightError,
+        editingCartItem = editingCartItem,
+        unitCartItemDialog = unitCartItemDialog,
+        unitInput = unitInput,
+        unitError = unitError,
         completedPurchase = completedPurchase,
         onLogout = onLogout,
         onSearchQueryChange = { query ->
@@ -155,6 +164,26 @@ fun ShoppingScreen(
             onUserInteracted(true)
             viewModel.submitWeightDialog(settings.globalMarkupPercent)
         },
+        onUnitInputChange = { input ->
+            onUserInteracted(true)
+            viewModel.updateUnitInput(input)
+        },
+        onCloseUnitDialog = {
+            onUserInteracted(true)
+            viewModel.closeUnitDialog()
+        },
+        onSubmitUnitDialog = {
+            onUserInteracted(true)
+            viewModel.submitUnitDialog()
+        },
+        onEditCartItem = { cartItem ->
+            onUserInteracted(true)
+            if (cartItem.product.unitType == UnitType.WEIGHT) {
+                viewModel.openEditWeightDialog(cartItem)
+            } else {
+                viewModel.openEditUnitDialog(cartItem)
+            }
+        },
         onNavigateToHistory = onNavigateToHistory,
         onUserUpdated = onUserUpdated,
         onUserInteracted = onUserInteracted,
@@ -179,6 +208,10 @@ fun ShoppingContent(
     weightProductDialog: Product?,
     weightInput: String,
     weightError: String?,
+    editingCartItem: CartItem? = null,
+    unitCartItemDialog: CartItem? = null,
+    unitInput: String = "",
+    unitError: String? = null,
     completedPurchase: Transaction? = null,
     isSubmittingNote: Boolean = false,
     noteSubmitSuccess: String? = null,
@@ -200,6 +233,10 @@ fun ShoppingContent(
     onWeightInputChange: (String) -> Unit,
     onCloseWeightDialog: () -> Unit,
     onSubmitWeightDialog: () -> Unit,
+    onUnitInputChange: (String) -> Unit = {},
+    onCloseUnitDialog: () -> Unit = {},
+    onSubmitUnitDialog: () -> Unit = {},
+    onEditCartItem: (CartItem) -> Unit = {},
     onNavigateToHistory: () -> Unit,
     onUserUpdated: (User) -> Unit = {},
     onUserInteracted: (force: Boolean) -> Unit = {},
@@ -245,8 +282,24 @@ fun ShoppingContent(
         }
     }
 
-    LaunchedEffect(weightProductDialog, showCheckoutConfirmation, completedPurchase, LanguageManager.currentLanguage) {
-        if (weightProductDialog == null && !showCheckoutConfirmation && completedPurchase == null) {
+    LaunchedEffect(
+        weightProductDialog,
+        unitCartItemDialog,
+        showCheckoutConfirmation,
+        completedPurchase,
+        showNoteDialog,
+        noteSubmitSuccess,
+        purchaseError,
+        LanguageManager.currentLanguage
+    ) {
+        if (weightProductDialog == null &&
+            unitCartItemDialog == null &&
+            !showCheckoutConfirmation &&
+            completedPurchase == null &&
+            !showNoteDialog &&
+            noteSubmitSuccess == null &&
+            purchaseError == null
+        ) {
             searchFocusRequester.safeRequestFocus()
         }
     }
@@ -373,7 +426,7 @@ fun ShoppingContent(
                 } else if (handleCartNavigation(keyEvent)) {
                     true
                 } else if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Escape) {
-                    if (weightProductDialog == null && !showCheckoutConfirmation && completedPurchase == null) {
+                    if (weightProductDialog == null && unitCartItemDialog == null && !showCheckoutConfirmation && completedPurchase == null) {
                         onLogout()
                         true
                     } else false
@@ -392,6 +445,7 @@ fun ShoppingContent(
             actions = {
                 Button(
                     onClick = onOpenNoteDialog,
+                    modifier = Modifier.focusProperties { canFocus = false },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
@@ -417,6 +471,7 @@ fun ShoppingContent(
 
                 Button(
                     onClick = onNavigateToHistory,
+                    modifier = Modifier.focusProperties { canFocus = false },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
@@ -441,7 +496,8 @@ fun ShoppingContent(
                 }
 
                 LogoutButton(
-                    onClick = onLogout
+                    onClick = onLogout,
+                    modifier = Modifier.focusProperties { canFocus = false }
                 )
             }
         )
@@ -660,6 +716,10 @@ fun ShoppingContent(
                     highlightedProductIndex = -1
                     coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
                 },
+                onEditCartItem = { cartItem ->
+                    selectProductInCart(cartItem.product.id)
+                    onEditCartItem(cartItem)
+                },
                 modifier = Modifier.weight(0.9f),
                 selectedCartIndex = selectedCartIndex,
                 isProcessing = isProcessingPurchase,
@@ -674,8 +734,12 @@ fun ShoppingContent(
 
         // Weight Input Modal Dialog
         weightProductDialog?.let { product ->
-            val inCart = cartItems.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
-            val maxAvailable = (product.stockQuantity - inCart).coerceAtLeast(0L)
+            val maxAvailable = if (editingCartItem != null) {
+                product.stockQuantity
+            } else {
+                val inCart = cartItems.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
+                (product.stockQuantity - inCart).coerceAtLeast(0L)
+            }
             WeightInputDialog(
                 productName = product.name,
                 weightInput = weightInput,
@@ -687,6 +751,22 @@ fun ShoppingContent(
                     onSubmitWeightDialog()
                 },
                 maxAvailableQuantityText = Formatting.formatQuantity(maxAvailable, UnitType.WEIGHT)
+            )
+        }
+
+        // Unit Input Modal Dialog
+        unitCartItemDialog?.let { item ->
+            UnitInputDialog(
+                productName = item.product.name,
+                unitInput = unitInput,
+                unitError = unitError,
+                onUnitInputChange = onUnitInputChange,
+                onDismiss = onCloseUnitDialog,
+                onSubmit = {
+                    selectProductInCart(item.product.id)
+                    onSubmitUnitDialog()
+                },
+                maxAvailableQuantityText = Formatting.formatQuantity(item.product.stockQuantity, UnitType.PIECE)
             )
         }
 
@@ -716,8 +796,14 @@ fun ShoppingContent(
                 message = err,
                 confirmText = strings.confirm,
                 cancelText = null,
-                onDismiss = onDismissPurchaseError,
-                onConfirm = onDismissPurchaseError,
+                onDismiss = {
+                    onDismissPurchaseError()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
+                onConfirm = {
+                    onDismissPurchaseError()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
                 confirmButtonColor = ColorDangerCrimson
             )
         }
@@ -745,7 +831,10 @@ fun ShoppingContent(
                 user = user,
                 isSubmitting = isSubmittingNote,
                 errorMessage = noteSubmitError,
-                onDismiss = onDismissNoteDialog,
+                onDismiss = {
+                    onDismissNoteDialog()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
                 onSubmit = onSubmitNote,
                 onUserInteracted = onUserInteracted
             )
@@ -758,8 +847,14 @@ fun ShoppingContent(
                 message = successMsg,
                 confirmText = strings.ok,
                 cancelText = null,
-                onDismiss = onDismissNoteSuccess,
-                onConfirm = onDismissNoteSuccess,
+                onDismiss = {
+                    onDismissNoteSuccess()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
+                onConfirm = {
+                    onDismissNoteSuccess()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
                 confirmButtonColor = ColorSuccessEmerald
             )
         }

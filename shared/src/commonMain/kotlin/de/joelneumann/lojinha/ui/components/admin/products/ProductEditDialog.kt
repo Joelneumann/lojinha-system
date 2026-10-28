@@ -281,6 +281,7 @@ fun ProductEditDialog(
                             value = stockQuantity,
                             onValueChange = { stockQuantity = it },
                             placeholder = if (unitType == UnitType.PIECE) strings.stockUnitsPlaceholder else strings.stockKgPlaceholder,
+                            selectAllOnFocus = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         if (!isStockValid && stockQuantity.isNotBlank()) {

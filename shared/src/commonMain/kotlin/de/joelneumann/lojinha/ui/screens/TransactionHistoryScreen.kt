@@ -42,6 +42,7 @@ import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.trackUserInteractions
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -239,6 +240,7 @@ fun TransactionHistoryContent(
             actions = {
                 Button(
                     onClick = onContinueShopping,
+                    modifier = Modifier.focusProperties { canFocus = false },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
@@ -263,7 +265,8 @@ fun TransactionHistoryContent(
                 }
 
                 LogoutButton(
-                    onClick = onLogout
+                    onClick = onLogout,
+                    modifier = Modifier.focusProperties { canFocus = false }
                 )
             }
         )

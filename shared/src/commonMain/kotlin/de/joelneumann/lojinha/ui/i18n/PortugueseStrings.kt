@@ -32,6 +32,10 @@ object PortugueseStrings : AppStrings {
     override val weightInputHint = ""
     override val weightTooltip = "• Decimais (1,5 / 0,25) ou ≤20 = kg\n• Números inteiros >20 (500) = gramas (g)\n• Ou digite unidades diretamente (1,5 kg / 500g)"
     override val invalidWeightFormat = "Formato de peso inválido"
+    override val unitDialogTitle = "Inserir Quantidade"
+    override fun unitDialogMsg(productName: String) = "Digite a quantidade para $productName:"
+    override val unitPieceBadge = "un"
+    override val invalidQuantityFormat = "Por favor, insira um número inteiro válido"
     override fun pieceUnitSuffix(quantity: Long) = "$quantity un."
     override val history = "Histórico de Transações"
     override val account = "Conta"
@@ -467,9 +471,25 @@ object PortugueseStrings : AppStrings {
     override val stockDeltaWeightLabel = "Alterar estoque (+/- kg):"
     override val stockDeltaPiecePlaceholder = "ex: +10 ou -5"
     override val stockDeltaWeightPlaceholder = "ex: +2.500 ou -0.500"
+    override val stockNewPurchasePriceLabel = "Novo preço de custo (opcional):"
+    override val stockNewPurchasePricePlaceholder = "ex: 2,50"
+    override val stockPriceDisabledForNegativeHint = "Atualização de preço disponível apenas ao adicionar estoque"
     override val confirmStockAdjustmentTitle = "Confirmar ajuste de estoque"
     override fun confirmStockAdjustmentMsg(isAddition: Boolean, formattedDelta: String, productName: String) =
         "Tem certeza de que deseja ${if (isAddition) "ADICIONAR" else "REMOVER"} $formattedDelta ${if (isAddition) "ao" else "do"} estoque de '$productName'?"
+    override val confirmStockAndPriceAdjustmentTitle = "Confirmar Ajuste de Estoque e Preço"
+    override fun confirmStockAndPriceMsg(productName: String) =
+        "Revise o preço de custo médio calculado para '$productName':"
+    override val stockPriceCurrentStockLabel = "Estoque Atual"
+    override val stockPriceIncomingStockLabel = "Estoque a Adicionar"
+    override val stockPriceTotalStockLabel = "Estoque Total"
+    override val stockPriceCurrentPriceLabel = "Preço de Custo Atual"
+    override val stockPriceIncomingPriceLabel = "Novo Preço de Custo"
+    override val stockPriceCalculationLabel = "Cálculo do Preço Médio Ponderado"
+    override val stockPriceNewBasePriceLabel = "Novo Preço"
+    override val stockPriceNewSellingPriceLabel = "Novo Preço de Venda"
+
+
     override val confirmProductStatusChangeTitle = "Confirmar alteração de status do produto"
     override fun confirmProductStatusChangeMsg(isDisabling: Boolean, productName: String) =
         "Tem certeza de que deseja ${if (isDisabling) "desativar" else "ativar"} o produto '$productName'?"
@@ -507,7 +527,7 @@ object PortugueseStrings : AppStrings {
         "Nota: O código de barras deste usuário está atualmente atribuído a outro usuário ativo e será redefinido após a restauração."
 
     // --- Custom Expense & Custom Income Modals ---
-    override val customExpense = "Despesa Avulsa"
+    override val customExpense = "Despesa Avulsa (+ Comentário)"
     override val customExpenseDialogTitle = "Despesa Avulsa"
     override val customExpenseDescriptionLabel = "Descrição / Item:"
     override val customExpenseDescriptionPlaceholder = "ex: Bolo de chocolate, Café, Lanche especial..."
@@ -537,6 +557,8 @@ object PortugueseStrings : AppStrings {
     override val searchUserToAdd = "Buscar usuário para adicionar..."
     override val noUsersInList = "Nenhum usuário nesta lista. Adicione usuários para começar."
     override val noUsersFound = "Nenhum usuário encontrado."
+    override val noUserOrProductFound = "Nenhum usuário ou produto encontrado."
+    override val priceCheckLabel = "Consulta de Preço"
     override val quantity = "Quantidade"
     override val amount = "Valor"
     override val deleteListTitle = "Excluir Lista"
@@ -653,6 +675,8 @@ object PortugueseStrings : AppStrings {
         "Estoque máximo disponível atingido para $productName ($maxQuantity)"
     override fun errWeightExceedsStock(maxQuantity: String): String =
         "Peso excede o estoque disponível (máx. $maxQuantity)"
+    override fun errQuantityExceedsStock(maxQuantity: String): String =
+        "Quantidade excede o estoque disponível (máx. $maxQuantity)"
     override fun errProductNotFound(barcode: String): String =
         "Nenhum produto encontrado para o código de barras '$barcode'"
     override fun availableStockLabel(quantity: String): String =

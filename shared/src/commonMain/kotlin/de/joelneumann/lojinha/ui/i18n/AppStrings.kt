@@ -32,6 +32,10 @@ interface AppStrings {
     val weightInputHint: String
     val weightTooltip: String
     val invalidWeightFormat: String
+    val unitDialogTitle: String
+    fun unitDialogMsg(productName: String): String
+    val unitPieceBadge: String
+    val invalidQuantityFormat: String
     fun pieceUnitSuffix(quantity: Long): String
     val history: String
     val account: String
@@ -461,8 +465,22 @@ interface AppStrings {
     val stockDeltaWeightLabel: String
     val stockDeltaPiecePlaceholder: String
     val stockDeltaWeightPlaceholder: String
+    val stockNewPurchasePriceLabel: String
+    val stockNewPurchasePricePlaceholder: String
+    val stockPriceDisabledForNegativeHint: String
     val confirmStockAdjustmentTitle: String
     fun confirmStockAdjustmentMsg(isAddition: Boolean, formattedDelta: String, productName: String): String
+    val confirmStockAndPriceAdjustmentTitle: String
+    fun confirmStockAndPriceMsg(productName: String): String
+    val stockPriceCurrentStockLabel: String
+    val stockPriceIncomingStockLabel: String
+    val stockPriceTotalStockLabel: String
+    val stockPriceCurrentPriceLabel: String
+    val stockPriceIncomingPriceLabel: String
+    val stockPriceCalculationLabel: String
+    val stockPriceNewBasePriceLabel: String
+    val stockPriceNewSellingPriceLabel: String
+
     val confirmProductStatusChangeTitle: String
     fun confirmProductStatusChangeMsg(isDisabling: Boolean, productName: String): String
     val confirmDeleteProductTitle: String
@@ -525,6 +543,8 @@ interface AppStrings {
     val searchUserToAdd: String
     val noUsersInList: String
     val noUsersFound: String
+    val noUserOrProductFound: String
+    val priceCheckLabel: String
     val quantity: String
     val amount: String
     val deleteListTitle: String
@@ -637,6 +657,7 @@ interface AppStrings {
     fun errProductOutOfStock(productName: String): String
     fun errProductMaxStockReached(productName: String, maxQuantity: String): String
     fun errWeightExceedsStock(maxQuantity: String): String
+    fun errQuantityExceedsStock(maxQuantity: String): String
     fun errProductNotFound(barcode: String): String
     fun availableStockLabel(quantity: String): String
 

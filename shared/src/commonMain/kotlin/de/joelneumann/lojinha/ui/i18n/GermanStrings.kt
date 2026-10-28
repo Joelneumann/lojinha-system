@@ -32,6 +32,10 @@ object GermanStrings : AppStrings {
     override val weightInputHint = ""
     override val weightTooltip = "• Kommazahlen (1,5 / 0,25) oder ≤20 = kg\n• Ganzzahlen >20 (500) = Gramm (g)\n• Einheiten auch direkt tippbar (1,5 kg / 500g)"
     override val invalidWeightFormat = "Ungültiges Gewichtsformat"
+    override val unitDialogTitle = "Menge eingeben"
+    override fun unitDialogMsg(productName: String) = "Geben Sie die Menge für $productName ein:"
+    override val unitPieceBadge = "Stk."
+    override val invalidQuantityFormat = "Bitte eine gültige Ganzzahl eingeben"
     override fun pieceUnitSuffix(quantity: Long) = "$quantity Stk."
     override val history = "Transaktionsverlauf"
     override val account = "Konto"
@@ -467,9 +471,25 @@ object GermanStrings : AppStrings {
     override val stockDeltaWeightLabel = "Bestandsänderung (+/- kg):"
     override val stockDeltaPiecePlaceholder = "z.B. +10 oder -5"
     override val stockDeltaWeightPlaceholder = "z.B. +2.500 oder -0.500"
+    override val stockNewPurchasePriceLabel = "Neuer Einkaufspreis (optional):"
+    override val stockNewPurchasePricePlaceholder = "z.B. 2,50"
+    override val stockPriceDisabledForNegativeHint = "Preisaktualisierung nur beim Hinzufügen von Bestand möglich"
     override val confirmStockAdjustmentTitle = "Bestandsänderung bestätigen"
     override fun confirmStockAdjustmentMsg(isAddition: Boolean, formattedDelta: String, productName: String) =
         "Möchtest du wirklich $formattedDelta zum Bestand von '$productName' ${if (isAddition) "HINZUFÜGEN" else "ABZIEHEN"}?"
+    override val confirmStockAndPriceAdjustmentTitle = "Bestands- und Preisänderung bestätigen"
+    override fun confirmStockAndPriceMsg(productName: String) =
+        "Überprüfe den neu berechneten durchschnittlichen Einkaufspreis für '$productName':"
+    override val stockPriceCurrentStockLabel = "Aktueller Bestand"
+    override val stockPriceIncomingStockLabel = "Hinzukommender Bestand"
+    override val stockPriceTotalStockLabel = "Gesamtbestand"
+    override val stockPriceCurrentPriceLabel = "Bisheriger Einkaufspreis"
+    override val stockPriceIncomingPriceLabel = "Neuer Einkaufspreis"
+    override val stockPriceCalculationLabel = "Gewichtete Durchschnittsberechnung"
+    override val stockPriceNewBasePriceLabel = "Neuer Preis"
+    override val stockPriceNewSellingPriceLabel = "Neuer Verkaufspreis"
+
+
     override val confirmProductStatusChangeTitle = "Produktstatus ändern bestätigen"
     override fun confirmProductStatusChangeMsg(isDisabling: Boolean, productName: String) =
         "Möchtest du das Produkt '$productName' wirklich ${if (isDisabling) "deaktivieren" else "aktivieren"}?"
@@ -507,7 +527,7 @@ object GermanStrings : AppStrings {
         "Hinweis: Der Barcode dieses Benutzers ist derzeit einem anderen aktiven Benutzer zugewiesen und wird bei der Wiederherstellung zurückgesetzt."
 
     // --- Custom Expense & Custom Income Modals ---
-    override val customExpense = "Sonderausgabe"
+    override val customExpense = "Sonderausgabe (+ Kommentar)"
     override val customExpenseDialogTitle = "Sonderausgabe"
     override val customExpenseDescriptionLabel = "Beschreibung / Posten:"
     override val customExpenseDescriptionPlaceholder = "z.B. Schokokuchen, Kaffee, Sonderposten..."
@@ -537,6 +557,8 @@ object GermanStrings : AppStrings {
     override val searchUserToAdd = "Benutzer suchen..."
     override val noUsersInList = "Keine Benutzer in dieser Liste. Fügen Sie Benutzer hinzu, um zu beginnen."
     override val noUsersFound = "Keine Benutzer gefunden."
+    override val noUserOrProductFound = "Kein Benutzer oder Produkt gefunden."
+    override val priceCheckLabel = "Preisabfrage"
     override val quantity = "Anzahl"
     override val amount = "Betrag"
     override val deleteListTitle = "Liste löschen"
@@ -653,6 +675,8 @@ object GermanStrings : AppStrings {
         "Maximal verfügbarer Bestand für $productName erreicht ($maxQuantity)"
     override fun errWeightExceedsStock(maxQuantity: String): String =
         "Gewicht überschreitet den verfügbaren Bestand (max. $maxQuantity)"
+    override fun errQuantityExceedsStock(maxQuantity: String): String =
+        "Menge überschreitet den verfügbaren Bestand (max. $maxQuantity)"
     override fun errProductNotFound(barcode: String): String =
         "Kein Produkt gefunden für Barcode '$barcode'"
     override fun availableStockLabel(quantity: String): String =

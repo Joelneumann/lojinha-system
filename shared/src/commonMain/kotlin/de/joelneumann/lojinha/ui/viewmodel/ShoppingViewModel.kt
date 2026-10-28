@@ -83,6 +83,18 @@ class ShoppingViewModel(
     private val _weightError = MutableStateFlow<String?>(null)
     val weightError: StateFlow<String?> = _weightError.asStateFlow()
 
+    private val _editingCartItem = MutableStateFlow<CartItem?>(null)
+    val editingCartItem: StateFlow<CartItem?> = _editingCartItem.asStateFlow()
+
+    private val _unitCartItemDialog = MutableStateFlow<CartItem?>(null)
+    val unitCartItemDialog: StateFlow<CartItem?> = _unitCartItemDialog.asStateFlow()
+
+    private val _unitInput = MutableStateFlow("")
+    val unitInput: StateFlow<String> = _unitInput.asStateFlow()
+
+    private val _unitError = MutableStateFlow<String?>(null)
+    val unitError: StateFlow<String?> = _unitError.asStateFlow()
+
     private val _completedPurchase = MutableStateFlow<Transaction?>(null)
     val completedPurchase: StateFlow<Transaction?> = _completedPurchase.asStateFlow()
 
@@ -275,12 +287,29 @@ class ShoppingViewModel(
         _cartItems.value = currentList
     }
 
+    fun openEditWeightDialog(cartItem: CartItem) {
+        _editingCartItem.value = cartItem
+        _weightProductDialog.value = cartItem.product
+        _weightInput.value = Formatting.formatWeightForInput(cartItem.quantity)
+        _weightError.value = null
+    }
+
+    fun openEditUnitDialog(cartItem: CartItem) {
+        _unitCartItemDialog.value = cartItem
+        _unitInput.value = cartItem.quantity.toString()
+        _unitError.value = null
+    }
+
     fun updateWeightInput(input: String) {
         _weightInput.value = input
         val product = _weightProductDialog.value
         if (product != null) {
-            val inCart = _cartItems.value.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
-            val maxAvailable = (product.stockQuantity - inCart).coerceAtLeast(0L)
+            val maxAvailable = if (_editingCartItem.value != null) {
+                product.stockQuantity
+            } else {
+                val inCart = _cartItems.value.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
+                (product.stockQuantity - inCart).coerceAtLeast(0L)
+            }
             val grams = Formatting.parseWeightInputToGrams(input)
             if (grams != null && grams > maxAvailable) {
                 _weightError.value = I18n.get().errWeightExceedsStock(
@@ -294,8 +323,13 @@ class ShoppingViewModel(
 
     fun submitWeightDialog(globalMarkup: Double) {
         val product = _weightProductDialog.value ?: return
-        val inCart = _cartItems.value.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
-        val maxAvailable = (product.stockQuantity - inCart).coerceAtLeast(0L)
+        val editingItem = _editingCartItem.value
+        val maxAvailable = if (editingItem != null) {
+            product.stockQuantity
+        } else {
+            val inCart = _cartItems.value.firstOrNull { it.product.id == product.id }?.quantity ?: 0L
+            (product.stockQuantity - inCart).coerceAtLeast(0L)
+        }
         val grams = Formatting.parseWeightInputToGrams(_weightInput.value)
         if (grams == null || grams <= 0) {
             _weightError.value = I18n.get().invalidWeightFormat
@@ -310,15 +344,25 @@ class ShoppingViewModel(
         val currentList = _cartItems.value.toMutableList()
         val unitPrice = product.calculateEffectiveUnitPrice(globalMarkup)
         val existingIndex = currentList.indexOfFirst { it.product.id == product.id }
-        if (existingIndex >= 0) {
-            val item = currentList[existingIndex]
-            currentList[existingIndex] = item.copy(
-                product = product,
-                quantity = item.quantity + grams,
-                unitPriceWithMarkup = unitPrice
-            )
+        if (editingItem != null) {
+            if (existingIndex >= 0) {
+                currentList[existingIndex] = currentList[existingIndex].copy(
+                    product = product,
+                    quantity = grams,
+                    unitPriceWithMarkup = unitPrice
+                )
+            }
         } else {
-            currentList.add(0, CartItem(product = product, quantity = grams, unitPriceWithMarkup = unitPrice))
+            if (existingIndex >= 0) {
+                val item = currentList[existingIndex]
+                currentList[existingIndex] = item.copy(
+                    product = product,
+                    quantity = item.quantity + grams,
+                    unitPriceWithMarkup = unitPrice
+                )
+            } else {
+                currentList.add(0, CartItem(product = product, quantity = grams, unitPriceWithMarkup = unitPrice))
+            }
         }
         _cartItems.value = currentList
         _searchQuery.value = ""
@@ -327,8 +371,55 @@ class ShoppingViewModel(
 
     fun closeWeightDialog() {
         _weightProductDialog.value = null
+        _editingCartItem.value = null
         _weightInput.value = ""
         _weightError.value = null
+    }
+
+    fun updateUnitInput(input: String) {
+        _unitInput.value = input
+        val item = _unitCartItemDialog.value
+        if (item != null) {
+            if (input.isBlank()) {
+                _unitError.value = null
+                return
+            }
+            val qty = input.toLongOrNull()
+            if (qty == null || qty <= 0L) {
+                _unitError.value = I18n.get().invalidQuantityFormat
+                return
+            }
+            if (qty > item.product.stockQuantity) {
+                _unitError.value = I18n.get().errQuantityExceedsStock(
+                    Formatting.formatQuantity(item.product.stockQuantity, UnitType.PIECE)
+                )
+                return
+            }
+        }
+        _unitError.value = null
+    }
+
+    fun submitUnitDialog() {
+        val item = _unitCartItemDialog.value ?: return
+        val qty = _unitInput.value.toLongOrNull()
+        if (qty == null || qty <= 0L) {
+            _unitError.value = I18n.get().invalidQuantityFormat
+            return
+        }
+        if (qty > item.product.stockQuantity) {
+            _unitError.value = I18n.get().errQuantityExceedsStock(
+                Formatting.formatQuantity(item.product.stockQuantity, UnitType.PIECE)
+            )
+            return
+        }
+        updateCartItemQuantity(item.product.id, qty)
+        closeUnitDialog()
+    }
+
+    fun closeUnitDialog() {
+        _unitCartItemDialog.value = null
+        _unitInput.value = ""
+        _unitError.value = null
     }
 
     fun updateCartItemQuantity(productId: String, newQty: Long) {
@@ -357,6 +448,7 @@ class ShoppingViewModel(
         _cartItems.value = emptyList()
         _searchQuery.value = ""
         closeWeightDialog()
+        closeUnitDialog()
     }
 
     fun dismissCompletedPurchase() {

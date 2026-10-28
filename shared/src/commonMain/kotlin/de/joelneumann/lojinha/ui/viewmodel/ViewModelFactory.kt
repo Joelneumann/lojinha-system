@@ -17,10 +17,11 @@ object LojinhaViewModelFactory {
     }
 
     fun createUserSelectionViewModelFactory(
-        userRepository: UserRepository
+        userRepository: UserRepository,
+        productRepository: ProductRepository? = null
     ): ViewModelProvider.Factory = viewModelFactory {
         initializer {
-            UserSelectionViewModel(userRepository)
+            UserSelectionViewModel(userRepository, productRepository)
         }
     }
 
