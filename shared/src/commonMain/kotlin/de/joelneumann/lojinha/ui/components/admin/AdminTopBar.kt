@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.FocusRequester
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.theme.AccentNavy
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
@@ -25,7 +26,8 @@ fun AdminTopBar(
     actionButtonText: String? = null,
     onActionButtonClick: (() -> Unit)? = null,
     sortContent: (@Composable () -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val isMobile = maxWidth < 600.dp
@@ -40,6 +42,7 @@ fun AdminTopBar(
                     onQueryChange = onQueryChange,
                     placeholder = placeholder,
                     onSearchSubmitted = onSearchSubmitted,
+                    focusRequester = focusRequester,
                     modifier = Modifier.fillMaxWidth().height(44.dp)
                 )
 
@@ -89,6 +92,7 @@ fun AdminTopBar(
                         onQueryChange = onQueryChange,
                         placeholder = placeholder,
                         onSearchSubmitted = onSearchSubmitted,
+                        focusRequester = focusRequester,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

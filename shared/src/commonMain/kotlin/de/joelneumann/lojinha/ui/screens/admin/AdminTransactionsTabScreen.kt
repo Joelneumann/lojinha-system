@@ -26,8 +26,10 @@ import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.utils.pageDown
 import de.joelneumann.lojinha.ui.utils.pageUp
 import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.FocusRequester
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.components.admin.transactions.AdminTransactionAccordionCard
 import de.joelneumann.lojinha.ui.components.admin.transactions.PurchaseCorrectionDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -40,7 +42,8 @@ fun AdminTransactionsTabScreen(
     expandedTransactionId: String?,
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandTransaction: (String) -> Unit,
-    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null
+    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
+    focusTrigger: Int = 0
 ) {
     val strings = I18n.current
     val transactions by viewModel.transactions.collectAsState()
@@ -60,6 +63,13 @@ fun AdminTransactionsTabScreen(
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val searchFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(correctionTarget, errorMessage, expandedTransactionId, focusTrigger) {
+        if (correctionTarget == null && errorMessage == null && expandedTransactionId == null) {
+            searchFocusRequester.safeRequestFocus()
+        }
+    }
 
     LaunchedEffect(onRegisterPageScroller, correctionTarget, errorMessage) {
         onRegisterPageScroller?.invoke { isDown ->
@@ -115,7 +125,8 @@ fun AdminTransactionsTabScreen(
             onQueryChange = viewModel::updateSearchFilter,
             placeholder = strings.searchTransactionAdminPlaceholder,
             countText = if (searchQuery.isBlank()) strings.transactionsCountText(totalCount) else strings.transactionsCountText(transactions.size, totalCount),
-            onSearchSubmitted = openFirstResult
+            onSearchSubmitted = openFirstResult,
+            focusRequester = searchFocusRequester
         )
 
         Spacer(modifier = Modifier.height(8.dp))

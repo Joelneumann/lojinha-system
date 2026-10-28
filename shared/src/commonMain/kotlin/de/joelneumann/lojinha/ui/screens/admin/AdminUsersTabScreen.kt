@@ -17,8 +17,10 @@ import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.utils.pageDown
 import de.joelneumann.lojinha.ui.utils.pageUp
 import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.FocusRequester
 import de.joelneumann.lojinha.ui.components.admin.AdminExpandableSection
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.components.admin.users.AdminUserAccordionCard
 import de.joelneumann.lojinha.ui.components.admin.users.DeactivatedUserCard
 import de.joelneumann.lojinha.ui.components.admin.users.DeletedUserCard
@@ -49,7 +51,8 @@ fun AdminUsersTabScreen(
     defaultSaveDirectory: String = "",
     onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
-    onRevealExportedFolder: ((String) -> Unit)? = null
+    onRevealExportedFolder: ((String) -> Unit)? = null,
+    focusTrigger: Int = 0
 ) {
     val users by viewModel.users.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -72,6 +75,13 @@ fun AdminUsersTabScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val isModalOpen = showUserModal || customExpenseUser != null || customIncomeUser != null || exportPdfUser != null
+    val searchFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isModalOpen, expandedUserId, focusTrigger) {
+        if (!isModalOpen && expandedUserId == null) {
+            searchFocusRequester.safeRequestFocus()
+        }
+    }
 
     LaunchedEffect(onRegisterPageScroller, isModalOpen) {
         onRegisterPageScroller?.invoke { isDown ->
@@ -155,7 +165,8 @@ fun AdminUsersTabScreen(
             countText = if (searchQuery.isBlank()) strings.accountsCountText(activeUsers.size) else strings.accountsCountText(filteredActiveUsers.size, activeUsers.size),
             onSearchSubmitted = openFirstResult,
             actionButtonText = strings.addUser,
-            onActionButtonClick = viewModel::openNewUserModal
+            onActionButtonClick = viewModel::openNewUserModal,
+            focusRequester = searchFocusRequester
         )
 
         Spacer(modifier = Modifier.height(14.dp))

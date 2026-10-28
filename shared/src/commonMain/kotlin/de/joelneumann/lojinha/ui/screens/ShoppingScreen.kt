@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -245,8 +246,22 @@ fun ShoppingContent(
         }
     }
 
-    LaunchedEffect(weightProductDialog, showCheckoutConfirmation, completedPurchase, LanguageManager.currentLanguage) {
-        if (weightProductDialog == null && !showCheckoutConfirmation && completedPurchase == null) {
+    LaunchedEffect(
+        weightProductDialog,
+        showCheckoutConfirmation,
+        completedPurchase,
+        showNoteDialog,
+        noteSubmitSuccess,
+        purchaseError,
+        LanguageManager.currentLanguage
+    ) {
+        if (weightProductDialog == null &&
+            !showCheckoutConfirmation &&
+            completedPurchase == null &&
+            !showNoteDialog &&
+            noteSubmitSuccess == null &&
+            purchaseError == null
+        ) {
             searchFocusRequester.safeRequestFocus()
         }
     }
@@ -392,6 +407,7 @@ fun ShoppingContent(
             actions = {
                 Button(
                     onClick = onOpenNoteDialog,
+                    modifier = Modifier.focusProperties { canFocus = false },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
@@ -417,6 +433,7 @@ fun ShoppingContent(
 
                 Button(
                     onClick = onNavigateToHistory,
+                    modifier = Modifier.focusProperties { canFocus = false },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
@@ -441,7 +458,8 @@ fun ShoppingContent(
                 }
 
                 LogoutButton(
-                    onClick = onLogout
+                    onClick = onLogout,
+                    modifier = Modifier.focusProperties { canFocus = false }
                 )
             }
         )
@@ -716,8 +734,14 @@ fun ShoppingContent(
                 message = err,
                 confirmText = strings.confirm,
                 cancelText = null,
-                onDismiss = onDismissPurchaseError,
-                onConfirm = onDismissPurchaseError,
+                onDismiss = {
+                    onDismissPurchaseError()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
+                onConfirm = {
+                    onDismissPurchaseError()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
                 confirmButtonColor = ColorDangerCrimson
             )
         }
@@ -745,7 +769,10 @@ fun ShoppingContent(
                 user = user,
                 isSubmitting = isSubmittingNote,
                 errorMessage = noteSubmitError,
-                onDismiss = onDismissNoteDialog,
+                onDismiss = {
+                    onDismissNoteDialog()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
                 onSubmit = onSubmitNote,
                 onUserInteracted = onUserInteracted
             )
@@ -758,8 +785,14 @@ fun ShoppingContent(
                 message = successMsg,
                 confirmText = strings.ok,
                 cancelText = null,
-                onDismiss = onDismissNoteSuccess,
-                onConfirm = onDismissNoteSuccess,
+                onDismiss = {
+                    onDismissNoteSuccess()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
+                onConfirm = {
+                    onDismissNoteSuccess()
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
                 confirmButtonColor = ColorSuccessEmerald
             )
         }

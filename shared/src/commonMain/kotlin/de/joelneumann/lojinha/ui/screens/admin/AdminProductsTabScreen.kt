@@ -20,8 +20,10 @@ import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.utils.pageDown
 import de.joelneumann.lojinha.ui.utils.pageUp
 import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.FocusRequester
 import de.joelneumann.lojinha.ui.components.admin.AdminExpandableSection
 import de.joelneumann.lojinha.ui.components.admin.AdminTopBar
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.components.admin.products.AdminProductAccordionCard
 import de.joelneumann.lojinha.ui.components.admin.products.DisabledProductCard
 import de.joelneumann.lojinha.ui.components.admin.products.ProductEditDialog
@@ -44,7 +46,8 @@ fun AdminProductsTabScreen(
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandProduct: (String) -> Unit,
     onUnsavedStateChanged: (Boolean) -> Unit,
-    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null
+    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
+    focusTrigger: Int = 0
 ) {
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -60,6 +63,13 @@ fun AdminProductsTabScreen(
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val searchFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(showProductModal, expandedProductId, focusTrigger) {
+        if (!showProductModal && expandedProductId == null) {
+            searchFocusRequester.safeRequestFocus()
+        }
+    }
 
     LaunchedEffect(onRegisterPageScroller, showProductModal) {
         onRegisterPageScroller?.invoke { isDown ->
@@ -138,6 +148,7 @@ fun AdminProductsTabScreen(
             onSearchSubmitted = openFirstResult,
             actionButtonText = strings.addProduct,
             onActionButtonClick = viewModel::openNewProductModal,
+            focusRequester = searchFocusRequester,
             sortContent = {
                 ProductSortButton(
                     selectedOption = sortOption,

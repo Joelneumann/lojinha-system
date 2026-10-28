@@ -35,6 +35,7 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.window.DialogProperties
@@ -77,9 +78,12 @@ fun AdminScreen(
     val focusRequester = remember { FocusRequester() }
     val initialTab = if (notesViewModel != null) AdminTab.NOTES else AdminTab.PRODUCTS
     var currentTab by remember { mutableStateOf(initialTab) }
+    var tabFocusTrigger by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) {
-        focusRequester.safeRequestFocus()
+    LaunchedEffect(currentTab) {
+        if (currentTab == AdminTab.BULK_BILLING || currentTab == AdminTab.SETTINGS) {
+            focusRequester.safeRequestFocus()
+        }
     }
 
     val notes by (notesViewModel?.notes?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
@@ -135,7 +139,13 @@ fun AdminScreen(
                 expandedUserId = null
                 expandedTransactionId = null
                 activePageScroller = null
+                tabFocusTrigger++
             }
+        } else {
+            expandedProductId = null
+            expandedUserId = null
+            expandedTransactionId = null
+            tabFocusTrigger++
         }
     }
 
@@ -215,6 +225,7 @@ fun AdminScreen(
                             .then(if (isCompact) Modifier.wrapContentWidth() else Modifier.weight(1f))
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
+                            .focusProperties { canFocus = false }
                             .clickable { handleTabSwitchRequest(tab) }
                             .padding(
                                 horizontal = if (isNarrow) 10.dp else 14.dp,
@@ -285,7 +296,8 @@ fun AdminScreen(
                         if (notesViewModel != null) {
                             AdminNotesTabScreen(
                                 viewModel = notesViewModel,
-                                onRegisterPageScroller = { scroller -> activePageScroller = scroller }
+                                onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                                focusTrigger = tabFocusTrigger
                             )
                         }
                     }
@@ -299,7 +311,8 @@ fun AdminScreen(
                             },
                             onRequestExpandProduct = { id -> expandedProductId = id },
                             onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
-                            onRegisterPageScroller = { scroller -> activePageScroller = scroller }
+                            onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                            focusTrigger = tabFocusTrigger
                         )
                     }
 
@@ -316,7 +329,8 @@ fun AdminScreen(
                             defaultSaveDirectory = defaultSaveDirectory,
                             onExecutePdfExport = onExecutePdfExport,
                             onOpenExportedPdf = onOpenExportedPdf,
-                            onRevealExportedFolder = onRevealExportedFolder
+                            onRevealExportedFolder = onRevealExportedFolder,
+                            focusTrigger = tabFocusTrigger
                         )
                     }
 
@@ -328,7 +342,8 @@ fun AdminScreen(
                                 expandedTransactionId = if (expandedTransactionId == id) null else id
                             },
                             onRequestExpandTransaction = { id -> expandedTransactionId = id },
-                            onRegisterPageScroller = { scroller -> activePageScroller = scroller }
+                            onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                            focusTrigger = tabFocusTrigger
                         )
                     }
 
