@@ -757,6 +757,7 @@ object EnglishStrings : AppStrings {
     override val historyColType = "Event Type"
     override val historyColUserOrDetails = "User / Details"
     override val historyColQuantity = "Quantity"
+    override val historyColStockAfter = "Stock After"
     override val stockAdjustmentInitial = "Initial stock"
     override val stockAdjustmentManual = "Manual stock adjustment"
     override val errFailedToLoadProductHistory = "Failed to load product history."

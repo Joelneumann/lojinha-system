@@ -66,6 +66,7 @@ class AdminProductsViewModel(
 
     private var productsJob: Job? = null
     private var settingsJob: Job? = null
+    private var historyJob: Job? = null
 
     init {
         loadData()
@@ -74,7 +75,15 @@ class AdminProductsViewModel(
     fun loadData() {
         productsJob?.cancel()
         productsJob = viewModelScope.launch {
-            productRepository.getProductsFlow().collect { _products.value = it.sortedByAccentInsensitive { p -> p.name } }
+            productRepository.getProductsFlow().collect { list ->
+                val sorted = list.sortedByAccentInsensitive { p -> p.name }
+                _products.value = sorted
+                _historyProduct.value?.let { currentHist ->
+                    sorted.firstOrNull { p -> p.id == currentHist.id }?.let { updated ->
+                        _historyProduct.value = updated
+                    }
+                }
+            }
         }
         settingsJob?.cancel()
         settingsRepository?.let { repo ->
@@ -187,7 +196,11 @@ class AdminProductsViewModel(
                     productRepository.saveProduct(prod.copy(basePrice = newBasePrice))
                 }
                 refreshProducts()
+                val updatedProd = _products.value.firstOrNull { it.id == productId }
                 if (_historyProduct.value?.id == productId) {
+                    if (updatedProd != null) {
+                        _historyProduct.value = updatedProd
+                    }
                     loadProductHistory()
                 }
             } catch (e: Exception) {
@@ -204,6 +217,8 @@ class AdminProductsViewModel(
     }
 
     fun closeProductHistoryModal() {
+        historyJob?.cancel()
+        historyJob = null
         _historyProduct.value = null
         _historyResult.value = null
         _historyPage.value = 0
@@ -222,7 +237,8 @@ class AdminProductsViewModel(
 
     fun loadProductHistory() {
         val prod = _historyProduct.value ?: return
-        viewModelScope.launch {
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
             _isLoadingHistory.value = true
             try {
                 val result = productRepository.getProductHistory(
@@ -240,13 +256,11 @@ class AdminProductsViewModel(
         }
     }
 
-
-
-
-
-
     override fun onCleared() {
         super.onCleared()
+        productsJob?.cancel()
+        settingsJob?.cancel()
+        historyJob?.cancel()
         _products.value = emptyList()
         _searchQuery.value = ""
     }

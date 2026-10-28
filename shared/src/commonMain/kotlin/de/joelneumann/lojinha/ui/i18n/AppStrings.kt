@@ -736,6 +736,7 @@ interface AppStrings {
     val historyColType: String
     val historyColUserOrDetails: String
     val historyColQuantity: String
+    val historyColStockAfter: String
     val stockAdjustmentInitial: String
     val stockAdjustmentManual: String
     val errFailedToLoadProductHistory: String

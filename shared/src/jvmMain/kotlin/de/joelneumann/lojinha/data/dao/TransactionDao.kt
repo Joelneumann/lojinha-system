@@ -74,13 +74,13 @@ interface TransactionDao {
     suspend fun getCancellationCountForReference(refId: String): Int
 
     @Query("""
-        SELECT COUNT(*) FROM transactions, json_each(CASE WHEN items IS NULL OR items = '' THEN '[]' ELSE items END) 
+        SELECT COUNT(DISTINCT transactions.id) FROM transactions, json_each(CASE WHEN items IS NULL OR items = '' THEN '[]' ELSE items END) 
         WHERE json_extract(value, '$.productId') = :productId
     """)
     suspend fun getTransactionCountForProduct(productId: String): Int
 
     @Query("""
-        SELECT transactions.* FROM transactions, json_each(CASE WHEN items IS NULL OR items = '' THEN '[]' ELSE items END) 
+        SELECT DISTINCT transactions.* FROM transactions, json_each(CASE WHEN items IS NULL OR items = '' THEN '[]' ELSE items END) 
         WHERE json_extract(value, '$.productId') = :productId
         ORDER BY timestamp DESC
     """)

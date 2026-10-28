@@ -30,5 +30,6 @@ data class ProductHistoryEntry(
     val unitType: UnitType = UnitType.PIECE,
     val note: String? = null,
     val unitPrice: Long? = null,
-    val isCancelled: Boolean = false
+    val isCancelled: Boolean = false,
+    val stockAfter: Long? = null
 )

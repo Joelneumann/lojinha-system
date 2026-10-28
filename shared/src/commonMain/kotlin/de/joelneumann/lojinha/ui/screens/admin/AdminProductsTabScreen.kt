@@ -214,7 +214,8 @@ fun AdminProductsTabScreen(
                             filteredDisabledProducts.forEach { product ->
                                 DisabledProductCard(
                                     product = product,
-                                    onEnableProduct = { viewModel.toggleProductActive(product) }
+                                    onEnableProduct = { viewModel.toggleProductActive(product) },
+                                    onViewHistory = { viewModel.openProductHistoryModal(product) }
                                 )
                             }
                         }

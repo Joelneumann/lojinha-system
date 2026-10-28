@@ -6,7 +6,9 @@ import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
+import de.joelneumann.lojinha.data.entity.ProductStockAdjustmentEntity
 import de.joelneumann.lojinha.data.entity.SettingsEntity
+import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -356,6 +358,63 @@ object DatabaseFactory {
             }
         } catch (e: Exception) {
             AppLogger.warn(TAG, "Failed to seed default backup routine: ${e.message}", e)
+        }
+
+        // Seed initial stock baseline for existing products that lack stock adjustment records
+        try {
+            val productDao = db.productDao()
+            val productStockAdjustmentDao = db.productStockAdjustmentDao()
+            val transactionDao = db.transactionDao()
+            val allProducts = productDao.getAllProducts()
+
+            for (product in allProducts) {
+                val existingAdjustments = productStockAdjustmentDao.getAdjustmentsByProductId(product.id)
+                if (existingAdjustments.isEmpty()) {
+                    val transactions = transactionDao.getTransactionsForProduct(product.id)
+                    val directCancellations = transactions
+                        .filter { it.type == TransactionType.CANCELLATION.name && it.referenceTransactionId != null }
+                        .mapNotNull { it.referenceTransactionId }
+                        .toSet()
+
+                    val purchases = transactions.filter { it.type == TransactionType.PURCHASE.name }
+                    val purchaseIds = purchases.map { it.id }
+                    val additionalCancellations = if (purchaseIds.isNotEmpty()) {
+                        transactionDao.getTransactionsByReferenceIds(purchaseIds)
+                            .filter { it.type == TransactionType.CANCELLATION.name && it.referenceTransactionId != null }
+                            .mapNotNull { it.referenceTransactionId }
+                            .toSet()
+                    } else {
+                        emptySet()
+                    }
+                    val allCancelledTxIds = directCancellations + additionalCancellations
+
+                    val activePurchases = purchases.filter { !allCancelledTxIds.contains(it.id) }
+                    val totalPurchased = activePurchases.sumOf { tx ->
+                        tx.items.filter { it.productId == product.id }.sumOf { it.quantity }
+                    }
+
+                    val initialStock = product.stockQuantity + totalPurchased
+                    val earliestTxTimestamp = transactions.minOfOrNull { it.timestamp }
+                    val initialTimestamp = if (earliestTxTimestamp != null && earliestTxTimestamp > 1000L) {
+                        earliestTxTimestamp - 1000L
+                    } else {
+                        de.joelneumann.lojinha.ui.utils.currentTimeMillis()
+                    }
+
+                    val initialAdjustment = ProductStockAdjustmentEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        productId = product.id,
+                        timestamp = initialTimestamp,
+                        deltaQuantity = initialStock,
+                        resultingQuantity = initialStock,
+                        note = "SYSNOTE|INITIAL_STOCK"
+                    )
+                    productStockAdjustmentDao.insertAdjustment(initialAdjustment)
+                    AppLogger.info(TAG, "Seeded initial stock baseline for product '${product.name}' (${product.id}): $initialStock (current: ${product.stockQuantity}, purchased: $totalPurchased)")
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.warn(TAG, "Failed to seed initial product stock baselines: ${e.message}", e)
         }
     }
 }

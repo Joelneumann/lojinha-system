@@ -65,7 +65,7 @@ class RoomProductRepositoryImpl(
             )
         } else {
             productDao.insertOrUpdateProduct(ProductEntity.fromDomain(sanitizedProduct))
-            if (sanitizedProduct.stockQuantity > 0L) {
+            if (sanitizedProduct.stockQuantity >= 0L) {
                 productStockAdjustmentDao?.insertAdjustment(
                     ProductStockAdjustmentEntity(
                         id = generateUuid(),
@@ -91,6 +91,7 @@ class RoomProductRepositoryImpl(
         if (txCount > 0) {
             productDao.deactivateProduct(id)
         } else {
+            productStockAdjustmentDao?.deleteAdjustmentsByProductId(id)
             productDao.deleteProduct(id)
         }
         onDataChanged?.invoke()
@@ -139,7 +140,7 @@ class RoomProductRepositoryImpl(
             )
         }
 
-        val rawTransactions = transactionDao?.getTransactionsForProduct(productId) ?: emptyList()
+        val rawTransactions = transactionDao?.getTransactionsForProduct(productId)?.distinctBy { it.id } ?: emptyList()
         val directCancellations = rawTransactions
             .filter { it.type == TransactionType.CANCELLATION.name && it.referenceTransactionId != null }
             .mapNotNull { it.referenceTransactionId }
@@ -148,7 +149,9 @@ class RoomProductRepositoryImpl(
         val candidatePurchases = rawTransactions.filter { it.type == TransactionType.PURCHASE.name }
         val purchaseIds = candidatePurchases.map { it.id }
         val additionalCancellations = if (purchaseIds.isNotEmpty() && transactionDao != null) {
-            transactionDao.getTransactionsByReferenceIds(purchaseIds)
+            purchaseIds.chunked(500).flatMap { chunk ->
+                transactionDao.getTransactionsByReferenceIds(chunk)
+            }
                 .filter { it.type == TransactionType.CANCELLATION.name && it.referenceTransactionId != null }
                 .mapNotNull { it.referenceTransactionId }
                 .toSet()
@@ -158,22 +161,163 @@ class RoomProductRepositoryImpl(
         val allCancelledTxIds = directCancellations + additionalCancellations
 
         val purchaseEntries = candidatePurchases.mapNotNull { tx ->
-            val item = tx.items.firstOrNull { it.productId == productId } ?: return@mapNotNull null
+            val matchingItems = tx.items.filter { it.productId == productId }
+            if (matchingItems.isEmpty()) return@mapNotNull null
+            val totalQuantity = matchingItems.sumOf { it.quantity }
+            val firstItem = matchingItems.first()
             ProductHistoryEntry(
                 id = "${tx.id}_$productId",
                 productId = productId,
                 timestamp = tx.timestamp,
                 type = ProductHistoryType.PURCHASE,
                 userName = tx.userNameSnapshot,
-                quantity = item.quantity,
-                unitType = item.unitType,
+                quantity = totalQuantity,
+                unitType = firstItem.unitType,
                 note = tx.note,
-                unitPrice = item.unitPriceAtPurchase,
+                unitPrice = firstItem.unitPriceAtPurchase,
                 isCancelled = allCancelledTxIds.contains(tx.id)
             )
         }
 
-        val allEntries = (adjustmentEntries + purchaseEntries).sortedByDescending { it.timestamp }
+        val correctionEntries = rawTransactions.filter { it.type == TransactionType.CORRECTION.name }.mapNotNull { tx ->
+            val matchingItems = tx.items.filter { it.productId == productId }
+            if (matchingItems.isEmpty()) return@mapNotNull null
+            var totalDelta = 0L
+            for (item in matchingItems) {
+                val prev = item.previousQuantity ?: continue
+                val diff = item.quantity - prev
+                totalDelta += -diff
+            }
+            if (totalDelta == 0L) return@mapNotNull null
+            val firstItem = matchingItems.first()
+            ProductHistoryEntry(
+                id = "${tx.id}_$productId",
+                productId = productId,
+                timestamp = tx.timestamp,
+                type = ProductHistoryType.STOCK_ADJUSTMENT,
+                userName = tx.userNameSnapshot,
+                quantity = totalDelta,
+                unitType = firstItem.unitType,
+                note = tx.note ?: "Correction",
+                unitPrice = firstItem.unitPriceAtPurchase,
+                isCancelled = false
+            )
+        }
+
+        val cancellationEntries = rawTransactions
+            .filter { it.type == TransactionType.CANCELLATION.name && it.referenceTransactionId != null }
+            .mapNotNull { tx ->
+                val matchingItems = tx.items.filter { it.productId == productId }
+                if (matchingItems.isEmpty()) return@mapNotNull null
+                val restoredQty = matchingItems.sumOf { item ->
+                    if (item.previousQuantity != null && item.previousQuantity > 0L) {
+                        item.previousQuantity - item.quantity
+                    } else {
+                        item.quantity
+                    }
+                }
+                if (restoredQty <= 0L) return@mapNotNull null
+                val firstItem = matchingItems.first()
+                ProductHistoryEntry(
+                    id = "${tx.id}_$productId",
+                    productId = productId,
+                    timestamp = tx.timestamp,
+                    type = ProductHistoryType.CANCELLATION,
+                    userName = tx.userNameSnapshot,
+                    quantity = restoredQty,
+                    unitType = firstItem.unitType,
+                    note = tx.note ?: "Cancellation",
+                    unitPrice = firstItem.unitPriceAtPurchase,
+                    isCancelled = false
+                )
+            }
+
+        val rawEntries = (adjustmentEntries + purchaseEntries + correctionEntries + cancellationEntries)
+            .distinctBy { it.id }
+
+        val initialStockEntry = rawEntries.firstOrNull { it.note == "SYSNOTE|INITIAL_STOCK" }
+        val earliestTxTimestamp = rawEntries.filter { it.note != "SYSNOTE|INITIAL_STOCK" }.minOfOrNull { it.timestamp }
+        val effectiveEntries = if (initialStockEntry != null && earliestTxTimestamp != null && initialStockEntry.timestamp >= earliestTxTimestamp) {
+            val adjustedInitial = initialStockEntry.copy(timestamp = earliestTxTimestamp - 1000L)
+            rawEntries.map { if (it.id == initialStockEntry.id) adjustedInitial else it }
+        } else {
+            rawEntries
+        }
+
+        val sortedAscending = effectiveEntries.sortedWith(
+            compareBy<ProductHistoryEntry> { it.timestamp }
+                .thenBy {
+                    when {
+                        it.note == "SYSNOTE|INITIAL_STOCK" -> 0
+                        it.type == ProductHistoryType.STOCK_ADJUSTMENT -> 1
+                        it.type == ProductHistoryType.PURCHASE -> 2
+                        it.type == ProductHistoryType.CANCELLATION -> 3
+                        else -> 4
+                    }
+                }
+        )
+
+        val explicitCancelledRefIds = cancellationEntries.mapNotNull { entry ->
+            val txId = entry.id.substringBefore("_$productId")
+            rawTransactions.firstOrNull { it.id == txId }?.referenceTransactionId
+        }.toSet()
+
+        val hasInitialStock = sortedAscending.any { it.note == "SYSNOTE|INITIAL_STOCK" }
+
+        val withStockAfter = if (hasInitialStock) {
+            var runningStock = 0L
+            var foundInitial = false
+            sortedAscending.map { entry ->
+                if (!foundInitial && entry.note == "SYSNOTE|INITIAL_STOCK") {
+                    foundInitial = true
+                    runningStock = entry.quantity
+                    entry.copy(stockAfter = runningStock)
+                } else {
+                    when (entry.type) {
+                        ProductHistoryType.STOCK_ADJUSTMENT -> {
+                            runningStock += entry.quantity
+                        }
+                        ProductHistoryType.PURCHASE -> {
+                            val rawTxId = entry.id.substringBefore("_$productId")
+                            val hasSeparateCancellation = explicitCancelledRefIds.contains(rawTxId)
+                            if (!entry.isCancelled || hasSeparateCancellation) {
+                                runningStock -= entry.quantity
+                            }
+                        }
+                        ProductHistoryType.CANCELLATION -> {
+                            runningStock += entry.quantity
+                        }
+                    }
+                    entry.copy(stockAfter = runningStock)
+                }
+            }
+        } else {
+            var runningStock = product?.stockQuantity ?: 0L
+            val result = ArrayList<ProductHistoryEntry>(sortedAscending.size)
+            for (i in sortedAscending.indices.reversed()) {
+                val entry = sortedAscending[i]
+                val entryWithStock = entry.copy(stockAfter = runningStock)
+                when (entry.type) {
+                    ProductHistoryType.STOCK_ADJUSTMENT -> {
+                        runningStock -= entry.quantity
+                    }
+                    ProductHistoryType.PURCHASE -> {
+                        val rawTxId = entry.id.substringBefore("_$productId")
+                        val hasSeparateCancellation = explicitCancelledRefIds.contains(rawTxId)
+                        if (!entry.isCancelled || hasSeparateCancellation) {
+                            runningStock += entry.quantity
+                        }
+                    }
+                    ProductHistoryType.CANCELLATION -> {
+                        runningStock -= entry.quantity
+                    }
+                }
+                result.add(entryWithStock)
+            }
+            result.reversed()
+        }
+
+        val allEntries = withStockAfter.sortedByDescending { it.timestamp }
         val totalCount = allEntries.size
         val safePageSize = pageSize.coerceAtLeast(1)
         val totalPages = if (totalCount == 0) 1 else (totalCount + safePageSize - 1) / safePageSize

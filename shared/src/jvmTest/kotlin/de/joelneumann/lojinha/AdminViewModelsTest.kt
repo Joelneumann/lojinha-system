@@ -402,7 +402,8 @@ class AdminViewModelsTest {
                 quantity = 20,
                 unitType = UnitType.PIECE,
                 userName = null,
-                note = "Initial stock"
+                note = "Initial stock",
+                stockAfter = 20L
             ),
             ProductHistoryEntry(
                 id = "h-2",
@@ -412,7 +413,8 @@ class AdminViewModelsTest {
                 quantity = 2,
                 unitType = UnitType.PIECE,
                 userName = "Alice",
-                note = null
+                note = null,
+                stockAfter = 18L
             )
         )
         val productRepo = TestProductRepository(listOf(testProduct)).apply {
@@ -427,6 +429,8 @@ class AdminViewModelsTest {
         assertEquals(Triple("prod-history-1", 0, 25), productRepo.requestedHistoryArgs.first())
         assertEquals(2, viewModel.historyResult.value?.items?.size)
         assertEquals(2, viewModel.historyResult.value?.totalCount)
+        assertEquals(20L, viewModel.historyResult.value?.items?.get(0)?.stockAfter)
+        assertEquals(18L, viewModel.historyResult.value?.items?.get(1)?.stockAfter)
         assertFalse(viewModel.isLoadingHistory.value)
 
         viewModel.closeProductHistoryModal()
@@ -480,6 +484,7 @@ class AdminViewModelsTest {
         viewModel.adjustProductStock(testProduct.id, 5)
         assertEquals(2, productRepo.requestedHistoryArgs.size)
         assertEquals(Triple("prod-history-3", 0, 25), productRepo.requestedHistoryArgs.last())
+        assertEquals(15L, viewModel.historyProduct.value?.stockQuantity)
     }
 
     @Test
