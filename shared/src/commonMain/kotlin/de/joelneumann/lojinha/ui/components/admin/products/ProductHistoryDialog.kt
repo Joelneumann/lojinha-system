@@ -31,10 +31,11 @@ import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.components.general.PaginationBar
-import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.SystemNoteHelper
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 @Composable
@@ -330,7 +331,7 @@ private fun HistoryRowItem(
                 }
                 ProductHistoryType.PURCHASE -> {
                     if (entry.isCancelled) {
-                        strings.historyTypeCancellation to AdminBadgeType.DANGER
+                        strings.historyTypePurchase to AdminBadgeType.DANGER
                     } else {
                         strings.historyTypePurchase to AdminBadgeType.NAVY
                     }
@@ -350,10 +351,14 @@ private fun HistoryRowItem(
             val detailText = when (entry.type) {
                 ProductHistoryType.PURCHASE -> entry.userName ?: "-"
                 ProductHistoryType.STOCK_ADJUSTMENT -> {
-                    when (entry.note) {
-                        "SYSNOTE|INITIAL_STOCK" -> strings.stockAdjustmentInitial
-                        null, "" -> strings.stockAdjustmentManual
-                        else -> entry.note
+                    if (!entry.userName.isNullOrBlank()) {
+                        entry.userName
+                    } else {
+                        when (entry.note) {
+                            "SYSNOTE|INITIAL_STOCK" -> strings.stockAdjustmentInitial
+                            null, "" -> strings.stockAdjustmentManual
+                            else -> SystemNoteHelper.decodeNote(entry.note, strings) ?: entry.note
+                        }
                     }
                 }
                 ProductHistoryType.CANCELLATION -> entry.userName ?: strings.historyTypeCancellation

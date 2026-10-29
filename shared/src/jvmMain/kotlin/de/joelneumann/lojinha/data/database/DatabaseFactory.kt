@@ -393,7 +393,16 @@ object DatabaseFactory {
                         tx.items.filter { it.productId == product.id }.sumOf { it.quantity }
                     }
 
-                    val initialStock = product.stockQuantity + totalPurchased
+                    val corrections = transactions.filter { it.type == TransactionType.CORRECTION.name }
+                    var totalCorrectionDelta = 0L
+                    for (tx in corrections) {
+                        for (item in tx.items.filter { it.productId == product.id }) {
+                            val prev = item.previousQuantity ?: continue
+                            totalCorrectionDelta += -(item.quantity - prev)
+                        }
+                    }
+
+                    val initialStock = product.stockQuantity + totalPurchased - totalCorrectionDelta
                     val earliestTxTimestamp = transactions.minOfOrNull { it.timestamp }
                     val initialTimestamp = if (earliestTxTimestamp != null && earliestTxTimestamp > 1000L) {
                         earliestTxTimestamp - 1000L

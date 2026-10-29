@@ -248,4 +248,99 @@ class RoomProductRepositoryImplTest {
         val olderTx = history.items.first { it.id == "tx-leg-1_p-legacy" }
         assertEquals(12L, olderTx.stockAfter)
     }
+
+    @Test
+    fun testUpdateStock_negativeDeltaExceedingStock_recordsActualClampedDelta() = runTest {
+        val product = Product(
+            id = "p-clamp",
+            name = "Clamped Item",
+            barcodes = emptyList(),
+            basePrice = 100,
+            unitType = UnitType.PIECE,
+            stockQuantity = 3
+        )
+        repository.saveProduct(product)
+
+        // Clear initial adjustment so we test only updateStock
+        db.productStockAdjustmentDao().deleteAdjustmentsByProductId("p-clamp")
+
+        // Call updateStock with -10 when stock is 3
+        repository.updateStock("p-clamp", -10)
+
+        val adjustments = db.productStockAdjustmentDao().getAdjustmentsByProductId("p-clamp")
+        assertEquals(1, adjustments.size)
+        // Delta should be -3 (the actual amount removed before clamping at 0), not -10
+        assertEquals(-3L, adjustments.first().deltaQuantity)
+        assertEquals(0L, adjustments.first().resultingQuantity)
+    }
+
+    @Test
+    fun testGetProductHistory_simultaneousEvents_tiebreaksDeterministicallyDescending() = runTest {
+        val product = Product(
+            id = "p-tie",
+            name = "Simultaneous Test Item",
+            barcodes = emptyList(),
+            basePrice = 100,
+            unitType = UnitType.PIECE,
+            stockQuantity = 10
+        )
+        repository.saveProduct(product)
+
+        // Overwrite the initial adjustment timestamp to 1000L
+        db.productStockAdjustmentDao().deleteAdjustmentsByProductId("p-tie")
+        db.productStockAdjustmentDao().insertAdjustment(
+            de.joelneumann.lojinha.data.entity.ProductStockAdjustmentEntity(
+                id = "adj-init",
+                productId = "p-tie",
+                timestamp = 1000L,
+                deltaQuantity = 10L,
+                resultingQuantity = 10L,
+                note = "SYSNOTE|INITIAL_STOCK"
+            )
+        )
+
+        db.userDao().insertOrUpdateUser(
+            UserEntity.fromDomain(User(id = "u-tie", name = "Tie User", balance = 5000, isActive = true))
+        )
+
+        // Purchase at 1000L
+        db.transactionDao().insertTransaction(
+            TransactionEntity(
+                id = "tx-tie-purch",
+                userId = "u-tie",
+                userNameSnapshot = "Tie User",
+                timestamp = 1000L,
+                type = TransactionType.PURCHASE.name,
+                referenceTransactionId = null,
+                note = null,
+                totalAmount = 200L,
+                items = listOf(TransactionItem(productId = "p-tie", productName = "Tie Item", quantity = 2, unitPriceAtPurchase = 100, unitType = UnitType.PIECE))
+            )
+        )
+
+        // Cancellation at 1000L
+        db.transactionDao().insertTransaction(
+            TransactionEntity(
+                id = "tx-tie-cancel",
+                userId = "u-tie",
+                userNameSnapshot = "Tie User",
+                timestamp = 1000L,
+                type = TransactionType.CANCELLATION.name,
+                referenceTransactionId = "tx-tie-purch",
+                note = "Cancellation",
+                totalAmount = -200L,
+                items = listOf(TransactionItem(productId = "p-tie", productName = "Tie Item", quantity = 0, unitPriceAtPurchase = 100, unitType = UnitType.PIECE, previousQuantity = 2))
+            )
+        )
+
+        val history = repository.getProductHistory("p-tie", page = 0, pageSize = 25)
+        assertEquals(3, history.items.size)
+
+        // In descending order, with all timestamps identical at 1000L:
+        // CANCELLATION must be first, then PURCHASE, then INITIAL_STOCK last
+        assertEquals(ProductHistoryType.CANCELLATION, history.items[0].type)
+        assertEquals(ProductHistoryType.PURCHASE, history.items[1].type)
+        assertEquals(ProductHistoryType.STOCK_ADJUSTMENT, history.items[2].type)
+        assertEquals("SYSNOTE|INITIAL_STOCK", history.items[2].note)
+    }
 }

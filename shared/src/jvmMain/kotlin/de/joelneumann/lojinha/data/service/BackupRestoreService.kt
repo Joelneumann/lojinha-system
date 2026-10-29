@@ -801,6 +801,7 @@ class BackupRestoreService(
                     db.adminNoteDao().deleteAllNotes()
                     db.billingListDao().deleteAllBillingListUsers()
                     db.billingListDao().deleteAllBillingLists()
+                    db.productStockAdjustmentDao().deleteAllAdjustments()
                     db.userDao().deleteAllUsers()
                     db.productDao().deleteAllProducts()
                     db.transactionDao().deleteAllTransactions()
@@ -1012,9 +1013,41 @@ class BackupRestoreService(
             if (dbFile.exists()) {
                 performDbSnapshot(safetyFile)
             }
+            val now = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
-                    productsToInsert.forEach { db.productDao().insertOrUpdateProduct(it) }
+                    productsToInsert.forEach { entity ->
+                        val existing = existingProducts[entity.id]
+                        db.productDao().insertOrUpdateProduct(entity)
+                        if (existing == null) {
+                            if (entity.stockQuantity >= 0L) {
+                                db.productStockAdjustmentDao().insertAdjustment(
+                                    ProductStockAdjustmentEntity(
+                                        id = java.util.UUID.randomUUID().toString(),
+                                        productId = entity.id,
+                                        timestamp = now,
+                                        deltaQuantity = entity.stockQuantity,
+                                        resultingQuantity = entity.stockQuantity,
+                                        note = "SYSNOTE|INITIAL_STOCK"
+                                    )
+                                )
+                            }
+                        } else {
+                            val delta = entity.stockQuantity - existing.stockQuantity
+                            if (delta != 0L) {
+                                db.productStockAdjustmentDao().insertAdjustment(
+                                    ProductStockAdjustmentEntity(
+                                        id = java.util.UUID.randomUUID().toString(),
+                                        productId = entity.id,
+                                        timestamp = now,
+                                        deltaQuantity = delta,
+                                        resultingQuantity = entity.stockQuantity,
+                                        note = null
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

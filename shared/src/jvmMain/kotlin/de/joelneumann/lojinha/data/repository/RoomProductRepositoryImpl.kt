@@ -98,16 +98,19 @@ class RoomProductRepositoryImpl(
     }
 
     override suspend fun updateStock(productId: String, delta: Long) {
+        val beforeStock = productDao.getProductById(productId)?.stockQuantity ?: 0L
         productDao.updateStock(productId, delta)
-        if (delta != 0L) {
-            val updated = productDao.getProductById(productId)
+        val updated = productDao.getProductById(productId)
+        val afterStock = updated?.stockQuantity ?: 0L
+        val actualDelta = afterStock - beforeStock
+        if (actualDelta != 0L) {
             productStockAdjustmentDao?.insertAdjustment(
                 ProductStockAdjustmentEntity(
                     id = generateUuid(),
                     productId = productId,
                     timestamp = currentTimeMillis(),
-                    deltaQuantity = delta,
-                    resultingQuantity = updated?.stockQuantity,
+                    deltaQuantity = actualDelta,
+                    resultingQuantity = afterStock,
                     note = null
                 )
             )
@@ -317,7 +320,18 @@ class RoomProductRepositoryImpl(
             result.reversed()
         }
 
-        val allEntries = withStockAfter.sortedByDescending { it.timestamp }
+        val allEntries = withStockAfter.sortedWith(
+            compareByDescending<ProductHistoryEntry> { it.timestamp }
+                .thenByDescending {
+                    when {
+                        it.note == "SYSNOTE|INITIAL_STOCK" -> 0
+                        it.type == ProductHistoryType.STOCK_ADJUSTMENT -> 1
+                        it.type == ProductHistoryType.PURCHASE -> 2
+                        it.type == ProductHistoryType.CANCELLATION -> 3
+                        else -> 4
+                    }
+                }
+        )
         val totalCount = allEntries.size
         val safePageSize = pageSize.coerceAtLeast(1)
         val totalPages = if (totalCount == 0) 1 else (totalCount + safePageSize - 1) / safePageSize
