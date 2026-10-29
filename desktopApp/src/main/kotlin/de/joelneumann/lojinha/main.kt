@@ -46,7 +46,7 @@ fun main() {
     application {
         val database = DatabaseFactory.createDatabase()
         val onDataChanged = { DataChangeNotifier.notifyDataChanged() }
-        val productRepository = RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), onDataChanged)
+        val productRepository = RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), database.productStockAdjustmentDao(), onDataChanged)
         val userRepository = RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged)
         val transactionRepository = RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged)
         val billingListRepository = RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged)

@@ -6,7 +6,9 @@ import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
+import de.joelneumann.lojinha.data.entity.ProductStockAdjustmentEntity
 import de.joelneumann.lojinha.data.entity.SettingsEntity
+import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -154,6 +156,22 @@ object DatabaseFactory {
         }
     }
 
+    private val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v16 -> v17 (creating product_stock_adjustments table)...")
+            try {
+                connection.execSQL("CREATE TABLE IF NOT EXISTS `product_stock_adjustments` (`id` TEXT NOT NULL, `productId` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `deltaQuantity` INTEGER NOT NULL, `resultingQuantity` INTEGER, `note` TEXT, PRIMARY KEY(`id`))")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_product_stock_adjustments_productId` ON `product_stock_adjustments` (`productId`)")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_product_stock_adjustments_timestamp` ON `product_stock_adjustments` (`timestamp`)")
+                AppLogger.info(TAG, "Database migration v16 -> v17 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v16 -> v17 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
+
     @Volatile
     private var instance: AppDatabase? = null
 
@@ -208,7 +226,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")
@@ -340,6 +358,72 @@ object DatabaseFactory {
             }
         } catch (e: Exception) {
             AppLogger.warn(TAG, "Failed to seed default backup routine: ${e.message}", e)
+        }
+
+        // Seed initial stock baseline for existing products that lack stock adjustment records
+        try {
+            val productDao = db.productDao()
+            val productStockAdjustmentDao = db.productStockAdjustmentDao()
+            val transactionDao = db.transactionDao()
+            val allProducts = productDao.getAllProducts()
+
+            for (product in allProducts) {
+                val existingAdjustments = productStockAdjustmentDao.getAdjustmentsByProductId(product.id)
+                if (existingAdjustments.isEmpty()) {
+                    val transactions = transactionDao.getTransactionsForProduct(product.id)
+                    val directCancellations = transactions
+                        .filter { it.type == TransactionType.CANCELLATION.name && it.referenceTransactionId != null }
+                        .mapNotNull { it.referenceTransactionId }
+                        .toSet()
+
+                    val purchases = transactions.filter { it.type == TransactionType.PURCHASE.name }
+                    val purchaseIds = purchases.map { it.id }
+                    val additionalCancellations = if (purchaseIds.isNotEmpty()) {
+                        transactionDao.getTransactionsByReferenceIds(purchaseIds)
+                            .filter { it.type == TransactionType.CANCELLATION.name && it.referenceTransactionId != null }
+                            .mapNotNull { it.referenceTransactionId }
+                            .toSet()
+                    } else {
+                        emptySet()
+                    }
+                    val allCancelledTxIds = directCancellations + additionalCancellations
+
+                    val activePurchases = purchases.filter { !allCancelledTxIds.contains(it.id) }
+                    val totalPurchased = activePurchases.sumOf { tx ->
+                        tx.items.filter { it.productId == product.id }.sumOf { it.quantity }
+                    }
+
+                    val corrections = transactions.filter { it.type == TransactionType.CORRECTION.name }
+                    var totalCorrectionDelta = 0L
+                    for (tx in corrections) {
+                        for (item in tx.items.filter { it.productId == product.id }) {
+                            val prev = item.previousQuantity ?: continue
+                            totalCorrectionDelta += -(item.quantity - prev)
+                        }
+                    }
+
+                    val initialStock = product.stockQuantity + totalPurchased - totalCorrectionDelta
+                    val earliestTxTimestamp = transactions.minOfOrNull { it.timestamp }
+                    val initialTimestamp = if (earliestTxTimestamp != null && earliestTxTimestamp > 1000L) {
+                        earliestTxTimestamp - 1000L
+                    } else {
+                        de.joelneumann.lojinha.ui.utils.currentTimeMillis()
+                    }
+
+                    val initialAdjustment = ProductStockAdjustmentEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        productId = product.id,
+                        timestamp = initialTimestamp,
+                        deltaQuantity = initialStock,
+                        resultingQuantity = initialStock,
+                        note = "SYSNOTE|INITIAL_STOCK"
+                    )
+                    productStockAdjustmentDao.insertAdjustment(initialAdjustment)
+                    AppLogger.info(TAG, "Seeded initial stock baseline for product '${product.name}' (${product.id}): $initialStock (current: ${product.stockQuantity}, purchased: $totalPurchased)")
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.warn(TAG, "Failed to seed initial product stock baselines: ${e.message}", e)
         }
     }
 }

@@ -141,7 +141,7 @@ fun App(
         }
     }
 
-    val effectiveProductRepo = productRepository ?: remember { RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), onDataChanged) }
+    val effectiveProductRepo = productRepository ?: remember { RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), database.productStockAdjustmentDao(), onDataChanged) }
     val effectiveUserRepo = userRepository ?: remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
     val effectiveTransactionRepo = transactionRepository ?: remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
     val effectiveBillingListRepo = billingListRepository ?: remember { de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged) }

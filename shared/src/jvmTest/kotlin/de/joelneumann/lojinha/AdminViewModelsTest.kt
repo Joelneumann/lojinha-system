@@ -45,6 +45,10 @@ class AdminViewModelsTest {
         var recordedStockDeltas = mutableListOf<Pair<String, Long>>()
         var savedProducts = mutableListOf<Product>()
         var shouldThrowOnSave: Boolean = false
+        var historyResult: PagedResult<ProductHistoryEntry> = PagedResult(emptyList<ProductHistoryEntry>(), 0, 1, 20, 1)
+        var recordedAdjustments = mutableListOf<ProductStockAdjustment>()
+        var requestedHistoryArgs = mutableListOf<Triple<String, Int, Int>>()
+        var shouldThrowOnHistory: Boolean = false
 
         override fun getProductsFlow(): Flow<List<Product>> = flowOf(products)
         override suspend fun getAllProducts(): List<Product> = products
@@ -68,6 +72,16 @@ class AdminViewModelsTest {
             products = products.map {
                 if (it.id == productId) it.copy(stockQuantity = it.stockQuantity + delta) else it
             }
+        }
+        override suspend fun getProductHistory(productId: String, page: Int, pageSize: Int): PagedResult<ProductHistoryEntry> {
+            requestedHistoryArgs.add(Triple(productId, page, pageSize))
+            if (shouldThrowOnHistory) {
+                throw RuntimeException("Database error loading history")
+            }
+            return historyResult
+        }
+        override suspend fun recordStockAdjustment(adjustment: ProductStockAdjustment) {
+            recordedAdjustments.add(adjustment)
         }
     }
 
@@ -367,6 +381,131 @@ class AdminViewModelsTest {
         // Dismiss error
         viewModel.clearProductError()
         assertNull(viewModel.productErrorMessage.value)
+    }
+
+    @Test
+    fun testOpenProductHistoryModal_loadsHistoryAndClearsOnClose() = runTest {
+        val testProduct = Product(
+            id = "prod-history-1",
+            name = "Mate Tea",
+            barcodes = emptyList(),
+            basePrice = 250,
+            unitType = UnitType.PIECE,
+            stockQuantity = 20
+        )
+        val historyEntries = listOf(
+            ProductHistoryEntry(
+                id = "h-1",
+                productId = testProduct.id,
+                timestamp = 1000L,
+                type = ProductHistoryType.STOCK_ADJUSTMENT,
+                quantity = 20,
+                unitType = UnitType.PIECE,
+                userName = null,
+                note = "Initial stock",
+                stockAfter = 20L
+            ),
+            ProductHistoryEntry(
+                id = "h-2",
+                productId = testProduct.id,
+                timestamp = 2000L,
+                type = ProductHistoryType.PURCHASE,
+                quantity = 2,
+                unitType = UnitType.PIECE,
+                userName = "Alice",
+                note = null,
+                stockAfter = 18L
+            )
+        )
+        val productRepo = TestProductRepository(listOf(testProduct)).apply {
+            historyResult = PagedResult(historyEntries, 2, 1, 20, 1)
+        }
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openProductHistoryModal(testProduct)
+
+        assertEquals(testProduct, viewModel.historyProduct.value)
+        assertEquals(1, productRepo.requestedHistoryArgs.size)
+        assertEquals(Triple("prod-history-1", 0, 25), productRepo.requestedHistoryArgs.first())
+        assertEquals(2, viewModel.historyResult.value?.items?.size)
+        assertEquals(2, viewModel.historyResult.value?.totalCount)
+        assertEquals(20L, viewModel.historyResult.value?.items?.get(0)?.stockAfter)
+        assertEquals(18L, viewModel.historyResult.value?.items?.get(1)?.stockAfter)
+        assertFalse(viewModel.isLoadingHistory.value)
+
+        viewModel.closeProductHistoryModal()
+        assertNull(viewModel.historyProduct.value)
+        assertNull(viewModel.historyResult.value)
+    }
+
+    @Test
+    fun testProductHistoryPagination_updatesPageAndPageSize() = runTest {
+        val testProduct = Product(
+            id = "prod-history-2",
+            name = "Coffee",
+            barcodes = emptyList(),
+            basePrice = 150,
+            unitType = UnitType.PIECE,
+            stockQuantity = 50
+        )
+        val productRepo = TestProductRepository(listOf(testProduct))
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openProductHistoryModal(testProduct)
+        assertEquals(0, viewModel.historyPage.value)
+        assertEquals(25, viewModel.historyPageSize.value)
+
+        viewModel.setHistoryPage(2)
+        assertEquals(2, viewModel.historyPage.value)
+        assertTrue(productRepo.requestedHistoryArgs.contains(Triple("prod-history-2", 2, 25)))
+
+        viewModel.setHistoryPageSize(50)
+        assertEquals(0, viewModel.historyPage.value) // resets to page 0
+        assertEquals(50, viewModel.historyPageSize.value)
+        assertTrue(productRepo.requestedHistoryArgs.contains(Triple("prod-history-2", 0, 50)))
+    }
+
+    @Test
+    fun testAdjustProductStock_refreshesHistoryIfModalIsOpen() = runTest {
+        val testProduct = Product(
+            id = "prod-history-3",
+            name = "Snack Bar",
+            barcodes = emptyList(),
+            basePrice = 120,
+            unitType = UnitType.PIECE,
+            stockQuantity = 10
+        )
+        val productRepo = TestProductRepository(listOf(testProduct))
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openProductHistoryModal(testProduct)
+        assertEquals(1, productRepo.requestedHistoryArgs.size)
+
+        viewModel.adjustProductStock(testProduct.id, 5)
+        assertEquals(2, productRepo.requestedHistoryArgs.size)
+        assertEquals(Triple("prod-history-3", 0, 25), productRepo.requestedHistoryArgs.last())
+        assertEquals(15L, viewModel.historyProduct.value?.stockQuantity)
+    }
+
+    @Test
+    fun testOpenProductHistoryModal_handlesExceptionGracefully() = runTest {
+        val testProduct = Product(
+            id = "prod-history-4",
+            name = "Sparkling Water",
+            barcodes = emptyList(),
+            basePrice = 80,
+            unitType = UnitType.PIECE,
+            stockQuantity = 30
+        )
+        val productRepo = TestProductRepository(listOf(testProduct)).apply {
+            shouldThrowOnHistory = true
+        }
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        viewModel.openProductHistoryModal(testProduct)
+
+        assertNotNull(viewModel.productErrorMessage.value)
+        assertFalse(viewModel.isLoadingHistory.value)
     }
 
     // --- Tests for AdminBulkBillingViewModel (QA-02 & QA-08) ---
