@@ -62,7 +62,7 @@ fun ProductHistoryDialog(
             color = SurfaceWhite,
             tonalElevation = 6.dp,
             modifier = Modifier
-                .widthIn(min = 600.dp, max = 860.dp)
+                .widthIn(min = 640.dp, max = 880.dp)
                 .confirmationDialogKeys(onCancel = onDismiss, onConfirm = onDismiss)
                 .fillMaxWidth(0.9f)
                 .fillMaxHeight(0.85f)
@@ -191,28 +191,29 @@ fun ProductHistoryDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
                                     Text(
                                         text = strings.historyColDate,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextSecondaryMuted,
-                                        modifier = Modifier.weight(1.6f)
+                                        modifier = Modifier.weight(1.8f)
                                     )
                                     Text(
                                         text = strings.historyColType,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextSecondaryMuted,
-                                        modifier = Modifier.weight(1.4f)
+                                        modifier = Modifier.weight(2.2f)
                                     )
                                     Text(
                                         text = strings.historyColUserOrDetails,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextSecondaryMuted,
-                                        modifier = Modifier.weight(2.4f)
+                                        modifier = Modifier.weight(2.2f)
                                     )
                                     Text(
                                         text = strings.historyColQuantity,
@@ -220,7 +221,7 @@ fun ProductHistoryDialog(
                                         fontWeight = FontWeight.Bold,
                                         color = TextSecondaryMuted,
                                         textAlign = TextAlign.End,
-                                        modifier = Modifier.weight(1.3f)
+                                        modifier = Modifier.weight(1.2f)
                                     )
                                     Text(
                                         text = strings.historyColStockAfter,
@@ -228,7 +229,7 @@ fun ProductHistoryDialog(
                                         fontWeight = FontWeight.Bold,
                                         color = TextSecondaryMuted,
                                         textAlign = TextAlign.End,
-                                        modifier = Modifier.weight(1.3f)
+                                        modifier = Modifier.weight(1.2f)
                                     )
                                 }
                             }
@@ -299,7 +300,8 @@ private fun HistoryRowItem(
             .fillMaxWidth()
             .background(if (entry.isCancelled) ColorDangerCrimson.copy(alpha = 0.04f) else SurfaceWhite)
             .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Col 1: Date & Time
         Text(
@@ -307,93 +309,44 @@ private fun HistoryRowItem(
             fontSize = 12.sp,
             color = if (entry.isCancelled) TextSecondaryMuted else PrimaryNavy,
             style = if (entry.isCancelled) LocalTextStyle.current.copy(textDecoration = TextDecoration.LineThrough) else LocalTextStyle.current,
-            modifier = Modifier.weight(1.6f)
+            modifier = Modifier.weight(1.8f)
         )
 
         // Col 2: Event Type Badge
-        Box(modifier = Modifier.weight(1.4f)) {
-            when (entry.type) {
+        Box(
+            modifier = Modifier.weight(2.2f),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            val (badgeText, badgeType) = when (entry.type) {
                 ProductHistoryType.STOCK_ADJUSTMENT -> {
                     val isPositive = entry.quantity > 0
                     val isNegative = entry.quantity < 0
-                    val badgeColor = when {
-                        isPositive -> ColorSuccessEmerald
-                        isNegative -> ColorWarningAmber
-                        else -> AccentNavy
+                    val type = when {
+                        isPositive -> AdminBadgeType.SUCCESS
+                        isNegative -> AdminBadgeType.WARNING
+                        else -> AdminBadgeType.NAVY
                     }
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = badgeColor.copy(alpha = 0.12f),
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(badgeColor.copy(alpha = 0.35f))
-                        )
-                    ) {
-                        Text(
-                            text = strings.historyTypeStockAdjustment,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = badgeColor,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        )
-                    }
+                    strings.historyTypeStockAdjustment to type
                 }
                 ProductHistoryType.PURCHASE -> {
                     if (entry.isCancelled) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = ColorDangerCrimson.copy(alpha = 0.1f),
-                            border = CardDefaults.outlinedCardBorder().copy(
-                                brush = androidx.compose.ui.graphics.SolidColor(ColorDangerCrimson.copy(alpha = 0.3f))
-                            )
-                        ) {
-                            Text(
-                                text = strings.historyTypeCancellation,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = ColorDangerCrimson,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                            )
-                        }
+                        strings.historyTypeCancellation to AdminBadgeType.DANGER
                     } else {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = AccentNavy.copy(alpha = 0.1f),
-                            border = CardDefaults.outlinedCardBorder().copy(
-                                brush = androidx.compose.ui.graphics.SolidColor(AccentNavy.copy(alpha = 0.3f))
-                            )
-                        ) {
-                            Text(
-                                text = strings.historyTypePurchase,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AccentNavy,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                            )
-                        }
+                        strings.historyTypePurchase to AdminBadgeType.NAVY
                     }
                 }
                 ProductHistoryType.CANCELLATION -> {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = ColorDangerCrimson.copy(alpha = 0.1f),
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(ColorDangerCrimson.copy(alpha = 0.3f))
-                        )
-                    ) {
-                        Text(
-                            text = strings.historyTypeCancellation,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ColorDangerCrimson,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        )
-                    }
+                    strings.historyTypeCancellation to AdminBadgeType.DANGER
                 }
             }
+            AdminStatusBadge(
+                text = badgeText,
+                type = badgeType
+            )
         }
 
         // Col 3: User / Details
-        Box(modifier = Modifier.weight(2.4f)) {
+        Box(modifier = Modifier.weight(2.2f)) {
             val detailText = when (entry.type) {
                 ProductHistoryType.PURCHASE -> entry.userName ?: "-"
                 ProductHistoryType.STOCK_ADJUSTMENT -> {
@@ -418,7 +371,7 @@ private fun HistoryRowItem(
         }
 
         // Col 4: Quantity
-        Box(modifier = Modifier.weight(1.3f), contentAlignment = Alignment.CenterEnd) {
+        Box(modifier = Modifier.weight(1.2f), contentAlignment = Alignment.CenterEnd) {
             val formattedQty = Formatting.formatQuantity(kotlin.math.abs(entry.quantity), entry.unitType)
             val qtyText = when (entry.type) {
                 ProductHistoryType.STOCK_ADJUSTMENT -> if (entry.quantity > 0) "+$formattedQty" else if (entry.quantity < 0) "-$formattedQty" else formattedQty
@@ -444,7 +397,7 @@ private fun HistoryRowItem(
         }
 
         // Col 5: Stock After
-        Box(modifier = Modifier.weight(1.3f), contentAlignment = Alignment.CenterEnd) {
+        Box(modifier = Modifier.weight(1.2f), contentAlignment = Alignment.CenterEnd) {
             val stockAfterText = entry.stockAfter?.let {
                 Formatting.formatQuantity(it, entry.unitType)
             } ?: "-"
