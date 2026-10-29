@@ -747,5 +747,20 @@ object EnglishStrings : AppStrings {
     override val confirmDeleteNoteTitle = "Delete Note"
     override val confirmDeleteNoteMsg = "Are you sure you want to delete this note?"
     override val searchNotesPlaceholder = "Search notes..."
+
+    // Product History
+    override val productHistoryTitle = "Product History"
+    override fun productHistoryForTitle(productName: String): String = "Product History: $productName"
+    override val historyTypeStockAdjustment = "Stock Adjustment"
+    override val historyNoData = "No history data found for this product."
+    override val historyColDate = "Date & Time"
+    override val historyColType = "Event Type"
+    override val historyColUserOrDetails = "User / Details"
+    override val historyColQuantity = "Quantity"
+    override val historyColStockAfter = "Stock After"
+    override val stockAdjustmentInitial = "Initial stock"
+    override val stockAdjustmentManual = "Manual stock adjustment"
+    override val errFailedToLoadProductHistory = "Failed to load product history."
 }
+
 

@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.History
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
@@ -28,6 +29,7 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 fun DisabledProductCard(
     product: Product,
     onEnableProduct: () -> Unit,
+    onViewHistory: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -71,23 +73,57 @@ fun DisabledProductCard(
                 )
             }
 
-            Button(
-                onClick = { showEnableConfirm = true },
-                colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(38.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                if (onViewHistory != null) {
+                    OutlinedButton(
+                        onClick = onViewHistory,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(38.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = PrimaryNavy
+                        )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = null,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = strings.history,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            )
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = { showEnableConfirm = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(38.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.FlashOn,
-                        contentDescription = null,
-                        tint = SurfaceWhite,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(strings.enableProduct, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FlashOn,
+                            contentDescription = null,
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(strings.enableProduct, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                    }
                 }
             }
         }

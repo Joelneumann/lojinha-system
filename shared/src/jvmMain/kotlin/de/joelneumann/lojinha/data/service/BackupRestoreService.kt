@@ -11,6 +11,7 @@ import de.joelneumann.lojinha.data.entity.BackupEntity
 import de.joelneumann.lojinha.data.entity.BillingListEntity
 import de.joelneumann.lojinha.data.entity.BillingListUserEntity
 import de.joelneumann.lojinha.data.entity.ProductEntity
+import de.joelneumann.lojinha.data.entity.ProductStockAdjustmentEntity
 import de.joelneumann.lojinha.data.entity.SettingsEntity
 import de.joelneumann.lojinha.data.entity.TransactionEntity
 import de.joelneumann.lojinha.data.entity.UserEntity
@@ -272,6 +273,23 @@ class BackupRestoreService(
         }
         writeCsvFile(notesCsv, noteLines)
 
+        // 6. Export Product Stock Adjustments
+        val stockAdjustments = db.productStockAdjustmentDao().getAllAdjustments()
+        val stockAdjCsv = File(exportFolder, "product_stock_adjustments.csv")
+        val stockAdjLines = mutableListOf("id;productId;timestamp;deltaQuantity;resultingQuantity;note")
+        stockAdjustments.forEach { sa ->
+            val line = listOf(
+                escapeCsv(sa.id),
+                escapeCsv(sa.productId),
+                sa.timestamp.toString(),
+                sa.deltaQuantity.toString(),
+                sa.resultingQuantity?.toString() ?: "",
+                escapeCsv(sa.note ?: "")
+            ).joinToString(CSV_DELIMITER)
+            stockAdjLines.add(line)
+        }
+        writeCsvFile(stockAdjCsv, stockAdjLines)
+
         exportFolder
     }
 
@@ -291,6 +309,7 @@ class BackupRestoreService(
         val backupBillingLists = mutableListOf<BillingListEntity>()
         val backupBillingListUsers = mutableListOf<BillingListUserEntity>()
         val backupNotes = mutableListOf<AdminNoteEntity>()
+        val backupStockAdjustments = mutableListOf<ProductStockAdjustmentEntity>()
         val tableNames = mutableSetOf<String>()
 
         // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
@@ -663,6 +682,26 @@ class BackupRestoreService(
                     stmt.close()
                 }
             }
+
+            // Read product_stock_adjustments
+            if (tableNames.contains("product_stock_adjustments")) {
+                val stmt = connection.prepare("SELECT id, productId, timestamp, deltaQuantity, resultingQuantity, note FROM product_stock_adjustments")
+                try {
+                    while (stmt.step()) {
+                        val adj = de.joelneumann.lojinha.data.entity.ProductStockAdjustmentEntity(
+                            id = stmt.getText(0),
+                            productId = stmt.getText(1),
+                            timestamp = stmt.getLong(2),
+                            deltaQuantity = stmt.getLong(3),
+                            resultingQuantity = if (stmt.isNull(4)) null else stmt.getLong(4),
+                            note = if (stmt.isNull(5)) null else stmt.getText(5)
+                        )
+                        backupStockAdjustments.add(adj)
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
         } finally {
             connection.close()
         }
@@ -680,6 +719,7 @@ class BackupRestoreService(
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     // Clear tables in reverse dependency order (children first)
+                    db.productStockAdjustmentDao().deleteAllAdjustments()
                     db.adminNoteDao().deleteAllNotes()
                     db.billingListDao().deleteAllBillingListUsers()
                     db.billingListDao().deleteAllBillingLists()
@@ -702,6 +742,8 @@ class BackupRestoreService(
                         .distinctBy { it.listId to it.userId }
                         .forEach { db.billingListDao().insertBillingListUser(it) }
                     backupNotes.forEach { db.adminNoteDao().insertNote(it) }
+                    backupStockAdjustments.forEach { db.productStockAdjustmentDao().insertAdjustment(it) }
+
                     if (hasBackupRoutinesInBackup && !preserveExistingRoutines) {
                         backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
                     }
@@ -759,6 +801,7 @@ class BackupRestoreService(
                     db.adminNoteDao().deleteAllNotes()
                     db.billingListDao().deleteAllBillingListUsers()
                     db.billingListDao().deleteAllBillingLists()
+                    db.productStockAdjustmentDao().deleteAllAdjustments()
                     db.userDao().deleteAllUsers()
                     db.productDao().deleteAllProducts()
                     db.transactionDao().deleteAllTransactions()
@@ -970,9 +1013,41 @@ class BackupRestoreService(
             if (dbFile.exists()) {
                 performDbSnapshot(safetyFile)
             }
+            val now = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
-                    productsToInsert.forEach { db.productDao().insertOrUpdateProduct(it) }
+                    productsToInsert.forEach { entity ->
+                        val existing = existingProducts[entity.id]
+                        db.productDao().insertOrUpdateProduct(entity)
+                        if (existing == null) {
+                            if (entity.stockQuantity >= 0L) {
+                                db.productStockAdjustmentDao().insertAdjustment(
+                                    ProductStockAdjustmentEntity(
+                                        id = java.util.UUID.randomUUID().toString(),
+                                        productId = entity.id,
+                                        timestamp = now,
+                                        deltaQuantity = entity.stockQuantity,
+                                        resultingQuantity = entity.stockQuantity,
+                                        note = "SYSNOTE|INITIAL_STOCK"
+                                    )
+                                )
+                            }
+                        } else {
+                            val delta = entity.stockQuantity - existing.stockQuantity
+                            if (delta != 0L) {
+                                db.productStockAdjustmentDao().insertAdjustment(
+                                    ProductStockAdjustmentEntity(
+                                        id = java.util.UUID.randomUUID().toString(),
+                                        productId = entity.id,
+                                        timestamp = now,
+                                        deltaQuantity = delta,
+                                        resultingQuantity = entity.stockQuantity,
+                                        note = null
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

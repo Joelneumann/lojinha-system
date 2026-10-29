@@ -747,5 +747,20 @@ object PortugueseStrings : AppStrings {
     override val confirmDeleteNoteTitle = "Excluir Recado"
     override val confirmDeleteNoteMsg = "Tem certeza de que deseja excluir este recado?"
     override val searchNotesPlaceholder = "Buscar recados..."
+
+    // Product History
+    override val productHistoryTitle = "Histórico do Produto"
+    override fun productHistoryForTitle(productName: String): String = "Histórico do Produto: $productName"
+    override val historyTypeStockAdjustment = "Ajuste de Estoque"
+    override val historyNoData = "Nenhum histórico encontrado para este produto."
+    override val historyColDate = "Data e Hora"
+    override val historyColType = "Tipo de Evento"
+    override val historyColUserOrDetails = "Usuário / Detalhes"
+    override val historyColQuantity = "Quantidade"
+    override val historyColStockAfter = "Estoque após"
+    override val stockAdjustmentInitial = "Estoque inicial"
+    override val stockAdjustmentManual = "Ajuste manual de estoque"
+    override val errFailedToLoadProductHistory = "Falha ao carregar o histórico do produto."
 }
+
 

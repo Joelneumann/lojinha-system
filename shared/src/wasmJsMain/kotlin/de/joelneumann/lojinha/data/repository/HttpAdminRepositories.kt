@@ -307,6 +307,24 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
             throw e
         }
     }
+
+    override suspend fun getProductHistory(productId: String, page: Int, pageSize: Int): PagedResult<ProductHistoryEntry> {
+        return try {
+            val result: PagedResult<ProductHistoryEntry> = client.httpClient.get(client.resolveUrl("/api/admin/products/$productId/history")) {
+                client.run { appendAdminAuth() }
+                parameter("page", page)
+                parameter("pageSize", pageSize)
+            }.body()
+            result
+        } catch (e: Exception) {
+            AppLogger.error("HttpProductRepository", "getProductHistory failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun recordStockAdjustment(adjustment: ProductStockAdjustment) {
+        // Stock adjustments on HTTP are recorded by the backend server
+    }
 }
 
 class HttpUserRepository(private val client: AdminNetworkClient) : UserRepository {
