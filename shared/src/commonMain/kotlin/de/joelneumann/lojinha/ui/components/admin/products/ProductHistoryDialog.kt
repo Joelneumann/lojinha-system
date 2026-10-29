@@ -280,7 +280,7 @@ fun ProductHistoryDialog(
                     totalCount = totalC,
                     onPageChange = onPageChange,
                     onPageSizeChange = onPageSizeChange,
-                    pageSizeOptions = listOf(10, 25, 50),
+                    pageSizeOptions = listOf(25, 50, 100),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
