@@ -432,18 +432,24 @@ fun App(
                                 currencyRateService = currencyRateService,
                                 onPreviewCsvImport = { platformFile, type ->
                                     val file = java.io.File(platformFile.absolutePath)
-                                    if (type.equals("Products", ignoreCase = true)) {
-                                        backupRestoreService.importProductsFromCsv(file, dryRun = true)
-                                    } else {
-                                        backupRestoreService.importUsersFromCsv(file, dryRun = true)
+                                    when {
+                                        type.equals("Products", ignoreCase = true) ->
+                                            backupRestoreService.importProductsFromCsv(file, dryRun = true)
+                                        type.equals("VeggieProducts", ignoreCase = true) ->
+                                            backupRestoreService.importVeggieProductsFromCsv(file, dryRun = true)
+                                        else ->
+                                            backupRestoreService.importUsersFromCsv(file, dryRun = true)
                                     }
                                 },
                                 onExecuteCsvImport = { platformFile, type ->
                                     val file = java.io.File(platformFile.absolutePath)
-                                    val result = if (type.equals("Products", ignoreCase = true)) {
-                                        backupRestoreService.importProductsFromCsv(file, dryRun = false)
-                                    } else {
-                                        backupRestoreService.importUsersFromCsv(file, dryRun = false)
+                                    val result = when {
+                                        type.equals("Products", ignoreCase = true) ->
+                                            backupRestoreService.importProductsFromCsv(file, dryRun = false)
+                                        type.equals("VeggieProducts", ignoreCase = true) ->
+                                            backupRestoreService.importVeggieProductsFromCsv(file, dryRun = false)
+                                        else ->
+                                            backupRestoreService.importUsersFromCsv(file, dryRun = false)
                                     }
                                     onDataChanged()
                                     result

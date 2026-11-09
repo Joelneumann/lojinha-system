@@ -1305,5 +1305,206 @@ class BackupRestoreServiceJvmTest {
         val file = DatabaseFactory.getDatabaseFile()
         assertTrue(file.absolutePath.endsWith(".lojinha/lojinha_room.db"))
     }
+
+    @Test
+    fun testV18VeggieBackupRestoreAndCsvExport() = runTest {
+        // 1. Seed v18 Veggie tables, User requirePinOnKiosk = false, and Veggie Settings
+        db.veggieOrderDao().insertOrUpdateUnitTypes(DatabaseFactory.defaultVeggieUnitTypes(1000L))
+        db.veggieOrderDao().insertOrUpdateUnitType(
+            VeggieUnitTypeEntity(id = "unit-crate", name = "Crate", allowDecimals = false, isActive = true, updatedAt = 1500L)
+        )
+
+        db.userDao().insertOrUpdateUser(
+            UserEntity(
+                id = "u-veggie",
+                name = "Veggie Buyer",
+                balance = 5000L,
+                language = "de",
+                secondaryCurrency = "EUR",
+                pin = "1234",
+                userBarcode = null,
+                userBarcodeNumber = null,
+                isActive = true,
+                isDeleted = false,
+                requirePinOnKiosk = false
+            )
+        )
+
+        db.settingsDao().insertOrUpdateSettings(
+            SettingsEntity(
+                id = 1,
+                adminPasswordHash = "hash",
+                globalMarkupPercent = 5.0,
+                usdExchangeRate = 0.18,
+                eurExchangeRate = 0.16,
+                inactivityTimeoutMinutes = 3,
+                veggieAutoOpenEnabled = true,
+                veggieAutoOpenDayOfWeek = 2,
+                veggieAutoOpenTime = "09:15",
+                defaultVeggieBuyerFeeCents = 1200L,
+                defaultVeggieTransportFeeCents = 1800L
+            )
+        )
+
+        val tomato = VeggieProductEntity(
+            id = "vp-1",
+            name = "Tomato",
+            description = "Fresh organic",
+            estimatedPriceCents = 950L,
+            unitTypeId = "unit-kg",
+            imageFileName = "vp-1",
+            isActive = true,
+            isDeleted = false,
+            updatedAt = 2000L
+        )
+        db.veggieOrderDao().insertOrUpdateVeggieProduct(tomato)
+
+        val round = VeggieOrderRoundEntity(
+            id = "vr-1",
+            openedAt = 1_776_672_000_000L,
+            closedAt = 1_776_680_000_000L,
+            settledAt = 1_776_690_000_000L,
+            status = "SETTLED",
+            buyerOperationFeeCents = 1200L,
+            transportFeeCents = 1800L,
+            transporterUserId = "u-veggie",
+            updatedAt = 3000L
+        )
+        db.veggieOrderDao().insertOrUpdateRound(round)
+
+        val settlement = VeggieRoundProductSettlementEntity(
+            roundId = "vr-1",
+            veggieProductId = "vp-1",
+            marketUnitPriceCents = 950L,
+            totalSpentCents = 1900L,
+            updatedAt = 3000L
+        )
+        db.veggieOrderDao().insertOrUpdateProductSettlement(settlement)
+
+        val entry = VeggieOrderEntryEntity(
+            id = "ve-1",
+            roundId = "vr-1",
+            userId = "u-veggie",
+            userNameSnapshot = "Veggie Buyer",
+            veggieProductId = "vp-1",
+            veggieNameSnapshot = "Tomato",
+            unitNameSnapshot = "kg",
+            allowDecimalsSnapshot = true,
+            orderedQuantityScaled = 2000L,
+            actualQuantityScaled = 1950L,
+            effectiveUnitPriceCents = 974L,
+            finalItemTotalCents = 1900L,
+            updatedAt = 3000L
+        )
+        db.veggieOrderDao().insertOrUpdateEntry(entry)
+
+        // 2. Verify CSV Backup exports veggie_products.csv and veggie_orders.csv
+        val csvBackupDir = File(tempDir, "csv_backups")
+        csvBackupDir.mkdirs()
+        val exportFolder = service.performCsvBackup(csvBackupDir)
+        val veggieProductsCsv = File(exportFolder, "veggie_products.csv")
+        val veggieOrdersCsv = File(exportFolder, "veggie_orders.csv")
+        assertTrue(veggieProductsCsv.exists(), "veggie_products.csv must be exported")
+        assertTrue(veggieOrdersCsv.exists(), "veggie_orders.csv must be exported")
+
+        val vpRecords = service.parseCsvRecords(veggieProductsCsv.readText())
+        assertEquals(2, vpRecords.size)
+        assertEquals("Tomato", vpRecords[1][1])
+        assertEquals("R$ 9,50", vpRecords[1][3])
+
+        val voRecords = service.parseCsvRecords(veggieOrdersCsv.readText())
+        assertEquals(2, voRecords.size)
+        assertEquals("vr-1", voRecords[1][0])
+        assertEquals("ve-1", voRecords[1][10])
+        assertEquals("1,95", voRecords[1][18])
+
+        // 3. Perform DB Backup, Wipe All Data, and Restore DB Backup
+        val dbBackupDir = File(tempDir, "db_backups")
+        dbBackupDir.mkdirs()
+        val dbBackupFile = service.performDbBackup(dbBackupDir)
+
+        service.wipeAllData()
+        assertTrue(service.isDatabaseEmpty())
+        assertEquals(4, db.veggieOrderDao().getAllUnitTypes().size, "Default unit types should remain seeded after wipe")
+        assertEquals(0, db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true).size)
+        assertEquals(0, db.veggieOrderDao().getAllRounds().size)
+
+        service.restoreDbFromBackup(dbBackupFile)
+        assertFalse(service.isDatabaseEmpty())
+
+        // Verify all Veggie entities, requirePinOnKiosk, and Veggie settings are restored
+        val restoredUser = db.userDao().getUserById("u-veggie")!!
+        assertFalse(restoredUser.requirePinOnKiosk)
+
+        val restoredSettings = db.settingsDao().getSettings()!!
+        assertTrue(restoredSettings.veggieAutoOpenEnabled)
+        assertEquals(2, restoredSettings.veggieAutoOpenDayOfWeek)
+        assertEquals("09:15", restoredSettings.veggieAutoOpenTime)
+        assertEquals(1200L, restoredSettings.defaultVeggieBuyerFeeCents)
+        assertEquals(1800L, restoredSettings.defaultVeggieTransportFeeCents)
+
+        assertEquals(5, db.veggieOrderDao().getAllUnitTypes().size)
+        val restoredProduct = db.veggieOrderDao().getVeggieProductById("vp-1")!!
+        assertEquals("Tomato", restoredProduct.name)
+        assertEquals(950L, restoredProduct.estimatedPriceCents)
+
+        val restoredRound = db.veggieOrderDao().getRoundById("vr-1")!!
+        assertEquals("SETTLED", restoredRound.status)
+        assertEquals(1200L, restoredRound.buyerOperationFeeCents)
+
+        val restoredSettlements = db.veggieOrderDao().getRoundProductSettlements("vr-1")
+        assertEquals(1, restoredSettlements.size)
+        assertEquals(1900L, restoredSettlements[0].totalSpentCents)
+
+        val restoredEntries = db.veggieOrderDao().getRoundEntries("vr-1")
+        assertEquals(1, restoredEntries.size)
+        assertEquals(1950L, restoredEntries[0].actualQuantityScaled)
+        assertEquals(1900L, restoredEntries[0].finalItemTotalCents)
+    }
+
+    @Test
+    fun testImportVeggieProductsFromCsv_dryRun_unknownPrices_andAutoUnitCreation() = runTest {
+        db.veggieOrderDao().insertOrUpdateUnitTypes(DatabaseFactory.defaultVeggieUnitTypes(1000L))
+
+        val csvFile = File(tempDir, "import_veggies.csv")
+        csvFile.writeText(
+            """
+            id;name;description;estimatedPrice;unitTypeName;allowDecimals;isActive
+            vp-carrot;Carrot;Organic carrots;6,50;kg;true;true
+            vp-mystery;Dragonfruit;Rare fruit;;Unit;false;true
+            vp-tray;Strawberry Tray;250g tray;12,00;Tray;false;true
+            """.trimIndent()
+        )
+
+        // 1. Dry-run preview must not modify database
+        val dryRunResult = service.importVeggieProductsFromCsv(csvFile, dryRun = true)
+        assertEquals(3, dryRunResult.totalProcessed)
+        assertEquals(3, dryRunResult.addedCount)
+        assertEquals(0, dryRunResult.updatedCount)
+        assertTrue(dryRunResult.errors.isEmpty())
+        assertEquals(0, db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true).size)
+
+        // 2. Live import
+        val liveResult = service.importVeggieProductsFromCsv(csvFile, dryRun = false)
+        assertEquals(3, liveResult.addedCount)
+
+        val carrot = db.veggieOrderDao().getVeggieProductById("vp-carrot")!!
+        assertEquals("Carrot", carrot.name)
+        assertEquals(650L, carrot.estimatedPriceCents)
+        assertEquals("unit-kg", carrot.unitTypeId)
+
+        val mystery = db.veggieOrderDao().getVeggieProductById("vp-mystery")!!
+        assertEquals("Dragonfruit", mystery.name)
+        assertNull(mystery.estimatedPriceCents, "Blank price in CSV must import as null (unknown initial price)")
+        assertEquals("unit-piece", mystery.unitTypeId)
+
+        val tray = db.veggieOrderDao().getVeggieProductById("vp-tray")!!
+        assertEquals("Strawberry Tray", tray.name)
+        assertEquals(1200L, tray.estimatedPriceCents)
+        val trayUnit = db.veggieOrderDao().getUnitTypeById(tray.unitTypeId)
+        assertNotNull(trayUnit, "Novel unit type 'Tray' should be auto-created")
+        assertEquals("Tray", trayUnit.name)
+        assertFalse(trayUnit.allowDecimals)
+    }
 }
 
