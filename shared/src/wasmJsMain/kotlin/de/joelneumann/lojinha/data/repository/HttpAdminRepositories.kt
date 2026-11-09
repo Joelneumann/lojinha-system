@@ -1426,7 +1426,16 @@ class HttpCustomerUserRepository(private val client: CustomerNetworkClient) : Us
         return getAllUsers().find { it.userBarcode == barcode || it.userBarcodeNumber == barcode }
     }
 
-    override suspend fun saveUser(user: User) {}
+    override suspend fun saveUser(user: User) {
+        val newPin = if (user.pin != null && user.pin != "PROTECTED") user.pin else null
+        client.updateMySettings(
+            language = user.language,
+            secondaryCurrency = user.secondaryCurrency,
+            avatar = user.avatar,
+            newPin = newPin,
+            requirePinOnKiosk = user.requirePinOnKiosk
+        )
+    }
     override suspend fun deactivateUser(id: String) {}
     override suspend fun softDeleteUser(id: String) {}
     override suspend fun restoreUser(id: String) {}

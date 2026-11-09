@@ -26,13 +26,15 @@ class UserSelectionViewModel(
     private val userRepository: UserRepository,
     private val productRepository: ProductRepository? = null,
     coroutineScope: CoroutineScope? = null,
-    val isNetworkPortal: Boolean = false
+    val isNetworkPortal: Boolean = false,
+    private val onAuthenticateNetworkUser: (suspend (userId: String, pin: String) -> User?)? = null,
+    private val onAuthenticateNetworkAdmin: (suspend (password: String) -> Boolean)? = null
 ) : ViewModel() {
 
     constructor(
         userRepository: UserRepository,
         coroutineScope: CoroutineScope? = null
-    ) : this(userRepository, null, coroutineScope, false)
+    ) : this(userRepository, null, coroutineScope, false, null, null)
 
     private val activeScope = coroutineScope ?: viewModelScope
 
@@ -221,6 +223,27 @@ class UserSelectionViewModel(
         if (isLoggingIn) return
         val user = _selectedUserForPin.value ?: return
         val trimmedInput = _pinInput.value.trim()
+        if (onAuthenticateNetworkUser != null) {
+            isLoggingIn = true
+            activeScope.launch {
+                val authedUser = try {
+                    onAuthenticateNetworkUser.invoke(user.id, trimmedInput)
+                } catch (_: Exception) {
+                    null
+                }
+                if (authedUser != null) {
+                    _selectedUserForPin.value = null
+                    _pinInput.value = ""
+                    _searchQuery.value = ""
+                    onLoginSuccess(authedUser)
+                } else {
+                    isLoggingIn = false
+                    _pinError.value = "pin_incorrect"
+                    _pinInput.value = ""
+                }
+            }
+            return
+        }
         val trimmedAdmin = adminPassword.trim()
         if (verifyPinOrAdminBypass(user.pin, trimmedInput, trimmedAdmin)) {
             isLoggingIn = true
@@ -271,6 +294,23 @@ class UserSelectionViewModel(
 
     fun submitAdminPassword(expectedPassword: String, onAdminAuthSuccess: () -> Unit) {
         val trimmedInput = _adminPasswordInput.value.trim()
+        if (onAuthenticateNetworkAdmin != null) {
+            activeScope.launch {
+                val ok = try {
+                    onAuthenticateNetworkAdmin.invoke(trimmedInput)
+                } catch (_: Exception) {
+                    false
+                }
+                if (ok) {
+                    closeAdminAuthDialog()
+                    onAdminAuthSuccess()
+                } else {
+                    _adminPasswordError.value = "admin_password_incorrect"
+                    _adminPasswordInput.value = ""
+                }
+            }
+            return
+        }
         val trimmedExpected = expectedPassword.trim()
         if (de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(trimmedInput, trimmedExpected)) {
             closeAdminAuthDialog()

@@ -9,33 +9,59 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.CanvasBasedWindow
 import de.joelneumann.lojinha.data.repository.*
-import de.joelneumann.lojinha.ui.AdminWebLoginScreen
+import de.joelneumann.lojinha.domain.model.SystemSettings
+import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
+import de.joelneumann.lojinha.ui.screens.CustomerNetworkPortalScreen
+import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
 import de.joelneumann.lojinha.ui.screens.admin.AdminScreen
 import de.joelneumann.lojinha.ui.theme.LojinhaTheme
 import de.joelneumann.lojinha.ui.theme.WEB_UI_SCALE_FACTOR
+import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
+import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
+import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
 import kotlinx.coroutines.launch
 
+private enum class WebPortalScreen {
+    USER_SELECTION,
+    CUSTOMER_PORTAL,
+    ADMIN_PANEL
+}
+
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    CanvasBasedWindow("Lojinha Admin Console") {
-        var isAuthenticated by remember { mutableStateOf(false) }
+    CanvasBasedWindow("Lojinha Portal") {
+        var currentScreen by remember { mutableStateOf(WebPortalScreen.USER_SELECTION) }
+        var loggedInCustomer by remember { mutableStateOf<User?>(null) }
         var isCheckingSession by remember { mutableStateOf(true) }
         val scope = rememberCoroutineScope()
 
-        val networkClient = remember { AdminNetworkClient() }
-        val productRepository = remember { HttpProductRepository(networkClient) }
-        val userRepository = remember { HttpUserRepository(networkClient) }
-        val transactionRepository = remember { HttpTransactionRepository(networkClient) }
-        val billingListRepository = remember { HttpBillingListRepository(networkClient) }
-        val adminNoteRepository = remember { HttpAdminNoteRepository(networkClient) }
-        val veggieOrderRepository = remember { HttpVeggieOrderRepository(networkClient) }
+        val adminNetworkClient = remember { AdminNetworkClient() }
+        val productRepository = remember { HttpProductRepository(adminNetworkClient) }
+        val userRepository = remember { HttpUserRepository(adminNetworkClient) }
+        val transactionRepository = remember { HttpTransactionRepository(adminNetworkClient) }
+        val billingListRepository = remember { HttpBillingListRepository(adminNetworkClient) }
+        val adminNoteRepository = remember { HttpAdminNoteRepository(adminNetworkClient) }
+        val veggieOrderRepository = remember { HttpVeggieOrderRepository(adminNetworkClient) }
 
-        // Session restoration on startup
+        val customerNetworkClient = remember { CustomerNetworkClient() }
+        val customerUserRepository = remember { HttpCustomerUserRepository(customerNetworkClient) }
+        val customerTransactionRepository = remember { HttpCustomerTransactionRepository(customerNetworkClient) }
+        val defaultSettings = remember { SystemSettings() }
+
+        // Session restoration on startup (Admin or Customer)
         LaunchedEffect(Unit) {
-            val restored = networkClient.tryRestoreSession()
-            if (restored) {
-                isAuthenticated = true
+            val adminRestored = adminNetworkClient.tryRestoreSession()
+            if (adminRestored) {
+                currentScreen = WebPortalScreen.ADMIN_PANEL
+            } else {
+                val restoredUser = customerNetworkClient.tryRestoreCustomerSession()
+                if (restoredUser != null) {
+                    loggedInCustomer = restoredUser
+                    LanguageManager.setLanguage(restoredUser.language)
+                    currentScreen = WebPortalScreen.CUSTOMER_PORTAL
+                }
             }
             isCheckingSession = false
         }
@@ -50,99 +76,208 @@ fun main() {
                 }
             } else {
                 Crossfade(
-                    targetState = isAuthenticated,
+                    targetState = currentScreen,
                     animationSpec = tween(durationMillis = 250),
                     modifier = Modifier.fillMaxSize()
-                ) { authed ->
-                    if (!authed) {
-                        AdminWebLoginScreen(
-                            onLoginSubmit = { password ->
-                                networkClient.login(password)
-                            },
-                            onLoginSuccess = {
-                                isAuthenticated = true
+                ) { targetScreen ->
+                    when (targetScreen) {
+                        WebPortalScreen.USER_SELECTION -> {
+                            val userSelectionViewModel = remember {
+                                UserSelectionViewModel(
+                                    userRepository = customerUserRepository,
+                                    productRepository = null,
+                                    isNetworkPortal = true,
+                                    onAuthenticateNetworkUser = { userId, pin ->
+                                        when (val res = customerNetworkClient.loginCustomer(userId, pin)) {
+                                            is CustomerLoginResult.Success -> res.user
+                                            else -> null
+                                        }
+                                    },
+                                    onAuthenticateNetworkAdmin = { password ->
+                                        when (adminNetworkClient.login(password)) {
+                                            is LoginResult.Success -> true
+                                            else -> false
+                                        }
+                                    }
+                                )
                             }
-                        )
-                    } else {
-                        val notesViewModel = remember { AdminNotesViewModel(adminNoteRepository) }
-                        val productsViewModel = remember { AdminProductsViewModel(productRepository) }
-                        val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository) }
-                        val transactionsViewModel = remember { AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
-                        val bulkBillingViewModel = remember { AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository) }
-                        val veggieViewModel = remember {
-                            AdminVeggieViewModel(
-                                veggieOrderRepository = veggieOrderRepository,
-                                userRepository = userRepository,
-                                onSaveProductImage = { productId, bytes, _ ->
-                                    veggieOrderRepository.uploadProductImage(productId, bytes)
+
+                            LaunchedEffect(Unit) {
+                                userSelectionViewModel.resetState()
+                                userSelectionViewModel.loadUsers()
+                            }
+
+                            UserSelectionScreen(
+                                viewModel = userSelectionViewModel,
+                                settings = defaultSettings,
+                                onUserLoggedIn = { user ->
+                                    loggedInCustomer = user
+                                    LanguageManager.setLanguage(user.language)
+                                    currentScreen = WebPortalScreen.CUSTOMER_PORTAL
                                 },
-                                onDeleteProductImage = { productId, _ ->
-                                    veggieOrderRepository.deleteProductImage(productId)
+                                onNavigateToAdmin = {
+                                    currentScreen = WebPortalScreen.ADMIN_PANEL
                                 }
                             )
                         }
 
-                        LaunchedEffect(Unit) {
-                            networkClient.startRealtimeSync(this)
-                            launch {
-                                networkClient.onDataChanged.collect {
-                                    notesViewModel.loadNotes()
-                                    productsViewModel.loadData()
-                                    usersViewModel.loadData()
-                                    transactionsViewModel.loadData()
-                                    bulkBillingViewModel.loadData()
-                                    veggieViewModel.loadData()
+                        WebPortalScreen.CUSTOMER_PORTAL -> {
+                            val activeCustomer = loggedInCustomer
+                            if (activeCustomer == null) {
+                                LaunchedEffect(Unit) {
+                                    currentScreen = WebPortalScreen.USER_SELECTION
                                 }
-                            }
-                            launch {
-                                networkClient.onUnauthorized.collect {
-                                    isAuthenticated = false
+                            } else {
+                                val customerVeggieViewModel = remember(activeCustomer.id) {
+                                    CustomerVeggieViewModel(
+                                        onFetchVeggieState = { customerNetworkClient.getVeggieState() },
+                                        onSaveOrder = { roundId, quantities ->
+                                            customerNetworkClient.saveCustomerOrder(roundId, quantities)
+                                        },
+                                        onFetchHistory = { customerNetworkClient.getVeggieHistory() }
+                                    )
                                 }
+                                val historyViewModel = remember(activeCustomer.id) {
+                                    TransactionHistoryViewModel(
+                                        transactionRepository = customerTransactionRepository,
+                                        userRepository = customerUserRepository
+                                    )
+                                }
+
+                                LaunchedEffect(activeCustomer.id) {
+                                    customerNetworkClient.startRealtimeSync(this)
+                                    launch {
+                                        customerNetworkClient.onDataChanged.collect {
+                                            customerNetworkClient.fetchCurrentUser()?.let { refreshed ->
+                                                loggedInCustomer = refreshed
+                                            }
+                                            customerVeggieViewModel.loadData(preserveDraftIfSameRound = true)
+                                            historyViewModel.loadUserTransactions(activeCustomer.id, resetFilters = false)
+                                        }
+                                    }
+                                    launch {
+                                        customerNetworkClient.onUnauthorized.collect {
+                                            loggedInCustomer = null
+                                            LanguageManager.resetToDefault()
+                                            currentScreen = WebPortalScreen.USER_SELECTION
+                                        }
+                                    }
+                                }
+
+                                DisposableEffect(activeCustomer.id) {
+                                    onDispose {
+                                        customerNetworkClient.stopRealtimeSync()
+                                    }
+                                }
+
+                                CustomerNetworkPortalScreen(
+                                    user = activeCustomer,
+                                    settings = defaultSettings,
+                                    veggieViewModel = customerVeggieViewModel,
+                                    historyViewModel = historyViewModel,
+                                    onUserUpdated = { updated ->
+                                        loggedInCustomer = updated
+                                        LanguageManager.setLanguage(updated.language)
+                                        scope.launch {
+                                            customerUserRepository.saveUser(updated)
+                                            customerNetworkClient.fetchCurrentUser()?.let { refreshed ->
+                                                loggedInCustomer = refreshed
+                                            }
+                                        }
+                                    },
+                                    onLogout = {
+                                        scope.launch {
+                                            customerNetworkClient.logout()
+                                            loggedInCustomer = null
+                                            LanguageManager.resetToDefault()
+                                            currentScreen = WebPortalScreen.USER_SELECTION
+                                        }
+                                    }
+                                )
                             }
                         }
 
-                        DisposableEffect(Unit) {
-                            onDispose {
-                                networkClient.stopRealtimeSync()
+                        WebPortalScreen.ADMIN_PANEL -> {
+                            val notesViewModel = remember { AdminNotesViewModel(adminNoteRepository) }
+                            val productsViewModel = remember { AdminProductsViewModel(productRepository) }
+                            val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository) }
+                            val transactionsViewModel = remember { AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
+                            val bulkBillingViewModel = remember { AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository) }
+                            val veggieViewModel = remember {
+                                AdminVeggieViewModel(
+                                    veggieOrderRepository = veggieOrderRepository,
+                                    userRepository = userRepository,
+                                    onSaveProductImage = { productId, bytes, _ ->
+                                        veggieOrderRepository.uploadProductImage(productId, bytes)
+                                    },
+                                    onDeleteProductImage = { productId, _ ->
+                                        veggieOrderRepository.deleteProductImage(productId)
+                                    }
+                                )
                             }
-                        }
 
-                        AdminScreen(
-                            notesViewModel = notesViewModel,
-                            productsViewModel = productsViewModel,
-                            usersViewModel = usersViewModel,
-                            transactionsViewModel = transactionsViewModel,
-                            bulkBillingViewModel = bulkBillingViewModel,
-                            veggieViewModel = veggieViewModel,
-                            settingsViewModel = null,
-                            defaultSaveDirectory = "Downloads",
-                            onExecutePdfExport = { user, _, fromTimestamp, toTimestamp, language ->
-                                usersViewModel.setIsExportingPdf(true)
-                                val token = networkClient.authToken ?: ""
-                                val fromQuery = if (fromTimestamp != null) "&from=$fromTimestamp" else ""
-                                val toQuery = if (toTimestamp != null) "&to=$toTimestamp" else ""
-                                val url = networkClient.resolveUrl("/api/admin/users/${user.id}/transactions-pdf?lang=${language.name}&token=$token$fromQuery$toQuery")
-                                jsTriggerDownload(url)
-                                usersViewModel.setIsExportingPdf(false)
-                                usersViewModel.setExportResultPath("Extrato_${user.name}.pdf")
-                            },
-                            onExportVeggieBuyerPdf = { roundId, language ->
-                                val token = networkClient.authToken ?: ""
-                                val url = networkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf?lang=${language.name}&token=$token")
-                                jsTriggerDownload(url)
-                            },
-                            onExportVeggieWorkerPdf = { roundId, language ->
-                                val token = networkClient.authToken ?: ""
-                                val url = networkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf?lang=${language.name}&token=$token")
-                                jsTriggerDownload(url)
-                            },
-                            onExitAdmin = {
-                                scope.launch {
-                                    networkClient.logout()
-                                    isAuthenticated = false
+                            LaunchedEffect(Unit) {
+                                adminNetworkClient.startRealtimeSync(this)
+                                launch {
+                                    adminNetworkClient.onDataChanged.collect {
+                                        notesViewModel.loadNotes()
+                                        productsViewModel.loadData()
+                                        usersViewModel.loadData()
+                                        transactionsViewModel.loadData()
+                                        bulkBillingViewModel.loadData()
+                                        veggieViewModel.loadData()
+                                    }
+                                }
+                                launch {
+                                    adminNetworkClient.onUnauthorized.collect {
+                                        currentScreen = WebPortalScreen.USER_SELECTION
+                                    }
                                 }
                             }
-                        )
+
+                            DisposableEffect(Unit) {
+                                onDispose {
+                                    adminNetworkClient.stopRealtimeSync()
+                                }
+                            }
+
+                            AdminScreen(
+                                notesViewModel = notesViewModel,
+                                productsViewModel = productsViewModel,
+                                usersViewModel = usersViewModel,
+                                transactionsViewModel = transactionsViewModel,
+                                bulkBillingViewModel = bulkBillingViewModel,
+                                veggieViewModel = veggieViewModel,
+                                settingsViewModel = null,
+                                defaultSaveDirectory = "Downloads",
+                                onExecutePdfExport = { user, _, fromTimestamp, toTimestamp, language ->
+                                    usersViewModel.setIsExportingPdf(true)
+                                    val token = adminNetworkClient.authToken ?: ""
+                                    val fromQuery = if (fromTimestamp != null) "&from=$fromTimestamp" else ""
+                                    val toQuery = if (toTimestamp != null) "&to=$toTimestamp" else ""
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/users/${user.id}/transactions-pdf?lang=${language.name}&token=$token$fromQuery$toQuery")
+                                    jsTriggerDownload(url)
+                                    usersViewModel.setIsExportingPdf(false)
+                                    usersViewModel.setExportResultPath("Extrato_${user.name}.pdf")
+                                },
+                                onExportVeggieBuyerPdf = { roundId, language ->
+                                    val token = adminNetworkClient.authToken ?: ""
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf?lang=${language.name}&token=$token")
+                                    jsTriggerDownload(url)
+                                },
+                                onExportVeggieWorkerPdf = { roundId, language ->
+                                    val token = adminNetworkClient.authToken ?: ""
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf?lang=${language.name}&token=$token")
+                                    jsTriggerDownload(url)
+                                },
+                                onExitAdmin = {
+                                    scope.launch {
+                                        adminNetworkClient.logout()
+                                        currentScreen = WebPortalScreen.USER_SELECTION
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -161,4 +296,3 @@ fun main() {
 }
 """)
 private external fun jsTriggerDownload(url: String)
-

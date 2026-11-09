@@ -968,7 +968,11 @@ class LojinhaAdminServer(
                         val req = call.receive<CustomerSettingsUpdateRequest>()
                         val cleanNewPin = req.newPin?.trim()
                         val updatedPinHash = if (!cleanNewPin.isNullOrBlank()) {
-                            de.joelneumann.lojinha.security.PasswordHasher.hash(cleanNewPin)
+                            if (de.joelneumann.lojinha.security.PasswordHasher.isHash(cleanNewPin)) {
+                                cleanNewPin
+                            } else {
+                                de.joelneumann.lojinha.security.PasswordHasher.hash(cleanNewPin)
+                            }
                         } else {
                             user.pin
                         }
