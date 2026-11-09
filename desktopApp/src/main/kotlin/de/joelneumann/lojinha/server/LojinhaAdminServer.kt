@@ -19,10 +19,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.util.AppLogger
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.GZIPOutputStream
 
 class LojinhaAdminServer(
     private val productRepository: ProductRepository,
@@ -45,6 +47,33 @@ class LojinhaAdminServer(
 
     private fun safeEquals(a: String, b: String): Boolean {
         return MessageDigest.isEqual(a.toByteArray(Charsets.UTF_8), b.toByteArray(Charsets.UTF_8))
+    }
+
+    private data class CachedAsset(
+        val lastModified: Long,
+        val etag: String,
+        val rawBytes: ByteArray,
+        val gzippedBytes: ByteArray
+    )
+
+    private val staticAssetCache = ConcurrentHashMap<String, CachedAsset>()
+
+    private fun isCompressible(name: String): Boolean =
+        name.endsWith(".wasm") || name.endsWith(".js") || name.endsWith(".html") ||
+        name.endsWith(".css") || name.endsWith(".map") || name.endsWith(".json") ||
+        name.endsWith(".svg")
+
+    private fun isImmutableAsset(name: String): Boolean =
+        name.endsWith(".wasm") || name.endsWith(".js") || name.endsWith(".map") ||
+        name.endsWith(".png") || name.endsWith(".ico") || name.endsWith(".svg") ||
+        name.startsWith("composeResources/")
+
+    private fun gzipBytes(data: ByteArray): ByteArray {
+        val bos = ByteArrayOutputStream(data.size / 2)
+        GZIPOutputStream(bos).use { gz ->
+            gz.write(data)
+        }
+        return bos.toByteArray()
     }
 
     private fun buildServer(bindPort: Int): EmbeddedServer<*, *> = embeddedServer(Netty, port = bindPort, host = "0.0.0.0") {
@@ -505,20 +534,80 @@ class LojinhaAdminServer(
                     }
                 }
 
-                // 3. Serve static Wasm assets
+                // 3. Serve static Wasm assets with HTTP Caching and Gzip Compression
                 suspend fun io.ktor.server.application.ApplicationCall.respondWasmAsset(assetName: String) {
                     val file = findWasmAsset(assetName)
+                    val resourceBytes = if (file == null || !file.exists()) loadWasmResourceBytes(assetName) else null
+
+                    if (file == null && resourceBytes == null) {
+                        if (assetName == "index.html") {
+                            respond(HttpStatusCode.NotFound, "Admin web interface assets not found.")
+                        } else {
+                            respond(HttpStatusCode.NotFound)
+                        }
+                        return
+                    }
+
+                    val lastModified = file?.lastModified() ?: 0L
+                    val rawLength = file?.length() ?: resourceBytes?.size?.toLong() ?: 0L
+                    val etag = "\"${assetName.hashCode()}-$rawLength-$lastModified\""
+
+                    // Cache-Control headers: Immutable 1-year cache for hashed assets; no-cache for entry HTML
+                    if (isImmutableAsset(assetName)) {
+                        response.header(HttpHeaders.CacheControl, "public, max-age=31536000, immutable")
+                    } else {
+                        response.header(HttpHeaders.CacheControl, "no-cache, must-revalidate")
+                    }
+                    response.header(HttpHeaders.ETag, etag)
+
+                    // Conditional request validation (304 Not Modified)
+                    val clientIfNoneMatch = request.headers[HttpHeaders.IfNoneMatch]
+                    if (clientIfNoneMatch != null && (clientIfNoneMatch == etag || clientIfNoneMatch == "*" || clientIfNoneMatch.contains(etag))) {
+                        respond(HttpStatusCode.NotModified)
+                        return
+                    }
+
+                    val acceptEncoding = request.headers[HttpHeaders.AcceptEncoding] ?: ""
+                    val clientAcceptsGzip = acceptEncoding.contains("gzip", ignoreCase = true)
+                    val contentType = getContentTypeForName(assetName)
+
+                    if (clientAcceptsGzip && isCompressible(assetName)) {
+                        response.header(HttpHeaders.Vary, HttpHeaders.AcceptEncoding)
+                        response.header(HttpHeaders.ContentEncoding, "gzip")
+
+                        // 1. Try pre-compressed .gz file on disk
+                        val gzFile = file?.let { findWasmAsset("$assetName.gz") ?: File(it.parentFile, "${it.name}.gz") }
+                        if (gzFile != null && gzFile.exists() && !gzFile.isDirectory) {
+                            respondBytes(gzFile.readBytes(), contentType)
+                            return
+                        }
+
+                        // 2. Try pre-compressed .gz resource from classpath
+                        val gzResourceBytes = loadWasmResourceBytes("$assetName.gz")
+                        if (gzResourceBytes != null) {
+                            respondBytes(gzResourceBytes, contentType)
+                            return
+                        }
+
+                        // 3. Dynamic runtime compression with in-memory caching
+                        val cached = staticAssetCache[assetName]
+                        if (cached != null && cached.lastModified == lastModified && cached.rawBytes.size.toLong() == rawLength) {
+                            respondBytes(cached.gzippedBytes, contentType)
+                            return
+                        }
+
+                        val rawData = file?.readBytes() ?: resourceBytes!!
+                        val compressedData = gzipBytes(rawData)
+                        staticAssetCache[assetName] = CachedAsset(lastModified, etag, rawData, compressedData)
+                        respondBytes(compressedData, contentType)
+                        return
+                    }
+
+                    // Client does not accept gzip or asset is not compressible
                     if (file != null && file.exists() && !file.isDirectory) {
                         respondFile(file)
-                        return
-                    }
-                    val resourceBytes = loadWasmResourceBytes(assetName)
-                    if (resourceBytes != null) {
-                        respondBytes(resourceBytes, getContentTypeForName(assetName))
-                        return
-                    }
-                    if (assetName == "index.html") {
-                        respond(HttpStatusCode.NotFound, "Admin web interface assets not found.")
+                    } else if (resourceBytes != null) {
+                        respondBytes(resourceBytes, contentType)
                     } else {
                         respond(HttpStatusCode.NotFound)
                     }
@@ -647,10 +736,10 @@ class LojinhaAdminServer(
         if (clean.isBlank()) return null
         val candidatePaths = listOf(
             File("shared/build/dist/wasmJs/productionExecutable"),
-            File("shared/build/dist/wasmJs/developmentExecutable"),
             File("build/dist/wasmJs/productionExecutable"),
-            File("build/dist/wasmJs/developmentExecutable"),
             File("../shared/build/dist/wasmJs/productionExecutable"),
+            File("shared/build/dist/wasmJs/developmentExecutable"),
+            File("build/dist/wasmJs/developmentExecutable"),
             File("../shared/build/dist/wasmJs/developmentExecutable")
         )
         for (dir in candidatePaths) {

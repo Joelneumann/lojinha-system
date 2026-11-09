@@ -1,4 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.io.File
+import java.util.zip.GZIPOutputStream
 
 plugins {
     alias(libs.plugins.kotlinJvm)
@@ -35,6 +37,24 @@ val copyWasmResources by tasks.registering(Copy::class) {
     dependsOn(":shared:wasmJsBrowserDistribution")
     from(project(":shared").layout.buildDirectory.dir("dist/wasmJs/productionExecutable"))
     into(layout.buildDirectory.dir("generated/wasmResources/wasm"))
+
+    doFirst {
+        destinationDir.deleteRecursively()
+        destinationDir.mkdirs()
+    }
+
+    doLast {
+        val targetDir = destinationDir
+        val compressibleExtensions = setOf("wasm", "js", "html", "css", "map", "json", "svg")
+        targetDir.walkTopDown().filter { it.isFile && it.extension in compressibleExtensions && !it.name.endsWith(".gz") }.forEach { file ->
+            val gzFile = File(file.parentFile, "${file.name}.gz")
+            GZIPOutputStream(gzFile.outputStream()).use { gzOut ->
+                file.inputStream().use { fileIn ->
+                    fileIn.copyTo(gzOut)
+                }
+            }
+        }
+    }
 }
 
 sourceSets {
