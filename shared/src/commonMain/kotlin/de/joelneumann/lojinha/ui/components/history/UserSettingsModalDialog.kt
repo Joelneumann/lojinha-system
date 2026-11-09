@@ -71,6 +71,9 @@ fun UserSettingsModalDialog(
     onDismiss: () -> Unit,
     onSave: (removePin: Boolean) -> Unit,
     onUserInteracted: (force: Boolean) -> Unit = {},
+    selectedRequirePinOnKiosk: Boolean = user.requirePinOnKiosk,
+    onRequirePinOnKioskChange: (Boolean) -> Unit = {},
+    isNetworkPortal: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -100,12 +103,14 @@ fun UserSettingsModalDialog(
             confirmPinInput.isNotEmpty() ||
             (selectedLanguage != user.language) ||
             (selectedSecondaryCurrency != user.secondaryCurrency) ||
-            (selectedAvatar != user.avatar)
+            (selectedAvatar != user.avatar) ||
+            (selectedRequirePinOnKiosk != user.requirePinOnKiosk)
 
     val hasChanges = isPinActionChanged ||
             (selectedLanguage != user.language) ||
             (selectedSecondaryCurrency != user.secondaryCurrency) ||
-            (selectedAvatar != user.avatar)
+            (selectedAvatar != user.avatar) ||
+            (selectedRequirePinOnKiosk != user.requirePinOnKiosk)
 
     val handleDismissRequest = {
         onUserInteracted(true)
@@ -340,7 +345,7 @@ fun UserSettingsModalDialog(
                 ) {
                     Text(text = strings.setPin, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
 
-                    if (user.pin != null) {
+                    if (user.pin != null && !isNetworkPortal) {
                         TextButton(
                             onClick = {
                                 onUserInteracted(true)
@@ -466,6 +471,43 @@ fun UserSettingsModalDialog(
                                     color = ColorDangerCrimson,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    if (user.pin != null || pinInput.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    onUserInteracted(true)
+                                    onRequirePinOnKioskChange(!selectedRequirePinOnKiosk)
+                                }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Checkbox(
+                                checked = selectedRequirePinOnKiosk,
+                                onCheckedChange = {
+                                    onUserInteracted(true)
+                                    onRequirePinOnKioskChange(it)
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column {
+                                Text(
+                                    text = strings.requirePinOnKioskLabel,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryNavy
+                                )
+                                Text(
+                                    text = strings.requirePinOnKioskDesc,
+                                    fontSize = 11.5.sp,
+                                    color = TextSecondaryMuted
                                 )
                             }
                         }

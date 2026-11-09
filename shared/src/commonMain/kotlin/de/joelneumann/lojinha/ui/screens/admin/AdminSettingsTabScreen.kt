@@ -110,6 +110,12 @@ fun AdminSettingsTabScreen(
     var isSupportEmailLocked by remember { mutableStateOf(supportEmail.isNotBlank()) }
     var showUnlockSupportEmailDialog by remember { mutableStateOf(false) }
 
+    var veggieAutoOpenEnabled by remember { mutableStateOf(settings.veggieAutoOpenEnabled) }
+    var veggieAutoOpenDayOfWeek by remember { mutableStateOf(settings.veggieAutoOpenDayOfWeek) }
+    var veggieAutoOpenTime by remember { mutableStateOf(settings.veggieAutoOpenTime) }
+    var veggieBuyerFeeInput by remember { mutableStateOf(formatCentsToInput(settings.defaultVeggieBuyerFeeCents)) }
+    var veggieTransportFeeInput by remember { mutableStateOf(formatCentsToInput(settings.defaultVeggieTransportFeeCents)) }
+
     val inactivityTimeoutValue = inactivityTimeout.toIntOrNull()
     val isInactivityTimeoutValid = inactivityTimeoutValue != null && inactivityTimeoutValue in 2..1440
 
@@ -126,11 +132,22 @@ fun AdminSettingsTabScreen(
     val isRedThresholdValid = parsedRed != null && parsedRed in -100_000_00L..100_000_00L
     val isThresholdOrderValid = isYellowThresholdValid && isRedThresholdValid && parsedYellow!! > parsedRed!!
 
+    val isVeggieTimeValid = remember(veggieAutoOpenTime) {
+        val parts = veggieAutoOpenTime.trim().split(":")
+        parts.size == 2 && parts[0].toIntOrNull() in 0..23 && parts[1].toIntOrNull() in 0..59
+    }
+    val parsedVeggieBuyerFee = remember(veggieBuyerFeeInput) { parseBrlInputToCents(veggieBuyerFeeInput) }
+    val isVeggieBuyerFeeValid = parsedVeggieBuyerFee != null && parsedVeggieBuyerFee in 0L..100_000_00L
+    val parsedVeggieTransportFee = remember(veggieTransportFeeInput) { parseBrlInputToCents(veggieTransportFeeInput) }
+    val isVeggieTransportFeeValid = parsedVeggieTransportFee != null && parsedVeggieTransportFee in 0L..100_000_00L
+
     val hasFieldChanges = remember(
         settings, newPassword, confirmPassword, globalMarkup, globalMarkupValue,
         usdRate, parsedUsdRate, eurRate, parsedEurRate,
         autoUpdateExchangeRates, inactivityTimeout, supportEmail,
-        yellowWarningThreshold, parsedYellow, redWarningThreshold, parsedRed
+        yellowWarningThreshold, parsedYellow, redWarningThreshold, parsedRed,
+        veggieAutoOpenEnabled, veggieAutoOpenDayOfWeek, veggieAutoOpenTime,
+        veggieBuyerFeeInput, parsedVeggieBuyerFee, veggieTransportFeeInput, parsedVeggieTransportFee
     ) {
         (newPassword.isNotEmpty() || confirmPassword.isNotEmpty()) ||
                 (if (globalMarkupValue != null) globalMarkupValue != settings.globalMarkupPercent else globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent)) ||
@@ -140,7 +157,12 @@ fun AdminSettingsTabScreen(
                 inactivityTimeout.trim() != settings.inactivityTimeoutMinutes.toString() ||
                 supportEmail.trim() != (settings.supportEmail ?: "") ||
                 (if (parsedYellow != null) parsedYellow != settings.yellowBalanceWarningThresholdCents else yellowWarningThreshold.trim() != formatCentsToInput(settings.yellowBalanceWarningThresholdCents)) ||
-                (if (parsedRed != null) parsedRed != settings.redBalanceWarningThresholdCents else redWarningThreshold.trim() != formatCentsToInput(settings.redBalanceWarningThresholdCents))
+                (if (parsedRed != null) parsedRed != settings.redBalanceWarningThresholdCents else redWarningThreshold.trim() != formatCentsToInput(settings.redBalanceWarningThresholdCents)) ||
+                veggieAutoOpenEnabled != settings.veggieAutoOpenEnabled ||
+                veggieAutoOpenDayOfWeek != settings.veggieAutoOpenDayOfWeek ||
+                veggieAutoOpenTime.trim() != settings.veggieAutoOpenTime ||
+                (if (parsedVeggieBuyerFee != null) parsedVeggieBuyerFee != settings.defaultVeggieBuyerFeeCents else veggieBuyerFeeInput.trim() != formatCentsToInput(settings.defaultVeggieBuyerFeeCents)) ||
+                (if (parsedVeggieTransportFee != null) parsedVeggieTransportFee != settings.defaultVeggieTransportFeeCents else veggieTransportFeeInput.trim() != formatCentsToInput(settings.defaultVeggieTransportFeeCents))
     }
 
     // Only synchronize baseline fields when the user has NO uncommitted changes
@@ -155,6 +177,11 @@ fun AdminSettingsTabScreen(
             redWarningThreshold = formatCentsToInput(settings.redBalanceWarningThresholdCents)
             supportEmail = settings.supportEmail ?: ""
             isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
+            veggieAutoOpenEnabled = settings.veggieAutoOpenEnabled
+            veggieAutoOpenDayOfWeek = settings.veggieAutoOpenDayOfWeek
+            veggieAutoOpenTime = settings.veggieAutoOpenTime
+            veggieBuyerFeeInput = formatCentsToInput(settings.defaultVeggieBuyerFeeCents)
+            veggieTransportFeeInput = formatCentsToInput(settings.defaultVeggieTransportFeeCents)
         }
     }
 
@@ -234,6 +261,11 @@ fun AdminSettingsTabScreen(
                             redWarningThreshold = formatCentsToInput(settings.redBalanceWarningThresholdCents)
                             supportEmail = settings.supportEmail ?: ""
                             isSupportEmailLocked = (settings.supportEmail ?: "").isNotBlank()
+                            veggieAutoOpenEnabled = settings.veggieAutoOpenEnabled
+                            veggieAutoOpenDayOfWeek = settings.veggieAutoOpenDayOfWeek
+                            veggieAutoOpenTime = settings.veggieAutoOpenTime
+                            veggieBuyerFeeInput = formatCentsToInput(settings.defaultVeggieBuyerFeeCents)
+                            veggieTransportFeeInput = formatCentsToInput(settings.defaultVeggieTransportFeeCents)
                             onUnsavedStateChanged(false)
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -254,14 +286,22 @@ fun AdminSettingsTabScreen(
                     }
                 }
 
+                val isAllSettingsValid = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid && isVeggieTimeValid && isVeggieBuyerFeeValid && isVeggieTransportFeeValid
+
                 Button(
                     onClick = {
-                        if (hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid) {
+                        if (isAllSettingsValid) {
                             val newUsd = parsedUsdRate ?: settings.usdExchangeRate
                             val newEur = parsedEurRate ?: settings.eurExchangeRate
                             val ratesManuallyChanged = newUsd != settings.usdExchangeRate || newEur != settings.eurExchangeRate
                             val newYellow = parsedYellow ?: settings.yellowBalanceWarningThresholdCents
                             val newRed = parsedRed ?: settings.redBalanceWarningThresholdCents
+                            val newBuyerFee = parsedVeggieBuyerFee ?: settings.defaultVeggieBuyerFeeCents
+                            val newTransportFee = parsedVeggieTransportFee ?: settings.defaultVeggieTransportFeeCents
+                            val timeParts = veggieAutoOpenTime.trim().split(":")
+                            val normalizedVeggieTime = if (timeParts.size == 2) {
+                                "${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}"
+                            } else settings.veggieAutoOpenTime
                             val updatedSettings = settings.copy(
                                 adminPasswordHash = if (newPassword.isNotBlank()) de.joelneumann.lojinha.security.PasswordHasher.hash(newPassword) else settings.adminPasswordHash,
                                 globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
@@ -272,7 +312,12 @@ fun AdminSettingsTabScreen(
                                 autoUpdateExchangeRates = autoUpdateExchangeRates,
                                 lastExchangeRateUpdateTimestamp = if (ratesManuallyChanged) null else settings.lastExchangeRateUpdateTimestamp,
                                 yellowBalanceWarningThresholdCents = newYellow,
-                                redBalanceWarningThresholdCents = newRed
+                                redBalanceWarningThresholdCents = newRed,
+                                veggieAutoOpenEnabled = veggieAutoOpenEnabled,
+                                veggieAutoOpenDayOfWeek = veggieAutoOpenDayOfWeek.coerceIn(1, 7),
+                                veggieAutoOpenTime = normalizedVeggieTime,
+                                defaultVeggieBuyerFeeCents = newBuyerFee,
+                                defaultVeggieTransportFeeCents = newTransportFee
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
@@ -282,11 +327,14 @@ fun AdminSettingsTabScreen(
                             globalMarkup = Formatting.formatDecimal(updatedSettings.globalMarkupPercent)
                             yellowWarningThreshold = formatCentsToInput(newYellow)
                             redWarningThreshold = formatCentsToInput(newRed)
+                            veggieAutoOpenTime = normalizedVeggieTime
+                            veggieBuyerFeeInput = formatCentsToInput(newBuyerFee)
+                            veggieTransportFeeInput = formatCentsToInput(newTransportFee)
                             isSupportEmailLocked = updatedSettings.supportEmail?.isNotBlank() == true
                             onUnsavedStateChanged(false)
                         }
                     },
-                    enabled = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid,
+                    enabled = isAllSettingsValid,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentNavy,
                         disabledContainerColor = SurfaceContainerHighLight
@@ -401,6 +449,158 @@ fun AdminSettingsTabScreen(
                                 color = ColorDangerCrimson,
                                 modifier = Modifier.padding(top = 4.dp, start = 2.dp)
                             )
+                        }
+                    }
+                }
+            }
+
+            // CARD 1B: VEGGIE ORDER SYSTEM
+            item(key = "veggie-settings-card") {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SurfaceWhite,
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Eco,
+                                contentDescription = null,
+                                tint = ColorSuccessEmerald,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(strings.veggieSettingsCardTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        }
+                        Text(
+                            text = strings.veggieSettingsCardSubtitle,
+                            fontSize = 12.sp,
+                            color = TextSecondaryMuted
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { veggieAutoOpenEnabled = !veggieAutoOpenEnabled }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .padding(vertical = 4.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Switch(
+                                checked = veggieAutoOpenEnabled,
+                                onCheckedChange = null,
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SurfaceWhite,
+                                    checkedTrackColor = AccentNavy
+                                )
+                            )
+                            Text(
+                                text = strings.veggieAutoOpenEnabledLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = PrimaryNavy
+                            )
+                        }
+
+                        val weekdayNames = listOf(
+                            strings.weekdayMonday,
+                            strings.weekdayTuesday,
+                            strings.weekdayWednesday,
+                            strings.weekdayThursday,
+                            strings.weekdayFriday,
+                            strings.weekdaySaturday,
+                            strings.weekdaySunday
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(2f)) {
+                                Text(
+                                    text = strings.veggieAutoOpenDayLabel,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryNavy
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    (1..7).forEach { dayIndex ->
+                                        val isSelected = veggieAutoOpenDayOfWeek == dayIndex
+                                        val dayLabel = weekdayNames.getOrNull(dayIndex - 1)?.take(3) ?: dayIndex.toString()
+                                        OutlinedButton(
+                                            onClick = { veggieAutoOpenDayOfWeek = dayIndex },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                containerColor = if (isSelected) AccentNavy else SurfaceWhite,
+                                                contentColor = if (isSelected) SurfaceWhite else PrimaryNavy
+                                            )
+                                        ) {
+                                            Text(dayLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                AdminLabeledField(
+                                    label = strings.veggieAutoOpenTimeLabel,
+                                    value = veggieAutoOpenTime,
+                                    onValueChange = { veggieAutoOpenTime = it },
+                                    placeholder = "08:00",
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (!isVeggieTimeValid) {
+                                    Text(
+                                        text = strings.veggieAutoOpenTimeInvalidError,
+                                        fontSize = 11.sp,
+                                        color = ColorDangerCrimson,
+                                        modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                AdminLabeledField(
+                                    label = strings.veggieStandardBuyerFeeLabel,
+                                    value = veggieBuyerFeeInput,
+                                    onValueChange = { veggieBuyerFeeInput = it },
+                                    placeholder = "0",
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                AdminLabeledField(
+                                    label = strings.veggieStandardTransportFeeLabel,
+                                    value = veggieTransportFeeInput,
+                                    onValueChange = { veggieTransportFeeInput = it },
+                                    placeholder = "0",
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
@@ -1329,6 +1529,29 @@ fun AdminSettingsTabScreen(
                                         modifier = Modifier.size(15.dp)
                                     )
                                     Text(strings.importUsersCsvBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    pickFile(strings.selectVeggieProductsCsvFile, ".csv") { selectedFile ->
+                                        viewModel.prepareCsvImport(selectedFile, "VeggieProducts")
+                                    }
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Eco,
+                                        contentDescription = null,
+                                        tint = ColorSuccessEmerald,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.importVeggieProductsCsvBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
                             }
                         }

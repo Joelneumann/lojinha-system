@@ -52,6 +52,7 @@ fun UserSelectionScreen(
     val adminPasswordError by viewModel.adminPasswordError.collectAsState()
     val scannedProduct by viewModel.scannedProduct.collectAsState()
     val notFoundNotice by viewModel.notFoundNotice.collectAsState()
+    val pinRequiredNoticeUser by viewModel.pinRequiredNoticeUser.collectAsState()
 
     UserSelectionContent(
         users = users,
@@ -64,6 +65,7 @@ fun UserSelectionScreen(
         showAdminAuthDialog = showAdminAuthDialog,
         adminPasswordInput = adminPasswordInput,
         adminPasswordError = adminPasswordError,
+        pinRequiredNoticeUser = pinRequiredNoticeUser,
         onOpenAdminAuthDialog = viewModel::openAdminAuthDialog,
         onSearchQueryChange = viewModel::updateSearchQuery,
         onSearchSubmitted = { viewModel.onSearchSubmitted(settings.globalMarkupPercent, onUserLoggedIn) },
@@ -74,7 +76,8 @@ fun UserSelectionScreen(
         onAdminPasswordChange = viewModel::updateAdminPassword,
         onAdminPasswordSubmit = { viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin) },
         onAdminPasswordDismiss = viewModel::closeAdminAuthDialog,
-        onDismissFeedback = viewModel::dismissFeedback
+        onDismissFeedback = viewModel::dismissFeedback,
+        onDismissPinRequiredNotice = viewModel::dismissPinRequiredNotice
     )
 }
 
@@ -100,7 +103,9 @@ fun UserSelectionContent(
     onAdminPasswordChange: (String) -> Unit,
     onAdminPasswordSubmit: () -> Unit,
     onAdminPasswordDismiss: () -> Unit,
-    onDismissFeedback: () -> Unit = {}
+    onDismissFeedback: () -> Unit = {},
+    pinRequiredNoticeUser: User? = null,
+    onDismissPinRequiredNotice: () -> Unit = {}
 ) {
     val strings = I18n.current
     val focusRequester = remember { FocusRequester() }
@@ -234,6 +239,37 @@ fun UserSelectionContent(
                     errorText = if (adminPasswordError != null) strings.adminPasswordIncorrect else null,
                     onDismiss = onAdminPasswordDismiss,
                     onSubmit = onAdminPasswordSubmit
+                )
+            }
+
+            // Network Portal PIN Required Notice Dialog
+            if (pinRequiredNoticeUser != null) {
+                AlertDialog(
+                    onDismissRequest = onDismissPinRequiredNotice,
+                    title = {
+                        Text(
+                            text = strings.networkPortalPinRequiredTitle,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryNavy
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = strings.networkPortalPinRequiredMsg,
+                            color = PrimaryNavy
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = onDismissPinRequiredNotice,
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(strings.confirm, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    containerColor = SurfaceWhite,
+                    shape = RoundedCornerShape(16.dp)
                 )
             }
 

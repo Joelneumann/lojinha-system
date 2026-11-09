@@ -742,6 +742,103 @@ interface AppStrings {
     val stockAdjustmentInitial: String
     val stockAdjustmentManual: String
     val errFailedToLoadProductHistory: String
+
+    // Veggie Order System & Customer Network Portal
+    fun sysNoteVeggieOrder(week: String, year: String): String
+    fun sysNoteVeggieTransport(week: String, year: String): String
+    fun sysNoteVeggieCorrection(week: String, year: String): String
+
+    val requirePinOnKioskLabel: String
+    val requirePinOnKioskDesc: String
+    val networkPortalPinRequiredTitle: String
+    val networkPortalPinRequiredMsg: String
+
+    val veggieSettingsCardTitle: String
+    val veggieSettingsCardSubtitle: String
+    val veggieAutoOpenEnabledLabel: String
+    val veggieAutoOpenDayLabel: String
+    val veggieAutoOpenTimeLabel: String
+    val veggieAutoOpenTimeInvalidError: String
+    val veggieStandardBuyerFeeLabel: String
+    val veggieStandardTransportFeeLabel: String
+    val importVeggieProductsCsvBtn: String
+    val selectVeggieProductsCsvFile: String
+    val csvTypeVeggieProducts: String
+    val weekdayMonday: String
+    val weekdayTuesday: String
+    val weekdayWednesday: String
+    val weekdayThursday: String
+    val weekdayFriday: String
+    val weekdaySaturday: String
+    val weekdaySunday: String
+
+    val tabVeggieOrders: String
+    val veggieSubTabRound: String
+    val veggieSubTabCatalog: String
+    val veggieSubTabHistory: String
+    val veggieCatalogTitle: String
+    val addVeggieProduct: String
+    val editVeggieProduct: String
+    val veggieProductNameLabel: String
+    val veggieProductNamePlaceholder: String
+    val veggieProductDescriptionLabel: String
+    val veggieProductDescriptionPlaceholder: String
+    val veggieEstimatedPriceLabel: String
+    val veggieEstimatedPricePlaceholder: String
+    val veggieEstimatedPriceUnknown: String
+    val veggieUnitTypeLabel: String
+    val manageUnitTypesBtn: String
+    val veggieUnitTypesDialogTitle: String
+    val addUnitTypeBtn: String
+    val unitTypeNameLabel: String
+    val unitTypeNamePlaceholder: String
+    val allowDecimalsLabel: String
+    val unitIntegerOnly: String
+    val unitAllowDecimals: String
+    val veggieProductPhotoLabel: String
+    val uploadPhotoBtn: String
+    val removePhotoBtn: String
+    val noPhotoAssigned: String
+    val disabledVeggieProductsSection: String
+
+    // Round Lifecycle, 2D Settlement Matrix & Customer Portal
+    fun weekOfYearLabel(week: Int, year: Int): String
+    val roundStatusOpen: String
+    val roundStatusClosed: String
+    val roundStatusSettled: String
+    val openNewRoundBtn: String
+    val closeRoundBtn: String
+    val reopenRoundBtn: String
+    val exportBuyerPdfBtn: String
+    val exportWorkerPdfBtn: String
+    val noActiveRoundTitle: String
+    val noActiveRoundDesc: String
+    val settlementMatrixTitle: String
+    val buyerOperationFeeLabel: String
+    val transportFeeLabel: String
+    val transporterLabel: String
+    val transporterExternal: String
+    val saveDraftBtn: String
+    val settleAndChargeBtn: String
+    val updateSettledRoundBtn: String
+    val colOrderedQty: String
+    val colActualQty: String
+    val colMarketUnitPrice: String
+    val colTotalSpent: String
+    val colEffectivePrice: String
+    val customerPortalTabOrder: String
+    val customerPortalTabVeggieHistory: String
+    val customerPortalTabStoreHistory: String
+    fun lastOrderBadge(qty: String, unit: String): String
+    val saveVeggieOrderBtn: String
+    val veggieOrderSavedMsg: String
+    val veggieOrderClosedBanner: String
+    val veggieCombinedFeeLabel: String
+    val veggieEstimatedTotalLabel: String
+    val veggieFinalTotalLabel: String
+    val searchVeggieProductsPlaceholder: String
+    val searchVeggieHistoryPlaceholder: String
+    val noVeggieHistoryMsg: String
 }
 
 

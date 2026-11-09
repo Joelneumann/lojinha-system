@@ -407,6 +407,7 @@ class AdminSettingsViewModel(
                     } else {
                         val localizedType = when (type.lowercase()) {
                             "products" -> I18n.get().csvTypeProducts
+                            "veggieproducts" -> I18n.get().csvTypeVeggieProducts
                             "users" -> I18n.get().csvTypeUsers
                             else -> type
                         }

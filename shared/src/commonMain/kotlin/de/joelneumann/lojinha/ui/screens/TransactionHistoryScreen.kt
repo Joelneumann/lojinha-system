@@ -59,7 +59,8 @@ fun TransactionHistoryScreen(
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit,
-    onUserInteracted: (force: Boolean) -> Unit = {}
+    onUserInteracted: (force: Boolean) -> Unit = {},
+    isNetworkPortal: Boolean = false
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val searchFilter by viewModel.searchFilter.collectAsState()
@@ -74,6 +75,7 @@ fun TransactionHistoryScreen(
     val selectedLanguage by viewModel.selectedLanguage.collectAsState()
     val selectedSecondaryCurrency by viewModel.selectedSecondaryCurrency.collectAsState()
     val selectedAvatar by viewModel.selectedAvatar.collectAsState()
+    val selectedRequirePinOnKiosk by viewModel.selectedRequirePinOnKiosk.collectAsState()
     val relatedTransactionsMap by viewModel.relatedTransactionsMap.collectAsState()
 
     LaunchedEffect(user.id) {
@@ -96,6 +98,8 @@ fun TransactionHistoryScreen(
         selectedLanguage = selectedLanguage,
         selectedSecondaryCurrency = selectedSecondaryCurrency,
         selectedAvatar = selectedAvatar,
+        selectedRequirePinOnKiosk = selectedRequirePinOnKiosk,
+        isNetworkPortal = isNetworkPortal,
         onContinueShopping = onContinueShopping,
         onLogout = onLogout,
         onUserUpdated = onUserUpdated,
@@ -139,6 +143,10 @@ fun TransactionHistoryScreen(
             onUserInteracted(true)
             viewModel.updateAvatar(av)
         },
+        onUpdateRequirePinOnKiosk = { req ->
+            onUserInteracted(true)
+            viewModel.updateRequirePinOnKiosk(req)
+        },
         onSaveUserSettings = { removePin ->
             onUserInteracted(true)
             viewModel.saveUserSettings(user, removePin = removePin, onSaved = onUserUpdated)
@@ -164,6 +172,8 @@ fun TransactionHistoryContent(
     selectedLanguage: Language,
     selectedSecondaryCurrency: SecondaryCurrency,
     selectedAvatar: UserAvatarConfig,
+    selectedRequirePinOnKiosk: Boolean = user.requirePinOnKiosk,
+    isNetworkPortal: Boolean = false,
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit,
@@ -177,6 +187,7 @@ fun TransactionHistoryContent(
     onUpdateLanguage: (Language) -> Unit,
     onUpdateSecondaryCurrency: (SecondaryCurrency) -> Unit,
     onUpdateAvatar: (UserAvatarConfig) -> Unit,
+    onUpdateRequirePinOnKiosk: (Boolean) -> Unit = {},
     onSaveUserSettings: (removePin: Boolean) -> Unit,
     onUserInteracted: (force: Boolean) -> Unit = {}
 ) {
@@ -400,10 +411,13 @@ fun TransactionHistoryContent(
                 selectedLanguage = selectedLanguage,
                 selectedSecondaryCurrency = selectedSecondaryCurrency,
                 selectedAvatar = selectedAvatar,
+                selectedRequirePinOnKiosk = selectedRequirePinOnKiosk,
+                isNetworkPortal = isNetworkPortal,
                 onPinInputChange = onUpdatePinInput,
                 onLanguageSelect = onUpdateLanguage,
                 onSecondaryCurrencySelect = onUpdateSecondaryCurrency,
                 onAvatarSelect = onUpdateAvatar,
+                onRequirePinOnKioskChange = onUpdateRequirePinOnKiosk,
                 onDismiss = onCloseSettingsModal,
                 onSave = onSaveUserSettings,
                 onUserInteracted = onUserInteracted

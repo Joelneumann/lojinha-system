@@ -51,6 +51,9 @@ class TransactionHistoryViewModel(
     private val _selectedAvatar = MutableStateFlow(UserAvatarConfig())
     val selectedAvatar: StateFlow<UserAvatarConfig> = _selectedAvatar.asStateFlow()
 
+    private val _selectedRequirePinOnKiosk = MutableStateFlow(true)
+    val selectedRequirePinOnKiosk: StateFlow<Boolean> = _selectedRequirePinOnKiosk.asStateFlow()
+
     private var currentUserId: String? = null
 
     private val _currentPage = MutableStateFlow(0)
@@ -148,6 +151,7 @@ class TransactionHistoryViewModel(
         _selectedLanguage.value = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
         _selectedSecondaryCurrency.value = user.secondaryCurrency
         _selectedAvatar.value = user.avatar
+        _selectedRequirePinOnKiosk.value = user.requirePinOnKiosk
         _showSettingsModal.value = true
     }
 
@@ -171,6 +175,10 @@ class TransactionHistoryViewModel(
         _selectedAvatar.value = avatar
     }
 
+    fun updateRequirePinOnKiosk(require: Boolean) {
+        _selectedRequirePinOnKiosk.value = require
+    }
+
     fun saveUserSettings(user: User, removePin: Boolean = false, onSaved: (User) -> Unit) {
         val updatedPin = when {
             removePin -> null
@@ -179,6 +187,7 @@ class TransactionHistoryViewModel(
         }
         val updated = user.copy(
             pin = updatedPin,
+            requirePinOnKiosk = if (updatedPin == null) true else _selectedRequirePinOnKiosk.value,
             language = _selectedLanguage.value,
             secondaryCurrency = _selectedSecondaryCurrency.value,
             avatar = _selectedAvatar.value

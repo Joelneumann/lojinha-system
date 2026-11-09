@@ -69,6 +69,7 @@ fun UserEditDialog(
     var selectedLang by remember(user.id) { mutableStateOf(user.language) }
     var selectedSecondaryCurrency by remember(user.id) { mutableStateOf(user.secondaryCurrency) }
     var selectedAvatar by remember(user.id, user.avatar) { mutableStateOf(user.avatar) }
+    var requirePinOnKiosk by remember(user.id) { mutableStateOf(user.requirePinOnKiosk) }
 
     val trimmedBarcode = remember(barcode) { barcode.trim() }
     val trimmedBarcodeNumber = remember(barcodeNumber) { barcodeNumber.trim() }
@@ -103,6 +104,7 @@ fun UserEditDialog(
     val isPinChanged = if (isNewUser) pin.isNotBlank() else shouldResetPin
     val hasDialogChanges = name != user.name ||
             isPinChanged ||
+            requirePinOnKiosk != user.requirePinOnKiosk ||
             selectedLang != user.language ||
             selectedSecondaryCurrency != user.secondaryCurrency ||
             selectedAvatar != user.avatar ||
@@ -111,6 +113,7 @@ fun UserEditDialog(
 
     val isModified = if (isNewUser) {
         name.isNotBlank() || pin.isNotBlank() || barcode.isNotBlank() || barcodeNumber.isNotBlank() ||
+                requirePinOnKiosk != user.requirePinOnKiosk ||
                 selectedLang != user.language || selectedSecondaryCurrency != user.secondaryCurrency || selectedAvatar != user.avatar
     } else {
         hasDialogChanges
@@ -147,6 +150,7 @@ fun UserEditDialog(
             val updated = user.copy(
                 name = name.trim(),
                 pin = finalPin,
+                requirePinOnKiosk = if (finalPin == null) true else requirePinOnKiosk,
                 userBarcode = if (bCode != null && bNum != null) bCode else null,
                 userBarcodeNumber = if (bCode != null && bNum != null) bNum else null,
                 language = selectedLang,
@@ -204,6 +208,7 @@ fun UserEditDialog(
                                 selectedLang = user.language
                                 selectedSecondaryCurrency = user.secondaryCurrency
                                 selectedAvatar = user.avatar
+                                requirePinOnKiosk = user.requirePinOnKiosk
                                 shouldResetPin = false
                                 pin = ""
                                 barcode = user.userBarcode ?: ""
@@ -313,6 +318,37 @@ fun UserEditDialog(
                                     )
                                 )
                             }
+                        }
+                    }
+                }
+
+                val hasEffectivePin = if (isNewUser) pin.isNotBlank() else (!shouldResetPin && user.pin != null) || (shouldResetPin && pin.isNotBlank())
+                if (hasEffectivePin) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { requirePinOnKiosk = !requirePinOnKiosk }
+                            .padding(vertical = 2.dp)
+                    ) {
+                        Checkbox(
+                            checked = requirePinOnKiosk,
+                            onCheckedChange = { requirePinOnKiosk = it }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column {
+                            Text(
+                                text = strings.requirePinOnKioskLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            )
+                            Text(
+                                text = strings.requirePinOnKioskDesc,
+                                fontSize = 11.5.sp,
+                                color = TextSecondaryMuted
+                            )
                         }
                     }
                 }

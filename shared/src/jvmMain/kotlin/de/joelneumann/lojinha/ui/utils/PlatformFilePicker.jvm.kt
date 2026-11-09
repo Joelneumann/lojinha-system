@@ -68,3 +68,29 @@ actual fun pickFile(title: String, extensionFilter: String?, onSelect: (Platform
         e.printStackTrace()
     }
 }
+
+actual fun pickImageBytes(title: String, onSelect: (fileName: String, bytes: ByteArray) -> Unit) {
+    try {
+        try {
+            javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName())
+        } catch (_: Exception) {}
+
+        val activeFrame = Frame.getFrames().firstOrNull { it.isShowing }
+        val dialog = FileDialog(activeFrame, title, FileDialog.LOAD)
+        dialog.setFilenameFilter { _, name ->
+            val lower = name.lowercase()
+            lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp") || lower.endsWith(".gif")
+        }
+        dialog.isVisible = true
+        val dir = dialog.directory
+        val file = dialog.file
+        if (dir != null && file != null) {
+            val selected = java.io.File(dir, file)
+            if (selected.exists() && selected.isFile) {
+                onSelect(selected.name, selected.readBytes())
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
