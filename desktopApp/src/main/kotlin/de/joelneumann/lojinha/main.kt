@@ -19,7 +19,10 @@ import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl
+import de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl
 import de.joelneumann.lojinha.data.service.DataChangeNotifier
+import de.joelneumann.lojinha.data.service.VeggieImageService
+import de.joelneumann.lojinha.data.service.VeggieRoundAutoScheduler
 import de.joelneumann.lojinha.server.LojinhaAdminServer
 import de.joelneumann.lojinha.ui.App
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -27,6 +30,10 @@ import de.joelneumann.lojinha.util.AppLogger
 import de.joelneumann.lojinha.util.CrashHandler
 import de.joelneumann.lojinha.util.AppVersionTracker
 import de.joelneumann.lojinha.util.SingleInstanceLock
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlin.system.exitProcess
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -52,6 +59,19 @@ fun main() {
         val billingListRepository = RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged)
         val settingsRepository = RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged)
         val adminNoteRepository = RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged)
+        val veggieOrderRepository = RoomVeggieOrderRepositoryImpl(
+            database.veggieOrderDao(),
+            database.userDao(),
+            database.transactionDao(),
+            onDataChanged
+        )
+        val veggieImageService = VeggieImageService()
+        val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val veggieAutoScheduler = VeggieRoundAutoScheduler(
+            veggieOrderRepository,
+            settingsRepository,
+            backgroundScope
+        )
 
         val adminServer = LojinhaAdminServer(
             productRepository = productRepository,
@@ -60,6 +80,8 @@ fun main() {
             billingListRepository = billingListRepository,
             settingsRepository = settingsRepository,
             adminNoteRepository = adminNoteRepository,
+            veggieOrderRepository = veggieOrderRepository,
+            veggieImageService = veggieImageService,
             database = database,
             port = 8080
         )
@@ -70,7 +92,18 @@ fun main() {
             } catch (e: Exception) {
                 AppLogger.warn("Main", "Failed to start admin server: ${e.message}", e)
             }
+            try {
+                veggieAutoScheduler.startScheduler()
+            } catch (e: Exception) {
+                AppLogger.warn("Main", "Failed to start veggie auto-open scheduler: ${e.message}", e)
+            }
             onDispose {
+                try {
+                    veggieAutoScheduler.stopScheduler()
+                    backgroundScope.cancel()
+                } catch (e: Exception) {
+                    AppLogger.warn("Main", "Error stopping veggie auto-open scheduler: ${e.message}", e)
+                }
                 try {
                     adminServer.stop()
                 } catch (e: Exception) {

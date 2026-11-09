@@ -10,9 +10,13 @@ data class IsoWeekInfo(
 )
 
 object IsoWeekUtils {
+    fun fromEpochMillis(epochMillis: Long): IsoWeekInfo {
+        return fromEpochMillis(epochMillis, TimeZone.currentSystemDefault())
+    }
+
     fun fromEpochMillis(
         epochMillis: Long,
-        timeZone: TimeZone = TimeZone.currentSystemDefault()
+        timeZone: TimeZone
     ): IsoWeekInfo {
         val localDate = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(timeZone).date
         return fromLocalDate(localDate)

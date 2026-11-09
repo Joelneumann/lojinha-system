@@ -19,6 +19,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import de.joelneumann.lojinha.AppVersion
 import de.joelneumann.lojinha.data.database.AppDatabase
+import de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl
+import de.joelneumann.lojinha.data.service.VeggieImageService
+import de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator
+import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.util.AppLogger
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -34,17 +38,35 @@ class LojinhaAdminServer(
     private val billingListRepository: BillingListRepository,
     private val settingsRepository: SettingsRepository,
     private val adminNoteRepository: AdminNoteRepository? = null,
+    private val veggieOrderRepository: VeggieOrderRepository? = null,
+    private val veggieImageService: VeggieImageService = VeggieImageService(),
     private val database: AppDatabase? = null,
     private val port: Int = 8080
 ) {
     private var server: EmbeddedServer<*, *>? = null
 
+    private data class CustomerSession(
+        val userId: String,
+        val expiryTimestamp: Long
+    )
+
     // Token Session Management
     private val activeTokens = ConcurrentHashMap<String, Long>() // token -> expiryTimestamp
+    private val activeCustomerTokens = ConcurrentHashMap<String, CustomerSession>() // token -> CustomerSession
     private val failedLoginAttempts = ConcurrentHashMap<String, Pair<Int, Long>>() // ip -> (count, firstAttemptTime)
     private val SESSION_DURATION_MS = 8 * 60 * 60 * 1000L // 8 hours
     private val MAX_LOGIN_ATTEMPTS = 5
     private val RATE_LIMIT_WINDOW_MS = 60 * 1000L // 1 minute
+
+    private fun resolveVeggieRepo(): VeggieOrderRepository? {
+        return veggieOrderRepository ?: database?.let {
+            RoomVeggieOrderRepositoryImpl(
+                it.veggieOrderDao(),
+                it.userDao(),
+                it.transactionDao()
+            ) { DataChangeNotifier.notifyDataChanged() }
+        }
+    }
 
     private fun safeEquals(a: String, b: String): Boolean {
         return MessageDigest.isEqual(a.toByteArray(Charsets.UTF_8), b.toByteArray(Charsets.UTF_8))
@@ -543,36 +565,571 @@ class LojinhaAdminServer(
                     // Real-Time Server-Sent Events (SSE) Stream
                     get("/events") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
-                        call.response.cacheControl(CacheControl.NoCache(null))
-                        call.respondTextWriter(contentType = ContentType.Text.EventStream) {
-                            val channel = Channel<Unit>(Channel.CONFLATED)
-                            val listener = {
-                                channel.trySend(Unit)
-                                Unit
+                        call.streamDataChangeEvents()
+                    }
+
+                    // Veggie Order System Admin Endpoints
+                    route("/veggie") {
+                        get("/unit-types") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(emptyList<VeggieUnitType>())
+                            call.respond(repo.getAllUnitTypes())
+                        }
+                        post("/unit-types") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val unitType = call.receive<VeggieUnitType>()
+                            if (unitType.name.isBlank()) {
+                                call.respond(HttpStatusCode.BadRequest, "Unit type name cannot be blank")
+                                return@post
                             }
-                            DataChangeNotifier.addListener(listener)
-                            try {
-                                write("event: connected\ndata: {}\n\n")
-                                flush()
-                                while (true) {
-                                    val received = withTimeoutOrNull(25_000L) {
-                                        channel.receive()
-                                    }
-                                    if (received != null) {
-                                        write("event: data_changed\ndata: {}\n\n")
-                                        flush()
-                                    } else {
-                                        // Keep-alive heartbeat comment ping every 25s
-                                        write(": ping\n\n")
-                                        flush()
-                                    }
-                                }
+                            repo.saveUnitType(unitType)
+                            call.respond(HttpStatusCode.OK)
+                        }
+
+                        get("/products") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(emptyList<VeggieProduct>())
+                            call.respond(repo.getAllVeggieProducts())
+                        }
+                        post("/products") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val product = call.receive<VeggieProduct>()
+                            if (product.name.isBlank()) {
+                                call.respond(HttpStatusCode.BadRequest, "Veggie product name cannot be blank")
+                                return@post
+                            }
+                            val toSave = if (product.id.isBlank()) product.copy(id = UUID.randomUUID().toString()) else product
+                            repo.saveVeggieProduct(toSave)
+                            call.respond(HttpStatusCode.OK, toSave)
+                        }
+                        post("/products/deactivate/{id}") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            repo.deactivateVeggieProduct(id)
+                            call.respond(HttpStatusCode.OK)
+                        }
+                        delete("/products/{id}") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@delete
+                            val repo = resolveVeggieRepo() ?: return@delete call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                            val existing = repo.getVeggieProductById(id)
+                            repo.hardDeleteVeggieProduct(id)
+                            veggieImageService.deleteProductImages(existing?.imageFileName ?: id)
+                            call.respond(HttpStatusCode.OK)
+                        }
+                        post("/products/{id}/image") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            val bytes = call.receive<ByteArray>()
+                            if (bytes.isEmpty()) {
+                                call.respond(HttpStatusCode.BadRequest, "Image payload is empty")
+                                return@post
+                            }
+                            val existing = repo.getVeggieProductById(id)
+                            val fileName = try {
+                                veggieImageService.saveProductImage(id, bytes, existing?.imageFileName)
                             } catch (e: Exception) {
-                                if (e is kotlinx.coroutines.CancellationException) throw e
-                            } finally {
-                                DataChangeNotifier.removeListener(listener)
-                                channel.close()
+                                call.respond(HttpStatusCode.BadRequest, "Invalid or unsupported image data")
+                                return@post
                             }
+                            if (existing != null) {
+                                repo.saveVeggieProduct(
+                                    existing.copy(
+                                        imageFileName = fileName,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                )
+                            }
+                            DataChangeNotifier.notifyDataChanged()
+                            call.respond(HttpStatusCode.OK, mapOf("imageFileName" to fileName))
+                        }
+                        delete("/products/{id}/image") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@delete
+                            val repo = resolveVeggieRepo() ?: return@delete call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                            val existing = repo.getVeggieProductById(id)
+                            veggieImageService.deleteProductImages(existing?.imageFileName ?: id)
+                            if (existing != null && existing.imageFileName != null) {
+                                repo.saveVeggieProduct(
+                                    existing.copy(
+                                        imageFileName = null,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                )
+                            }
+                            DataChangeNotifier.notifyDataChanged()
+                            call.respond(HttpStatusCode.OK)
+                        }
+
+                        get("/rounds") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(emptyList<VeggieOrderRound>())
+                            call.respond(repo.getAllRounds())
+                        }
+                        get("/rounds/active") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(HttpStatusCode.NoContent)
+                            val round = repo.getActiveOrLatestRound()
+                            if (round != null) {
+                                call.respond(round)
+                            } else {
+                                call.respond(HttpStatusCode.NoContent)
+                            }
+                        }
+                        get("/rounds/{id}") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(HttpStatusCode.NotFound)
+                            val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                            val round = repo.getRoundById(id)
+                            if (round != null) {
+                                call.respond(round)
+                            } else {
+                                call.respond(HttpStatusCode.NotFound)
+                            }
+                        }
+                        post("/rounds/open") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val req = call.receive<OpenVeggieRoundRequest>()
+                            val openedAt = if (req.openedAt > 0L) req.openedAt else System.currentTimeMillis()
+                            val round = repo.openNewRound(
+                                buyerOperationFeeCents = req.buyerOperationFeeCents,
+                                transportFeeCents = req.transportFeeCents,
+                                openedAt = openedAt
+                            )
+                            call.respond(HttpStatusCode.OK, round)
+                        }
+                        post("/rounds/{id}/close") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            val req = try { call.receive<CloseVeggieRoundRequest>() } catch (_: Exception) { CloseVeggieRoundRequest() }
+                            val closedAt = if (req.closedAt > 0L) req.closedAt else System.currentTimeMillis()
+                            val ok = repo.closeRound(id, closedAt)
+                            if (ok) {
+                                call.respond(HttpStatusCode.OK)
+                            } else {
+                                call.respond(HttpStatusCode.BadRequest, "Failed to close round")
+                            }
+                        }
+                        post("/rounds/{id}/reopen") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            val ok = repo.reopenRound(id)
+                            if (ok) {
+                                call.respond(HttpStatusCode.OK)
+                            } else {
+                                call.respond(HttpStatusCode.BadRequest, "Failed to reopen round")
+                            }
+                        }
+                        get("/rounds/{id}/entries") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(emptyList<VeggieOrderEntry>())
+                            val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                            call.respond(repo.getEntriesForRound(id))
+                        }
+                        post("/rounds/{id}/entries") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val entry = call.receive<VeggieOrderEntry>()
+                            val ok = repo.upsertAdminOrderEntry(entry)
+                            if (ok) {
+                                call.respond(HttpStatusCode.OK)
+                            } else {
+                                call.respond(HttpStatusCode.BadRequest, "Failed to upsert order entry")
+                            }
+                        }
+                        get("/rounds/{id}/settlements") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(emptyList<VeggieRoundProductSettlement>())
+                            val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                            call.respond(repo.getProductSettlementsForRound(id))
+                        }
+                        post("/rounds/{id}/draft-settlement") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            val req = call.receive<VeggieSettlementRequest>()
+                            val ok = repo.saveDraftSettlement(
+                                roundId = id,
+                                buyerOperationFeeCents = req.buyerOperationFeeCents,
+                                transportFeeCents = req.transportFeeCents,
+                                transporterUserId = req.transporterUserId,
+                                productSettlements = req.productSettlements,
+                                actualQuantitiesByEntryId = req.actualQuantitiesByEntryId
+                            )
+                            if (ok) {
+                                call.respond(HttpStatusCode.OK)
+                            } else {
+                                call.respond(HttpStatusCode.BadRequest, "Failed to save draft settlement")
+                            }
+                        }
+                        post("/rounds/{id}/settle") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            val req = call.receive<VeggieSettlementRequest>()
+                            val settledAt = if (req.settledAt > 0L) req.settledAt else System.currentTimeMillis()
+                            val result = repo.executeRoundSettlement(
+                                roundId = id,
+                                buyerOperationFeeCents = req.buyerOperationFeeCents,
+                                transportFeeCents = req.transportFeeCents,
+                                transporterUserId = req.transporterUserId,
+                                productSettlements = req.productSettlements,
+                                actualQuantitiesByEntryId = req.actualQuantitiesByEntryId,
+                                settledAt = settledAt
+                            )
+                            if (result != null) {
+                                call.respond(HttpStatusCode.OK, result)
+                            } else {
+                                call.respond(HttpStatusCode.BadRequest, "Failed to execute round settlement")
+                            }
+                        }
+                        get("/rounds/{id}/buyer-pdf") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                            val round = repo.getRoundById(id) ?: return@get call.respond(HttpStatusCode.NotFound)
+                            val entries = repo.getEntriesForRound(id)
+                            val langStr = call.request.queryParameters["lang"] ?: "BR"
+                            val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+                            try {
+                                val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(round, entries, language)
+                                val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
+                                val filename = "Buyer_Shopping_List_W${isoWeek.weekOfYear.toString().padStart(2, '0')}_${isoWeek.isoYear}.pdf"
+                                call.response.header(
+                                    HttpHeaders.ContentDisposition,
+                                    ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
+                                )
+                                call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                            } catch (e: Exception) {
+                                AppLogger.error("LojinhaAdminServer", "Failed to generate buyer PDF: ${e.message}", e)
+                                call.respond(HttpStatusCode.InternalServerError, "Failed to generate buyer PDF")
+                            }
+                        }
+                        get("/rounds/{id}/worker-pdf") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                            val round = repo.getRoundById(id) ?: return@get call.respond(HttpStatusCode.NotFound)
+                            val entries = repo.getEntriesForRound(id)
+                            val langStr = call.request.queryParameters["lang"] ?: "BR"
+                            val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+                            try {
+                                val pdfBytes = VeggieOrderPdfGenerator.generateWorkerSortingMatrixBytes(round, entries, language)
+                                val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
+                                val filename = "Worker_Sorting_Matrix_W${isoWeek.weekOfYear.toString().padStart(2, '0')}_${isoWeek.isoYear}.pdf"
+                                call.response.header(
+                                    HttpHeaders.ContentDisposition,
+                                    ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
+                                )
+                                call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                            } catch (e: Exception) {
+                                AppLogger.error("LojinhaAdminServer", "Failed to generate worker PDF: ${e.message}", e)
+                                call.respond(HttpStatusCode.InternalServerError, "Failed to generate worker PDF")
+                            }
+                        }
+                    }
+                }
+
+                // 2b. Public Veggie Product Image Endpoint
+                get("/api/veggie/images/{id}") {
+                    val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                    val isThumb = call.request.queryParameters["thumb"]?.lowercase() != "false"
+                    val directFile = if (isThumb) veggieImageService.getThumbnailFile(id) else veggieImageService.getFullImageFile(id)
+                    val imgFile: File? = directFile ?: run {
+                        val product = resolveVeggieRepo()?.getVeggieProductById(id)
+                        val key = product?.imageFileName
+                        if (isThumb) veggieImageService.getThumbnailFile(key) else veggieImageService.getFullImageFile(key)
+                    }
+                    if (imgFile == null || !imgFile.exists()) {
+                        call.respond(HttpStatusCode.NotFound)
+                        return@get
+                    }
+                    val fileModified = imgFile.lastModified()
+                    val fileSize = imgFile.length()
+                    val etag = "W/\"veggie-img-$id-$isThumb-$fileModified-$fileSize\""
+                    call.response.header(HttpHeaders.ETag, etag)
+                    call.response.header(HttpHeaders.CacheControl, "public, max-age=3600")
+                    val clientIfNoneMatch = call.request.headers[HttpHeaders.IfNoneMatch]
+                    if (clientIfNoneMatch != null) {
+                        val opaqueEtag = etag.removePrefix("W/").trim('"')
+                        val clientTags = clientIfNoneMatch.split(',').map { it.trim().removePrefix("W/").trim('"') }
+                        if (clientIfNoneMatch.trim() == "*" || clientTags.any { it == opaqueEtag }) {
+                            call.respond(HttpStatusCode.NotModified)
+                            return@get
+                        }
+                    }
+                    call.respondBytes(imgFile.readBytes(), ContentType.Image.JPEG)
+                }
+
+                // 2c. Customer Network Portal Endpoints (/api/customer)
+                route("/api/customer") {
+                    get("/users") {
+                        val activeUsers = userRepository.getAllUsers()
+                            .filter { it.isActive && !it.isDeleted }
+                            .map { u ->
+                                u.copy(
+                                    balance = 0L,
+                                    pin = if (u.pin.isNullOrBlank()) null else "PROTECTED"
+                                )
+                            }
+                        call.respond(activeUsers)
+                    }
+
+                    post("/login") {
+                        val clientIp = call.request.local.remoteHost
+                        val now = System.currentTimeMillis()
+
+                        val currentAttempt = failedLoginAttempts[clientIp]
+                        if (currentAttempt != null) {
+                            val (count, firstAttempt) = currentAttempt
+                            if (now - firstAttempt < RATE_LIMIT_WINDOW_MS && count >= MAX_LOGIN_ATTEMPTS) {
+                                call.respond(
+                                    HttpStatusCode.TooManyRequests,
+                                    CustomerLoginResponse(false, "Too many failed login attempts. Please wait a minute before retrying.")
+                                )
+                                return@post
+                            } else if (now - firstAttempt >= RATE_LIMIT_WINDOW_MS) {
+                                failedLoginAttempts.remove(clientIp)
+                            }
+                        }
+
+                        val req = call.receive<CustomerLoginRequest>()
+                        val user = userRepository.getUserById(req.userId)
+                        if (user == null || !user.isActive || user.isDeleted) {
+                            call.respond(HttpStatusCode.OK, CustomerLoginResponse(false, "User not found"))
+                            return@post
+                        }
+                        if (user.pin.isNullOrBlank()) {
+                            call.respond(HttpStatusCode.OK, CustomerLoginResponse(false, "PIN required on network portal"))
+                            return@post
+                        }
+
+                        val settings = settingsRepository.getSettings()
+                        val expectedAdminPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
+                        val cleanPin = req.pin.trim()
+                        val matches = de.joelneumann.lojinha.security.PasswordHasher.verify(cleanPin, user.pin) ||
+                            de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(cleanPin, expectedAdminPassword)
+
+                        if (matches) {
+                            failedLoginAttempts.remove(clientIp)
+                            val token = UUID.randomUUID().toString()
+                            activeCustomerTokens[token] = CustomerSession(user.id, now + SESSION_DURATION_MS)
+                            call.respond(
+                                HttpStatusCode.OK,
+                                CustomerLoginResponse(
+                                    success = true,
+                                    message = "Authenticated",
+                                    token = token,
+                                    user = user.copy(pin = "PROTECTED")
+                                )
+                            )
+                        } else {
+                            failedLoginAttempts.compute(clientIp) { _, current ->
+                                val count = current?.first ?: 0
+                                val firstTime = current?.second ?: now
+                                Pair(count + 1, firstTime)
+                            }
+                            call.respond(HttpStatusCode.OK, CustomerLoginResponse(false, "Invalid PIN"))
+                        }
+                    }
+
+                    post("/logout") {
+                        val token = call.extractBearerToken() ?: call.request.queryParameters["token"]
+                        if (token != null) {
+                            activeCustomerTokens.remove(token)
+                        }
+                        call.respond(HttpStatusCode.OK)
+                    }
+
+                    get("/me") {
+                        val userId = call.requireCustomerUserId() ?: return@get
+                        val user = userRepository.getUserById(userId)
+                        if (user == null || !user.isActive || user.isDeleted) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@get
+                        }
+                        call.respond(user.copy(pin = if (user.pin.isNullOrBlank()) null else "PROTECTED"))
+                    }
+
+                    post("/me/settings") {
+                        val userId = call.requireCustomerUserId() ?: return@post
+                        val user = userRepository.getUserById(userId)
+                        if (user == null || !user.isActive || user.isDeleted) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@post
+                        }
+                        val req = call.receive<CustomerSettingsUpdateRequest>()
+                        val cleanNewPin = req.newPin?.trim()
+                        val updatedPinHash = if (!cleanNewPin.isNullOrBlank()) {
+                            de.joelneumann.lojinha.security.PasswordHasher.hash(cleanNewPin)
+                        } else {
+                            user.pin
+                        }
+                        val updatedUser = user.copy(
+                            language = req.language,
+                            secondaryCurrency = req.secondaryCurrency ?: user.secondaryCurrency,
+                            avatar = req.avatar ?: user.avatar,
+                            pin = updatedPinHash,
+                            requirePinOnKiosk = req.requirePinOnKiosk
+                        )
+                        userRepository.saveUser(updatedUser)
+                        call.respond(updatedUser.copy(pin = if (updatedUser.pin.isNullOrBlank()) null else "PROTECTED"))
+                    }
+
+                    get("/transactions") {
+                        val userId = call.requireCustomerUserId() ?: return@get
+                        val pageParam = call.request.queryParameters["page"]?.toIntOrNull()
+                        val pageSizeParam = call.request.queryParameters["pageSize"]?.toIntOrNull()
+                        val searchParam = call.request.queryParameters["search"]
+                        val typeParam = call.request.queryParameters["type"]?.let {
+                            try { TransactionType.valueOf(it) } catch (_: Exception) { null }
+                        }
+                        if (pageParam != null && pageSizeParam != null) {
+                            val result = transactionRepository.getTransactionsByUserIdPaged(
+                                userId = userId,
+                                page = pageParam,
+                                pageSize = pageSizeParam,
+                                searchQuery = searchParam,
+                                typeFilter = typeParam
+                            )
+                            call.respond(result)
+                        } else {
+                            call.respond(transactionRepository.getTransactionsByUserId(userId))
+                        }
+                    }
+
+                    get("/transactions-pdf") {
+                        val userId = call.requireCustomerUserId() ?: return@get
+                        val fromTimestamp = call.request.queryParameters["from"]?.toLongOrNull()
+                        val toTimestamp = call.request.queryParameters["to"]?.toLongOrNull()
+                        val langStr = call.request.queryParameters["lang"] ?: "BR"
+                        val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+                        val user = userRepository.getUserById(userId)
+                        if (user == null) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@get
+                        }
+                        val txs = transactionRepository.getTransactionsByUserId(userId)
+                        try {
+                            val pdfBytes = de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementBytes(
+                                user = user,
+                                transactions = txs,
+                                fromTimestamp = fromTimestamp,
+                                toTimestamp = toTimestamp,
+                                language = language
+                            )
+                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
+                            val filename = "Extrato_${cleanUserName}.pdf"
+                            call.response.header(
+                                HttpHeaders.ContentDisposition,
+                                ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
+                            )
+                            call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                        } catch (e: Exception) {
+                            AppLogger.error("LojinhaAdminServer", "Failed to generate customer statement PDF: ${e.message}", e)
+                            call.respond(HttpStatusCode.InternalServerError, "Failed to generate transactions PDF")
+                        }
+                    }
+
+                    post("/notes") {
+                        val userId = call.requireCustomerUserId() ?: return@post
+                        val user = userRepository.getUserById(userId)
+                        if (user == null) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@post
+                        }
+                        val note = call.receive<AdminNote>()
+                        val cleanMessage = note.message.trim().take(1000)
+                        if (cleanMessage.isBlank()) {
+                            return@post call.respond(HttpStatusCode.BadRequest, "Note message cannot be blank")
+                        }
+                        val noteToSave = AdminNote(
+                            id = UUID.randomUUID().toString(),
+                            message = cleanMessage,
+                            userId = user.id,
+                            userNameSnapshot = user.name,
+                            timestamp = System.currentTimeMillis()
+                        )
+                        val repo = adminNoteRepository ?: database?.let {
+                            de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl(it.adminNoteDao()) { DataChangeNotifier.notifyDataChanged() }
+                        }
+                        repo?.addNote(noteToSave)
+                        call.respond(HttpStatusCode.Created, noteToSave)
+                    }
+
+                    get("/veggie/state") {
+                        val userId = call.requireCustomerUserId() ?: return@get
+                        val repo = resolveVeggieRepo()
+                        if (repo == null) {
+                            call.respond(CustomerVeggieStateResponse())
+                            return@get
+                        }
+                        val unitTypes = repo.getAllUnitTypes().filter { it.isActive }
+                        val products = repo.getAllVeggieProducts().filter { it.isActive && !it.isDeleted }
+                        val activeRound = repo.getActiveOrLatestRound()
+                        val currentEntries = if (activeRound != null) {
+                            repo.getEntriesForUserInRound(activeRound.id, userId)
+                        } else {
+                            emptyList()
+                        }
+                        val previousQuantities = if (activeRound != null) {
+                            repo.getPreviousRoundQuantitiesForUser(activeRound.id, userId)
+                        } else {
+                            emptyMap()
+                        }
+                        call.respond(
+                            CustomerVeggieStateResponse(
+                                unitTypes = unitTypes,
+                                products = products,
+                                activeRound = activeRound,
+                                currentEntries = currentEntries,
+                                previousRoundQuantities = previousQuantities
+                            )
+                        )
+                    }
+
+                    post("/veggie/order") {
+                        val userId = call.requireCustomerUserId() ?: return@post
+                        val user = userRepository.getUserById(userId)
+                        if (user == null || !user.isActive || user.isDeleted) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@post
+                        }
+                        val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                        val req = call.receive<SaveCustomerVeggieOrderRequest>()
+                        val saved = repo.saveCustomerOrder(
+                            roundId = req.roundId,
+                            user = user,
+                            productQuantitiesScaled = req.productQuantitiesScaled
+                        )
+                        if (saved) {
+                            call.respond(HttpStatusCode.OK)
+                        } else {
+                            call.respond(HttpStatusCode.Conflict, "Order round is not open")
+                        }
+                    }
+
+                    get("/veggie/history") {
+                        val userId = call.requireCustomerUserId() ?: return@get
+                        val repo = resolveVeggieRepo()
+                        if (repo == null) {
+                            call.respond(emptyList<CustomerVeggieRoundHistoryItem>())
+                            return@get
+                        }
+                        call.respond(repo.getCustomerOrderHistory(userId))
+                    }
+
+                    get("/events") {
+                        val userId = call.requireCustomerUserId() ?: return@get
+                        if (userId.isNotBlank()) {
+                            call.streamDataChangeEvents()
                         }
                     }
                 }
@@ -714,6 +1271,57 @@ class LojinhaAdminServer(
 
         respond(HttpStatusCode.Unauthorized, "Unauthorized access")
         return false
+    }
+
+    private suspend fun ApplicationCall.requireCustomerUserId(): String? {
+        if (request.httpMethod == HttpMethod.Options) return ""
+        val token = extractBearerToken() ?: request.queryParameters["token"]
+        if (token != null) {
+            val session = activeCustomerTokens[token]
+            if (session != null) {
+                if (System.currentTimeMillis() < session.expiryTimestamp) {
+                    return session.userId
+                } else {
+                    activeCustomerTokens.remove(token)
+                }
+            }
+        }
+        respond(HttpStatusCode.Unauthorized, "Unauthorized customer access")
+        return null
+    }
+
+    private suspend fun ApplicationCall.streamDataChangeEvents() {
+        response.cacheControl(CacheControl.NoCache(null))
+        respondTextWriter(contentType = ContentType.Text.EventStream) {
+            val channel = Channel<Unit>(Channel.CONFLATED)
+            val listener = {
+                channel.trySend(Unit)
+                Unit
+            }
+            DataChangeNotifier.addListener(listener)
+            try {
+                write("event: connected\ndata: {}\n\n")
+                flush()
+                while (true) {
+                    val received = withTimeoutOrNull(25_000L) {
+                        channel.receive()
+                    }
+                    if (received != null) {
+                        write("event: data_changed\ndata: {}\n\n")
+                        flush()
+                    } else {
+                        // Keep-alive heartbeat comment ping every 25s
+                        write(": ping\n\n")
+                        flush()
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            } finally {
+                DataChangeNotifier.removeListener(listener)
+                channel.close()
+            }
+        }
     }
 
     private fun ApplicationCall.extractBearerToken(): String? {

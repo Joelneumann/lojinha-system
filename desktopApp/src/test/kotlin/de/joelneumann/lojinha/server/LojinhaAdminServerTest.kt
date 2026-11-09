@@ -1,15 +1,24 @@
 package de.joelneumann.lojinha.server
 
+import de.joelneumann.lojinha.data.service.VeggieImageService
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.*
+import de.joelneumann.lojinha.domain.service.VeggieRoundSettlementResult
+import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
+import java.io.File
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.file.Files
+import javax.imageio.ImageIO
 import kotlin.test.*
 
 class LojinhaAdminServerTest {
@@ -42,12 +51,38 @@ class LojinhaAdminServerTest {
         override suspend fun recordStockAdjustment(adjustment: ProductStockAdjustment) {}
     }
 
+    private val fakeUsers = mutableListOf(
+        User(
+            id = "u-alice",
+            name = "Alice",
+            balance = 2500L,
+            pin = de.joelneumann.lojinha.security.PasswordHasher.hash("1234"),
+            requirePinOnKiosk = false,
+            language = Language.EN,
+            isActive = true,
+            isDeleted = false
+        ),
+        User(
+            id = "u-nopin",
+            name = "Bob NoPin",
+            balance = 1000L,
+            pin = null,
+            requirePinOnKiosk = true,
+            language = Language.BR,
+            isActive = true,
+            isDeleted = false
+        )
+    )
+
     private val fakeUserRepo = object : UserRepository {
-        override fun getUsersFlow(): Flow<List<User>> = flowOf(emptyList())
-        override suspend fun getAllUsers(): List<User> = emptyList()
-        override suspend fun getUserById(id: String): User? = null
+        override fun getUsersFlow(): Flow<List<User>> = flowOf(fakeUsers)
+        override suspend fun getAllUsers(): List<User> = fakeUsers.toList()
+        override suspend fun getUserById(id: String): User? = fakeUsers.find { it.id == id }
         override suspend fun getUserByBarcode(barcode: String): User? = null
-        override suspend fun saveUser(user: User) {}
+        override suspend fun saveUser(user: User) {
+            fakeUsers.removeIf { it.id == user.id }
+            fakeUsers.add(user)
+        }
         override suspend fun deactivateUser(id: String) {}
         override suspend fun softDeleteUser(id: String) {}
         override suspend fun restoreUser(id: String) {}
@@ -104,8 +139,169 @@ class LojinhaAdminServerTest {
         }
     }
 
+    private lateinit var tempImageDir: File
+
+    private val fakeVeggieUnitTypes = mutableListOf(
+        VeggieUnitType("unit-kg", "kg", allowDecimals = true, isActive = true),
+        VeggieUnitType("unit-un", "Unit", allowDecimals = false, isActive = true)
+    )
+    private val fakeVeggieProducts = mutableListOf(
+        VeggieProduct(
+            id = "vp-tomato",
+            name = "Organic Tomato",
+            description = "Fresh vine tomatoes",
+            estimatedPriceCents = 950L,
+            unitTypeId = "unit-kg",
+            isActive = true,
+            isDeleted = false
+        )
+    )
+    private val fakeVeggieRounds = mutableListOf<VeggieOrderRound>()
+    private val fakeVeggieEntries = mutableListOf<VeggieOrderEntry>()
+    private val fakeVeggieSettlements = mutableListOf<VeggieRoundProductSettlement>()
+
+    private val fakeVeggieRepo = object : VeggieOrderRepository {
+        override fun getUnitTypesFlow(): Flow<List<VeggieUnitType>> = flowOf(fakeVeggieUnitTypes)
+        override suspend fun getAllUnitTypes(): List<VeggieUnitType> = fakeVeggieUnitTypes.toList()
+        override suspend fun saveUnitType(unitType: VeggieUnitType) {
+            fakeVeggieUnitTypes.removeIf { it.id == unitType.id }
+            fakeVeggieUnitTypes.add(unitType)
+        }
+        override fun getVeggieProductsFlow(): Flow<List<VeggieProduct>> = flowOf(fakeVeggieProducts)
+        override suspend fun getAllVeggieProducts(): List<VeggieProduct> = fakeVeggieProducts.toList()
+        override suspend fun getVeggieProductById(id: String): VeggieProduct? = fakeVeggieProducts.find { it.id == id }
+        override suspend fun saveVeggieProduct(product: VeggieProduct) {
+            fakeVeggieProducts.removeIf { it.id == product.id }
+            fakeVeggieProducts.add(product)
+        }
+        override suspend fun deactivateVeggieProduct(id: String) {
+            val idx = fakeVeggieProducts.indexOfFirst { it.id == id }
+            if (idx >= 0) fakeVeggieProducts[idx] = fakeVeggieProducts[idx].copy(isActive = false)
+        }
+        override suspend fun hardDeleteVeggieProduct(id: String) {
+            fakeVeggieProducts.removeIf { it.id == id }
+        }
+        override fun getRoundsFlow(): Flow<List<VeggieOrderRound>> = flowOf(fakeVeggieRounds)
+        override suspend fun getAllRounds(): List<VeggieOrderRound> = fakeVeggieRounds.toList()
+        override suspend fun getActiveOrLatestRound(): VeggieOrderRound? =
+            fakeVeggieRounds.firstOrNull { it.status == VeggieRoundStatus.OPEN } ?: fakeVeggieRounds.maxByOrNull { it.openedAt }
+        override suspend fun getRoundById(roundId: String): VeggieOrderRound? = fakeVeggieRounds.find { it.id == roundId }
+        override suspend fun openNewRound(buyerOperationFeeCents: Long, transportFeeCents: Long, openedAt: Long): VeggieOrderRound {
+            val round = VeggieOrderRound(
+                id = "round-${fakeVeggieRounds.size + 1}",
+                openedAt = openedAt,
+                status = VeggieRoundStatus.OPEN,
+                buyerOperationFeeCents = buyerOperationFeeCents,
+                transportFeeCents = transportFeeCents,
+                updatedAt = openedAt
+            )
+            fakeVeggieRounds.add(round)
+            return round
+        }
+        override suspend fun closeRound(roundId: String, closedAt: Long): Boolean {
+            val idx = fakeVeggieRounds.indexOfFirst { it.id == roundId }
+            if (idx < 0) return false
+            fakeVeggieRounds[idx] = fakeVeggieRounds[idx].copy(status = VeggieRoundStatus.CLOSED, closedAt = closedAt)
+            return true
+        }
+        override suspend fun reopenRound(roundId: String): Boolean {
+            val idx = fakeVeggieRounds.indexOfFirst { it.id == roundId }
+            if (idx < 0) return false
+            fakeVeggieRounds[idx] = fakeVeggieRounds[idx].copy(status = VeggieRoundStatus.OPEN, closedAt = null)
+            return true
+        }
+        override suspend fun getEntriesForRound(roundId: String): List<VeggieOrderEntry> =
+            fakeVeggieEntries.filter { it.roundId == roundId }
+        override suspend fun getEntriesForUserInRound(roundId: String, userId: String): List<VeggieOrderEntry> =
+            fakeVeggieEntries.filter { it.roundId == roundId && it.userId == userId }
+        override suspend fun getPreviousRoundQuantitiesForUser(currentRoundId: String, userId: String): Map<String, Long> =
+            mapOf("vp-tomato" to 1500L)
+        override suspend fun saveCustomerOrder(roundId: String, user: User, productQuantitiesScaled: Map<String, Long>): Boolean {
+            val round = getRoundById(roundId) ?: return false
+            if (round.status != VeggieRoundStatus.OPEN) return false
+            fakeVeggieEntries.removeIf { it.roundId == roundId && it.userId == user.id }
+            for ((prodId, qty) in productQuantitiesScaled) {
+                if (qty <= 0L) continue
+                val prod = getVeggieProductById(prodId) ?: continue
+                val unit = fakeVeggieUnitTypes.find { it.id == prod.unitTypeId }
+                fakeVeggieEntries.add(
+                    VeggieOrderEntry(
+                        id = "entry-${user.id}-$prodId",
+                        roundId = roundId,
+                        userId = user.id,
+                        userNameSnapshot = user.name,
+                        veggieProductId = prod.id,
+                        veggieNameSnapshot = prod.name,
+                        unitNameSnapshot = unit?.name ?: "kg",
+                        allowDecimalsSnapshot = unit?.allowDecimals ?: true,
+                        orderedQuantityScaled = qty
+                    )
+                )
+            }
+            return true
+        }
+        override suspend fun getCustomerOrderHistory(userId: String): List<CustomerVeggieRoundHistoryItem> {
+            return fakeVeggieRounds.mapNotNull { round ->
+                val entries = getEntriesForUserInRound(round.id, userId)
+                if (entries.isEmpty()) return@mapNotNull null
+                CustomerVeggieRoundHistoryItem(
+                    round = round,
+                    entries = entries,
+                    itemsSubtotalCents = entries.sumOf { it.finalItemTotalCents ?: 0L },
+                    combinedFeeShareCents = round.combinedFeeCents,
+                    grandTotalCents = entries.sumOf { it.finalItemTotalCents ?: 0L } + round.combinedFeeCents
+                )
+            }
+        }
+        override suspend fun getProductSettlementsForRound(roundId: String): List<VeggieRoundProductSettlement> =
+            fakeVeggieSettlements.filter { it.roundId == roundId }
+        override suspend fun saveDraftSettlement(
+            roundId: String,
+            buyerOperationFeeCents: Long,
+            transportFeeCents: Long,
+            transporterUserId: String?,
+            productSettlements: List<VeggieRoundProductSettlement>,
+            actualQuantitiesByEntryId: Map<String, Long>
+        ): Boolean = true
+        override suspend fun executeRoundSettlement(
+            roundId: String,
+            buyerOperationFeeCents: Long,
+            transportFeeCents: Long,
+            transporterUserId: String?,
+            productSettlements: List<VeggieRoundProductSettlement>,
+            actualQuantitiesByEntryId: Map<String, Long>,
+            settledAt: Long
+        ): VeggieRoundSettlementResult? {
+            val roundIdx = fakeVeggieRounds.indexOfFirst { it.id == roundId }
+            if (roundIdx < 0) return null
+            val entries = getEntriesForRound(roundId).map { e ->
+                e.copy(actualQuantityScaled = actualQuantitiesByEntryId[e.id] ?: e.orderedQuantityScaled)
+            }
+            val res = VeggieSettlementCalculator.calculateRoundSettlement(
+                roundId = roundId,
+                entries = entries,
+                productSettlementInputs = productSettlements.associateBy { it.veggieProductId },
+                buyerOperationFeeCents = buyerOperationFeeCents,
+                transportFeeCents = transportFeeCents,
+                transporterUserId = transporterUserId,
+                timestamp = settledAt
+            )
+            fakeVeggieRounds[roundIdx] = fakeVeggieRounds[roundIdx].copy(
+                status = VeggieRoundStatus.SETTLED,
+                settledAt = settledAt,
+                buyerOperationFeeCents = buyerOperationFeeCents,
+                transportFeeCents = transportFeeCents,
+                transporterUserId = transporterUserId
+            )
+            fakeVeggieEntries.removeIf { it.roundId == roundId }
+            fakeVeggieEntries.addAll(res.updatedEntries)
+            return res
+        }
+    }
+
     @BeforeTest
     fun setUp() {
+        tempImageDir = Files.createTempDirectory("lojinha_server_veggie_imgs").toFile()
         server = LojinhaAdminServer(
             productRepository = fakeProductRepo,
             userRepository = fakeUserRepo,
@@ -113,6 +309,8 @@ class LojinhaAdminServerTest {
             billingListRepository = fakeBillingListRepo,
             settingsRepository = fakeSettingsRepo,
             adminNoteRepository = fakeAdminNoteRepo,
+            veggieOrderRepository = fakeVeggieRepo,
+            veggieImageService = VeggieImageService(tempImageDir),
             port = testPort
         )
         server.start()
@@ -122,6 +320,7 @@ class LojinhaAdminServerTest {
     @AfterTest
     fun tearDown() {
         server.stop()
+        tempImageDir.deleteRecursively()
         Thread.sleep(300)
     }
 
@@ -537,6 +736,210 @@ class LojinhaAdminServerTest {
             assertEquals("public, max-age=31536000, immutable", wasmRawRes.headers().firstValue("Cache-Control").orElse(null))
             assertEquals(wasmFile.length(), wasmRawRes.body().size.toLong())
         }
+    }
+
+    @Test
+    fun testCustomerPortalLoginAndVeggieOrderFlow() {
+        val json = Json { ignoreUnknownKeys = true }
+
+        // 1. GET /api/customer/users sanitizes balance and PIN hash
+        val usersReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/customer/users"))
+            .GET()
+            .build()
+        val usersRes = client.send(usersReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, usersRes.statusCode())
+        val publicUsers = json.decodeFromString<List<User>>(usersRes.body())
+        val alicePublic = publicUsers.first { it.id == "u-alice" }
+        val bobPublic = publicUsers.first { it.id == "u-nopin" }
+        assertEquals(0L, alicePublic.balance, "Public user list must zero out balance")
+        assertEquals("PROTECTED", alicePublic.pin, "Public user list must mask PIN hash")
+        assertNull(bobPublic.pin, "User without PIN must have null pin on public list")
+
+        // 2. Customer without PIN cannot log in on network portal
+        val noPinLoginReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/customer/login"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(CustomerLoginRequest("u-nopin", "1234"))))
+            .build()
+        val noPinLoginRes = client.send(noPinLoginReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, noPinLoginRes.statusCode())
+        val noPinBody = json.decodeFromString<CustomerLoginResponse>(noPinLoginRes.body())
+        assertFalse(noPinBody.success)
+        assertTrue(noPinBody.message.contains("PIN required"))
+
+        // 3. Customer with valid PIN logs in and receives scoped token + actual balance
+        val aliceLoginReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/customer/login"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(CustomerLoginRequest("u-alice", "1234"))))
+            .build()
+        val aliceLoginRes = client.send(aliceLoginReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, aliceLoginRes.statusCode())
+        val aliceLoginBody = json.decodeFromString<CustomerLoginResponse>(aliceLoginRes.body())
+        assertTrue(aliceLoginBody.success)
+        assertNotNull(aliceLoginBody.token)
+        assertEquals(2500L, aliceLoginBody.user?.balance)
+        val customerToken = aliceLoginBody.token!!
+
+        // 4. Open a veggie round as Admin first
+        val adminToken = getValidToken()
+        val openRoundReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/open"))
+            .header("Authorization", "Bearer $adminToken")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(OpenVeggieRoundRequest(300L, 600L, 1731150000000L))))
+            .build()
+        val openRoundRes = client.send(openRoundReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, openRoundRes.statusCode())
+        val openedRound = json.decodeFromString<VeggieOrderRound>(openRoundRes.body())
+
+        // 5. Customer fetches /api/customer/veggie/state
+        val stateReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/customer/veggie/state"))
+            .header("Authorization", "Bearer $customerToken")
+            .GET()
+            .build()
+        val stateRes = client.send(stateReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, stateRes.statusCode())
+        val veggieState = json.decodeFromString<CustomerVeggieStateResponse>(stateRes.body())
+        assertEquals(openedRound.id, veggieState.activeRound?.id)
+        assertEquals(1500L, veggieState.previousRoundQuantities["vp-tomato"])
+
+        // 6. Customer submits an order in the open round
+        val saveOrderPayload = SaveCustomerVeggieOrderRequest(
+            roundId = openedRound.id,
+            productQuantitiesScaled = mapOf("vp-tomato" to 2000L)
+        )
+        val saveOrderReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/customer/veggie/order"))
+            .header("Authorization", "Bearer $customerToken")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(saveOrderPayload)))
+            .build()
+        val saveOrderRes = client.send(saveOrderReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, saveOrderRes.statusCode())
+
+        // 7. Customer fetches /api/customer/veggie/history
+        val historyReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/customer/veggie/history"))
+            .header("Authorization", "Bearer $customerToken")
+            .GET()
+            .build()
+        val historyRes = client.send(historyReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, historyRes.statusCode())
+        val history = json.decodeFromString<List<CustomerVeggieRoundHistoryItem>>(historyRes.body())
+        assertEquals(1, history.size)
+        assertEquals(2000L, history.first().entries.first().orderedQuantityScaled)
+    }
+
+    @Test
+    fun testAdminVeggieEndpointsImagesAndPdfs() {
+        val json = Json { ignoreUnknownKeys = true }
+        val adminToken = getValidToken()
+
+        // 1. Upload image for vp-tomato
+        val sampleImg = BufferedImage(400, 300, BufferedImage.TYPE_INT_RGB).apply {
+            val g = createGraphics()
+            g.color = Color.RED
+            g.fillRect(0, 0, 400, 300)
+            g.dispose()
+        }
+        val imgBytes = ByteArrayOutputStream().also { ImageIO.write(sampleImg, "png", it) }.toByteArray()
+
+        val uploadImgReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/products/vp-tomato/image"))
+            .header("Authorization", "Bearer $adminToken")
+            .header("Content-Type", "application/octet-stream")
+            .POST(HttpRequest.BodyPublishers.ofByteArray(imgBytes))
+            .build()
+        val uploadImgRes = client.send(uploadImgReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, uploadImgRes.statusCode())
+        assertTrue(uploadImgRes.body().contains("vp-tomato"))
+
+        // 2. Fetch thumbnail via /api/veggie/images/vp-tomato?thumb=true and verify ETag 304
+        val getThumbReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/veggie/images/vp-tomato?thumb=true"))
+            .GET()
+            .build()
+        val getThumbRes = client.send(getThumbReq, HttpResponse.BodyHandlers.ofByteArray())
+        assertEquals(200, getThumbRes.statusCode())
+        assertTrue(getThumbRes.headers().firstValue("Content-Type").orElse("").contains("image/jpeg"))
+        val imgEtag = getThumbRes.headers().firstValue("ETag").orElse(null)
+        assertNotNull(imgEtag)
+
+        val condThumbReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/veggie/images/vp-tomato?thumb=true"))
+            .header("If-None-Match", imgEtag)
+            .GET()
+            .build()
+        val condThumbRes = client.send(condThumbReq, HttpResponse.BodyHandlers.ofByteArray())
+        assertEquals(304, condThumbRes.statusCode())
+
+        // 3. Open round, add entry, close round, download Buyer & Worker PDFs, and settle
+        val openRoundReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/open"))
+            .header("Authorization", "Bearer $adminToken")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(OpenVeggieRoundRequest(200L, 400L, 1731150000000L))))
+            .build()
+        val round = json.decodeFromString<VeggieOrderRound>(
+            client.send(openRoundReq, HttpResponse.BodyHandlers.ofString()).body()
+        )
+
+        val buyerPdfReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/buyer-pdf?lang=EN"))
+            .header("Authorization", "Bearer $adminToken")
+            .GET()
+            .build()
+        val buyerPdfRes = client.send(buyerPdfReq, HttpResponse.BodyHandlers.ofByteArray())
+        assertEquals(200, buyerPdfRes.statusCode())
+        assertEquals("%PDF-", String(buyerPdfRes.body(), 0, 5, Charsets.US_ASCII))
+
+        val workerPdfReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/worker-pdf?lang=DE"))
+            .header("Authorization", "Bearer $adminToken")
+            .GET()
+            .build()
+        val workerPdfRes = client.send(workerPdfReq, HttpResponse.BodyHandlers.ofByteArray())
+        assertEquals(200, workerPdfRes.statusCode())
+        assertEquals("%PDF-", String(workerPdfRes.body(), 0, 5, Charsets.US_ASCII))
+
+        // Close and settle round
+        val closeReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/close"))
+            .header("Authorization", "Bearer $adminToken")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(CloseVeggieRoundRequest(1731155000000L))))
+            .build()
+        assertEquals(200, client.send(closeReq, HttpResponse.BodyHandlers.ofString()).statusCode())
+
+        val settlePayload = VeggieSettlementRequest(
+            buyerOperationFeeCents = 200L,
+            transportFeeCents = 400L,
+            transporterUserId = "u-alice",
+            productSettlements = listOf(
+                VeggieRoundProductSettlement(
+                    roundId = round.id,
+                    veggieProductId = "vp-tomato",
+                    marketUnitPriceCents = 1000L,
+                    totalSpentCents = 2000L
+                )
+            ),
+            actualQuantitiesByEntryId = emptyMap(),
+            settledAt = 1731160000000L
+        )
+        val settleReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/settle"))
+            .header("Authorization", "Bearer $adminToken")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(settlePayload)))
+            .build()
+        val settleRes = client.send(settleReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, settleRes.statusCode())
+        val settlementResult = json.decodeFromString<VeggieRoundSettlementResult>(settleRes.body())
+        assertEquals(600L, settlementResult.combinedFeeCents)
+        assertEquals("u-alice", settlementResult.transporterUserId)
     }
 }
 
