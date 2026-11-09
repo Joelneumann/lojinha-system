@@ -20,8 +20,8 @@ actual suspend fun loadVeggieImageBitmap(
     imageBitmapCache[cacheKey]?.let { return it }
 
     return try {
-        val sizeParam = if (fullSize) "full" else "thumb"
-        val response = imageHttpClient.get("/api/veggie/images/$productId?size=$sizeParam&v=$imageFileName")
+        val isThumb = !fullSize
+        val response = imageHttpClient.get("/api/veggie/images/$productId?thumb=$isThumb&v=$imageFileName")
         if (response.status == HttpStatusCode.OK) {
             val bytes = response.readRawBytes()
             if (bytes.isNotEmpty()) {

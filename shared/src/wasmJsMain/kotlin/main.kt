@@ -29,6 +29,7 @@ fun main() {
         val transactionRepository = remember { HttpTransactionRepository(networkClient) }
         val billingListRepository = remember { HttpBillingListRepository(networkClient) }
         val adminNoteRepository = remember { HttpAdminNoteRepository(networkClient) }
+        val veggieOrderRepository = remember { HttpVeggieOrderRepository(networkClient) }
 
         // Session restoration on startup
         LaunchedEffect(Unit) {
@@ -68,6 +69,18 @@ fun main() {
                         val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository) }
                         val transactionsViewModel = remember { AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
                         val bulkBillingViewModel = remember { AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository) }
+                        val veggieViewModel = remember {
+                            AdminVeggieViewModel(
+                                veggieOrderRepository = veggieOrderRepository,
+                                userRepository = userRepository,
+                                onSaveProductImage = { productId, bytes, _ ->
+                                    veggieOrderRepository.uploadProductImage(productId, bytes)
+                                },
+                                onDeleteProductImage = { productId, _ ->
+                                    veggieOrderRepository.deleteProductImage(productId)
+                                }
+                            )
+                        }
 
                         LaunchedEffect(Unit) {
                             networkClient.startRealtimeSync(this)
@@ -78,6 +91,7 @@ fun main() {
                                     usersViewModel.loadData()
                                     transactionsViewModel.loadData()
                                     bulkBillingViewModel.loadData()
+                                    veggieViewModel.loadData()
                                 }
                             }
                             launch {
@@ -99,6 +113,7 @@ fun main() {
                             usersViewModel = usersViewModel,
                             transactionsViewModel = transactionsViewModel,
                             bulkBillingViewModel = bulkBillingViewModel,
+                            veggieViewModel = veggieViewModel,
                             settingsViewModel = null,
                             defaultSaveDirectory = "Downloads",
                             onExecutePdfExport = { user, _, fromTimestamp, toTimestamp, language ->
@@ -110,6 +125,16 @@ fun main() {
                                 jsTriggerDownload(url)
                                 usersViewModel.setIsExportingPdf(false)
                                 usersViewModel.setExportResultPath("Extrato_${user.name}.pdf")
+                            },
+                            onExportVeggieBuyerPdf = { roundId, language ->
+                                val token = networkClient.authToken ?: ""
+                                val url = networkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf?lang=${language.name}&token=$token")
+                                jsTriggerDownload(url)
+                            },
+                            onExportVeggieWorkerPdf = { roundId, language ->
+                                val token = networkClient.authToken ?: ""
+                                val url = networkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf?lang=${language.name}&token=$token")
+                                jsTriggerDownload(url)
                             },
                             onExitAdmin = {
                                 scope.launch {

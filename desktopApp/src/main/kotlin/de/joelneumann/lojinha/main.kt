@@ -152,6 +152,7 @@ fun main() {
                 billingListRepository = billingListRepository,
                 settingsRepository = settingsRepository,
                 adminNoteRepository = adminNoteRepository,
+                veggieOrderRepository = veggieOrderRepository,
                 showExitAuthDialog = showExitAuthDialog,
                 onDismissExitAuthDialog = { showExitAuthDialog = false }
             )

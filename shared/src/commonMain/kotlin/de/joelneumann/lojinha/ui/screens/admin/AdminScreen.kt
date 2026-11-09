@@ -32,6 +32,7 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel
 
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
@@ -47,8 +48,19 @@ enum class AdminTab {
     PRODUCTS,
     USERS,
     BULK_BILLING,
+    VEGGIE_ORDERS,
     TRANSACTIONS,
     SETTINGS
+}
+
+private fun fKeyForIndex(index: Int): Key = when (index) {
+    1 -> Key.F1
+    2 -> Key.F2
+    3 -> Key.F3
+    4 -> Key.F4
+    5 -> Key.F5
+    6 -> Key.F6
+    else -> Key.F7
 }
 
 private data class AdminTabDefinition(
@@ -67,9 +79,12 @@ fun AdminScreen(
     usersViewModel: AdminUsersViewModel,
     transactionsViewModel: AdminTransactionsViewModel,
     bulkBillingViewModel: AdminBulkBillingViewModel? = null,
+    veggieViewModel: AdminVeggieViewModel? = null,
     settingsViewModel: AdminSettingsViewModel? = null,
     defaultSaveDirectory: String = "",
     onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
+    onExportVeggieBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
+    onExportVeggieWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null,
     onExitAdmin: () -> Unit
@@ -81,7 +96,7 @@ fun AdminScreen(
     var tabFocusTrigger by remember { mutableStateOf(0) }
 
     LaunchedEffect(currentTab) {
-        if (currentTab == AdminTab.BULK_BILLING || currentTab == AdminTab.SETTINGS) {
+        if (currentTab == AdminTab.BULK_BILLING || currentTab == AdminTab.VEGGIE_ORDERS || currentTab == AdminTab.SETTINGS) {
             focusRequester.safeRequestFocus()
         }
     }
@@ -97,7 +112,7 @@ fun AdminScreen(
     var isExitAdminPending by remember { mutableStateOf(false) }
     var activePageScroller by remember { mutableStateOf<((Boolean) -> Boolean)?>(null) }
 
-    val tabItems = remember(strings, notes, bulkBillingViewModel, settingsViewModel, notesViewModel) {
+    val tabItems = remember(strings, notes, bulkBillingViewModel, veggieViewModel, settingsViewModel, notesViewModel) {
         buildList {
             var fKeyIndex = 1
             if (notesViewModel != null) {
@@ -106,25 +121,29 @@ fun AdminScreen(
                         tab = AdminTab.NOTES,
                         icon = Icons.Default.ChatBubbleOutline,
                         label = strings.tabNotes,
-                        key = Key.F1,
-                        keyLabel = "F1",
+                        key = fKeyForIndex(fKeyIndex),
+                        keyLabel = "F$fKeyIndex",
                         badgeCount = notes.size.takeIf { it > 0 }
                     )
                 )
                 fKeyIndex++
             }
-            add(AdminTabDefinition(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts, if (fKeyIndex == 1) Key.F1 else Key.F2, "F$fKeyIndex"))
+            add(AdminTabDefinition(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
             fKeyIndex++
-            add(AdminTabDefinition(AdminTab.USERS, Icons.Default.People, strings.tabUsers, if (fKeyIndex == 2) Key.F2 else Key.F3, "F$fKeyIndex"))
+            add(AdminTabDefinition(AdminTab.USERS, Icons.Default.People, strings.tabUsers, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
             fKeyIndex++
             if (bulkBillingViewModel != null) {
-                add(AdminTabDefinition(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling, if (fKeyIndex == 3) Key.F3 else Key.F4, "F$fKeyIndex"))
+                add(AdminTabDefinition(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
                 fKeyIndex++
             }
-            add(AdminTabDefinition(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions, if (fKeyIndex == 4) Key.F4 else Key.F5, "F$fKeyIndex"))
+            if (veggieViewModel != null) {
+                add(AdminTabDefinition(AdminTab.VEGGIE_ORDERS, Icons.Default.Eco, strings.tabVeggieOrders, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
+                fKeyIndex++
+            }
+            add(AdminTabDefinition(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
             fKeyIndex++
             if (settingsViewModel != null) {
-                add(AdminTabDefinition(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings, if (fKeyIndex == 5) Key.F5 else Key.F6, "F$fKeyIndex"))
+                add(AdminTabDefinition(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
             }
         }
     }
@@ -353,6 +372,17 @@ fun AdminScreen(
                                 viewModel = bulkBillingViewModel,
                                 onNavigateToTransactions = { handleTabSwitchRequest(AdminTab.TRANSACTIONS) },
                                 onRegisterPageScroller = { scroller -> activePageScroller = scroller }
+                            )
+                        }
+                    }
+
+                    AdminTab.VEGGIE_ORDERS -> {
+                        if (veggieViewModel != null) {
+                            AdminVeggieTabScreen(
+                                viewModel = veggieViewModel,
+                                onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
+                                onExportBuyerPdf = onExportVeggieBuyerPdf,
+                                onExportWorkerPdf = onExportVeggieWorkerPdf
                             )
                         }
                     }

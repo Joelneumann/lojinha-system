@@ -60,6 +60,7 @@ fun App(
     billingListRepository: BillingListRepository? = null,
     settingsRepository: SettingsRepository? = null,
     adminNoteRepository: AdminNoteRepository? = null,
+    veggieOrderRepository: VeggieOrderRepository? = null,
     showExitAuthDialog: Boolean = false,
     onDismissExitAuthDialog: () -> Unit = {}
 ) {
@@ -146,6 +147,15 @@ fun App(
     val effectiveTransactionRepo = transactionRepository ?: remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
     val effectiveBillingListRepo = billingListRepository ?: remember { de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged) }
     val effectiveAdminNoteRepo = adminNoteRepository ?: remember { RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged) }
+    val effectiveVeggieRepo = veggieOrderRepository ?: remember {
+        de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl(
+            database.veggieOrderDao(),
+            database.userDao(),
+            database.transactionDao(),
+            onDataChanged
+        )
+    }
+    val veggieImageService = remember { de.joelneumann.lojinha.data.service.VeggieImageService() }
 
     val appViewModel: AppViewModel = viewModel(
         factory = LojinhaViewModelFactory.createAppViewModelFactory(effectiveUserRepo, effectiveSettingsRepo)
@@ -415,6 +425,20 @@ fun App(
                         val adminBulkBillingViewModel = remember {
                             AdminBulkBillingViewModel(effectiveBillingListRepo, effectiveUserRepo, effectiveTransactionRepo)
                         }
+
+                        val adminVeggieViewModel = remember {
+                            AdminVeggieViewModel(
+                                veggieOrderRepository = effectiveVeggieRepo,
+                                userRepository = effectiveUserRepo,
+                                settingsRepository = effectiveSettingsRepo,
+                                onSaveProductImage = { productId, bytes, previousFileName ->
+                                    veggieImageService.saveProductImage(productId, bytes, previousFileName)
+                                },
+                                onDeleteProductImage = { productId, previousFileName ->
+                                    veggieImageService.deleteProductImages(previousFileName ?: productId)
+                                }
+                            )
+                        }
                         
                         val adminSettingsViewModel = remember {
                             AdminSettingsViewModel(
@@ -490,6 +514,7 @@ fun App(
                             adminUsersViewModel,
                             adminTransactionsViewModel,
                             adminBulkBillingViewModel,
+                            adminVeggieViewModel,
                             adminSettingsViewModel
                         ) {
                             val listener = {
@@ -498,6 +523,7 @@ fun App(
                                 adminUsersViewModel.loadData()
                                 adminTransactionsViewModel.loadData()
                                 adminBulkBillingViewModel.loadData()
+                                adminVeggieViewModel.loadData()
                                 adminSettingsViewModel.loadSettings()
                                 adminSettingsViewModel.loadRoutines()
                                 adminSettingsViewModel.refreshLogSize()
@@ -510,8 +536,15 @@ fun App(
                                 adminUsersViewModel.viewModelScope.cancel()
                                 adminTransactionsViewModel.viewModelScope.cancel()
                                 adminBulkBillingViewModel.viewModelScope.cancel()
+                                adminVeggieViewModel.viewModelScope.cancel()
                                 adminSettingsViewModel.viewModelScope.cancel()
                             }
+                        }
+
+                        val defaultSaveDir = remember {
+                            val userHome = System.getProperty("user.home")
+                            val downloads = java.io.File(userHome, "Downloads")
+                            if (downloads.exists()) downloads.absolutePath else userHome
                         }
 
                         de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
@@ -520,12 +553,9 @@ fun App(
                             usersViewModel = adminUsersViewModel,
                             transactionsViewModel = adminTransactionsViewModel,
                             bulkBillingViewModel = adminBulkBillingViewModel,
+                            veggieViewModel = adminVeggieViewModel,
                             settingsViewModel = adminSettingsViewModel,
-                            defaultSaveDirectory = remember {
-                                val userHome = System.getProperty("user.home")
-                                val downloads = java.io.File(userHome, "Downloads")
-                                if (downloads.exists()) downloads.absolutePath else userHome
-                            },
+                            defaultSaveDirectory = defaultSaveDir,
                             onExecutePdfExport = { user, destinationFolder, fromTimestamp, toTimestamp, language ->
                                 if (!adminUsersViewModel.isExportingPdf.value) {
                                     coroutineScope.launch {
@@ -556,6 +586,62 @@ fun App(
                                         } finally {
                                             adminUsersViewModel.setIsExportingPdf(false)
                                         }
+                                    }
+                                }
+                            },
+                            onExportVeggieBuyerPdf = { roundId, language ->
+                                coroutineScope.launch {
+                                    try {
+                                        val round = effectiveVeggieRepo.getRoundById(roundId) ?: return@launch
+                                        val entries = effectiveVeggieRepo.getEntriesForRound(roundId)
+                                        val weekInfo = de.joelneumann.lojinha.ui.utils.IsoWeekUtils.fromEpochMillis(round.openedAt)
+                                        val targetDir = java.io.File(defaultSaveDir)
+                                        if (!targetDir.exists()) targetDir.mkdirs()
+                                        val targetFile = java.io.File(
+                                            targetDir,
+                                            "Veggie_Buyer_List_Week_${weekInfo.weekOfYear}_${weekInfo.isoYear}.pdf"
+                                        )
+                                        de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator.generateBuyerShoppingListPdf(
+                                            outputFile = targetFile,
+                                            round = round,
+                                            entries = entries,
+                                            language = language
+                                        )
+                                        if (targetFile.exists() && java.awt.Desktop.isDesktopSupported()) {
+                                            java.awt.Desktop.getDesktop().open(targetFile)
+                                        } else {
+                                            diagnosticsService.revealInFileExplorer(targetFile)
+                                        }
+                                    } catch (e: Exception) {
+                                        AppLogger.error("App", "Failed to export Veggie Buyer Shopping List PDF: ${e.message}", e)
+                                    }
+                                }
+                            },
+                            onExportVeggieWorkerPdf = { roundId, language ->
+                                coroutineScope.launch {
+                                    try {
+                                        val round = effectiveVeggieRepo.getRoundById(roundId) ?: return@launch
+                                        val entries = effectiveVeggieRepo.getEntriesForRound(roundId)
+                                        val weekInfo = de.joelneumann.lojinha.ui.utils.IsoWeekUtils.fromEpochMillis(round.openedAt)
+                                        val targetDir = java.io.File(defaultSaveDir)
+                                        if (!targetDir.exists()) targetDir.mkdirs()
+                                        val targetFile = java.io.File(
+                                            targetDir,
+                                            "Veggie_Worker_Matrix_Week_${weekInfo.weekOfYear}_${weekInfo.isoYear}.pdf"
+                                        )
+                                        de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator.generateWorkerSortingMatrixPdf(
+                                            outputFile = targetFile,
+                                            round = round,
+                                            entries = entries,
+                                            language = language
+                                        )
+                                        if (targetFile.exists() && java.awt.Desktop.isDesktopSupported()) {
+                                            java.awt.Desktop.getDesktop().open(targetFile)
+                                        } else {
+                                            diagnosticsService.revealInFileExplorer(targetFile)
+                                        }
+                                    } catch (e: Exception) {
+                                        AppLogger.error("App", "Failed to export Veggie Worker Sorting Matrix PDF: ${e.message}", e)
                                     }
                                 }
                             },
