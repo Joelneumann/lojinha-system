@@ -416,10 +416,12 @@ class LojinhaAdminServerTest {
         val htmlRes = client.send(htmlReq, HttpResponse.BodyHandlers.ofByteArray())
         assertEquals(200, htmlRes.statusCode())
         assertEquals("gzip", htmlRes.headers().firstValue("Content-Encoding").orElse(null))
+        assertEquals("Accept-Encoding", htmlRes.headers().firstValue("Vary").orElse(null))
         assertTrue(htmlRes.headers().firstValue("Content-Type").orElse("").contains("text/html"))
         assertTrue(htmlRes.headers().firstValue("Cache-Control").orElse("").contains("no-cache"))
         val htmlEtag = htmlRes.headers().firstValue("ETag").orElse(null)
         assertNotNull(htmlEtag)
+        assertTrue(htmlEtag.startsWith("W/\""), "ETag should be weak ETag")
 
         // Verify conditional request returns 304 Not Modified
         val conditionalHtmlReq = HttpRequest.newBuilder()
@@ -429,8 +431,34 @@ class LojinhaAdminServerTest {
             .build()
         val conditionalHtmlRes = client.send(conditionalHtmlReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(304, conditionalHtmlRes.statusCode())
+        assertEquals("Accept-Encoding", conditionalHtmlRes.headers().firstValue("Vary").orElse(null))
 
-        // 2. GET wasm asset with gzip
+        // 2. GET /lojinha.js - MUST NOT be immutable (must be no-cache with ETag for safe updates)
+        val jsReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/lojinha.js"))
+            .header("Accept-Encoding", "gzip")
+            .GET()
+            .build()
+        val jsRes = client.send(jsReq, HttpResponse.BodyHandlers.ofByteArray())
+        if (jsRes.statusCode() == 200) {
+            assertEquals("gzip", jsRes.headers().firstValue("Content-Encoding").orElse(null))
+            assertEquals("Accept-Encoding", jsRes.headers().firstValue("Vary").orElse(null))
+            assertTrue(jsRes.headers().firstValue("Cache-Control").orElse("").contains("no-cache"),
+                "lojinha.js must use no-cache, not immutable, to prevent stale cache lock-in")
+            val jsEtag = jsRes.headers().firstValue("ETag").orElse(null)
+            assertNotNull(jsEtag)
+
+            // Test 304 for lojinha.js
+            val conditionalJsReq = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/lojinha.js"))
+                .header("If-None-Match", jsEtag)
+                .GET()
+                .build()
+            val conditionalJsRes = client.send(conditionalJsReq, HttpResponse.BodyHandlers.ofString())
+            assertEquals(304, conditionalJsRes.statusCode())
+        }
+
+        // 3. GET wasm asset with gzip
         val wasmFile = java.io.File("shared/build/dist/wasmJs/productionExecutable")
             .listFiles { file -> file.extension == "wasm" }
             ?.firstOrNull()
@@ -445,9 +473,11 @@ class LojinhaAdminServerTest {
             assertEquals(200, wasmGzipRes.statusCode())
             assertEquals("gzip", wasmGzipRes.headers().firstValue("Content-Encoding").orElse(null))
             assertEquals("application/wasm", wasmGzipRes.headers().firstValue("Content-Type").orElse(null))
+            assertEquals("Accept-Encoding", wasmGzipRes.headers().firstValue("Vary").orElse(null))
             assertEquals("public, max-age=31536000, immutable", wasmGzipRes.headers().firstValue("Cache-Control").orElse(null))
             val wasmEtag = wasmGzipRes.headers().firstValue("ETag").orElse(null)
             assertNotNull(wasmEtag)
+            assertTrue(wasmEtag.startsWith("W/\""), "ETag should be weak ETag")
 
             // Verify compressed payload is significantly smaller than raw file
             val compressedBytes = wasmGzipRes.body()
@@ -466,7 +496,7 @@ class LojinhaAdminServerTest {
             val conditionalWasmRes = client.send(conditionalWasmReq, HttpResponse.BodyHandlers.ofByteArray())
             assertEquals(304, conditionalWasmRes.statusCode())
 
-            // Test non-gzip request receives uncompressed content
+            // Test non-gzip request receives uncompressed content but still includes Vary header
             val wasmRawReq = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:$testPort/$wasmName"))
                 .GET()
@@ -475,6 +505,7 @@ class LojinhaAdminServerTest {
             assertEquals(200, wasmRawRes.statusCode())
             assertFalse(wasmRawRes.headers().firstValue("Content-Encoding").isPresent)
             assertEquals("application/wasm", wasmRawRes.headers().firstValue("Content-Type").orElse(null))
+            assertEquals("Accept-Encoding", wasmRawRes.headers().firstValue("Vary").orElse(null))
             assertEquals("public, max-age=31536000, immutable", wasmRawRes.headers().firstValue("Cache-Control").orElse(null))
             assertEquals(wasmFile.length(), wasmRawRes.body().size.toLong())
         }

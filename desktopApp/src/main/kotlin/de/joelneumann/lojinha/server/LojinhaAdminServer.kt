@@ -17,6 +17,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import de.joelneumann.lojinha.AppVersion
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.util.AppLogger
 import java.io.ByteArrayOutputStream
@@ -53,7 +54,7 @@ class LojinhaAdminServer(
         val lastModified: Long,
         val etag: String,
         val rawBytes: ByteArray,
-        val gzippedBytes: ByteArray
+        val gzippedBytes: ByteArray?
     )
 
     private val staticAssetCache = ConcurrentHashMap<String, CachedAsset>()
@@ -63,9 +64,10 @@ class LojinhaAdminServer(
         name.endsWith(".css") || name.endsWith(".map") || name.endsWith(".json") ||
         name.endsWith(".svg")
 
+    // Only content-hashed wasm chunks and generated compose resources are safe for 1-year immutable caching.
+    // Unhashed files (lojinha.js, index.html, favicons) must use no-cache with ETag validation so updates take effect immediately.
     private fun isImmutableAsset(name: String): Boolean =
-        name.endsWith(".wasm") || name.endsWith(".js") || name.endsWith(".map") ||
-        name.endsWith(".png") || name.endsWith(".ico") || name.endsWith(".svg") ||
+        (name.endsWith(".wasm") && !name.startsWith("lojinha")) ||
         name.startsWith("composeResources/")
 
     private fun gzipBytes(data: ByteArray): ByteArray {
@@ -74,6 +76,43 @@ class LojinhaAdminServer(
             gz.write(data)
         }
         return bos.toByteArray()
+    }
+
+    private fun getOrLoadAsset(assetName: String): CachedAsset? {
+        val cached = staticAssetCache[assetName]
+        val file = findWasmAsset(assetName)
+        if (file != null && file.exists() && !file.isDirectory) {
+            val fileModified = file.lastModified()
+            if (cached != null && cached.lastModified == fileModified) {
+                return cached
+            }
+            val rawData = try { file.readBytes() } catch (e: Exception) { return null }
+            val etag = "W/\"${assetName.hashCode()}-${rawData.size}-${AppVersion.CURRENT}-$fileModified\""
+            val gzFile = findWasmAsset("$assetName.gz") ?: File(file.parentFile, "${file.name}.gz")
+            val gzippedData = if (isCompressible(assetName)) {
+                if (gzFile.exists() && !gzFile.isDirectory) {
+                    try { gzFile.readBytes() } catch (e: Exception) { gzipBytes(rawData) }
+                } else {
+                    gzipBytes(rawData)
+                }
+            } else null
+            val newAsset = CachedAsset(fileModified, etag, rawData, gzippedData)
+            staticAssetCache[assetName] = newAsset
+            return newAsset
+        }
+
+        // Classpath resource (JAR)
+        if (cached != null) {
+            return cached
+        }
+        val rawData = loadWasmResourceBytes(assetName) ?: return null
+        val etag = "W/\"${assetName.hashCode()}-${rawData.size}-${AppVersion.CURRENT}\""
+        val gzData = if (isCompressible(assetName)) {
+            loadWasmResourceBytes("$assetName.gz") ?: gzipBytes(rawData)
+        } else null
+        val newAsset = CachedAsset(0L, etag, rawData, gzData)
+        staticAssetCache[assetName] = newAsset
+        return newAsset
     }
 
     private fun buildServer(bindPort: Int): EmbeddedServer<*, *> = embeddedServer(Netty, port = bindPort, host = "0.0.0.0") {
@@ -536,10 +575,25 @@ class LojinhaAdminServer(
 
                 // 3. Serve static Wasm assets with HTTP Caching and Gzip Compression
                 suspend fun io.ktor.server.application.ApplicationCall.respondWasmAsset(assetName: String) {
-                    val file = findWasmAsset(assetName)
-                    val resourceBytes = if (file == null || !file.exists()) loadWasmResourceBytes(assetName) else null
+                    val contentType = getContentTypeForName(assetName)
+                    val compressible = isCompressible(assetName)
+                    val acceptEncoding = request.headers[HttpHeaders.AcceptEncoding] ?: ""
+                    val clientAcceptsGzip = acceptEncoding.contains("gzip", ignoreCase = true)
 
-                    if (file == null && resourceBytes == null) {
+                    // RFC 9110: Vary header MUST be sent on all responses for content-negotiated resources
+                    if (compressible) {
+                        response.header(HttpHeaders.Vary, HttpHeaders.AcceptEncoding)
+                    }
+
+                    // Cache-Control headers: Immutable 1-year cache for hashed assets; no-cache for entry HTML/JS
+                    if (isImmutableAsset(assetName)) {
+                        response.header(HttpHeaders.CacheControl, "public, max-age=31536000, immutable")
+                    } else {
+                        response.header(HttpHeaders.CacheControl, "no-cache, must-revalidate")
+                    }
+
+                    val asset = getOrLoadAsset(assetName)
+                    if (asset == null) {
                         if (assetName == "index.html") {
                             respond(HttpStatusCode.NotFound, "Admin web interface assets not found.")
                         } else {
@@ -548,68 +602,20 @@ class LojinhaAdminServer(
                         return
                     }
 
-                    val lastModified = file?.lastModified() ?: 0L
-                    val rawLength = file?.length() ?: resourceBytes?.size?.toLong() ?: 0L
-                    val etag = "\"${assetName.hashCode()}-$rawLength-$lastModified\""
-
-                    // Cache-Control headers: Immutable 1-year cache for hashed assets; no-cache for entry HTML
-                    if (isImmutableAsset(assetName)) {
-                        response.header(HttpHeaders.CacheControl, "public, max-age=31536000, immutable")
-                    } else {
-                        response.header(HttpHeaders.CacheControl, "no-cache, must-revalidate")
-                    }
-                    response.header(HttpHeaders.ETag, etag)
+                    response.header(HttpHeaders.ETag, asset.etag)
 
                     // Conditional request validation (304 Not Modified)
                     val clientIfNoneMatch = request.headers[HttpHeaders.IfNoneMatch]
-                    if (clientIfNoneMatch != null && (clientIfNoneMatch == etag || clientIfNoneMatch == "*" || clientIfNoneMatch.contains(etag))) {
+                    if (clientIfNoneMatch != null && (clientIfNoneMatch == asset.etag || clientIfNoneMatch == "*" || clientIfNoneMatch.contains(asset.etag))) {
                         respond(HttpStatusCode.NotModified)
                         return
                     }
 
-                    val acceptEncoding = request.headers[HttpHeaders.AcceptEncoding] ?: ""
-                    val clientAcceptsGzip = acceptEncoding.contains("gzip", ignoreCase = true)
-                    val contentType = getContentTypeForName(assetName)
-
-                    if (clientAcceptsGzip && isCompressible(assetName)) {
-                        response.header(HttpHeaders.Vary, HttpHeaders.AcceptEncoding)
+                    if (clientAcceptsGzip && asset.gzippedBytes != null) {
                         response.header(HttpHeaders.ContentEncoding, "gzip")
-
-                        // 1. Try pre-compressed .gz file on disk
-                        val gzFile = file?.let { findWasmAsset("$assetName.gz") ?: File(it.parentFile, "${it.name}.gz") }
-                        if (gzFile != null && gzFile.exists() && !gzFile.isDirectory) {
-                            respondBytes(gzFile.readBytes(), contentType)
-                            return
-                        }
-
-                        // 2. Try pre-compressed .gz resource from classpath
-                        val gzResourceBytes = loadWasmResourceBytes("$assetName.gz")
-                        if (gzResourceBytes != null) {
-                            respondBytes(gzResourceBytes, contentType)
-                            return
-                        }
-
-                        // 3. Dynamic runtime compression with in-memory caching
-                        val cached = staticAssetCache[assetName]
-                        if (cached != null && cached.lastModified == lastModified && cached.rawBytes.size.toLong() == rawLength) {
-                            respondBytes(cached.gzippedBytes, contentType)
-                            return
-                        }
-
-                        val rawData = file?.readBytes() ?: resourceBytes!!
-                        val compressedData = gzipBytes(rawData)
-                        staticAssetCache[assetName] = CachedAsset(lastModified, etag, rawData, compressedData)
-                        respondBytes(compressedData, contentType)
-                        return
-                    }
-
-                    // Client does not accept gzip or asset is not compressible
-                    if (file != null && file.exists() && !file.isDirectory) {
-                        respondFile(file)
-                    } else if (resourceBytes != null) {
-                        respondBytes(resourceBytes, contentType)
+                        respondBytes(asset.gzippedBytes, contentType)
                     } else {
-                        respond(HttpStatusCode.NotFound)
+                        respondBytes(asset.rawBytes, contentType)
                     }
                 }
 
@@ -735,6 +741,8 @@ class LojinhaAdminServer(
         val clean = name.trim('/')
         if (clean.isBlank()) return null
         val candidatePaths = listOf(
+            File("desktopApp/build/generated/wasmResources/wasm"),
+            File("build/generated/wasmResources/wasm"),
             File("shared/build/dist/wasmJs/productionExecutable"),
             File("build/dist/wasmJs/productionExecutable"),
             File("../shared/build/dist/wasmJs/productionExecutable"),
