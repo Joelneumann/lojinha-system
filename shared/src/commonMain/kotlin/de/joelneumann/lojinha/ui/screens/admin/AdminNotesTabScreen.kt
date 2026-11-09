@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,6 +29,7 @@ import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.SystemNoteHelper
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.pageDown
 import de.joelneumann.lojinha.ui.utils.pageUp
@@ -69,11 +71,13 @@ fun AdminNotesTabScreen(
         }
     }
 
-    val filteredNotes = remember(notes, searchQuery) {
+    val filteredNotes = remember(notes, searchQuery, strings) {
         if (searchQuery.isBlank()) notes
         else notes.filter { n ->
-            n.message.containsIgnoreAccents(searchQuery) ||
-                    n.userNameSnapshot.containsIgnoreAccents(searchQuery)
+            val displayMsg = if (n.isSystem) (SystemNoteHelper.decodeNote(n.message, strings) ?: n.message) else n.message
+            displayMsg.containsIgnoreAccents(searchQuery) ||
+                    n.userNameSnapshot.containsIgnoreAccents(searchQuery) ||
+                    (n.isSystem && strings.systemLabel.containsIgnoreAccents(searchQuery))
         }
     }
 
@@ -153,6 +157,10 @@ fun AdminNotesTabScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(filteredNotes, key = { it.id }) { note ->
+                        val isSystem = note.isSystem
+                        val authorName = if (isSystem) strings.systemLabel else note.userNameSnapshot
+                        val displayMessage = if (isSystem) (SystemNoteHelper.decodeNote(note.message, strings) ?: note.message) else note.message
+
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
@@ -176,13 +184,13 @@ fun AdminNotesTabScreen(
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Person,
+                                            imageVector = if (isSystem) Icons.Default.Info else Icons.Default.Person,
                                             contentDescription = null,
                                             tint = AccentNavy,
                                             modifier = Modifier.size(16.dp)
                                         )
                                         Text(
-                                            text = note.userNameSnapshot,
+                                            text = authorName,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = PrimaryNavy,
@@ -219,7 +227,7 @@ fun AdminNotesTabScreen(
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 Text(
-                                    text = note.message,
+                                    text = displayMessage,
                                     fontSize = 14.sp,
                                     color = PrimaryNavy,
                                     lineHeight = 20.sp

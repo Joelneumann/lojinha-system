@@ -109,4 +109,35 @@ class AdminNotesViewModelTest {
         viewModel.clearError()
         assertNull(viewModel.errorMessage.value)
     }
+
+    @Test
+    fun testSystemNoteIsRecognizedAndCanBeDeleted() = runTest {
+        val sysNote = AdminNote(
+            id = "sys-1",
+            message = "SYSNOTE|STOCK_ZERO|Club Mate|Alice",
+            userId = AdminNote.SYSTEM_USER_ID,
+            userNameSnapshot = AdminNote.SYSTEM_USER_NAME,
+            timestamp = 2000L
+        )
+        val userNote = AdminNote(
+            id = "u-1",
+            message = "Can we get more chips?",
+            userId = "u123",
+            userNameSnapshot = "Bob",
+            timestamp = 1000L
+        )
+        val repo = FakeAdminNoteRepository(listOf(sysNote, userNote))
+        val viewModel = AdminNotesViewModel(repo)
+
+        val notes = viewModel.notes.value
+        assertEquals(2, notes.size)
+        assertTrue(notes[0].isSystem)
+        assertFalse(notes[1].isSystem)
+
+        // Delete system note
+        viewModel.deleteNote("sys-1")
+        assertEquals(1, viewModel.notes.value.size)
+        assertEquals("u-1", viewModel.notes.value.first().id)
+        assertTrue(repo.deletedIds.contains("sys-1"))
+    }
 }

@@ -236,9 +236,11 @@ interface AppStrings {
     fun confirmStornoEntirePurchaseBody(user: String, refundAmount: String, itemCount: Int): String
     
     // System Notes
+    val systemLabel: String
     fun sysNoteCompleteStorno(date: String, amount: String): String
     fun sysNotePartialStorno(date: String, amount: String): String
     fun sysNoteNonPurchaseStorno(type: String, date: String, amount: String): String
+    fun sysNoteStockZero(customer: String, product: String): String
 
     fun originalOrderTotalLabel(amount: String): String
     fun newOrderTotalLabel(amount: String): String

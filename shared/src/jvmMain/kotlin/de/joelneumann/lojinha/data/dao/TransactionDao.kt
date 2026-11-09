@@ -4,7 +4,9 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import de.joelneumann.lojinha.data.entity.AdminNoteEntity
 import de.joelneumann.lojinha.data.entity.TransactionEntity
+import de.joelneumann.lojinha.domain.model.AdminNote
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -100,42 +102,19 @@ interface TransactionDao {
     @Query("UPDATE products SET stockQuantity = MAX(0, stockQuantity + :delta) WHERE id = :id")
     suspend fun updateProductStock(id: String, delta: Long)
 
+    @Query("SELECT name FROM products WHERE id = :id")
+    suspend fun getProductName(id: String): String?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAdminNote(note: AdminNoteEntity)
+
     @androidx.room.Transaction
     suspend fun executeAtomicTransaction(
         transaction: TransactionEntity,
         balanceDelta: Long,
         stockDeltas: Map<String, Long>
     ) {
-        val currentBal = getUserBalance(transaction.userId)
-            ?: throw IllegalArgumentException("Cannot execute transaction: User '${transaction.userId}' does not exist.")
-
-        if (transaction.type == "CANCELLATION" && transaction.referenceTransactionId != null) {
-            val cancellations = getCancellationCountForReference(transaction.referenceTransactionId)
-            check(cancellations == 0) { "Transaction '${transaction.referenceTransactionId}' has already been cancelled." }
-        }
-
-        for ((productId, delta) in stockDeltas) {
-            if (delta < 0L) {
-                val currentStock = getProductStock(productId) ?: 0L
-                check(currentStock + delta >= 0L) {
-                    "Insufficient stock for product '$productId'. Current: $currentStock, required: ${-delta}"
-                }
-            }
-        }
-
-        if (balanceDelta != 0L) {
-            updateUserBalance(transaction.userId, balanceDelta)
-        }
-        for ((productId, delta) in stockDeltas) {
-            if (delta != 0L) {
-                updateProductStock(productId, delta)
-            }
-        }
-        val authoritativeTx = transaction.copy(
-            userBalanceBefore = currentBal,
-            userBalanceAfter = currentBal + balanceDelta
-        )
-        insertTransaction(authoritativeTx)
+        executeBatchAtomicTransactions(listOf(Triple(transaction, balanceDelta, stockDeltas)))
     }
 
     @androidx.room.Transaction
@@ -151,11 +130,16 @@ interface TransactionDao {
                 check(cancellations == 0) { "Transaction '${tx.referenceTransactionId}' has already been cancelled." }
             }
 
+            val depletedProducts = mutableListOf<Pair<String, String>>()
             for ((productId, delta) in stockDeltas) {
                 if (delta < 0L) {
                     val currentStock = getProductStock(productId) ?: 0L
                     check(currentStock + delta >= 0L) {
                         "Insufficient stock for product '$productId'. Current: $currentStock, required: ${-delta}"
+                    }
+                    if (currentStock > 0L && currentStock + delta == 0L) {
+                        val prodName = getProductName(productId) ?: productId
+                        depletedProducts.add(productId to prodName)
                     }
                 }
             }
@@ -173,6 +157,23 @@ interface TransactionDao {
                 userBalanceAfter = currentBal + balDelta
             )
             insertTransaction(authoritativeTx)
+
+            if (tx.type == "PURCHASE" && depletedProducts.isNotEmpty()) {
+                for ((_, productName) in depletedProducts) {
+                    val rawUser = tx.userNameSnapshot.ifBlank { tx.userId }
+                    val rawProd = productName.ifBlank { "Product" }
+                    val safeProdName = rawProd.replace(Regex("\\s+"), " ").replace("|", "/").trim()
+                    val safeUserName = rawUser.replace(Regex("\\s+"), " ").replace("|", "/").trim()
+                    val noteEntity = AdminNoteEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        message = "SYSNOTE|STOCK_ZERO|$safeProdName|$safeUserName",
+                        userId = AdminNote.SYSTEM_USER_ID,
+                        userNameSnapshot = AdminNote.SYSTEM_USER_NAME,
+                        timestamp = tx.timestamp
+                    )
+                    insertAdminNote(noteEntity)
+                }
+            }
         }
     }
 }
