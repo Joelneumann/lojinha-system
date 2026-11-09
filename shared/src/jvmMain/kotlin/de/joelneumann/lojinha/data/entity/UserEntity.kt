@@ -31,7 +31,8 @@ data class UserEntity(
     @ColumnInfo(defaultValue = "0") val isDeleted: Boolean = false,
     @ColumnInfo(defaultValue = "'INITIALS'") val avatarType: String = "INITIALS",
     @ColumnInfo(defaultValue = "'😀'") val avatarEmoji: String = "😀",
-    @ColumnInfo(defaultValue = "'#1E293B'") val avatarColor: String = "#1E293B"
+    @ColumnInfo(defaultValue = "'#1E293B'") val avatarColor: String = "#1E293B",
+    @ColumnInfo(defaultValue = "1") val requirePinOnKiosk: Boolean = true
 ) {
 
     fun toDomain(): User {
@@ -51,6 +52,7 @@ data class UserEntity(
             language = Language.fromCode(language),
             secondaryCurrency = try { SecondaryCurrency.valueOf(secondaryCurrency) } catch (e: Exception) { SecondaryCurrency.NONE },
             pin = pin,
+            requirePinOnKiosk = requirePinOnKiosk,
             userBarcode = safeBarcode.first,
             userBarcodeNumber = safeBarcode.second,
             isActive = isActive,
@@ -77,7 +79,8 @@ data class UserEntity(
             isDeleted = user.isDeleted,
             avatarType = user.avatar.type.name,
             avatarEmoji = user.avatar.emoji,
-            avatarColor = user.avatar.colorHex
+            avatarColor = user.avatar.colorHex,
+            requirePinOnKiosk = user.requirePinOnKiosk
         )
     }
 }

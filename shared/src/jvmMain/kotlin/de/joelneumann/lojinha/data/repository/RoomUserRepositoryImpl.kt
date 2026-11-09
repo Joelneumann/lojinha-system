@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.repository
 
 import de.joelneumann.lojinha.data.dao.TransactionDao
 import de.joelneumann.lojinha.data.dao.UserDao
+import de.joelneumann.lojinha.data.dao.VeggieOrderDao
 import de.joelneumann.lojinha.data.entity.UserEntity
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.UserRepository
@@ -12,7 +13,8 @@ import kotlinx.coroutines.flow.map
 class RoomUserRepositoryImpl(
     private val userDao: UserDao,
     private val transactionDao: TransactionDao,
-    private val onDataChanged: (() -> Unit)? = null
+    private val onDataChanged: (() -> Unit)? = null,
+    private val veggieOrderDao: VeggieOrderDao? = null
 ) : UserRepository {
 
     override fun getUsersFlow(): Flow<List<User>> {
@@ -53,7 +55,8 @@ class RoomUserRepositoryImpl(
                 isDeleted = entity.isDeleted,
                 avatarType = entity.avatarType,
                 avatarEmoji = entity.avatarEmoji,
-                avatarColor = entity.avatarColor
+                avatarColor = entity.avatarColor,
+                requirePinOnKiosk = entity.requirePinOnKiosk
             )
         } else {
             // New user must always start with 0L balance
@@ -97,7 +100,8 @@ class RoomUserRepositoryImpl(
 
     override suspend fun canHardDeleteUser(id: String): Boolean {
         val txCount = transactionDao.getTransactionCountForUser(id)
-        return txCount == 0
+        val veggieCount = veggieOrderDao?.getEntryCountForUser(id) ?: 0
+        return txCount == 0 && veggieCount == 0
     }
 
     override suspend fun hardDeleteUser(id: String): Boolean {

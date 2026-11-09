@@ -53,6 +53,7 @@ interface VeggieOrderRepository {
     suspend fun getCustomerOrderHistory(userId: String): List<CustomerVeggieRoundHistoryItem>
 
     // 5. Settlement & Corrections
+    suspend fun upsertAdminOrderEntry(entry: VeggieOrderEntry): Boolean = false
     suspend fun getProductSettlementsForRound(roundId: String): List<VeggieRoundProductSettlement>
     suspend fun saveDraftSettlement(
         roundId: String,

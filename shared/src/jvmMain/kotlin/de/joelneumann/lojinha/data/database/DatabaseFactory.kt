@@ -8,6 +8,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import de.joelneumann.lojinha.data.entity.ProductStockAdjustmentEntity
 import de.joelneumann.lojinha.data.entity.SettingsEntity
+import de.joelneumann.lojinha.data.entity.VeggieUnitTypeEntity
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.Dispatchers
@@ -171,6 +172,67 @@ object DatabaseFactory {
         }
     }
 
+    internal val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v17 -> v18 (creating Veggie Order System tables and settings)...")
+            try {
+                // 1. Add requirePinOnKiosk to users
+                connection.execSQL("ALTER TABLE `users` ADD COLUMN `requirePinOnKiosk` INTEGER NOT NULL DEFAULT 1")
+
+                // 2. Add Veggie settings columns to settings
+                connection.execSQL("ALTER TABLE `settings` ADD COLUMN `veggieAutoOpenEnabled` INTEGER NOT NULL DEFAULT 0")
+                connection.execSQL("ALTER TABLE `settings` ADD COLUMN `veggieAutoOpenDayOfWeek` INTEGER NOT NULL DEFAULT 1")
+                connection.execSQL("ALTER TABLE `settings` ADD COLUMN `veggieAutoOpenTime` TEXT NOT NULL DEFAULT '08:00'")
+                connection.execSQL("ALTER TABLE `settings` ADD COLUMN `defaultVeggieBuyerFeeCents` INTEGER NOT NULL DEFAULT 0")
+                connection.execSQL("ALTER TABLE `settings` ADD COLUMN `defaultVeggieTransportFeeCents` INTEGER NOT NULL DEFAULT 0")
+
+                // 3. Create veggie_unit_types
+                connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_unit_types` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `allowDecimals` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_unit_types_name` ON `veggie_unit_types` (`name`)")
+
+                // 4. Create veggie_products
+                connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `estimatedPriceCents` INTEGER, `unitTypeId` TEXT NOT NULL, `imageFileName` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_products_name` ON `veggie_products` (`name`)")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_products_unitTypeId` ON `veggie_products` (`unitTypeId`)")
+
+                // 5. Create veggie_order_rounds
+                connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_order_rounds` (`id` TEXT NOT NULL, `openedAt` INTEGER NOT NULL, `closedAt` INTEGER, `settledAt` INTEGER, `status` TEXT NOT NULL, `buyerOperationFeeCents` INTEGER NOT NULL, `transportFeeCents` INTEGER NOT NULL, `transporterUserId` TEXT, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_rounds_status` ON `veggie_order_rounds` (`status`)")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_rounds_openedAt` ON `veggie_order_rounds` (`openedAt`)")
+
+                // 6. Create veggie_round_product_settlements
+                connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_round_product_settlements` (`roundId` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `marketUnitPriceCents` INTEGER, `totalSpentCents` INTEGER, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`roundId`, `veggieProductId`))")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_round_product_settlements_roundId` ON `veggie_round_product_settlements` (`roundId`)")
+
+                // 7. Create veggie_order_entries
+                connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_order_entries` (`id` TEXT NOT NULL, `roundId` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `veggieNameSnapshot` TEXT NOT NULL, `unitNameSnapshot` TEXT NOT NULL, `allowDecimalsSnapshot` INTEGER NOT NULL, `orderedQuantityScaled` INTEGER NOT NULL, `actualQuantityScaled` INTEGER, `effectiveUnitPriceCents` INTEGER, `finalItemTotalCents` INTEGER, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+                connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_veggie_order_entries_roundId_userId_veggieProductId` ON `veggie_order_entries` (`roundId`, `userId`, `veggieProductId`)")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_roundId` ON `veggie_order_entries` (`roundId`)")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_userId` ON `veggie_order_entries` (`userId`)")
+                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_veggieProductId` ON `veggie_order_entries` (`veggieProductId`)")
+
+                // 8. Seed default Veggie Unit Types
+                val now = System.currentTimeMillis()
+                connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-kg', 'kg', 1, 1, $now)")
+                connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-piece', 'Unit', 0, 1, $now)")
+                connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-pack', 'Pack', 0, 1, $now)")
+                connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-bunch', 'Bunch', 0, 1, $now)")
+
+                AppLogger.info(TAG, "Database migration v17 -> v18 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v17 -> v18 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
+    fun defaultVeggieUnitTypes(timestamp: Long = System.currentTimeMillis()): List<VeggieUnitTypeEntity> = listOf(
+        VeggieUnitTypeEntity(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true, updatedAt = timestamp),
+        VeggieUnitTypeEntity(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true, updatedAt = timestamp),
+        VeggieUnitTypeEntity(id = "unit-pack", name = "Pack", allowDecimals = false, isActive = true, updatedAt = timestamp),
+        VeggieUnitTypeEntity(id = "unit-bunch", name = "Bunch", allowDecimals = false, isActive = true, updatedAt = timestamp)
+    )
+
 
     @Volatile
     private var instance: AppDatabase? = null
@@ -226,7 +288,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")
@@ -328,9 +390,21 @@ object DatabaseFactory {
                     isDeleted = user.isDeleted,
                     avatarType = user.avatarType,
                     avatarEmoji = user.avatarEmoji,
-                    avatarColor = user.avatarColor
+                    avatarColor = user.avatarColor,
+                    requirePinOnKiosk = user.requirePinOnKiosk
                 )
             }
+        }
+
+        // Seed default Veggie Unit Types if none exist (e.g. fresh v18 database install)
+        try {
+            val veggieDao = db.veggieOrderDao()
+            if (veggieDao.getAllUnitTypes().isEmpty()) {
+                veggieDao.insertOrUpdateUnitTypes(defaultVeggieUnitTypes())
+                AppLogger.info(TAG, "Seeded default Veggie Unit Types (kg, Unit, Pack, Bunch).")
+            }
+        } catch (e: Exception) {
+            AppLogger.warn(TAG, "Failed to seed default Veggie Unit Types: ${e.message}", e)
         }
 
         // Seed a default automated local backup routine if no routines currently exist

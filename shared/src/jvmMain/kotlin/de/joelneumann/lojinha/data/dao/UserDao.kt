@@ -43,7 +43,8 @@ interface UserDao {
             isDeleted = :isDeleted, 
             avatarType = :avatarType, 
             avatarEmoji = :avatarEmoji, 
-            avatarColor = :avatarColor 
+            avatarColor = :avatarColor,
+            requirePinOnKiosk = :requirePinOnKiosk
         WHERE id = :id
     """)
     suspend fun updateUserProfile(
@@ -58,7 +59,8 @@ interface UserDao {
         isDeleted: Boolean,
         avatarType: String,
         avatarEmoji: String,
-        avatarColor: String
+        avatarColor: String,
+        requirePinOnKiosk: Boolean = true
     )
 
     @Query("DELETE FROM billing_list_users WHERE userId = :id")
