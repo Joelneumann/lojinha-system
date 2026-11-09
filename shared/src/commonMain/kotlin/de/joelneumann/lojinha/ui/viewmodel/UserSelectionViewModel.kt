@@ -25,13 +25,14 @@ data class ScannedProductInfo(
 class UserSelectionViewModel(
     private val userRepository: UserRepository,
     private val productRepository: ProductRepository? = null,
-    coroutineScope: CoroutineScope? = null
+    coroutineScope: CoroutineScope? = null,
+    val isNetworkPortal: Boolean = false
 ) : ViewModel() {
 
     constructor(
         userRepository: UserRepository,
         coroutineScope: CoroutineScope? = null
-    ) : this(userRepository, null, coroutineScope)
+    ) : this(userRepository, null, coroutineScope, false)
 
     private val activeScope = coroutineScope ?: viewModelScope
 
@@ -49,6 +50,9 @@ class UserSelectionViewModel(
 
     private val _selectedUserForPin = MutableStateFlow<User?>(null)
     val selectedUserForPin: StateFlow<User?> = _selectedUserForPin.asStateFlow()
+
+    private val _pinRequiredNoticeUser = MutableStateFlow<User?>(null)
+    val pinRequiredNoticeUser: StateFlow<User?> = _pinRequiredNoticeUser.asStateFlow()
 
     private val _pinInput = MutableStateFlow("")
     val pinInput: StateFlow<String> = _pinInput.asStateFlow()
@@ -90,11 +94,16 @@ class UserSelectionViewModel(
         dismissFeedback()
         _searchQuery.value = ""
         _selectedUserForPin.value = null
+        _pinRequiredNoticeUser.value = null
         _pinInput.value = ""
         _pinError.value = null
         _showAdminAuthDialog.value = false
         _adminPasswordInput.value = ""
         _adminPasswordError.value = null
+    }
+
+    fun dismissPinRequiredNotice() {
+        _pinRequiredNoticeUser.value = null
     }
 
     fun updateSearchQuery(query: String) {
@@ -181,14 +190,25 @@ class UserSelectionViewModel(
     fun onUserCardClicked(user: User, onLoginSuccess: (User) -> Unit) {
         if (isLoggingIn) return
         dismissFeedback()
-        if (user.pin.isNullOrBlank()) {
-            isLoggingIn = true
-            _searchQuery.value = ""
-            onLoginSuccess(user)
+        _pinRequiredNoticeUser.value = null
+        if (isNetworkPortal) {
+            if (user.pin.isNullOrBlank()) {
+                _pinRequiredNoticeUser.value = user
+            } else {
+                _selectedUserForPin.value = user
+                _pinInput.value = ""
+                _pinError.value = null
+            }
         } else {
-            _selectedUserForPin.value = user
-            _pinInput.value = ""
-            _pinError.value = null
+            if (user.pin.isNullOrBlank() || !user.requirePinOnKiosk) {
+                isLoggingIn = true
+                _searchQuery.value = ""
+                onLoginSuccess(user)
+            } else {
+                _selectedUserForPin.value = user
+                _pinInput.value = ""
+                _pinError.value = null
+            }
         }
     }
 

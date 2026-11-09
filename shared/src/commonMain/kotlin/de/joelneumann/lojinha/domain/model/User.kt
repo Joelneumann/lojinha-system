@@ -17,6 +17,7 @@ data class User(
     val language: Language = Language.DE,
     val secondaryCurrency: SecondaryCurrency = SecondaryCurrency.NONE,
     val pin: String? = null,
+    val requirePinOnKiosk: Boolean = true,
     val userBarcode: String? = null,
     val userBarcodeNumber: String? = null,
     val isActive: Boolean = true,
