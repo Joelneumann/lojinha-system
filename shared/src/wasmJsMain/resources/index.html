@@ -73,7 +73,13 @@
                 }
             }
 
-            if (!supportsWasmGC()) {
+            if (supportsWasmGC()) {
+                var s = document.createElement('script');
+                s.type = 'application/javascript';
+                s.src = 'lojinha.js';
+                s.defer = true;
+                document.head.appendChild(s);
+            } else {
                 window.addEventListener('DOMContentLoaded', function() {
                     var container = document.querySelector('.loading-container');
                     if (container) {
@@ -88,7 +94,6 @@
             }
         })();
     </script>
-    <script type="application/javascript" src="lojinha.js" defer></script>
 </head>
 <body>
     <div class="loading-container">

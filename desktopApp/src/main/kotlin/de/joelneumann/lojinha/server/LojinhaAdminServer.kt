@@ -64,11 +64,10 @@ class LojinhaAdminServer(
         name.endsWith(".css") || name.endsWith(".map") || name.endsWith(".json") ||
         name.endsWith(".svg")
 
-    // Only content-hashed wasm chunks and generated compose resources are safe for 1-year immutable caching.
-    // Unhashed files (lojinha.js, index.html, favicons) must use no-cache with ETag validation so updates take effect immediately.
+    // Only content-hashed wasm chunks are safe for 1-year immutable caching.
+    // Unhashed files (lojinha.js, composeResources/*, index.html, favicons) must use no-cache with ETag validation so updates take effect immediately.
     private fun isImmutableAsset(name: String): Boolean =
-        (name.endsWith(".wasm") && !name.startsWith("lojinha")) ||
-        name.startsWith("composeResources/")
+        name.endsWith(".wasm") && !name.startsWith("lojinha")
 
     private fun gzipBytes(data: ByteArray): ByteArray {
         val bos = ByteArrayOutputStream(data.size / 2)
@@ -80,6 +79,11 @@ class LojinhaAdminServer(
 
     private fun getOrLoadAsset(assetName: String): CachedAsset? {
         val cached = staticAssetCache[assetName]
+        // Fast-path: Classpath assets (JAR) are immutable in memory; avoid filesystem stat calls
+        if (cached != null && cached.lastModified == 0L) {
+            return cached
+        }
+
         val file = findWasmAsset(assetName)
         if (file != null && file.exists() && !file.isDirectory) {
             val fileModified = file.lastModified()
@@ -574,7 +578,10 @@ class LojinhaAdminServer(
                 }
 
                 // 3. Serve static Wasm assets with HTTP Caching and Gzip Compression
-                suspend fun io.ktor.server.application.ApplicationCall.respondWasmAsset(assetName: String) {
+                suspend fun io.ktor.server.application.ApplicationCall.respondWasmAsset(
+                    assetName: String,
+                    preloadedAsset: CachedAsset? = null
+                ) {
                     val contentType = getContentTypeForName(assetName)
                     val compressible = isCompressible(assetName)
                     val acceptEncoding = request.headers[HttpHeaders.AcceptEncoding] ?: ""
@@ -592,7 +599,7 @@ class LojinhaAdminServer(
                         response.header(HttpHeaders.CacheControl, "no-cache, must-revalidate")
                     }
 
-                    val asset = getOrLoadAsset(assetName)
+                    val asset = preloadedAsset ?: getOrLoadAsset(assetName)
                     if (asset == null) {
                         if (assetName == "index.html") {
                             respond(HttpStatusCode.NotFound, "Admin web interface assets not found.")
@@ -604,11 +611,15 @@ class LojinhaAdminServer(
 
                     response.header(HttpHeaders.ETag, asset.etag)
 
-                    // Conditional request validation (304 Not Modified)
+                    // RFC 9110 conditional request validation (weak comparison allows stripped W/ and quotes, comma-separated, wildcard)
                     val clientIfNoneMatch = request.headers[HttpHeaders.IfNoneMatch]
-                    if (clientIfNoneMatch != null && (clientIfNoneMatch == asset.etag || clientIfNoneMatch == "*" || clientIfNoneMatch.contains(asset.etag))) {
-                        respond(HttpStatusCode.NotModified)
-                        return
+                    if (clientIfNoneMatch != null) {
+                        val opaqueEtag = asset.etag.removePrefix("W/").trim('"')
+                        val clientTags = clientIfNoneMatch.split(',').map { it.trim().removePrefix("W/").trim('"') }
+                        if (clientIfNoneMatch.trim() == "*" || clientTags.any { it == opaqueEtag }) {
+                            respond(HttpStatusCode.NotModified)
+                            return
+                        }
                     }
 
                     if (clientAcceptsGzip && asset.gzippedBytes != null) {
@@ -639,11 +650,9 @@ class LojinhaAdminServer(
                         return@get
                     }
 
-                    val file = findWasmAsset(filename)
-                    val resourceBytes = if (filename.isNotBlank()) loadWasmResourceBytes(filename) else null
-
-                    if (file != null || resourceBytes != null) {
-                        call.respondWasmAsset(filename)
+                    val asset = getOrLoadAsset(filename)
+                    if (asset != null) {
+                        call.respondWasmAsset(filename, asset)
                     } else {
                         // Only fallback to index.html for root or clean single-segment SPA routes
                         val isSpaRoute = !filename.contains(".")
@@ -732,9 +741,13 @@ class LojinhaAdminServer(
     private fun loadWasmResourceBytes(name: String): ByteArray? {
         val clean = name.trim('/')
         if (clean.isBlank()) return null
-        val stream = LojinhaAdminServer::class.java.getResourceAsStream("/wasm/$clean")
-            ?: Thread.currentThread().contextClassLoader.getResourceAsStream("wasm/$clean")
-        return stream?.use { it.readBytes() }
+        return try {
+            val stream = LojinhaAdminServer::class.java.getResourceAsStream("/wasm/$clean")
+                ?: Thread.currentThread().contextClassLoader.getResourceAsStream("wasm/$clean")
+            stream?.use { it.readBytes() }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun findWasmAsset(name: String): File? {

@@ -423,7 +423,7 @@ class LojinhaAdminServerTest {
         assertNotNull(htmlEtag)
         assertTrue(htmlEtag.startsWith("W/\""), "ETag should be weak ETag")
 
-        // Verify conditional request returns 304 Not Modified
+        // Verify conditional request returns 304 Not Modified (weak match, exact)
         val conditionalHtmlReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/index.html"))
             .header("If-None-Match", htmlEtag)
@@ -432,6 +432,34 @@ class LojinhaAdminServerTest {
         val conditionalHtmlRes = client.send(conditionalHtmlReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(304, conditionalHtmlRes.statusCode())
         assertEquals("Accept-Encoding", conditionalHtmlRes.headers().firstValue("Vary").orElse(null))
+
+        // RFC 9110 weak comparison: Normalized strong format from client (stripped W/) must match weak server ETag
+        val strongHtmlEtag = htmlEtag.removePrefix("W/")
+        val conditionalStrongReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/index.html"))
+            .header("If-None-Match", strongHtmlEtag)
+            .GET()
+            .build()
+        val conditionalStrongRes = client.send(conditionalStrongReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(304, conditionalStrongRes.statusCode(), "Client sending strong opaque ETag should match weak ETag with 304")
+
+        // RFC 9110: Comma-separated If-None-Match header must match if any tag matches
+        val commaSeparatedReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/index.html"))
+            .header("If-None-Match", "\"unrelated-tag-123\", $htmlEtag")
+            .GET()
+            .build()
+        val commaSeparatedRes = client.send(commaSeparatedReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(304, commaSeparatedRes.statusCode(), "Comma-separated If-None-Match should match with 304")
+
+        // RFC 9110: Wildcard * matches any existing representation
+        val wildcardReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/index.html"))
+            .header("If-None-Match", "*")
+            .GET()
+            .build()
+        val wildcardRes = client.send(wildcardReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(304, wildcardRes.statusCode(), "Wildcard If-None-Match should match with 304")
 
         // 2. GET /lojinha.js - MUST NOT be immutable (must be no-cache with ETag for safe updates)
         val jsReq = HttpRequest.newBuilder()
