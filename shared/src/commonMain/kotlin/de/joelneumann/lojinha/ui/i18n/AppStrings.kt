@@ -792,6 +792,10 @@ interface AppStrings {
     val addUnitTypeBtn: String
     val unitTypeNameLabel: String
     val unitTypeNamePlaceholder: String
+    val allUnitsFilter: String
+    val filterByUnit: String
+    val confirmDeleteUnitTypeTitle: String
+    fun confirmDeleteUnitTypeMsg(name: String): String
     val allowDecimalsLabel: String
     val unitIntegerOnly: String
     val unitAllowDecimals: String

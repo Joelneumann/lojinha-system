@@ -38,7 +38,7 @@ fun AdminLabeledField(
 ) {
     if (!selectAllOnFocus) {
         Column(modifier = modifier) {
-            Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+            Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy, maxLines = 1)
             Spacer(modifier = Modifier.height(4.dp))
             OutlinedTextField(
                 value = value,
@@ -82,7 +82,7 @@ fun AdminLabeledField(
         }
 
         Column(modifier = modifier) {
-            Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+            Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy, maxLines = 1)
             Spacer(modifier = Modifier.height(4.dp))
             OutlinedTextField(
                 value = textFieldValue,

@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.ui.components.admin.veggie
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,9 +15,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.VeggieProduct
 import de.joelneumann.lojinha.domain.model.VeggieUnitType
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
+import de.joelneumann.lojinha.ui.components.admin.AdminCountPill
 import de.joelneumann.lojinha.ui.components.admin.AdminExpandableSection
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
@@ -25,10 +28,10 @@ import de.joelneumann.lojinha.ui.components.veggie.VeggieProductImage
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
-import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 
 @Composable
 fun AdminVeggieCatalogSection(
@@ -50,79 +53,197 @@ fun AdminVeggieCatalogSection(
     var editingProduct by remember { mutableStateOf<VeggieProduct?>(null) }
     var showUnitsDialog by remember { mutableStateOf(false) }
     var productToDelete by remember { mutableStateOf<VeggieProduct?>(null) }
+    var productToToggleActive by remember { mutableStateOf<VeggieProduct?>(null) }
+    var selectedSortOption by remember { mutableStateOf(VeggieSortOption.NAME_ASC) }
+    var selectedUnitFilterId by remember { mutableStateOf<String?>(null) }
 
-    val filteredProducts = remember(products, searchQuery) {
-        val nonDeleted = products.filter { !it.isDeleted }
-        val matching = if (searchQuery.isBlank()) nonDeleted
-        else nonDeleted.filter {
-            it.name.containsIgnoreAccents(searchQuery.trim()) ||
-                    (it.description?.containsIgnoreAccents(searchQuery.trim()) == true)
+    val nonDeleted = remember(products) { products.filter { !it.isDeleted } }
+
+    val filteredActiveProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption) {
+        var list = nonDeleted.filter { it.isActive }
+        if (selectedUnitFilterId != null) {
+            list = list.filter { it.unitTypeId == selectedUnitFilterId }
         }
-        matching.sortedByAccentInsensitive { it.name }
+        if (searchQuery.isNotBlank()) {
+            val q = searchQuery.trim()
+            list = list.filter {
+                it.name.containsIgnoreAccents(q) || (it.description?.containsIgnoreAccents(q) == true)
+            }
+        }
+        list.sortWithOption(selectedSortOption)
     }
 
-    val activeProducts = remember(filteredProducts) { filteredProducts.filter { it.isActive } }
-    val disabledProducts = remember(filteredProducts) { filteredProducts.filter { !it.isActive } }
+    val filteredDisabledProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption) {
+        var list = nonDeleted.filter { !it.isActive }
+        if (selectedUnitFilterId != null) {
+            list = list.filter { it.unitTypeId == selectedUnitFilterId }
+        }
+        if (searchQuery.isNotBlank()) {
+            val q = searchQuery.trim()
+            list = list.filter {
+                it.name.containsIgnoreAccents(q) || (it.description?.containsIgnoreAccents(q) == true)
+            }
+        }
+        list.sortWithOption(selectedSortOption)
+    }
+
+    val totalActiveNonDeleted = remember(nonDeleted) { nonDeleted.count { it.isActive } }
+    val countText = remember(searchQuery, selectedUnitFilterId, filteredActiveProducts.size, totalActiveNonDeleted) {
+        if (searchQuery.isBlank() && selectedUnitFilterId == null) {
+            strings.productsCountText(totalActiveNonDeleted)
+        } else {
+            strings.productsCountText(filteredActiveProducts.size, totalActiveNonDeleted)
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Top Action Bar
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SearchInputField(
-                query = searchQuery,
-                onQueryChange = onSearchQueryChange,
-                placeholder = strings.searchVeggieProductsPlaceholder,
-                modifier = Modifier.weight(1f)
-            )
+        // Top Action Bar matching Product tab style and 56dp height
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val isNarrow = maxWidth < 920.dp
 
-            OutlinedButton(
-                onClick = { showUnitsDialog = true },
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.height(48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Tune,
-                    contentDescription = null,
-                    tint = PrimaryNavy,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(strings.manageUnitTypesBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-            }
-
-            Button(
-                onClick = {
-                    val defaultUnitId = unitTypes.firstOrNull { it.isActive }?.id ?: "unit_kg"
-                    editingProduct = VeggieProduct(
-                        id = generateUuid(),
-                        name = "",
-                        description = null,
-                        estimatedPriceCents = null,
-                        unitTypeId = defaultUnitId,
-                        imageFileName = null,
-                        isActive = true,
-                        isDeleted = false,
-                        updatedAt = currentTimeMillis()
+            if (isNarrow) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SearchInputField(
+                        query = searchQuery,
+                        onQueryChange = onSearchQueryChange,
+                        placeholder = strings.searchVeggieProductsPlaceholder,
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
                     )
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.height(48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    tint = SurfaceWhite,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(strings.addVeggieProduct, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AdminCountPill(
+                            text = countText,
+                            modifier = Modifier.fillMaxHeight()
+                        )
+                        VeggieSortButton(
+                            selectedOption = selectedSortOption,
+                            onOptionSelected = { selectedSortOption = it },
+                            modifier = Modifier.fillMaxHeight()
+                        )
+                        VeggieUnitFilterButton(
+                            selectedUnitId = selectedUnitFilterId,
+                            unitTypes = unitTypes,
+                            onUnitSelected = { selectedUnitFilterId = it },
+                            modifier = Modifier.fillMaxHeight()
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Button(
+                            onClick = { showUnitsDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.fillMaxHeight()
+                        ) {
+                            Icon(Icons.Default.Tune, contentDescription = null, tint = SurfaceWhite, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(strings.manageUnitTypesBtn, fontWeight = FontWeight.Bold, color = SurfaceWhite, fontSize = 13.sp, maxLines = 1)
+                        }
+                        Button(
+                            onClick = {
+                                val defaultUnitId = unitTypes.firstOrNull { it.isActive }?.id ?: "unit_kg"
+                                editingProduct = VeggieProduct(
+                                    id = generateUuid(),
+                                    name = "",
+                                    description = null,
+                                    estimatedPriceCents = null,
+                                    unitTypeId = defaultUnitId,
+                                    imageFileName = null,
+                                    isActive = true,
+                                    isDeleted = false,
+                                    updatedAt = currentTimeMillis()
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier.fillMaxHeight()
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = SurfaceWhite, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(strings.addVeggieProduct, fontWeight = FontWeight.Bold, color = SurfaceWhite, fontSize = 13.sp, maxLines = 1)
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        SearchInputField(
+                            query = searchQuery,
+                            onQueryChange = onSearchQueryChange,
+                            placeholder = strings.searchVeggieProductsPlaceholder,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    AdminCountPill(
+                        text = countText,
+                        modifier = Modifier.fillMaxHeight()
+                    )
+
+                    VeggieSortButton(
+                        selectedOption = selectedSortOption,
+                        onOptionSelected = { selectedSortOption = it },
+                        modifier = Modifier.fillMaxHeight()
+                    )
+
+                    VeggieUnitFilterButton(
+                        selectedUnitId = selectedUnitFilterId,
+                        unitTypes = unitTypes,
+                        onUnitSelected = { selectedUnitFilterId = it },
+                        modifier = Modifier.fillMaxHeight()
+                    )
+
+                    Button(
+                        onClick = { showUnitsDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                        modifier = Modifier.fillMaxHeight()
+                    ) {
+                        Icon(Icons.Default.Tune, contentDescription = null, tint = SurfaceWhite, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(strings.manageUnitTypesBtn, fontWeight = FontWeight.Bold, color = SurfaceWhite, fontSize = 13.sp, maxLines = 1)
+                    }
+
+                    Button(
+                        onClick = {
+                            val defaultUnitId = unitTypes.firstOrNull { it.isActive }?.id ?: "unit_kg"
+                            editingProduct = VeggieProduct(
+                                id = generateUuid(),
+                                name = "",
+                                description = null,
+                                estimatedPriceCents = null,
+                                unitTypeId = defaultUnitId,
+                                imageFileName = null,
+                                isActive = true,
+                                isDeleted = false,
+                                updatedAt = currentTimeMillis()
+                            )
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxHeight()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = SurfaceWhite, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(strings.addVeggieProduct, fontWeight = FontWeight.Bold, color = SurfaceWhite, fontSize = 13.sp, maxLines = 1)
+                    }
+                }
             }
         }
 
@@ -131,7 +252,7 @@ fun AdminVeggieCatalogSection(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            if (activeProducts.isEmpty() && disabledProducts.isEmpty()) {
+            if (filteredActiveProducts.isEmpty() && filteredDisabledProducts.isEmpty()) {
                 item(key = "empty-veggie-catalog") {
                     Box(
                         modifier = Modifier
@@ -144,31 +265,31 @@ fun AdminVeggieCatalogSection(
                 }
             }
 
-            items(activeProducts, key = { it.id }) { product ->
+            items(filteredActiveProducts, key = { it.id }) { product ->
                 VeggieCatalogProductRow(
                     product = product,
                     unitType = unitMap[product.unitTypeId],
                     onEdit = { editingProduct = product },
-                    onToggleActive = { onToggleProductActive(product) },
+                    onToggleActive = { productToToggleActive = product },
                     onDelete = { productToDelete = product }
                 )
             }
 
-            if (disabledProducts.isNotEmpty()) {
+            if (filteredDisabledProducts.isNotEmpty()) {
                 item(key = "disabled-veggie-section") {
                     AdminExpandableSection(
                         title = strings.disabledVeggieProductsSection,
-                        countText = disabledProducts.size.toString(),
+                        countText = filteredDisabledProducts.size.toString(),
                         accentColor = ColorDangerCrimson,
                         showLabel = strings.showDisabledProducts,
                         hideLabel = strings.hideDisabledProducts
                     ) {
-                        disabledProducts.forEach { product ->
+                        filteredDisabledProducts.forEach { product ->
                             VeggieCatalogProductRow(
                                 product = product,
                                 unitType = unitMap[product.unitTypeId],
                                 onEdit = { editingProduct = product },
-                                onToggleActive = { onToggleProductActive(product) },
+                                onToggleActive = { productToToggleActive = product },
                                 onDelete = { productToDelete = product }
                             )
                         }
@@ -183,7 +304,6 @@ fun AdminVeggieCatalogSection(
             product = editingProduct!!,
             unitTypes = unitTypes,
             isSaving = isSavingProduct,
-            onManageUnitsClick = { showUnitsDialog = true },
             onSave = { updated, newBytes, removeImg ->
                 onSaveProduct(updated, newBytes, removeImg)
                 editingProduct = null
@@ -199,6 +319,58 @@ fun AdminVeggieCatalogSection(
             onSaveUnitType = onSaveUnitType,
             onDeleteUnitType = onDeleteUnitType,
             onDismiss = { showUnitsDialog = false }
+        )
+    }
+
+    if (productToToggleActive != null) {
+        val target = productToToggleActive!!
+        val isCurrentlyActive = target.isActive
+        val dismissDialog = { productToToggleActive = null }
+        val confirmToggle = {
+            onToggleProductActive(target)
+            productToToggleActive = null
+        }
+
+        AlertDialog(
+            onDismissRequest = dismissDialog,
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmToggle),
+            title = {
+                Text(
+                    text = strings.confirmProductStatusChangeTitle,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy
+                )
+            },
+            text = {
+                Text(
+                    text = strings.confirmProductStatusChangeMsg(isCurrentlyActive, target.name),
+                    color = PrimaryNavy
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = confirmToggle,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isCurrentlyActive) ColorWarningAmber else ColorSuccessEmerald
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = if (isCurrentlyActive) strings.disable else strings.enable,
+                        color = SurfaceWhite,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = dismissDialog,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(strings.cancel)
+                }
+            }
         )
     }
 

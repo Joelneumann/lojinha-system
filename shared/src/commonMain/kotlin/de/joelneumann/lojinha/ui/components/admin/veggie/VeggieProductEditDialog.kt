@@ -35,7 +35,6 @@ fun VeggieProductEditDialog(
     product: VeggieProduct,
     unitTypes: List<VeggieUnitType>,
     isSaving: Boolean = false,
-    onManageUnitsClick: (() -> Unit)? = null,
     onSave: (product: VeggieProduct, newImageBytes: ByteArray?, removeExistingImage: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -243,7 +242,8 @@ fun VeggieProductEditDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
                     AdminLabeledField(
                         label = strings.veggieProductNameLabel,
@@ -274,28 +274,12 @@ fun VeggieProductEditDialog(
 
                 // Unit Type Selector
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = strings.veggieUnitTypeLabel,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = PrimaryNavy
-                        )
-                        if (onManageUnitsClick != null) {
-                            TextButton(
-                                onClick = onManageUnitsClick,
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
-                            ) {
-                                Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp), tint = AccentNavy)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(strings.manageUnitTypesBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy)
-                            }
-                        }
-                    }
+                    Text(
+                        text = strings.veggieUnitTypeLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy
+                    )
 
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
@@ -314,7 +298,7 @@ fun VeggieProductEditDialog(
                                 border = BorderStroke(1.dp, if (isSelected) AccentNavy else DividerBorder)
                             ) {
                                 Text(
-                                    text = "${unit.name} (${if (unit.allowDecimals) "0.00" else "1"})",
+                                    text = unit.name,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )

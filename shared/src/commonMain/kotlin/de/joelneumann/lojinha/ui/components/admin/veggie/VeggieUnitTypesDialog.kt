@@ -22,6 +22,7 @@ import de.joelneumann.lojinha.domain.model.VeggieUnitType
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
@@ -43,6 +44,7 @@ fun VeggieUnitTypesDialog(
     var editingUnit by remember { mutableStateOf<VeggieUnitType?>(null) }
     var unitNameInput by remember { mutableStateOf("") }
     var allowDecimalsInput by remember { mutableStateOf(false) }
+    var unitToDelete by remember { mutableStateOf<VeggieUnitType?>(null) }
 
     val canAddOrSave = unitNameInput.trim().isNotBlank() &&
             activeUnits.none { it.id != editingUnit?.id && it.name.equals(unitNameInput.trim(), ignoreCase = true) }
@@ -247,7 +249,7 @@ fun VeggieUnitTypesDialog(
                                     IconButton(
                                         onClick = {
                                             if (!isUsed) {
-                                                onDeleteUnitType(unit.id)
+                                                unitToDelete = unit
                                             }
                                         },
                                         enabled = !isUsed,
@@ -281,6 +283,22 @@ fun VeggieUnitTypesDialog(
                     }
                 }
             }
+        }
+
+        if (unitToDelete != null) {
+            val target = unitToDelete!!
+            ConfirmationDialog(
+                title = strings.confirmDeleteUnitTypeTitle,
+                message = strings.confirmDeleteUnitTypeMsg(target.name),
+                confirmText = strings.delete,
+                cancelText = strings.cancel,
+                confirmButtonColor = ColorDangerCrimson,
+                onConfirm = {
+                    onDeleteUnitType(target.id)
+                    unitToDelete = null
+                },
+                onDismiss = { unitToDelete = null }
+            )
         }
     }
 }
