@@ -32,6 +32,7 @@ val DividerBorder = Color(0xFFE2E8F0)
 val ColorSuccessEmerald = Color(0xFF059669)
 val ColorDangerCrimson = Color(0xFFDC2626)
 val ColorWarningAmber = Color(0xFFD97706)
+val ColorStarYellow = Color(0xFFEAB308)
 
 private val LightColorScheme = lightColorScheme(
     primary = PrimaryNavy,

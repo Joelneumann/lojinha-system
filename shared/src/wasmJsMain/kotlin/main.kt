@@ -134,7 +134,11 @@ fun main() {
                                         onSaveOrder = { roundId, quantities ->
                                             customerNetworkClient.saveCustomerOrder(roundId, quantities)
                                         },
-                                        onFetchHistory = { customerNetworkClient.getVeggieHistory() }
+                                        onFetchHistory = { customerNetworkClient.getVeggieHistory() },
+                                        initialFavoriteProductIds = loadUserFavorites(activeCustomer.id),
+                                        onFavoritesChanged = { favorites ->
+                                            saveUserFavorites(activeCustomer.id, favorites)
+                                        }
                                     )
                                 }
                                 val historyViewModel = remember(activeCustomer.id) {
@@ -296,3 +300,42 @@ fun main() {
 }
 """)
 private external fun jsTriggerDownload(url: String)
+
+@JsFun("""
+(key, value) => {
+    try {
+        window.localStorage.setItem(key, value);
+    } catch (e) {
+        console.warn('Failed to set localStorage item:', e);
+    }
+}
+""")
+private external fun jsSetLocalItem(key: String, value: String)
+
+@JsFun("""
+(key) => {
+    try {
+        return window.localStorage.getItem(key);
+    } catch (e) {
+        console.warn('Failed to get localStorage item:', e);
+        return null;
+    }
+}
+""")
+private external fun jsGetLocalItem(key: String): String?
+
+private fun loadUserFavorites(userId: String): Set<String> {
+    return try {
+        val raw = jsGetLocalItem("lojinha_veggie_favorites_$userId") ?: return emptySet()
+        raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    } catch (_: Exception) {
+        emptySet()
+    }
+}
+
+private fun saveUserFavorites(userId: String, favorites: Set<String>) {
+    try {
+        jsSetLocalItem("lojinha_veggie_favorites_$userId", favorites.joinToString(","))
+    } catch (_: Exception) {}
+}
+

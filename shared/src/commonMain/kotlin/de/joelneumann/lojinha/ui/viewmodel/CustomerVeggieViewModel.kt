@@ -19,6 +19,8 @@ class CustomerVeggieViewModel(
     private val onFetchVeggieState: suspend () -> CustomerVeggieStateResponse,
     private val onSaveOrder: suspend (roundId: String, quantitiesScaled: Map<String, Long>) -> Boolean,
     private val onFetchHistory: suspend () -> List<CustomerVeggieRoundHistoryItem>,
+    initialFavoriteProductIds: Set<String> = emptySet(),
+    private val onFavoritesChanged: ((Set<String>) -> Unit)? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
 
@@ -41,6 +43,12 @@ class CustomerVeggieViewModel(
 
     private val _previousRoundQuantitiesScaled = MutableStateFlow<Map<String, Long>>(emptyMap())
     val previousRoundQuantitiesScaled: StateFlow<Map<String, Long>> = _previousRoundQuantitiesScaled.asStateFlow()
+
+    private val _favoriteProductIds = MutableStateFlow<Set<String>>(initialFavoriteProductIds)
+    val favoriteProductIds: StateFlow<Set<String>> = _favoriteProductIds.asStateFlow()
+
+    private val _filterFavoritesOnly = MutableStateFlow(false)
+    val filterFavoritesOnly: StateFlow<Boolean> = _filterFavoritesOnly.asStateFlow()
 
     private val _productSearchQuery = MutableStateFlow("")
     val productSearchQuery: StateFlow<String> = _productSearchQuery.asStateFlow()
@@ -110,6 +118,34 @@ class CustomerVeggieViewModel(
 
     fun updateProductSearchQuery(query: String) {
         _productSearchQuery.value = query
+    }
+
+    fun toggleFavorite(productId: String) {
+        val current = _favoriteProductIds.value
+        val updated = if (productId in current) {
+            current - productId
+        } else {
+            current + productId
+        }
+        _favoriteProductIds.value = updated
+        onFavoritesChanged?.invoke(updated)
+    }
+
+    fun isFavorite(productId: String): Boolean {
+        return productId in _favoriteProductIds.value
+    }
+
+    fun toggleFilterFavoritesOnly() {
+        _filterFavoritesOnly.value = !_filterFavoritesOnly.value
+    }
+
+    fun setFilterFavoritesOnly(enabled: Boolean) {
+        _filterFavoritesOnly.value = enabled
+    }
+
+    fun setFavoriteProductIds(ids: Set<String>) {
+        _favoriteProductIds.value = ids
+        onFavoritesChanged?.invoke(ids)
     }
 
     fun updateHistorySearchQuery(query: String) {

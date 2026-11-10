@@ -875,6 +875,11 @@ object PortugueseStrings : AppStrings {
     override val veggiePricelessItemsNotice = "* Alguns itens ainda não têm preço estimado; o total final será maior."
     override fun addedOrderBadge(qty: String, unit: String): String = "Adicionado $qty $unit"
     override val btnFillFromLastWeek = "Repetir da semana passada"
+    override val filterFavoritesTooltip = "Filtrar por favoritos"
+    override val filterFavoritesActiveTooltip = "Mostrando apenas favoritos (clique para ver todos)"
+    override val markFavoriteTooltip = "Marcar como favorito"
+    override val unmarkFavoriteTooltip = "Remover dos favoritos"
+    override val noFavoriteProductsFound = "Nenhum produto favorito encontrado"
 }
 
 

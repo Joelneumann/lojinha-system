@@ -855,6 +855,11 @@ interface AppStrings {
     val veggiePricelessItemsNotice: String
     fun addedOrderBadge(qty: String, unit: String): String
     val btnFillFromLastWeek: String
+    val filterFavoritesTooltip: String
+    val filterFavoritesActiveTooltip: String
+    val markFavoriteTooltip: String
+    val unmarkFavoriteTooltip: String
+    val noFavoriteProductsFound: String
 }
 
 

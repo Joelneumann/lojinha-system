@@ -371,9 +371,13 @@ internal fun filterVeggieAmountInput(input: String, allowDecimals: Boolean): Str
             } else {
                 result.append(char)
             }
-        } else if ((char == '.' || char == ',') && !hasSeparator) {
-            hasSeparator = true
-            result.append(char)
+        } else if (char == '.' || char == ',') {
+            if (!hasSeparator) {
+                hasSeparator = true
+                result.append(char)
+            } else {
+                break
+            }
         }
     }
     return result.toString()
