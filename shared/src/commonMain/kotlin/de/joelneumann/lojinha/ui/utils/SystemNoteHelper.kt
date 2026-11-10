@@ -57,6 +57,11 @@ object SystemNoteHelper {
             }
             "ADMIN_DEPOSIT" -> strings.depositViaAdmin
             "ADMIN_DEBIT" -> strings.debitViaAdmin
+            "STOCK_ZERO" -> {
+                val product = parts.getOrNull(2)?.trim()?.ifBlank { "?" } ?: "?"
+                val customer = parts.getOrNull(3)?.trim()?.ifBlank { "?" } ?: "?"
+                strings.sysNoteStockZero(customer = customer, product = product)
+            }
             else -> note // fallback if code not recognized
         }
     }

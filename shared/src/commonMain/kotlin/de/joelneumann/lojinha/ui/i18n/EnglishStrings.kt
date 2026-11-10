@@ -242,9 +242,11 @@ object EnglishStrings : AppStrings {
         "Are you sure you want to completely storno this purchase for user $user?\n\n• Account Balance Refund: $refundAmount\n• Inventory: All remaining items ($itemCount products) will be restored to stock."
 
     // System Notes
+    override val systemLabel = "System"
     override fun sysNoteCompleteStorno(date: String, amount: String) = "Complete Storno of Purchase ($date - $amount)"
     override fun sysNotePartialStorno(date: String, amount: String) = "Item quantity correction for Purchase ($date - Original $amount)"
     override fun sysNoteNonPurchaseStorno(type: String, date: String, amount: String) = "Storno of $type ($date - $amount)"
+    override fun sysNoteStockZero(customer: String, product: String) = "$customer bought the last item of $product"
 
     override fun originalOrderTotalLabel(amount: String) = "Original Order Total: $amount"
     override fun newOrderTotalLabel(amount: String) = "New Order Total: $amount"
