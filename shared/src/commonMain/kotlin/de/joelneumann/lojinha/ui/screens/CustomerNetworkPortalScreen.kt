@@ -33,6 +33,7 @@ import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
 import de.joelneumann.lojinha.ui.components.general.LogoutButton
+import de.joelneumann.lojinha.ui.components.general.PaginationBar
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.components.history.UserBalanceWarningBanner
 import de.joelneumann.lojinha.ui.components.history.UserSettingsModalDialog
@@ -1511,10 +1512,26 @@ private fun CustomerVeggieHistoryTabContent(
     val strings = I18n.current
     val historyItems by veggieViewModel.historyItems.collectAsState()
     val historySearchQuery by veggieViewModel.historySearchQuery.collectAsState()
+    val historyPage by veggieViewModel.historyPage.collectAsState()
+    val historyPageSize by veggieViewModel.historyPageSize.collectAsState()
+    val products by veggieViewModel.products.collectAsState()
+    val productsById = remember(products) { products.associateBy { it.id } }
     val decimalSep = if (currentLanguage == Language.EN) '.' else ','
 
     val filteredHistory = remember(historyItems, historySearchQuery) {
         veggieViewModel.filteredHistoryItems()
+    }
+    val totalCount = filteredHistory.size
+    val totalPages = remember(totalCount, historyPageSize) {
+        if (totalCount == 0) 1 else (totalCount + historyPageSize - 1) / historyPageSize
+    }
+    val safePage = remember(historyPage, totalPages) {
+        historyPage.coerceIn(0, (totalPages - 1).coerceAtLeast(0))
+    }
+    val pagedHistory = remember(filteredHistory, safePage, historyPageSize) {
+        val fromIndex = (safePage * historyPageSize).coerceAtMost(filteredHistory.size)
+        val toIndex = (fromIndex + historyPageSize).coerceAtMost(filteredHistory.size)
+        filteredHistory.subList(fromIndex, toIndex)
     }
 
     Column(
@@ -1542,7 +1559,9 @@ private fun CustomerVeggieHistoryTabContent(
                 shape = RoundedCornerShape(12.dp),
                 color = SurfaceWhite,
                 shadowElevation = 1.dp,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -1561,11 +1580,12 @@ private fun CustomerVeggieHistoryTabContent(
                     .weight(1f)
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                contentPadding = PaddingValues(bottom = 8.dp)
             ) {
-                items(filteredHistory, key = { it.round.id }) { item ->
+                items(pagedHistory, key = { it.round.id }) { item ->
                     CustomerVeggieHistoryRoundCard(
                         item = item,
+                        productsById = productsById,
                         searchQuery = historySearchQuery,
                         currentLanguage = currentLanguage,
                         decimalSeparator = decimalSep,
@@ -1574,12 +1594,24 @@ private fun CustomerVeggieHistoryTabContent(
                 }
             }
         }
+
+        PaginationBar(
+            currentPage = safePage,
+            totalPages = totalPages,
+            pageSize = historyPageSize,
+            totalCount = totalCount,
+            onPageChange = { veggieViewModel.setHistoryPage(it) },
+            onPageSizeChange = { veggieViewModel.setHistoryPageSize(it) },
+            pageSizeOptions = listOf(5, 10, 25),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
 @Composable
 private fun CustomerVeggieHistoryRoundCard(
     item: CustomerVeggieRoundHistoryItem,
+    productsById: Map<String, VeggieProduct>,
     searchQuery: String,
     currentLanguage: Language,
     decimalSeparator: Char,
@@ -1646,7 +1678,7 @@ private fun CustomerVeggieHistoryRoundCard(
                         color = TextSecondaryMuted
                     )
                     Text(
-                        text = Formatting.formatBrl(item.grandTotalCents),
+                        text = (if (!isSettled) "~ " else "") + Formatting.formatBrl(item.grandTotalCents),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
@@ -1672,15 +1704,16 @@ private fun CustomerVeggieHistoryRoundCard(
                     decimalSeparator
                 )
                 val unitPriceCents = entry.effectiveUnitPriceCents
-                val lineTotalCents = entry.finalItemTotalCents ?: if (unitPriceCents != null) {
+                    ?: productsById[entry.veggieProductId]?.estimatedPriceCents
+                val lineTotalCents = entry.finalItemTotalCents ?: if (unitPriceCents != null && unitPriceCents > 0L) {
                     ((deliveredScaled.toDouble() / VEGGIE_QTY_SCALE.toDouble()) * unitPriceCents.toDouble()).roundToLong()
-                } else 0L
+                } else null
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(6.dp))
-                        .background(if (matchesSearch) ColorWarningAmber.copy(alpha = 0.14f) else SurfaceWhite)
+                        .background(if (matchesSearch) ColorStarYellow.copy(alpha = 0.2f) else SurfaceWhite)
                         .padding(vertical = 4.dp, horizontal = if (matchesSearch) 6.dp else 0.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -1697,15 +1730,22 @@ private fun CustomerVeggieHistoryRoundCard(
                         } else {
                             "${strings.colOrderedQty}: $orderedText ${entry.unitNameSnapshot}"
                         }
+                        val priceSuffix = if (unitPriceCents != null && unitPriceCents > 0L) {
+                            "  •  ${if (!isSettled) "~ " else ""}${Formatting.formatBrl(unitPriceCents)} / ${entry.unitNameSnapshot}"
+                        } else ""
                         Text(
-                            text = qtySummary + (if (unitPriceCents != null) "  •  ${Formatting.formatBrl(unitPriceCents)} / ${entry.unitNameSnapshot}" else ""),
+                            text = qtySummary + priceSuffix,
                             fontSize = 12.sp,
                             color = TextSecondaryMuted
                         )
                     }
 
                     Text(
-                        text = Formatting.formatBrl(lineTotalCents),
+                        text = if (lineTotalCents != null) {
+                            "${if (!isSettled) "~ " else ""}${Formatting.formatBrl(lineTotalCents)}"
+                        } else {
+                            strings.veggieEstimatedPriceUnknown
+                        },
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = PrimaryNavy

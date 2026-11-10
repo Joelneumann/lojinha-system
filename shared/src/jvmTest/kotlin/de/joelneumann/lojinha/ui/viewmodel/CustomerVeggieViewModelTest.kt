@@ -129,4 +129,27 @@ class CustomerVeggieViewModelTest {
         assertEquals(setOf("new-1", "new-2"), vm.favoriteProductIds.value)
         assertEquals(setOf("new-1", "new-2"), notified)
     }
+
+    @Test
+    fun testHistoryPaginationAndSearchReset() = runTest {
+        val vm = createViewModel(testScope = this)
+        advanceUntilIdle()
+
+        assertEquals(0, vm.historyPage.value)
+        assertEquals(10, vm.historyPageSize.value)
+
+        vm.setHistoryPage(2)
+        assertEquals(2, vm.historyPage.value)
+
+        vm.setHistoryPageSize(25)
+        assertEquals(25, vm.historyPageSize.value)
+        assertEquals(0, vm.historyPage.value)
+
+        vm.setHistoryPage(3)
+        assertEquals(3, vm.historyPage.value)
+
+        vm.updateHistorySearchQuery("tomato")
+        assertEquals("tomato", vm.historySearchQuery.value)
+        assertEquals(0, vm.historyPage.value)
+    }
 }

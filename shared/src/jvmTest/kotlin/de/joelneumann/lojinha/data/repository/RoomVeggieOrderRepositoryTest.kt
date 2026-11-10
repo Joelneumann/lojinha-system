@@ -365,4 +365,41 @@ class RoomVeggieOrderRepositoryTest {
         assertEquals(15_00L, loaded.defaultVeggieBuyerFeeCents)
         assertEquals(20_00L, loaded.defaultVeggieTransportFeeCents)
     }
+
+    @Test
+    fun testCustomerOrderHistory_calculatesEstimatedPricesForOpenRound() = runTest {
+        veggieRepo.saveVeggieProduct(
+            VeggieProduct(
+                id = "vp-carrot",
+                name = "Carrots",
+                unitTypeId = "unit-kg",
+                estimatedPriceCents = 600L
+            )
+        )
+        userRepo.saveUser(User(id = "u-charlie", name = "Charlie", balance = 50_00L))
+
+        val round = veggieRepo.openNewRound(
+            buyerOperationFeeCents = 200L,
+            transportFeeCents = 300L,
+            openedAt = 1_776_672_000_000L
+        )
+
+        val charlie = userRepo.getUserById("u-charlie")!!
+        veggieRepo.saveCustomerOrder(round.id, charlie, mapOf("vp-carrot" to 2500L))
+
+        val history = veggieRepo.getCustomerOrderHistory("u-charlie")
+        assertEquals(1, history.size)
+        val item = history[0]
+        assertEquals(round.id, item.round.id)
+        assertEquals(VeggieRoundStatus.OPEN, item.round.status)
+        assertEquals(1, item.entries.size)
+
+        val entry = item.entries[0]
+        assertEquals("vp-carrot", entry.veggieProductId)
+        assertEquals(600L, entry.effectiveUnitPriceCents)
+        assertEquals(1500L, entry.finalItemTotalCents)
+        assertEquals(1500L, item.itemsSubtotalCents)
+        assertEquals(500L, item.combinedFeeShareCents)
+        assertEquals(2000L, item.grandTotalCents)
+    }
 }

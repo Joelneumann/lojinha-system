@@ -62,6 +62,12 @@ class CustomerVeggieViewModel(
     private val _historySearchQuery = MutableStateFlow("")
     val historySearchQuery: StateFlow<String> = _historySearchQuery.asStateFlow()
 
+    private val _historyPage = MutableStateFlow(0)
+    val historyPage: StateFlow<Int> = _historyPage.asStateFlow()
+
+    private val _historyPageSize = MutableStateFlow(10)
+    val historyPageSize: StateFlow<Int> = _historyPageSize.asStateFlow()
+
     private val _isSavingOrder = MutableStateFlow(false)
     val isSavingOrder: StateFlow<Boolean> = _isSavingOrder.asStateFlow()
 
@@ -150,6 +156,16 @@ class CustomerVeggieViewModel(
 
     fun updateHistorySearchQuery(query: String) {
         _historySearchQuery.value = query
+        _historyPage.value = 0
+    }
+
+    fun setHistoryPage(page: Int) {
+        _historyPage.value = page.coerceAtLeast(0)
+    }
+
+    fun setHistoryPageSize(pageSize: Int) {
+        _historyPageSize.value = pageSize
+        _historyPage.value = 0
     }
 
     fun openProductDetail(product: VeggieProduct) {
@@ -255,6 +271,23 @@ class CustomerVeggieViewModel(
                 entry.veggieNameSnapshot.containsIgnoreAccents(query)
             }
         }
+    }
+
+    fun pagedHistoryItems(): List<CustomerVeggieRoundHistoryItem> {
+        val filtered = filteredHistoryItems()
+        val size = _historyPageSize.value
+        val totalPages = if (filtered.isEmpty()) 1 else (filtered.size + size - 1) / size
+        val page = _historyPage.value.coerceIn(0, totalPages - 1)
+        val fromIndex = (page * size).coerceAtMost(filtered.size)
+        val toIndex = (fromIndex + size).coerceAtMost(filtered.size)
+        return filtered.subList(fromIndex, toIndex)
+    }
+
+    fun historyTotalPages(): Int {
+        val filtered = filteredHistoryItems()
+        val size = _historyPageSize.value
+        if (filtered.isEmpty()) return 1
+        return (filtered.size + size - 1) / size
     }
 
     private fun recomputeUnsavedFlag() {

@@ -294,7 +294,26 @@ class RoomVeggieOrderRepositoryImpl(
         for ((roundId, rawUserEntries) in entriesByRoundId) {
             val round = veggieOrderDao.getRoundById(roundId)?.toDomain() ?: continue
             val allRoundEntries = veggieOrderDao.getRoundEntries(roundId).map { it.toDomain() }
-            val userEntries = rawUserEntries.map { it.toDomain() }.sortedByAccentInsensitive { it.veggieNameSnapshot }
+            val userEntries = rawUserEntries.map { raw ->
+                val domain = raw.toDomain()
+                if (round.status != VeggieRoundStatus.SETTLED && domain.effectiveUnitPriceCents == null) {
+                    val estPrice = productsById[domain.veggieProductId]?.estimatedPriceCents
+                    if (estPrice != null && estPrice > 0L) {
+                        val total = VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(
+                            unitPriceCents = estPrice,
+                            totalDeliveredQtyScaled = domain.deliveredQuantityScaled
+                        )
+                        domain.copy(
+                            effectiveUnitPriceCents = estPrice,
+                            finalItemTotalCents = total
+                        )
+                    } else {
+                        domain
+                    }
+                } else {
+                    domain
+                }
+            }.sortedByAccentInsensitive { it.veggieNameSnapshot }
 
             val participatingUserIds = allRoundEntries
                 .filter { it.deliveredQuantityScaled > 0L }
@@ -311,14 +330,16 @@ class RoomVeggieOrderRepositoryImpl(
                 userEntries.sumOf { it.finalItemTotalCents ?: 0L }
             } else {
                 userEntries.sumOf { entry ->
-                    val estPrice = entry.effectiveUnitPriceCents ?: productsById[entry.veggieProductId]?.estimatedPriceCents
-                    if (estPrice != null && estPrice > 0L) {
-                        VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(
-                            unitPriceCents = estPrice,
-                            totalDeliveredQtyScaled = entry.deliveredQuantityScaled
-                        )
-                    } else {
-                        0L
+                    entry.finalItemTotalCents ?: run {
+                        val estPrice = entry.effectiveUnitPriceCents ?: productsById[entry.veggieProductId]?.estimatedPriceCents
+                        if (estPrice != null && estPrice > 0L) {
+                            VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(
+                                unitPriceCents = estPrice,
+                                totalDeliveredQtyScaled = entry.deliveredQuantityScaled
+                            )
+                        } else {
+                            0L
+                        }
                     }
                 }
             }
