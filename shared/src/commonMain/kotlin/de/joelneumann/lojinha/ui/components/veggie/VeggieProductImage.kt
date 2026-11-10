@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.ui.components.veggie
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -18,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -36,7 +39,8 @@ fun VeggieProductImage(
     contentDescription: String? = null,
     shape: Shape = RoundedCornerShape(10.dp),
     placeholderIconSize: Dp = 24.dp,
-    contentScale: ContentScale = ContentScale.Crop
+    contentScale: ContentScale = ContentScale.Crop,
+    onClick: (() -> Unit)? = null
 ) {
     val previewBitmap = remember(previewBytes) {
         if (previewBytes != null && previewBytes.isNotEmpty()) {
@@ -61,9 +65,16 @@ fun VeggieProductImage(
 
     val bitmap = previewBitmap ?: loadedBitmap
 
+    val clickModifier = if (onClick != null) {
+        Modifier
+            .pointerHoverIcon(PointerIcon.Hand)
+            .clickable(onClick = onClick)
+    } else Modifier
+
     Box(
         modifier = modifier
             .clip(shape)
+            .then(clickModifier)
             .background(SurfaceContainerHighLight),
         contentAlignment = Alignment.Center
     ) {

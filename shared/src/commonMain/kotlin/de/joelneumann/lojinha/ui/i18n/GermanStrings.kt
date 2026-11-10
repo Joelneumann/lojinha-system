@@ -859,6 +859,22 @@ object GermanStrings : AppStrings {
     override val searchVeggieProductsPlaceholder = "Gemüse suchen..."
     override val searchVeggieHistoryPlaceholder = "Vergangene Bestellungen nach Produkt durchsuchen..."
     override val noVeggieHistoryMsg = "Noch keine Gemüsebestellungen vorhanden."
+    override val unsavedChangesMessage = "Du hast ungespeicherte Änderungen in deiner Gemüsebestellung. Wenn du jetzt gehst, gehen deine Änderungen verloren."
+    override val btnSaveAndProceed = "Speichern & Weiter"
+    override val btnDiscardChanges = "Änderungen verwerfen"
+    override val btnKeepEditing = "Abbrechen"
+    override val veggieCartTitle = "Aktuelle Bestellung"
+    override val veggieCartEmptyMsg = "Deine Bestellung ist leer. Klicke auf ein Produkt, um es hinzuzufügen."
+    override val mobileSubTabCatalog = "Katalog"
+    override fun mobileSubTabCart(count: Int): String = "Bestellung ($count)"
+    override val veggieAmountDialogTitle = "Menge eingeben"
+    override val veggieAmountDialogConfirm = "Bestätigen"
+    override val veggieAmountDialogPlaceholder = "Menge"
+    override val veggieUnsavedBadge = "Ungespeichert"
+    override val lastOrderNone = "Letzte Bestellung: Keine"
+    override val veggiePricelessItemsNotice = "* Einige Artikel haben noch keinen Richtpreis; Endbetrag wird höher ausfallen."
+    override fun addedOrderBadge(qty: String, unit: String): String = "Hinzugefügt $qty $unit"
+    override val btnFillFromLastWeek = "Von letzter Woche übernehmen"
 }
 
 

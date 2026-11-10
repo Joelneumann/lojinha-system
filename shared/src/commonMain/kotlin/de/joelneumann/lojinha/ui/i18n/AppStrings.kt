@@ -839,6 +839,22 @@ interface AppStrings {
     val searchVeggieProductsPlaceholder: String
     val searchVeggieHistoryPlaceholder: String
     val noVeggieHistoryMsg: String
+    val unsavedChangesMessage: String
+    val btnSaveAndProceed: String
+    val btnDiscardChanges: String
+    val btnKeepEditing: String
+    val veggieCartTitle: String
+    val veggieCartEmptyMsg: String
+    val mobileSubTabCatalog: String
+    fun mobileSubTabCart(count: Int): String
+    val veggieAmountDialogTitle: String
+    val veggieAmountDialogConfirm: String
+    val veggieAmountDialogPlaceholder: String
+    val veggieUnsavedBadge: String
+    val lastOrderNone: String
+    val veggiePricelessItemsNotice: String
+    fun addedOrderBadge(qty: String, unit: String): String
+    val btnFillFromLastWeek: String
 }
 
 

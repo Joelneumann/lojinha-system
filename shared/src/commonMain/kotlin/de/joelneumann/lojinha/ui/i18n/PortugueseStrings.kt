@@ -859,6 +859,22 @@ object PortugueseStrings : AppStrings {
     override val searchVeggieProductsPlaceholder = "Buscar verduras..."
     override val searchVeggieHistoryPlaceholder = "Buscar pedidos anteriores por produto..."
     override val noVeggieHistoryMsg = "Nenhum pedido de verduras encontrado."
+    override val unsavedChangesMessage = "Você tem alterações não salvas no seu pedido de verduras. Se sair agora, as alterações serão descartadas."
+    override val btnSaveAndProceed = "Salvar e Continuar"
+    override val btnDiscardChanges = "Descartar Alterações"
+    override val btnKeepEditing = "Cancelar"
+    override val veggieCartTitle = "Pedido Atual"
+    override val veggieCartEmptyMsg = "Seu pedido está vazio. Clique em um produto para adicioná-lo."
+    override val mobileSubTabCatalog = "Catálogo"
+    override fun mobileSubTabCart(count: Int): String = "Pedido ($count)"
+    override val veggieAmountDialogTitle = "Digitar Quantidade"
+    override val veggieAmountDialogConfirm = "Confirmar"
+    override val veggieAmountDialogPlaceholder = "Quantidade"
+    override val veggieUnsavedBadge = "Não salvo"
+    override val lastOrderNone = "Último pedido: Nenhum"
+    override val veggiePricelessItemsNotice = "* Alguns itens ainda não têm preço estimado; o total final será maior."
+    override fun addedOrderBadge(qty: String, unit: String): String = "Adicionado $qty $unit"
+    override val btnFillFromLastWeek = "Repetir da semana passada"
 }
 
 

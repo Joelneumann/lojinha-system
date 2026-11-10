@@ -143,6 +143,20 @@ class CustomerVeggieViewModel(
         recomputeUnsavedFlag()
     }
 
+    fun copyPreviousRoundOrder() {
+        val round = _activeRound.value ?: return
+        if (round.status != VeggieRoundStatus.OPEN) return
+        val prev = _previousRoundQuantitiesScaled.value.filterValues { it > 0L }
+        if (prev.isEmpty()) return
+
+        val activeProductIds = _products.value.map { it.id }.toSet()
+        val filteredPrev = prev.filterKeys { it in activeProductIds }
+        if (filteredPrev.isEmpty()) return
+
+        _draftQuantitiesScaled.value = filteredPrev
+        recomputeUnsavedFlag()
+    }
+
     fun incrementProductQuantity(product: VeggieProduct, unitType: VeggieUnitType?) {
         val step = if (unitType?.allowDecimals == true) VEGGIE_QTY_SCALE / 2L else VEGGIE_QTY_SCALE
         val current = _draftQuantitiesScaled.value[product.id] ?: 0L
