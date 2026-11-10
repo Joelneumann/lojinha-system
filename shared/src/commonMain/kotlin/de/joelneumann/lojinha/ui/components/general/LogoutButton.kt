@@ -18,15 +18,17 @@ import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 @Composable
 fun LogoutButton(
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    iconOnly: Boolean? = null
 ) {
     val strings = I18n.current
+    val showIconOnly = iconOnly ?: LocalHeaderCompact.current
 
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
         shape = RoundedCornerShape(8.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+        contentPadding = if (showIconOnly) PaddingValues(horizontal = 10.dp, vertical = 6.dp) else PaddingValues(horizontal = 12.dp, vertical = 6.dp),
         modifier = modifier
     ) {
         Row(
@@ -35,18 +37,20 @@ fun LogoutButton(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.Logout,
-                contentDescription = null,
+                contentDescription = strings.logout,
                 tint = SurfaceWhite,
                 modifier = Modifier.size(16.dp)
             )
-            Text(
-                text = strings.logout,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = SurfaceWhite,
-                maxLines = 1,
-                softWrap = false
-            )
+            if (!showIconOnly) {
+                Text(
+                    text = strings.logout,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SurfaceWhite,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
         }
     }
 }

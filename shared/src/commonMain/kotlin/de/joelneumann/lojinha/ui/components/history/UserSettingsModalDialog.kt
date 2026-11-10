@@ -195,19 +195,12 @@ fun UserSettingsModalDialog(
                                     fontSize = 18.sp
                                 )
 
-                                Column {
-                                    Text(
-                                        text = strings.profileAvatarColorTitle,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = PrimaryNavy
-                                    )
-                                    Text(
-                                        text = if (selectedAvatar.type == AvatarType.EMOJI) strings.emojiWithVal(selectedAvatar.emoji) else strings.initialsWithVal(user.initials),
-                                        fontSize = 12.sp,
-                                        color = TextSecondaryMuted
-                                    )
-                                }
+                                Text(
+                                    text = strings.profileAvatarColorTitle,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryNavy
+                                )
                             }
 
                             Row(
@@ -272,7 +265,14 @@ fun UserSettingsModalDialog(
                                         ),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Text(strings.emojiWithVal(selectedAvatar.emoji), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text("${strings.emojiLabel} (", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            PlatformEmoji(emoji = selectedAvatar.emoji, fontSize = 14.sp)
+                                            Text(")", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
 

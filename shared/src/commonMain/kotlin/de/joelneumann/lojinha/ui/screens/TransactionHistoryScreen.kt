@@ -28,6 +28,7 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.domain.model.balanceWarningLevel
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
+import de.joelneumann.lojinha.ui.components.general.LocalHeaderCompact
 import de.joelneumann.lojinha.ui.components.general.LogoutButton
 import de.joelneumann.lojinha.ui.components.history.TransactionFilterBar
 import de.joelneumann.lojinha.ui.components.history.TransactionItemCard
@@ -253,12 +254,13 @@ fun TransactionHistoryContent(
                     coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
                 },
                 actions = {
+                    val isCompact = LocalHeaderCompact.current
                     Button(
                         onClick = onContinueShopping,
                         modifier = Modifier.focusProperties { canFocus = false },
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        contentPadding = if (isCompact) PaddingValues(horizontal = 10.dp, vertical = 6.dp) else PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -266,16 +268,18 @@ fun TransactionHistoryContent(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ShoppingCart,
-                                contentDescription = null,
+                                contentDescription = strings.continueShopping,
                                 tint = SurfaceWhite,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Text(
-                                text = strings.continueShopping,
-                                color = SurfaceWhite,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
+                            if (!isCompact) {
+                                Text(
+                                    text = strings.continueShopping,
+                                    color = SurfaceWhite,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
                         }
                     }
 
