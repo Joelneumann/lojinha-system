@@ -153,15 +153,98 @@ fun AdminVeggieTabScreen(
                 )
             }
 
-            if (onExportOrderFormPdf != null) {
-                OutlinedButton(
-                    onClick = { onExportOrderFormPdf(currentLanguage) },
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                ) {
-                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(strings.exportOrderFormPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 13.sp)
+            // Top action buttons based on selected sub-tab
+            when (currentSubTab) {
+                AdminVeggieSubTab.ACTIVE_ROUND -> {
+                    val currentRound = activeRound
+                    if (currentRound != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (onExportBuyerPdf != null) {
+                                OutlinedButton(
+                                    onClick = { onExportBuyerPdf(currentRound.id, currentLanguage) },
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.exportBuyerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                                    if (currentRound.buyerPdfExportedAt != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        ExportedBadgePill()
+                                    }
+                                }
+                            }
+                            if (onExportWorkerPdf != null) {
+                                OutlinedButton(
+                                    onClick = { onExportWorkerPdf(currentRound.id, currentLanguage) },
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.GridOn, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.exportWorkerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                                    if (currentRound.workerPdfExportedAt != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        ExportedBadgePill()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                AdminVeggieSubTab.CATALOG -> {
+                    if (onExportOrderFormPdf != null) {
+                        OutlinedButton(
+                            onClick = { onExportOrderFormPdf(currentLanguage) },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(strings.exportOrderFormPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                        }
+                    }
+                }
+                AdminVeggieSubTab.HISTORY -> {
+                    val pastRound = editingPastRound
+                    if (pastRound != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (onExportBuyerPdf != null) {
+                                OutlinedButton(
+                                    onClick = { onExportBuyerPdf(pastRound.id, currentLanguage) },
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.exportBuyerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                                    if (pastRound.buyerPdfExportedAt != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        ExportedBadgePill()
+                                    }
+                                }
+                            }
+                            if (onExportWorkerPdf != null) {
+                                OutlinedButton(
+                                    onClick = { onExportWorkerPdf(pastRound.id, currentLanguage) },
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.GridOn, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.exportWorkerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                                    if (pastRound.workerPdfExportedAt != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        ExportedBadgePill()
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -259,40 +259,6 @@ fun AdminVeggieSettlementMatrix(
                             Text(strings.addUserToList, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
 
-                        if (onExportBuyerPdf != null) {
-                            OutlinedButton(
-                                onClick = { onExportBuyerPdf(round.id, currentLanguage) },
-                                enabled = !isSaving,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(strings.exportBuyerPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                                if (round.buyerPdfExportedAt != null) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    ExportedBadgePill()
-                                }
-                            }
-                        }
-
-                        if (onExportWorkerPdf != null) {
-                            OutlinedButton(
-                                onClick = { onExportWorkerPdf(round.id, currentLanguage) },
-                                enabled = !isSaving,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Icon(Icons.Default.GridOn, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(strings.exportWorkerPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                                if (round.workerPdfExportedAt != null) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    ExportedBadgePill()
-                                }
-                            }
-                        }
-
                         when (round.status) {
                             VeggieRoundStatus.OPEN -> {
                                 OutlinedButton(
