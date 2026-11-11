@@ -261,16 +261,6 @@ fun AdminVeggieSettlementMatrix(
 
                         when (round.status) {
                             VeggieRoundStatus.OPEN -> {
-                                OutlinedButton(
-                                    onClick = onSaveDraft,
-                                    enabled = !isSaving,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = AccentNavy)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(strings.saveChangesBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy)
-                                }
-
                                 if (onResetChanges != null) {
                                     OutlinedButton(
                                         onClick = { showConfirmResetChanges = true },
@@ -300,6 +290,35 @@ fun AdminVeggieSettlementMatrix(
                                             color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
                                         )
                                     }
+                                }
+
+                                OutlinedButton(
+                                    onClick = onSaveDraft,
+                                    enabled = hasUnsavedChanges && !isSaving,
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
+                                        disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Default.Save,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        strings.saveChangesBtn,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                    )
                                 }
 
                                 if (entries.isEmpty()) {
@@ -354,16 +373,6 @@ fun AdminVeggieSettlementMatrix(
                                     Text(strings.reopenRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
 
-                                OutlinedButton(
-                                    onClick = onSaveDraft,
-                                    enabled = !isSaving,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = AccentNavy)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(strings.saveDraftBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy)
-                                }
-
                                 if (onResetChanges != null) {
                                     OutlinedButton(
                                         onClick = { showConfirmResetChanges = true },
@@ -393,6 +402,35 @@ fun AdminVeggieSettlementMatrix(
                                             color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
                                         )
                                     }
+                                }
+
+                                OutlinedButton(
+                                    onClick = onSaveDraft,
+                                    enabled = hasUnsavedChanges && !isSaving,
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
+                                        disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Default.Save,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        strings.saveDraftBtn,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                    )
                                 }
 
                                 if (entries.isEmpty()) {
