@@ -8,9 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -46,6 +45,7 @@ import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.general.AppHorizontalScrollbar
+import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
@@ -178,6 +178,7 @@ fun AdminVeggieSettlementMatrix(
     }
 
     val horizontalScrollState = rememberScrollState()
+    val verticalScrollState = rememberScrollState()
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -735,10 +736,18 @@ fun AdminVeggieSettlementMatrix(
                     }
 
                     // Scrollable Product Rows
-                    LazyColumn(
-                        modifier = Modifier.weight(1f)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
                     ) {
-                        items(roundProductRows, key = { it.productId }) { rowInfo ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(verticalScrollState)
+                        ) {
+                            roundProductRows.forEach { rowInfo ->
+                                key(rowInfo.productId) {
                             val productSettlement = previewProductSettlementMap[rowInfo.productId]
                             val totalDeliveredScaled = rowInfo.entriesByUserId.values.sumOf { entry ->
                                 previewEntryMap[entry.id]?.deliveredQuantityScaled ?: entry.deliveredQuantityScaled
@@ -965,6 +974,15 @@ fun AdminVeggieSettlementMatrix(
                             }
                         }
                     }
+                }
+                AppVerticalScrollbar(
+                    scrollState = verticalScrollState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .padding(vertical = 4.dp)
+                )
+            }
 
                     HorizontalDivider(thickness = 1.5.dp, color = PrimaryNavy.copy(alpha = 0.25f))
 

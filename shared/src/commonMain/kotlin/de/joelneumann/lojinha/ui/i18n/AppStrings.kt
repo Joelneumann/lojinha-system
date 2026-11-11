@@ -831,6 +831,9 @@ interface AppStrings {
     val saveChangesBtn: String
     val resetChangesBtn: String
     val unsavedChangesBadge: String
+    val unsavedExportTitle: String
+    val unsavedExportMsg: String
+    val saveAndExportBtn: String
     val confirmResetChangesTitle: String
     val confirmResetChangesMsg: String
     val deleteRoundBtn: String

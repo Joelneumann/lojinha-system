@@ -567,7 +567,7 @@ class AdminVeggieViewModelTest {
     }
 
     @Test
-    fun testChangingListInvalidatesPdfExportCheckmark() = runTest {
+    fun testSavingDraftInvalidatesPdfExportCheckmark() = runTest {
         val (veggieRepo, userRepo) = setupTestFixture()
         val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
         advanceUntilIdle()
@@ -580,18 +580,19 @@ class AdminVeggieViewModelTest {
         assertNotNull(vm.activeRound.value?.buyerPdfExportedAt)
         assertNotNull(vm.activeRound.value?.workerPdfExportedAt)
 
-        // Change a quantity in the list
+        // Change a quantity in the list (unsaved draft changes)
         vm.updateEntryActualQuantity("entry-act-1", "99")
 
-        // Immediately, export timestamps should be invalidated/cleared
-        assertNull(vm.activeRound.value?.buyerPdfExportedAt)
-        assertNull(vm.activeRound.value?.workerPdfExportedAt)
+        // Unsaved draft edits do NOT invalidate export timestamps
+        assertNotNull(vm.activeRound.value?.buyerPdfExportedAt)
+        assertNotNull(vm.activeRound.value?.workerPdfExportedAt)
 
-        // Save draft settlement
-        vm.saveDraftSettlement()
+        // Save draft settlement triggers onSuccess callback and resets timestamps
+        var callbackCalled = false
+        vm.saveDraftSettlement(onSuccess = { callbackCalled = true })
         advanceUntilIdle()
 
-        // After save, export timestamps remain cleared until next export
+        assertTrue(callbackCalled)
         assertNull(vm.activeRound.value?.buyerPdfExportedAt)
         assertNull(vm.activeRound.value?.workerPdfExportedAt)
     }
