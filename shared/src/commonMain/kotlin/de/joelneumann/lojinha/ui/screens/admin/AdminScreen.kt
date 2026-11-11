@@ -382,7 +382,9 @@ fun AdminScreen(
                                 viewModel = veggieViewModel,
                                 onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
                                 onExportBuyerPdf = onExportVeggieBuyerPdf,
-                                onExportWorkerPdf = onExportVeggieWorkerPdf
+                                onExportWorkerPdf = onExportVeggieWorkerPdf,
+                                onOpenExportedPdf = onOpenExportedPdf,
+                                onRevealExportedFolder = onRevealExportedFolder
                             )
                         }
                     }

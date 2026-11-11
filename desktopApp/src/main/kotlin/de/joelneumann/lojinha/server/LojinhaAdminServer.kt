@@ -800,6 +800,7 @@ class LojinhaAdminServer(
                             val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
                             try {
                                 val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(round, entries, language)
+                                repo.markBuyerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
                                 val filename = "Buyer_Shopping_List_W${isoWeek.weekOfYear.toString().padStart(2, '0')}_${isoWeek.isoYear}.pdf"
                                 call.response.header(
@@ -812,6 +813,13 @@ class LojinhaAdminServer(
                                 call.respond(HttpStatusCode.InternalServerError, "Failed to generate buyer PDF")
                             }
                         }
+                        post("/rounds/{id}/buyer-pdf/exported") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            repo.markBuyerPdfExported(id, System.currentTimeMillis())
+                            call.respond(HttpStatusCode.OK)
+                        }
                         get("/rounds/{id}/worker-pdf") {
                             if (!call.checkAdminAuth(settingsRepository)) return@get
                             val repo = resolveVeggieRepo() ?: return@get call.respond(HttpStatusCode.ServiceUnavailable)
@@ -822,6 +830,7 @@ class LojinhaAdminServer(
                             val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
                             try {
                                 val pdfBytes = VeggieOrderPdfGenerator.generateWorkerSortingMatrixBytes(round, entries, language)
+                                repo.markWorkerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
                                 val filename = "Worker_Sorting_Matrix_W${isoWeek.weekOfYear.toString().padStart(2, '0')}_${isoWeek.isoYear}.pdf"
                                 call.response.header(
@@ -832,6 +841,24 @@ class LojinhaAdminServer(
                             } catch (e: Exception) {
                                 AppLogger.error("LojinhaAdminServer", "Failed to generate worker PDF: ${e.message}", e)
                                 call.respond(HttpStatusCode.InternalServerError, "Failed to generate worker PDF")
+                            }
+                        }
+                        post("/rounds/{id}/worker-pdf/exported") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            repo.markWorkerPdfExported(id, System.currentTimeMillis())
+                            call.respond(HttpStatusCode.OK)
+                        }
+                        delete("/rounds/{id}") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@delete
+                            val repo = resolveVeggieRepo() ?: return@delete call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                            val success = repo.deleteRound(id)
+                            if (success) {
+                                call.respond(HttpStatusCode.OK)
+                            } else {
+                                call.respond(HttpStatusCode.BadRequest, "Could not delete round (may have existing transactions or not found)")
                             }
                         }
                     }

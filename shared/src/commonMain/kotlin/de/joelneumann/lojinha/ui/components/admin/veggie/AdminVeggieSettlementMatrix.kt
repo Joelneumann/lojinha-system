@@ -87,16 +87,23 @@ fun AdminVeggieSettlementMatrix(
     onReopenRound: () -> Unit,
     onSaveDraft: () -> Unit,
     onExecuteSettlement: () -> Unit,
+    onDeleteRound: (() -> Unit)? = null,
+    onCompleteEmptyRound: (() -> Unit)? = null,
     onAddAdminEntry: (user: User, product: VeggieProduct, quantityInput: String) -> Unit,
     onExportBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onExportWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
+    hasUnsavedChanges: Boolean = false,
+    onResetChanges: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
     val currentLanguage = LanguageManager.currentLanguage
     val isoWeek = remember(round.openedAt) { IsoWeekUtils.fromEpochMillis(round.openedAt) }
 
+    var showConfirmResetChanges by remember { mutableStateOf(false) }
     var showConfirmSettle by remember { mutableStateOf(false) }
+    var showConfirmCompleteEmpty by remember { mutableStateOf(false) }
+    var showConfirmDeleteRound by remember { mutableStateOf(false) }
     var showAddEntryDialog by remember { mutableStateOf(false) }
     var transporterDropdownExpanded by remember { mutableStateOf(false) }
     var showBuyerOverview by remember { mutableStateOf(true) }
@@ -223,6 +230,12 @@ fun AdminVeggieSettlementMatrix(
                                         VeggieRoundStatus.SETTLED -> AdminBadgeType.NAVY
                                     }
                                 )
+                                if (hasUnsavedChanges) {
+                                    AdminStatusBadge(
+                                        text = "● ${strings.unsavedChangesBadge}",
+                                        type = AdminBadgeType.WARNING
+                                    )
+                                }
                             }
                             Text(
                                 text = Formatting.formatTimestamp(round.openedAt),
@@ -249,31 +262,109 @@ fun AdminVeggieSettlementMatrix(
                         if (onExportBuyerPdf != null) {
                             OutlinedButton(
                                 onClick = { onExportBuyerPdf(round.id, currentLanguage) },
-                                enabled = entries.isNotEmpty(),
+                                enabled = !isSaving,
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(strings.exportBuyerPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                if (round.buyerPdfExportedAt != null) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    ExportedBadgePill()
+                                }
                             }
                         }
 
                         if (onExportWorkerPdf != null) {
                             OutlinedButton(
                                 onClick = { onExportWorkerPdf(round.id, currentLanguage) },
-                                enabled = entries.isNotEmpty(),
+                                enabled = !isSaving,
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Icon(Icons.Default.GridOn, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(strings.exportWorkerPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                if (round.workerPdfExportedAt != null) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    ExportedBadgePill()
+                                }
                             }
                         }
 
                         when (round.status) {
                             VeggieRoundStatus.OPEN -> {
+                                OutlinedButton(
+                                    onClick = onSaveDraft,
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = AccentNavy)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(strings.saveChangesBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy)
+                                }
+
+                                if (onResetChanges != null) {
+                                    OutlinedButton(
+                                        onClick = { showConfirmResetChanges = true },
+                                        enabled = hasUnsavedChanges && !isSaving,
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
+                                            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Restore,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            strings.resetChangesBtn,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                        )
+                                    }
+                                }
+
+                                if (entries.isEmpty()) {
+                                    if (onCompleteEmptyRound != null) {
+                                        Button(
+                                            onClick = { showConfirmCompleteEmpty = true },
+                                            enabled = !isSaving,
+                                            colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = SurfaceWhite)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(strings.completeRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                        }
+                                    }
+
+                                    if (onDeleteRound != null) {
+                                        OutlinedButton(
+                                            onClick = { showConfirmDeleteRound = true },
+                                            enabled = !isSaving,
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson),
+                                            border = BorderStroke(1.dp, ColorDangerCrimson.copy(alpha = 0.5f)),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp), tint = ColorDangerCrimson)
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(strings.deleteRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                                        }
+                                    }
+                                }
+
                                 Button(
                                     onClick = onCloseRound,
                                     enabled = !isSaving,
@@ -307,19 +398,110 @@ fun AdminVeggieSettlementMatrix(
                                     Text(strings.saveDraftBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy)
                                 }
 
-                                Button(
-                                    onClick = { showConfirmSettle = true },
-                                    enabled = !isSaving && entries.isNotEmpty(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = SurfaceWhite)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(strings.settleAndChargeBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                if (onResetChanges != null) {
+                                    OutlinedButton(
+                                        onClick = { showConfirmResetChanges = true },
+                                        enabled = hasUnsavedChanges && !isSaving,
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
+                                            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Restore,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            strings.resetChangesBtn,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                        )
+                                    }
+                                }
+
+                                if (entries.isEmpty()) {
+                                    if (onCompleteEmptyRound != null) {
+                                        Button(
+                                            onClick = { showConfirmCompleteEmpty = true },
+                                            enabled = !isSaving,
+                                            colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = SurfaceWhite)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(strings.completeRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                        }
+                                    }
+
+                                    if (onDeleteRound != null) {
+                                        OutlinedButton(
+                                            onClick = { showConfirmDeleteRound = true },
+                                            enabled = !isSaving,
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson),
+                                            border = BorderStroke(1.dp, ColorDangerCrimson.copy(alpha = 0.5f)),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp), tint = ColorDangerCrimson)
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(strings.deleteRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
+                                        }
+                                    }
+                                } else {
+                                    Button(
+                                        onClick = { showConfirmSettle = true },
+                                        enabled = !isSaving,
+                                        colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = SurfaceWhite)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(strings.settleAndChargeBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                    }
                                 }
                             }
 
                             VeggieRoundStatus.SETTLED -> {
+                                if (onResetChanges != null) {
+                                    OutlinedButton(
+                                        onClick = { showConfirmResetChanges = true },
+                                        enabled = hasUnsavedChanges && !isSaving,
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
+                                            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Restore,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            strings.resetChangesBtn,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                        )
+                                    }
+                                }
+
                                 Button(
                                     onClick = { showConfirmSettle = true },
                                     enabled = !isSaving && entries.isNotEmpty(),
@@ -955,6 +1137,21 @@ fun AdminVeggieSettlementMatrix(
         }
     }
 
+    if (showConfirmResetChanges) {
+        ConfirmationDialog(
+            title = strings.confirmResetChangesTitle,
+            message = strings.confirmResetChangesMsg,
+            confirmText = strings.resetChangesBtn,
+            cancelText = strings.cancel,
+            confirmButtonColor = ColorDangerCrimson,
+            onConfirm = {
+                showConfirmResetChanges = false
+                onResetChanges?.invoke()
+            },
+            onDismiss = { showConfirmResetChanges = false }
+        )
+    }
+
     if (showConfirmSettle) {
         val totalAllCharged = (livePreview?.totalMarketProductsSpentCents ?: 0L) + (livePreview?.combinedFeeCents ?: 0L)
         val participantCount = livePreview?.customerSummaries?.size ?: 0
@@ -969,6 +1166,36 @@ fun AdminVeggieSettlementMatrix(
                 onExecuteSettlement()
             },
             onDismiss = { showConfirmSettle = false }
+        )
+    }
+
+    if (showConfirmCompleteEmpty) {
+        ConfirmationDialog(
+            title = strings.confirmCompleteEmptyRoundTitle,
+            message = strings.confirmCompleteEmptyRoundMsg,
+            confirmText = strings.confirm,
+            cancelText = strings.cancel,
+            confirmButtonColor = ColorSuccessEmerald,
+            onConfirm = {
+                showConfirmCompleteEmpty = false
+                onCompleteEmptyRound?.invoke()
+            },
+            onDismiss = { showConfirmCompleteEmpty = false }
+        )
+    }
+
+    if (showConfirmDeleteRound) {
+        ConfirmationDialog(
+            title = strings.confirmDeleteRoundTitle,
+            message = strings.confirmDeleteRoundMsg,
+            confirmText = strings.delete,
+            cancelText = strings.cancel,
+            confirmButtonColor = ColorDangerCrimson,
+            onConfirm = {
+                showConfirmDeleteRound = false
+                onDeleteRound?.invoke()
+            },
+            onDismiss = { showConfirmDeleteRound = false }
         )
     }
 
@@ -1263,6 +1490,27 @@ private fun MatrixNumberInputField(
                             false
                         }
                     }
+            )
+        }
+    }
+}
+
+@Composable
+internal fun ExportedBadgePill() {
+    Surface(
+        color = ColorSuccessEmerald.copy(alpha = 0.15f),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, ColorSuccessEmerald.copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = ColorSuccessEmerald,
+                modifier = Modifier.size(11.dp)
             )
         }
     }

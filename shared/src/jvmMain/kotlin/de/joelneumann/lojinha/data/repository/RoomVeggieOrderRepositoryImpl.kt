@@ -182,6 +182,37 @@ class RoomVeggieOrderRepositoryImpl(
         true
     }
 
+    override suspend fun deleteRound(roundId: String): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        // Disallow deletion if round has recorded financial transactions
+        val existingTxs = transactionDao.getTransactionsForRound(roundId)
+        if (existingTxs.isNotEmpty()) return@withLock false
+
+        veggieOrderDao.deleteEntriesForRound(roundId)
+        veggieOrderDao.deleteProductSettlementsForRound(roundId)
+        veggieOrderDao.deleteRound(roundId)
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean = mutationMutex.withLock {
+        veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val now = currentTimeMillis()
+        val exportTime = if (timestamp > 0L) timestamp else now
+        veggieOrderDao.markBuyerPdfExported(roundId, exportTime, now)
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean = mutationMutex.withLock {
+        veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val now = currentTimeMillis()
+        val exportTime = if (timestamp > 0L) timestamp else now
+        veggieOrderDao.markWorkerPdfExported(roundId, exportTime, now)
+        onDataChanged?.invoke()
+        true
+    }
+
     // -------------------------------------------------------------------------
     // 4. Customer Order Entries & History
     // -------------------------------------------------------------------------
@@ -466,7 +497,7 @@ class RoomVeggieOrderRepositoryImpl(
         val batchTransactions = mutableListOf<Triple<TransactionEntity, Long, Map<String, Long>>>()
 
         if (previousRound.status != VeggieRoundStatus.SETTLED) {
-            // Initial settlement: 1 summary ADMIN_WITHDRAWAL per customer + optional ADMIN_DEPOSIT for transporter
+            // Initial settlement: 1 summary VEGGIE transaction per customer + optional ADMIN_DEPOSIT for transporter
             for (summary in calculationResult.customerSummaries) {
                 if (summary.grandTotalCents <= 0L) continue
                 // Verify user exists in DB before recording transaction
@@ -477,7 +508,7 @@ class RoomVeggieOrderRepositoryImpl(
                     userId = userEntity.id,
                     userNameSnapshot = userEntity.name,
                     timestamp = now,
-                    type = TransactionType.ADMIN_WITHDRAWAL.name,
+                    type = TransactionType.VEGGIE.name,
                     referenceTransactionId = null,
                     note = "SYSNOTE|VEGGIE_ORDER|${weekInfo.weekOfYear}|${weekInfo.isoYear}|$roundId",
                     totalAmount = withdrawalAmount,
@@ -506,38 +537,42 @@ class RoomVeggieOrderRepositoryImpl(
                 }
             }
         } else {
-            // Post-settlement correction: compute previous customer grand totals and apply differential transactions
-            val prevEntriesByUser = previousEntries.groupBy { it.userId }
-            val prevParticipatingUsers = prevEntriesByUser
-                .filter { (_, list) -> list.any { it.deliveredQuantityScaled > 0L } }
-                .keys
-            val prevFeeShares = VeggieSettlementCalculator.distributeCombinedFeesEqually(
-                combinedFeeCents = previousRound.combinedFeeCents,
-                participatingUserIds = prevParticipatingUsers
-            )
-            val previousCustomerTotals = prevParticipatingUsers.associateWith { uid ->
-                val itemsSub = prevEntriesByUser[uid]?.sumOf { it.finalItemTotalCents ?: 0L } ?: 0L
-                itemsSub + (prevFeeShares[uid] ?: 0L)
+            // Post-settlement correction: compare against ACTUAL ledger transactions for this round
+            val roundTransactions = transactionDao.getTransactionsForRound(roundId)
+
+            // Customer transactions: all round transactions except transporter deposit
+            val customerTransactions = roundTransactions.filter { tx ->
+                tx.note?.startsWith("SYSNOTE|VEGGIE_TRANSPORT|") != true
             }
-            val newCustomerTotals = calculationResult.customerSummaries.associate {
+
+            // Total amount previously charged to each user:
+            // Since charges are recorded as negative values (-grandTotalCents),
+            // the net amount charged is - (sum of totalAmount).
+            val previouslyChargedByUser = customerTransactions
+                .groupBy { it.userId }
+                .mapValues { (_, txs) -> -txs.sumOf { it.totalAmount } }
+
+            val newTotalsByUser = calculationResult.customerSummaries.associate {
                 it.userId to it.grandTotalCents
             }
+            val allInvolvedUserIds = (previouslyChargedByUser.keys + newTotalsByUser.keys).toSet()
 
-            val customerBalanceDeltas = VeggieSettlementCalculator.calculateCustomerChargeCorrectionDeltas(
-                previousCustomerTotals = previousCustomerTotals,
-                newCustomerTotals = newCustomerTotals
-            )
-
-            for ((userId, balanceDelta) in customerBalanceDeltas) {
+            for (userId in allInvolvedUserIds) {
+                val prevCharged = previouslyChargedByUser[userId] ?: 0L
+                val newTotal = newTotalsByUser[userId] ?: 0L
+                // delta is: prevCharged - newTotal.
+                // If prevCharged > newTotal (e.g. fee share decreased): delta > 0 (refund)
+                // If prevCharged < newTotal (e.g. newly added user or more items): delta < 0 (additional charge)
+                val balanceDelta = prevCharged - newTotal
                 if (balanceDelta == 0L) continue
+
                 val userEntity = userDao.getUserById(userId) ?: continue
-                val txType = if (balanceDelta > 0L) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
                 val txEntity = TransactionEntity(
                     id = generateUuid(),
                     userId = userEntity.id,
                     userNameSnapshot = userEntity.name,
                     timestamp = now,
-                    type = txType.name,
+                    type = TransactionType.VEGGIE.name,
                     referenceTransactionId = null,
                     note = "SYSNOTE|VEGGIE_CORRECTION|${weekInfo.weekOfYear}|${weekInfo.isoYear}|$roundId",
                     totalAmount = balanceDelta,
@@ -546,32 +581,38 @@ class RoomVeggieOrderRepositoryImpl(
                 batchTransactions.add(Triple(txEntity, balanceDelta, emptyMap()))
             }
 
-            // Also check if transporter or transport fee changed
-            val prevTransporterId = previousRound.transporterUserId?.takeIf { it.isNotBlank() }
-            val prevTransportCredit = if (prevTransporterId != null) previousRound.transportFeeCents.coerceAtLeast(0L) else 0L
+            // Also check if transporter credit changed
+            val transporterTransactions = roundTransactions.filter { tx ->
+                tx.note?.startsWith("SYSNOTE|VEGGIE_TRANSPORT|") == true
+            }
+            val previouslyCreditedByUser = transporterTransactions
+                .groupBy { it.userId }
+                .mapValues { (_, txs) -> txs.sumOf { it.totalAmount } }
+
             val newTransporterId = calculationResult.transporterUserId
             val newTransportCredit = calculationResult.transporterCreditCents
-
-            val transporterDeltas = mutableMapOf<String, Long>()
-            if (prevTransporterId != null && prevTransportCredit > 0L) {
-                transporterDeltas[prevTransporterId] = (transporterDeltas[prevTransporterId] ?: 0L) - prevTransportCredit
-            }
-            if (newTransporterId != null && newTransportCredit > 0L) {
-                transporterDeltas[newTransporterId] = (transporterDeltas[newTransporterId] ?: 0L) + newTransportCredit
+            val newTransporterMap = if (newTransporterId != null && newTransportCredit > 0L) {
+                mapOf(newTransporterId to newTransportCredit)
+            } else {
+                emptyMap()
             }
 
-            for ((tUserId, tDelta) in transporterDeltas) {
+            val allTransporterUserIds = (previouslyCreditedByUser.keys + newTransporterMap.keys).toSet()
+            for (tUserId in allTransporterUserIds) {
+                val prevCredit = previouslyCreditedByUser[tUserId] ?: 0L
+                val targetCredit = newTransporterMap[tUserId] ?: 0L
+                val tDelta = targetCredit - prevCredit
                 if (tDelta == 0L) continue
+
                 val userEntity = userDao.getUserById(tUserId) ?: continue
-                val txType = if (tDelta > 0L) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
                 val txEntity = TransactionEntity(
                     id = generateUuid(),
                     userId = userEntity.id,
                     userNameSnapshot = userEntity.name,
                     timestamp = now,
-                    type = txType.name,
+                    type = TransactionType.ADMIN_DEPOSIT.name,
                     referenceTransactionId = null,
-                    note = "SYSNOTE|VEGGIE_CORRECTION|${weekInfo.weekOfYear}|${weekInfo.isoYear}|$roundId",
+                    note = "SYSNOTE|VEGGIE_TRANSPORT|${weekInfo.weekOfYear}|${weekInfo.isoYear}|$roundId",
                     totalAmount = tDelta,
                     items = emptyList()
                 )

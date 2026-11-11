@@ -40,6 +40,9 @@ interface VeggieOrderRepository {
     ): VeggieOrderRound
     suspend fun closeRound(roundId: String, closedAt: Long): Boolean
     suspend fun reopenRound(roundId: String): Boolean
+    suspend fun deleteRound(roundId: String): Boolean
+    suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean
+    suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean
 
     // 4. Customer Order Entries & History
     suspend fun getEntriesForRound(roundId: String): List<VeggieOrderEntry>

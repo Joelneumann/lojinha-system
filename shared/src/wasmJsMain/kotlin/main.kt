@@ -268,11 +268,13 @@ fun main() {
                                     val token = adminNetworkClient.authToken ?: ""
                                     val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf?lang=${language.name}&token=$token")
                                     jsTriggerDownload(url)
+                                    veggieViewModel.markPdfExported(roundId, isBuyer = true)
                                 },
                                 onExportVeggieWorkerPdf = { roundId, language ->
                                     val token = adminNetworkClient.authToken ?: ""
                                     val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf?lang=${language.name}&token=$token")
                                     jsTriggerDownload(url)
+                                    veggieViewModel.markPdfExported(roundId, isBuyer = false)
                                 },
                                 onExitAdmin = {
                                     scope.launch {

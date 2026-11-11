@@ -275,13 +275,13 @@ class RoomVeggieOrderRepositoryTest {
         // Verify transactions in Lojinha ledger
         val aliceTxs = txRepo.getTransactionsByUserId("u-alice")
         assertEquals(1, aliceTxs.size)
-        assertEquals(TransactionType.ADMIN_WITHDRAWAL, aliceTxs[0].type)
+        assertEquals(TransactionType.VEGGIE, aliceTxs[0].type)
         assertEquals(-25_00L, aliceTxs[0].totalAmount)
         assertTrue(aliceTxs[0].note!!.startsWith("SYSNOTE|VEGGIE_ORDER|"))
 
         val bobTxs = txRepo.getTransactionsByUserId("u-bob")
         assertEquals(2, bobTxs.size)
-        val bobOrderTx = bobTxs.first { it.type == TransactionType.ADMIN_WITHDRAWAL }
+        val bobOrderTx = bobTxs.first { it.type == TransactionType.VEGGIE }
         val bobTransportTx = bobTxs.first { it.type == TransactionType.ADMIN_DEPOSIT }
         assertEquals(-35_00L, bobOrderTx.totalAmount)
         assertTrue(bobOrderTx.note!!.startsWith("SYSNOTE|VEGGIE_ORDER|"))
@@ -338,6 +338,7 @@ class RoomVeggieOrderRepositoryTest {
         assertEquals(2, aliceTxsAfter.size)
         val aliceCorrTx = aliceTxsAfter.first { it.note!!.startsWith("SYSNOTE|VEGGIE_CORRECTION|") }
         assertEquals(2_00L, aliceCorrTx.totalAmount)
+        assertEquals(TransactionType.VEGGIE, aliceCorrTx.type)
     }
 
     @Test
@@ -401,5 +402,208 @@ class RoomVeggieOrderRepositoryTest {
         assertEquals(1500L, item.itemsSubtotalCents)
         assertEquals(500L, item.combinedFeeShareCents)
         assertEquals(2000L, item.grandTotalCents)
+    }
+
+    @Test
+    fun testEmptyRound_settleArchivedToHistoryAndAllowsNewRound() = runTest {
+        val round = veggieRepo.openNewRound(
+            buyerOperationFeeCents = 10_00L,
+            transportFeeCents = 5_00L,
+            openedAt = 1_776_700_000_000L
+        )
+
+        // Close round without any customer orders
+        assertTrue(veggieRepo.closeRound(round.id, 1_776_701_000_000L))
+
+        // Settle empty round
+        val result = veggieRepo.executeRoundSettlement(
+            roundId = round.id,
+            buyerOperationFeeCents = 0L,
+            transportFeeCents = 0L,
+            transporterUserId = null,
+            productSettlements = emptyList(),
+            actualQuantitiesByEntryId = emptyMap(),
+            settledAt = 1_776_702_000_000L
+        )
+        assertNotNull(result)
+        assertEquals(0, result.customerSummaries.size)
+
+        val updated = veggieRepo.getRoundById(round.id)!!
+        assertEquals(VeggieRoundStatus.SETTLED, updated.status)
+
+        // Verify zero transactions were created
+        val allTxs = txRepo.getAllTransactions()
+        assertEquals(0, allTxs.size)
+
+        // Verify a new round can now be opened without conflict
+        val newRound = veggieRepo.openNewRound(
+            buyerOperationFeeCents = 10_00L,
+            transportFeeCents = 5_00L,
+            openedAt = 1_776_800_000_000L
+        )
+        assertEquals(VeggieRoundStatus.OPEN, newRound.status)
+    }
+
+    @Test
+    fun testEmptyRound_deletePermanently() = runTest {
+        val round = veggieRepo.openNewRound(
+            buyerOperationFeeCents = 10_00L,
+            transportFeeCents = 5_00L,
+            openedAt = 1_776_700_000_000L
+        )
+
+        assertTrue(veggieRepo.deleteRound(round.id))
+        assertNull(veggieRepo.getRoundById(round.id))
+    }
+
+    @Test
+    fun testPostSettlement_addUserAfterwardsUpdatesOperationCostForEveryone() = runTest {
+        // Setup 4 users
+        userRepo.saveUser(User(id = "u-1", name = "User 1"))
+        userRepo.saveUser(User(id = "u-2", name = "User 2"))
+        userRepo.saveUser(User(id = "u-3", name = "User 3"))
+        userRepo.saveUser(User(id = "u-4", name = "User 4"))
+        userRepo.updateBalance("u-1", 100_00L)
+        userRepo.updateBalance("u-2", 100_00L)
+        userRepo.updateBalance("u-3", 100_00L)
+        userRepo.updateBalance("u-4", 100_00L)
+
+        // Product
+        veggieRepo.saveVeggieProduct(VeggieProduct(id = "vp-item", name = "Item", estimatedPriceCents = 10_00L, unitTypeId = "unit-piece"))
+
+        // Round with R$ 30,00 fee (3000 cents)
+        val round = veggieRepo.openNewRound(
+            buyerOperationFeeCents = 30_00L,
+            transportFeeCents = 0L,
+            openedAt = 1_776_700_000_000L
+        )
+
+        // Users 1, 2, 3 order 1 item each
+        val u1 = userRepo.getUserById("u-1")!!
+        val u2 = userRepo.getUserById("u-2")!!
+        val u3 = userRepo.getUserById("u-3")!!
+        val u4 = userRepo.getUserById("u-4")!!
+
+        veggieRepo.saveCustomerOrder(round.id, u1, mapOf("vp-item" to 1000L))
+        veggieRepo.saveCustomerOrder(round.id, u2, mapOf("vp-item" to 1000L))
+        veggieRepo.saveCustomerOrder(round.id, u3, mapOf("vp-item" to 1000L))
+
+        veggieRepo.closeRound(round.id, 1_776_701_000_000L)
+
+        // Initial settlement with 3 users:
+        // Market price: R$ 10,00 per item -> item cost = 1000 cents each.
+        // Fee share: R$ 30,00 / 3 = R$ 10,00 each.
+        // Grand total per user: R$ 20,00 (2000 cents).
+        val initialEntries = veggieRepo.getEntriesForRound(round.id)
+        val initialSettlement = veggieRepo.executeRoundSettlement(
+            roundId = round.id,
+            buyerOperationFeeCents = 30_00L,
+            transportFeeCents = 0L,
+            transporterUserId = null,
+            productSettlements = listOf(
+                VeggieRoundProductSettlement(
+                    roundId = round.id,
+                    veggieProductId = "vp-item",
+                    marketUnitPriceCents = 10_00L,
+                    totalSpentCents = 30_00L
+                )
+            ),
+            actualQuantitiesByEntryId = initialEntries.associate { it.id to 1000L },
+            settledAt = 1_776_702_000_000L
+        )
+        assertNotNull(initialSettlement)
+
+        // Check balances after initial settlement: 10000 - 2000 = 8000 cents (R$ 80,00)
+        assertEquals(80_00L, userRepo.getUserById("u-1")!!.balance)
+        assertEquals(80_00L, userRepo.getUserById("u-2")!!.balance)
+        assertEquals(80_00L, userRepo.getUserById("u-3")!!.balance)
+        assertEquals(100_00L, userRepo.getUserById("u-4")!!.balance)
+
+        // Now, User 4 is added afterwards to this billed round!
+        val itemProd = veggieRepo.getVeggieProductById("vp-item")!!
+        veggieRepo.upsertAdminOrderEntry(
+            VeggieOrderEntry(
+                id = "entry-u4",
+                roundId = round.id,
+                userId = u4.id,
+                userNameSnapshot = u4.name,
+                veggieProductId = itemProd.id,
+                veggieNameSnapshot = itemProd.name,
+                unitNameSnapshot = "Unit",
+                allowDecimalsSnapshot = false,
+                orderedQuantityScaled = 1000L,
+                actualQuantityScaled = 1000L
+            )
+        )
+
+        // Execute settlement update (4 users now! Fee share drops to R$ 30,00 / 4 = R$ 7,50 = 750 cents):
+        // New grand total for u-1, u-2, u-3: 1000 (item) + 750 (fee) = 1750 cents (R$ 17,50).
+        // Each previously paid 2000 cents -> Each gets a +250 cent (R$ 2,50) refund!
+        // New grand total for u-4: 1000 (item) + 750 (fee) = 1750 cents (R$ 17,50).
+        // u-4 previously paid 0 cents -> Charged -1750 cents (R$ 17,50).
+        val allEntriesNow = veggieRepo.getEntriesForRound(round.id)
+        val updateSettlement = veggieRepo.executeRoundSettlement(
+            roundId = round.id,
+            buyerOperationFeeCents = 30_00L,
+            transportFeeCents = 0L,
+            transporterUserId = null,
+            productSettlements = listOf(
+                VeggieRoundProductSettlement(
+                    roundId = round.id,
+                    veggieProductId = "vp-item",
+                    marketUnitPriceCents = 10_00L,
+                    totalSpentCents = 40_00L
+                )
+            ),
+            actualQuantitiesByEntryId = allEntriesNow.associate { it.id to 1000L },
+            settledAt = 1_776_703_000_000L
+        )
+        assertNotNull(updateSettlement)
+
+        // Verify balances after post-settlement addition:
+        // u-1, u-2, u-3: 8000 + 250 = 8250 cents (R$ 82,50)
+        // u-4: 10000 - 1750 = 8250 cents (R$ 82,50)
+        assertEquals(82_50L, userRepo.getUserById("u-1")!!.balance)
+        assertEquals(82_50L, userRepo.getUserById("u-2")!!.balance)
+        assertEquals(82_50L, userRepo.getUserById("u-3")!!.balance)
+        assertEquals(82_50L, userRepo.getUserById("u-4")!!.balance)
+
+        // Verify delta transactions for u-1, u-2, u-3 have type VEGGIE and amount +250 cents
+        val u1Txs = txRepo.getTransactionsByUserId("u-1")
+        assertEquals(2, u1Txs.size)
+        val u1Refund = u1Txs.find { it.note!!.startsWith("SYSNOTE|VEGGIE_CORRECTION|") }!!
+        assertEquals(2_50L, u1Refund.totalAmount)
+        assertEquals(TransactionType.VEGGIE, u1Refund.type)
+
+        // Verify charge transaction for u-4 has type VEGGIE and amount -1750 cents
+        val u4Txs = txRepo.getTransactionsByUserId("u-4")
+        assertEquals(1, u4Txs.size)
+        val u4Charge = u4Txs[0]
+        assertEquals(-17_50L, u4Charge.totalAmount)
+        assertEquals(TransactionType.VEGGIE, u4Charge.type)
+    }
+
+    @Test
+    fun testPdfExportMarking() = runTest {
+        val round = veggieRepo.openNewRound(
+            buyerOperationFeeCents = 5_00L,
+            transportFeeCents = 5_00L,
+            openedAt = 1_776_700_000_000L
+        )
+        assertNull(round.buyerPdfExportedAt)
+        assertNull(round.workerPdfExportedAt)
+
+        val buyerExportTime = 1_776_710_000_000L
+        val workerExportTime = 1_776_720_000_000L
+
+        assertTrue(veggieRepo.markBuyerPdfExported(round.id, buyerExportTime))
+        val afterBuyer = veggieRepo.getRoundById(round.id)!!
+        assertEquals(buyerExportTime, afterBuyer.buyerPdfExportedAt)
+        assertNull(afterBuyer.workerPdfExportedAt)
+
+        assertTrue(veggieRepo.markWorkerPdfExported(round.id, workerExportTime))
+        val afterWorker = veggieRepo.getRoundById(round.id)!!
+        assertEquals(buyerExportTime, afterWorker.buyerPdfExportedAt)
+        assertEquals(workerExportTime, afterWorker.workerPdfExportedAt)
     }
 }

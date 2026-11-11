@@ -44,6 +44,8 @@ data class VeggieOrderRound(
     val buyerOperationFeeCents: Long = 0L,
     val transportFeeCents: Long = 0L,
     val transporterUserId: String? = null,
+    val buyerPdfExportedAt: Long? = null,
+    val workerPdfExportedAt: Long? = null,
     val updatedAt: Long = 0L
 ) {
     val combinedFeeCents: Long

@@ -49,6 +49,7 @@ interface AppStrings {
     val historyTypeExpenses: String
     val historyTypeCancellation: String
     val historyTypeCorrection: String
+    val historyTypeVeggie: String
     fun cancellationNote(type: String, date: String): String
     val continueShopping: String
     val lowBalanceWarningTitle: String
@@ -811,6 +812,7 @@ interface AppStrings {
     val roundStatusClosed: String
     val roundStatusSettled: String
     val openNewRoundBtn: String
+    fun nextAutoRoundScheduled(day: String, date: String, time: String): String
     val closeRoundBtn: String
     val reopenRoundBtn: String
     val exportBuyerPdfBtn: String
@@ -823,8 +825,25 @@ interface AppStrings {
     val transporterLabel: String
     val transporterExternal: String
     val saveDraftBtn: String
+    val saveChangesBtn: String
+    val resetChangesBtn: String
+    val unsavedChangesBadge: String
+    val confirmResetChangesTitle: String
+    val confirmResetChangesMsg: String
+    val deleteRoundBtn: String
+    val confirmDeleteRoundTitle: String
+    val confirmDeleteRoundMsg: String
+    val completeRoundBtn: String
+    val confirmCompleteEmptyRoundTitle: String
+    val confirmCompleteEmptyRoundMsg: String
+    val pdfExportSuccessTitle: String
+    val pdfSavedToMsg: String
+    val openPdfBtn: String
+    val showInFolderBtn: String
     val settleAndChargeBtn: String
     val updateSettledRoundBtn: String
+    val backToPastRounds: String
+    fun editingPastRoundTitle(weekOfYear: Int, isoYear: Int): String
     val colOrderedQty: String
     val colActualQty: String
     val colMarketUnitPrice: String

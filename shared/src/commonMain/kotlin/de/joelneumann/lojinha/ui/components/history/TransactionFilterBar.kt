@@ -58,6 +58,7 @@ fun TransactionFilterBar(
             val filterOptions: List<Pair<String, TransactionType?>> = listOf(
                 strings.historyFilterAll to null,
                 strings.historyTypePurchase to TransactionType.PURCHASE,
+                strings.historyTypeVeggie to TransactionType.VEGGIE,
                 strings.historyTypeExpenses to TransactionType.ADMIN_WITHDRAWAL,
                 strings.historyTypeDeposit to TransactionType.ADMIN_DEPOSIT,
                 strings.historyTypeCancellation to TransactionType.CANCELLATION,

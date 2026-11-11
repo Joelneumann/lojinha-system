@@ -4,8 +4,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +23,10 @@ import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.admin.veggie.AdminVeggieCatalogSection
 import de.joelneumann.lojinha.ui.components.admin.veggie.AdminVeggieSettlementMatrix
+import de.joelneumann.lojinha.ui.components.admin.veggie.ExportedBadgePill
+import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
+import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
+import de.joelneumann.lojinha.ui.components.general.PaginationBar
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
@@ -34,7 +40,9 @@ fun AdminVeggieTabScreen(
     viewModel: AdminVeggieViewModel,
     onUnsavedStateChanged: (Boolean) -> Unit = {},
     onExportBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
-    onExportWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null
+    onExportWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
+    onOpenExportedPdf: ((String) -> Unit)? = null,
+    onRevealExportedFolder: ((String) -> Unit)? = null
 ) {
     val strings = I18n.current
     val currentLanguage = LanguageManager.currentLanguage
@@ -45,6 +53,13 @@ fun AdminVeggieTabScreen(
     val catalogSearchQuery by viewModel.catalogSearchQuery.collectAsState()
     val users by viewModel.users.collectAsState()
     val rounds by viewModel.rounds.collectAsState()
+    val historyCurrentPage by viewModel.historyCurrentPage.collectAsState()
+    val historyTotalPages by viewModel.historyTotalPages.collectAsState()
+    val historyPageSize by viewModel.historyPageSize.collectAsState()
+    val historyTotalCount by viewModel.historyTotalCount.collectAsState()
+    val pagedSettledRounds by viewModel.pagedSettledRounds.collectAsState()
+    val activeRound by viewModel.activeRound.collectAsState()
+    val editingPastRound by viewModel.editingPastRound.collectAsState()
     val selectedRound by viewModel.selectedRound.collectAsState()
     val selectedRoundEntries by viewModel.selectedRoundEntries.collectAsState()
     val draftActualQuantities by viewModel.draftActualQuantities.collectAsState()
@@ -58,6 +73,12 @@ fun AdminVeggieTabScreen(
     val isSaving by viewModel.isSaving.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val pdfExportResultPath by viewModel.pdfExportResultPath.collectAsState()
+    val nextAutoRoundSchedule by viewModel.nextAutoRoundSchedule.collectAsState()
+
+    var pendingSubTab by remember { mutableStateOf<AdminVeggieSubTab?>(null) }
+    var pendingBackFromHistoryEdit by remember { mutableStateOf(false) }
+    var showDiscardConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(hasUnsavedSettlementChanges) {
         onUnsavedStateChanged(hasUnsavedSettlementChanges)
@@ -82,33 +103,53 @@ fun AdminVeggieTabScreen(
                     label = strings.veggieSubTabRound,
                     icon = Icons.Default.TableChart,
                     selected = currentSubTab == AdminVeggieSubTab.ACTIVE_ROUND,
-                    onClick = { viewModel.selectSubTab(AdminVeggieSubTab.ACTIVE_ROUND) }
+                    onClick = {
+                        if (currentSubTab != AdminVeggieSubTab.ACTIVE_ROUND) {
+                            if (hasUnsavedSettlementChanges) {
+                                pendingSubTab = AdminVeggieSubTab.ACTIVE_ROUND
+                                showDiscardConfirmDialog = true
+                            } else {
+                                if (editingPastRound != null) {
+                                    viewModel.closePastRoundEditor()
+                                }
+                                viewModel.selectSubTab(AdminVeggieSubTab.ACTIVE_ROUND)
+                            }
+                        }
+                    }
                 )
                 SubTabButton(
                     label = strings.veggieSubTabCatalog,
                     icon = Icons.Default.Eco,
                     selected = currentSubTab == AdminVeggieSubTab.CATALOG,
-                    onClick = { viewModel.selectSubTab(AdminVeggieSubTab.CATALOG) }
+                    onClick = {
+                        if (currentSubTab != AdminVeggieSubTab.CATALOG) {
+                            if (hasUnsavedSettlementChanges) {
+                                pendingSubTab = AdminVeggieSubTab.CATALOG
+                                showDiscardConfirmDialog = true
+                            } else {
+                                if (editingPastRound != null) {
+                                    viewModel.closePastRoundEditor()
+                                }
+                                viewModel.selectSubTab(AdminVeggieSubTab.CATALOG)
+                            }
+                        }
+                    }
                 )
                 SubTabButton(
-                    label = "${strings.veggieSubTabHistory} (${rounds.size})",
+                    label = "${strings.veggieSubTabHistory} ($historyTotalCount)",
                     icon = Icons.Default.History,
                     selected = currentSubTab == AdminVeggieSubTab.HISTORY,
-                    onClick = { viewModel.selectSubTab(AdminVeggieSubTab.HISTORY) }
+                    onClick = {
+                        if (currentSubTab != AdminVeggieSubTab.HISTORY) {
+                            if (hasUnsavedSettlementChanges) {
+                                pendingSubTab = AdminVeggieSubTab.HISTORY
+                                showDiscardConfirmDialog = true
+                            } else {
+                                viewModel.selectSubTab(AdminVeggieSubTab.HISTORY)
+                            }
+                        }
+                    }
                 )
-            }
-
-            if (!hasAnyOpenOrClosedRound) {
-                Button(
-                    onClick = { viewModel.openNewRound() },
-                    enabled = !isSaving,
-                    colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp), tint = SurfaceWhite)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(strings.openNewRoundBtn, fontWeight = FontWeight.Bold, color = SurfaceWhite, fontSize = 13.sp)
-                }
             }
         }
 
@@ -152,7 +193,7 @@ fun AdminVeggieTabScreen(
 
         when (currentSubTab) {
             AdminVeggieSubTab.ACTIVE_ROUND -> {
-                if (selectedRound == null) {
+                if (activeRound == null) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = SurfaceWhite,
@@ -194,11 +235,40 @@ fun AdminVeggieTabScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(strings.openNewRoundBtn, fontWeight = FontWeight.Bold, color = SurfaceWhite)
                             }
+
+                            if (nextAutoRoundSchedule != null) {
+                                val scheduleInfo = nextAutoRoundSchedule!!
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Surface(
+                                    color = ColorSuccessEmerald.copy(alpha = 0.08f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, ColorSuccessEmerald.copy(alpha = 0.25f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Schedule,
+                                            contentDescription = null,
+                                            tint = ColorSuccessEmerald,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = scheduleInfo.formatScheduleText(strings, currentLanguage),
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = PrimaryNavy
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 } else {
                     AdminVeggieSettlementMatrix(
-                        round = selectedRound!!,
+                        round = activeRound!!,
                         entries = selectedRoundEntries,
                         products = products,
                         users = users,
@@ -220,9 +290,13 @@ fun AdminVeggieTabScreen(
                         onReopenRound = viewModel::reopenSelectedRound,
                         onSaveDraft = viewModel::saveDraftSettlement,
                         onExecuteSettlement = viewModel::executeSettlement,
+                        onDeleteRound = viewModel::deleteCurrentRound,
+                        onCompleteEmptyRound = viewModel::completeEmptyRound,
                         onAddAdminEntry = viewModel::addOrUpdateCustomerEntry,
                         onExportBuyerPdf = onExportBuyerPdf,
                         onExportWorkerPdf = onExportWorkerPdf,
+                        hasUnsavedChanges = hasUnsavedSettlementChanges,
+                        onResetChanges = viewModel::discardDraft,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -245,35 +319,278 @@ fun AdminVeggieTabScreen(
             }
 
             AdminVeggieSubTab.HISTORY -> {
-                LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp)
-                ) {
-                    if (rounds.isEmpty()) {
-                        item(key = "empty-rounds-history") {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                                contentAlignment = Alignment.Center
+                if (editingPastRound != null) {
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        val isoWeek = remember(editingPastRound!!.openedAt) {
+                            IsoWeekUtils.fromEpochMillis(editingPastRound!!.openedAt)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SurfaceWhite,
+                            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                            shadowElevation = 1.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(strings.noVeggieHistoryMsg, color = TextSecondaryMuted, fontSize = 14.sp)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (hasUnsavedSettlementChanges) {
+                                                pendingBackFromHistoryEdit = true
+                                                showDiscardConfirmDialog = true
+                                            } else {
+                                                viewModel.closePastRoundEditor()
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(strings.backToPastRounds, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Text(
+                                        text = strings.editingPastRoundTitle(isoWeek.weekOfYear, isoWeek.isoYear),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrimaryNavy
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    AdminStatusBadge(
+                                        text = strings.roundStatusSettled,
+                                        type = AdminBadgeType.NAVY
+                                    )
+                                    if (hasUnsavedSettlementChanges) {
+                                        AdminStatusBadge(
+                                            text = "● ${strings.unsavedChangesBadge}",
+                                            type = AdminBadgeType.WARNING
+                                        )
+                                    }
+                                }
                             }
                         }
-                    } else {
-                        items(rounds, key = { it.id }) { round ->
-                            RoundHistoryCard(
-                                round = round,
-                                isSelected = selectedRound?.id == round.id,
-                                transporterName = users.find { it.id == round.transporterUserId }?.name,
-                                onOpenInMatrix = { viewModel.selectRound(round.id, switchToRoundTab = true) },
-                                onExportBuyerPdf = onExportBuyerPdf?.let { cb -> { cb(round.id, currentLanguage) } },
-                                onExportWorkerPdf = onExportWorkerPdf?.let { cb -> { cb(round.id, currentLanguage) } }
-                            )
-                        }
+
+                        AdminVeggieSettlementMatrix(
+                            round = editingPastRound!!,
+                            entries = selectedRoundEntries,
+                            products = products,
+                            users = users,
+                            draftActualQuantities = draftActualQuantities,
+                            draftMarketPrices = draftMarketPrices,
+                            draftTotalSpent = draftTotalSpent,
+                            draftBuyerFeeInput = draftBuyerFeeInput,
+                            draftTransportFeeInput = draftTransportFeeInput,
+                            draftTransporterUserId = draftTransporterUserId,
+                            livePreview = liveSettlementPreview,
+                            isSaving = isSaving,
+                            onUpdateActualQuantity = viewModel::updateEntryActualQuantity,
+                            onUpdateMarketUnitPrice = viewModel::updateProductMarketUnitPrice,
+                            onUpdateTotalSpent = viewModel::updateProductTotalSpent,
+                            onUpdateBuyerFee = viewModel::updateBuyerFeeInput,
+                            onUpdateTransportFee = viewModel::updateTransportFeeInput,
+                            onUpdateTransporterUser = viewModel::updateTransporterUserId,
+                            onCloseRound = viewModel::closeSelectedRound,
+                            onReopenRound = viewModel::reopenSelectedRound,
+                            onSaveDraft = viewModel::saveDraftSettlement,
+                            onExecuteSettlement = viewModel::executeSettlement,
+                            onDeleteRound = viewModel::deleteCurrentRound,
+                            onCompleteEmptyRound = viewModel::completeEmptyRound,
+                            onAddAdminEntry = viewModel::addOrUpdateCustomerEntry,
+                            onExportBuyerPdf = onExportBuyerPdf,
+                            onExportWorkerPdf = onExportWorkerPdf,
+                            hasUnsavedChanges = hasUnsavedSettlementChanges,
+                            onResetChanges = viewModel::discardDraft,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
+                } else {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth()
+                    ) {
+                        val historyListState = rememberLazyListState()
+
+                        LaunchedEffect(historyCurrentPage, historyPageSize) {
+                            historyListState.scrollToItem(0)
+                        }
+
+                        LazyColumn(
+                            state = historyListState,
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(bottom = 12.dp)
+                        ) {
+                            if (historyTotalCount == 0) {
+                                item(key = "empty-rounds-history") {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(strings.noVeggieHistoryMsg, color = TextSecondaryMuted, fontSize = 14.sp)
+                                    }
+                                }
+                            } else {
+                                items(pagedSettledRounds, key = { it.id }) { round ->
+                                    RoundHistoryCard(
+                                        round = round,
+                                        isSelected = false,
+                                        transporterName = users.find { it.id == round.transporterUserId }?.name,
+                                        onOpenInMatrix = { viewModel.openPastRoundForEditing(round.id) },
+                                        onExportBuyerPdf = onExportBuyerPdf?.let { cb -> { cb(round.id, currentLanguage) } },
+                                        onExportWorkerPdf = onExportWorkerPdf?.let { cb -> { cb(round.id, currentLanguage) } }
+                                    )
+                                }
+                            }
+                        }
+
+                        AppVerticalScrollbar(
+                            scrollState = historyListState,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .padding(vertical = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    PaginationBar(
+                        currentPage = historyCurrentPage,
+                        totalPages = historyTotalPages,
+                        pageSize = historyPageSize,
+                        totalCount = historyTotalCount,
+                        onPageChange = viewModel::setHistoryPage,
+                        onPageSizeChange = viewModel::setHistoryPageSize,
+                        pageSizeOptions = listOf(10, 25, 50, 100),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
+    }
+
+    if (showDiscardConfirmDialog) {
+        ConfirmationDialog(
+            title = strings.discardChangesTitle,
+            message = strings.discardChangesMsg,
+            confirmText = strings.discard,
+            cancelText = strings.cancel,
+            confirmButtonColor = ColorDangerCrimson,
+            onConfirm = {
+                showDiscardConfirmDialog = false
+                if (pendingBackFromHistoryEdit) {
+                    pendingBackFromHistoryEdit = false
+                    viewModel.closePastRoundEditor()
+                } else if (pendingSubTab != null) {
+                    val target = pendingSubTab!!
+                    pendingSubTab = null
+                    if (editingPastRound != null) {
+                        viewModel.closePastRoundEditor()
+                    } else {
+                        viewModel.discardDraft()
+                    }
+                    viewModel.selectSubTab(target)
+                }
+            },
+            onDismiss = {
+                showDiscardConfirmDialog = false
+                pendingBackFromHistoryEdit = false
+                pendingSubTab = null
+            }
+        )
+    }
+
+    if (pdfExportResultPath != null) {
+        val resultPath = pdfExportResultPath!!
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissExportResultDialog() },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ColorSuccessEmerald, modifier = Modifier.size(24.dp))
+                    Text(strings.pdfExportSuccessTitle, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PrimaryNavy)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(strings.pdfSavedToMsg, fontSize = 13.sp, color = TextSecondaryMuted)
+                    Surface(
+                        color = SurfaceContainerHighLight,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = resultPath,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = PrimaryNavy,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (onOpenExportedPdf != null) {
+                            Button(
+                                onClick = {
+                                    onOpenExportedPdf(resultPath)
+                                    viewModel.dismissExportResultDialog()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f).height(40.dp)
+                            ) {
+                                Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(strings.openPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        if (onRevealExportedFolder != null) {
+                            OutlinedButton(
+                                onClick = {
+                                    onRevealExportedFolder(resultPath)
+                                    viewModel.dismissExportResultDialog()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f).height(40.dp)
+                            ) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(strings.showInFolderBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.dismissExportResultDialog() },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy)
+                ) {
+                    Text(strings.confirm, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                }
+            }
+        )
     }
 }
 
@@ -375,6 +692,10 @@ private fun RoundHistoryCard(
                         Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(15.dp), tint = PrimaryNavy)
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(strings.exportBuyerPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        if (round.buyerPdfExportedAt != null) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            ExportedBadgePill()
+                        }
                     }
                 }
 
@@ -387,6 +708,10 @@ private fun RoundHistoryCard(
                         Icon(Icons.Default.GridOn, contentDescription = null, modifier = Modifier.size(15.dp), tint = PrimaryNavy)
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(strings.exportWorkerPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                        if (round.workerPdfExportedAt != null) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            ExportedBadgePill()
+                        }
                     }
                 }
 
@@ -396,10 +721,10 @@ private fun RoundHistoryCard(
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                 ) {
-                    Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(15.dp), tint = SurfaceWhite)
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp), tint = SurfaceWhite)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (round.status == VeggieRoundStatus.SETTLED) strings.edit else strings.veggieSubTabRound,
+                        text = strings.edit,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = SurfaceWhite

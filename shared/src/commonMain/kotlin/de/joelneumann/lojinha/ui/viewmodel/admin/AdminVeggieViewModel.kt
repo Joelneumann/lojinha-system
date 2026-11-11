@@ -6,6 +6,8 @@ import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.domain.repository.VeggieOrderRepository
+import de.joelneumann.lojinha.domain.service.NextAutoRoundInfo
+import de.joelneumann.lojinha.domain.service.VeggieAutoScheduleCalculator
 import de.joelneumann.lojinha.domain.service.VeggieRoundSettlementResult
 import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -57,6 +59,28 @@ class AdminVeggieViewModel(
     private val _rounds = MutableStateFlow<List<VeggieOrderRound>>(emptyList())
     val rounds: StateFlow<List<VeggieOrderRound>> = _rounds.asStateFlow()
 
+    // Pagination for past settled rounds (history tab)
+    private val _historyCurrentPage = MutableStateFlow(0)
+    val historyCurrentPage: StateFlow<Int> = _historyCurrentPage.asStateFlow()
+
+    private val _historyPageSize = MutableStateFlow(10)
+    val historyPageSize: StateFlow<Int> = _historyPageSize.asStateFlow()
+
+    private val _historyTotalCount = MutableStateFlow(0)
+    val historyTotalCount: StateFlow<Int> = _historyTotalCount.asStateFlow()
+
+    private val _historyTotalPages = MutableStateFlow(1)
+    val historyTotalPages: StateFlow<Int> = _historyTotalPages.asStateFlow()
+
+    private val _pagedSettledRounds = MutableStateFlow<List<VeggieOrderRound>>(emptyList())
+    val pagedSettledRounds: StateFlow<List<VeggieOrderRound>> = _pagedSettledRounds.asStateFlow()
+
+    private val _activeRound = MutableStateFlow<VeggieOrderRound?>(null)
+    val activeRound: StateFlow<VeggieOrderRound?> = _activeRound.asStateFlow()
+
+    private val _editingPastRound = MutableStateFlow<VeggieOrderRound?>(null)
+    val editingPastRound: StateFlow<VeggieOrderRound?> = _editingPastRound.asStateFlow()
+
     private val _selectedRound = MutableStateFlow<VeggieOrderRound?>(null)
     val selectedRound: StateFlow<VeggieOrderRound?> = _selectedRound.asStateFlow()
 
@@ -102,6 +126,15 @@ class AdminVeggieViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _pdfExportResultPath = MutableStateFlow<String?>(null)
+    val pdfExportResultPath: StateFlow<String?> = _pdfExportResultPath.asStateFlow()
+
+    private val _systemSettings = MutableStateFlow(SystemSettings())
+    val systemSettings: StateFlow<SystemSettings> = _systemSettings.asStateFlow()
+
+    private val _nextAutoRoundSchedule = MutableStateFlow<NextAutoRoundInfo?>(null)
+    val nextAutoRoundSchedule: StateFlow<NextAutoRoundInfo?> = _nextAutoRoundSchedule.asStateFlow()
+
     private var loadJob: Job? = null
 
     init {
@@ -129,28 +162,43 @@ class AdminVeggieViewModel(
                 val allProducts = veggieOrderRepository.getAllVeggieProducts()
                 val allUsers = userRepository.getAllUsers().filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
                 val allRounds = veggieOrderRepository.getAllRounds().sortedByDescending { it.openedAt }
+                val settings = settingsRepository?.getSettings() ?: SystemSettings()
 
                 _unitTypes.value = allUnits
                 _products.value = allProducts
                 _users.value = allUsers
                 _rounds.value = allRounds
+                updatePagedSettledRounds()
+                _systemSettings.value = settings
+                _nextAutoRoundSchedule.value = VeggieAutoScheduleCalculator.getNextAutoRoundSchedule(
+                    settings = settings,
+                    nowMillis = currentTimeMillis()
+                )
 
-                val currentSelectedId = _selectedRound.value?.id
-                val targetRound = if (currentSelectedId != null) {
-                    allRounds.find { it.id == currentSelectedId } ?: allRounds.firstOrNull()
-                } else {
-                    allRounds.firstOrNull { it.status != VeggieRoundStatus.SETTLED } ?: allRounds.firstOrNull()
-                }
+                val currentActive = allRounds.firstOrNull { it.status != VeggieRoundStatus.SETTLED }
+                _activeRound.value = currentActive
 
-                if (targetRound != null) {
-                    val isSameRound = currentSelectedId == targetRound.id
-                    loadRoundDetailsInternal(targetRound, resetDraft = !(isSameRound && preserveDraftEdits && _hasUnsavedSettlementChanges.value))
+                val editingId = _editingPastRound.value?.id
+                if (editingId != null) {
+                    val updatedEditingRound = allRounds.find { it.id == editingId }
+                    if (updatedEditingRound != null) {
+                        _editingPastRound.value = updatedEditingRound
+                        loadRoundDetailsInternal(updatedEditingRound, resetDraft = !(preserveDraftEdits && _hasUnsavedSettlementChanges.value))
+                    } else {
+                        _editingPastRound.value = null
+                        if (currentActive != null) {
+                            loadRoundDetailsInternal(currentActive, resetDraft = true)
+                        } else {
+                            clearSelectedRoundState()
+                        }
+                    }
                 } else {
-                    _selectedRound.value = null
-                    _selectedRoundEntries.value = emptyList()
-                    _selectedRoundSettlements.value = emptyMap()
-                    _liveSettlementPreview.value = null
-                    _hasUnsavedSettlementChanges.value = false
+                    if (currentActive != null) {
+                        val isSame = _selectedRound.value?.id == currentActive.id
+                        loadRoundDetailsInternal(currentActive, resetDraft = !(isSame && preserveDraftEdits && _hasUnsavedSettlementChanges.value))
+                    } else {
+                        clearSelectedRoundState()
+                    }
                 }
             } catch (e: Exception) {
                 AppLogger.error("AdminVeggieViewModel", "Failed to load veggie data: ${e.message}", e)
@@ -158,14 +206,98 @@ class AdminVeggieViewModel(
         }
     }
 
-    fun selectRound(roundId: String, switchToRoundTab: Boolean = true) {
+    private fun clearSelectedRoundState() {
+        _selectedRound.value = null
+        _selectedRoundEntries.value = emptyList()
+        _selectedRoundSettlements.value = emptyMap()
+        _liveSettlementPreview.value = null
+        _hasUnsavedSettlementChanges.value = false
+        _draftActualQuantities.value = emptyMap()
+        _draftMarketPrices.value = emptyMap()
+        _draftTotalSpent.value = emptyMap()
+        _manuallyEditedTotalSpentProductIds.value = emptySet()
+        _draftBuyerFeeInput.value = "0"
+        _draftTransportFeeInput.value = "0"
+        _draftTransporterUserId.value = null
+    }
+
+    fun openPastRoundForEditing(roundId: String) {
         activeScope.launch {
             val round = _rounds.value.find { it.id == roundId } ?: veggieOrderRepository.getRoundById(roundId) ?: return@launch
+            _editingPastRound.value = round
             loadRoundDetailsInternal(round, resetDraft = true)
-            if (switchToRoundTab) {
-                _currentSubTab.value = AdminVeggieSubTab.ACTIVE_ROUND
-            }
         }
+    }
+
+    fun closePastRoundEditor() {
+        _editingPastRound.value = null
+        _hasUnsavedSettlementChanges.value = false
+        val active = _activeRound.value
+        if (active != null) {
+            activeScope.launch {
+                loadRoundDetailsInternal(active, resetDraft = true)
+            }
+        } else {
+            clearSelectedRoundState()
+        }
+    }
+
+    fun setHistoryPage(page: Int) {
+        val total = _historyTotalPages.value
+        if (page in 0 until total) {
+            _historyCurrentPage.value = page
+            updatePagedSettledRounds()
+        }
+    }
+
+    fun setHistoryPageSize(size: Int) {
+        if (size > 0) {
+            _historyPageSize.value = size
+            _historyCurrentPage.value = 0
+            updatePagedSettledRounds()
+        }
+    }
+
+    private fun updatePagedSettledRounds() {
+        val settled = _rounds.value.filter { it.status == VeggieRoundStatus.SETTLED }
+        val count = settled.size
+        _historyTotalCount.value = count
+        val size = _historyPageSize.value
+        val pages = if (count == 0) 1 else kotlin.math.ceil(count.toDouble() / size).toInt()
+        _historyTotalPages.value = pages
+
+        if (_historyCurrentPage.value >= pages) {
+            _historyCurrentPage.value = maxOf(0, pages - 1)
+        }
+
+        val start = _historyCurrentPage.value * size
+        _pagedSettledRounds.value = if (start < count) {
+            settled.drop(start).take(size)
+        } else {
+            emptyList()
+        }
+    }
+
+    fun discardDraft() {
+        val editing = _editingPastRound.value
+        if (editing != null) {
+            activeScope.launch {
+                loadRoundDetailsInternal(editing, resetDraft = true)
+            }
+            return
+        }
+        val active = _activeRound.value
+        if (active != null) {
+            activeScope.launch {
+                loadRoundDetailsInternal(active, resetDraft = true)
+            }
+        } else {
+            clearSelectedRoundState()
+        }
+    }
+
+    fun selectRound(roundId: String, switchToRoundTab: Boolean = true) {
+        openPastRoundForEditing(roundId)
     }
 
     private suspend fun loadRoundDetailsInternal(round: VeggieOrderRound, resetDraft: Boolean) {
@@ -360,12 +492,14 @@ class AdminVeggieViewModel(
         clearMessages()
         activeScope.launch {
             try {
+                _editingPastRound.value = null
                 val settings = settingsRepository?.getSettings() ?: SystemSettings()
                 val newRound = veggieOrderRepository.openNewRound(
                     buyerOperationFeeCents = settings.defaultVeggieBuyerFeeCents,
                     transportFeeCents = settings.defaultVeggieTransportFeeCents,
                     openedAt = currentTimeMillis()
                 )
+                _currentSubTab.value = AdminVeggieSubTab.ACTIVE_ROUND
                 _selectedRound.value = newRound
                 loadData(preserveDraftEdits = false)
             } catch (e: Exception) {
@@ -448,6 +582,84 @@ class AdminVeggieViewModel(
         }
     }
 
+    fun setExportResultPath(path: String?) {
+        _pdfExportResultPath.value = path
+    }
+
+    fun dismissExportResultDialog() {
+        _pdfExportResultPath.value = null
+    }
+
+    fun deleteCurrentRound() {
+        val round = _selectedRound.value ?: return
+        if (_isSaving.value) return
+        _isSaving.value = true
+        clearMessages()
+        activeScope.launch {
+            try {
+                val ok = veggieOrderRepository.deleteRound(round.id)
+                if (ok) {
+                    _editingPastRound.value = null
+                    _statusMessage.value = I18n.get().deleted
+                    loadData(preserveDraftEdits = false)
+                } else {
+                    _errorMessage.value = "Could not delete round (may have existing transactions)"
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Failed to delete round"
+            } finally {
+                _isSaving.value = false
+            }
+        }
+    }
+
+    fun completeEmptyRound() {
+        val round = _selectedRound.value ?: return
+        if (_isSaving.value) return
+        _isSaving.value = true
+        clearMessages()
+        activeScope.launch {
+            try {
+                val result = veggieOrderRepository.executeRoundSettlement(
+                    roundId = round.id,
+                    buyerOperationFeeCents = 0L,
+                    transportFeeCents = 0L,
+                    transporterUserId = null,
+                    productSettlements = emptyList(),
+                    actualQuantitiesByEntryId = emptyMap(),
+                    settledAt = currentTimeMillis()
+                )
+                if (result != null) {
+                    _editingPastRound.value = null
+                    _hasUnsavedSettlementChanges.value = false
+                    _statusMessage.value = I18n.get().saved
+                    loadData(preserveDraftEdits = false)
+                } else {
+                    _errorMessage.value = "Failed to complete empty round"
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Failed to complete empty round"
+            } finally {
+                _isSaving.value = false
+            }
+        }
+    }
+
+    fun markPdfExported(roundId: String, isBuyer: Boolean) {
+        activeScope.launch {
+            try {
+                if (isBuyer) {
+                    veggieOrderRepository.markBuyerPdfExported(roundId, currentTimeMillis())
+                } else {
+                    veggieOrderRepository.markWorkerPdfExported(roundId, currentTimeMillis())
+                }
+                loadData(preserveDraftEdits = true)
+            } catch (e: Exception) {
+                AppLogger.error("AdminVeggieViewModel", "Failed to mark PDF exported: ${e.message}", e)
+            }
+        }
+    }
+
     fun executeSettlement() {
         val payload = buildCurrentDraftPayload() ?: return
         if (_isSaving.value) return
@@ -455,6 +667,7 @@ class AdminVeggieViewModel(
         clearMessages()
         activeScope.launch {
             try {
+                val isEditingPast = _editingPastRound.value != null
                 val result = veggieOrderRepository.executeRoundSettlement(
                     roundId = payload.round.id,
                     buyerOperationFeeCents = payload.buyerFeeCents,
@@ -465,6 +678,9 @@ class AdminVeggieViewModel(
                     settledAt = currentTimeMillis()
                 )
                 if (result != null) {
+                    if (isEditingPast) {
+                        _editingPastRound.value = null
+                    }
                     _hasUnsavedSettlementChanges.value = false
                     _statusMessage.value = I18n.get().saved
                     loadData(preserveDraftEdits = false)

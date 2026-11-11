@@ -558,7 +558,7 @@ fun App(
                             defaultSaveDirectory = defaultSaveDir,
                             onExecutePdfExport = { user, destinationFolder, fromTimestamp, toTimestamp, language ->
                                 if (!adminUsersViewModel.isExportingPdf.value) {
-                                    coroutineScope.launch {
+                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                         adminUsersViewModel.setIsExportingPdf(true)
                                         adminUsersViewModel.setExportPdfError(null)
                                         try {
@@ -578,21 +578,31 @@ fun App(
                                                 toTimestamp = toTimestamp,
                                                 language = language
                                             )
-                                            adminUsersViewModel.setExportResultPath(targetFile.absolutePath)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminUsersViewModel.setExportResultPath(targetFile.absolutePath)
+                                            }
                                         } catch (e: Exception) {
                                             AppLogger.error("App", "Failed to export PDF statement: ${e.message}", e)
-                                            adminUsersViewModel.setExportResultPath(null)
-                                            adminUsersViewModel.setExportPdfError(e.message ?: "Failed to export PDF statement")
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminUsersViewModel.setExportResultPath(null)
+                                                adminUsersViewModel.setExportPdfError(e.message ?: "Failed to export PDF statement")
+                                            }
                                         } finally {
-                                            adminUsersViewModel.setIsExportingPdf(false)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminUsersViewModel.setIsExportingPdf(false)
+                                            }
                                         }
                                     }
                                 }
                             },
                             onExportVeggieBuyerPdf = { roundId, language ->
-                                coroutineScope.launch {
+                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                     try {
-                                        val round = effectiveVeggieRepo.getRoundById(roundId) ?: return@launch
+                                        val round = effectiveVeggieRepo.getRoundById(roundId)
+                                        if (round == null) {
+                                            AppLogger.error("App", "Failed to export Veggie Buyer Shopping List PDF: Round $roundId not found")
+                                            return@launch
+                                        }
                                         val entries = effectiveVeggieRepo.getEntriesForRound(roundId)
                                         val weekInfo = de.joelneumann.lojinha.ui.utils.IsoWeekUtils.fromEpochMillis(round.openedAt)
                                         val targetDir = java.io.File(defaultSaveDir)
@@ -607,10 +617,9 @@ fun App(
                                             entries = entries,
                                             language = language
                                         )
-                                        if (targetFile.exists() && java.awt.Desktop.isDesktopSupported()) {
-                                            java.awt.Desktop.getDesktop().open(targetFile)
-                                        } else {
-                                            diagnosticsService.revealInFileExplorer(targetFile)
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            adminVeggieViewModel.markPdfExported(roundId, isBuyer = true)
+                                            adminVeggieViewModel.setExportResultPath(targetFile.absolutePath)
                                         }
                                     } catch (e: Exception) {
                                         AppLogger.error("App", "Failed to export Veggie Buyer Shopping List PDF: ${e.message}", e)
@@ -618,9 +627,13 @@ fun App(
                                 }
                             },
                             onExportVeggieWorkerPdf = { roundId, language ->
-                                coroutineScope.launch {
+                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                     try {
-                                        val round = effectiveVeggieRepo.getRoundById(roundId) ?: return@launch
+                                        val round = effectiveVeggieRepo.getRoundById(roundId)
+                                        if (round == null) {
+                                            AppLogger.error("App", "Failed to export Veggie Worker Sorting Matrix PDF: Round $roundId not found")
+                                            return@launch
+                                        }
                                         val entries = effectiveVeggieRepo.getEntriesForRound(roundId)
                                         val weekInfo = de.joelneumann.lojinha.ui.utils.IsoWeekUtils.fromEpochMillis(round.openedAt)
                                         val targetDir = java.io.File(defaultSaveDir)
@@ -635,10 +648,9 @@ fun App(
                                             entries = entries,
                                             language = language
                                         )
-                                        if (targetFile.exists() && java.awt.Desktop.isDesktopSupported()) {
-                                            java.awt.Desktop.getDesktop().open(targetFile)
-                                        } else {
-                                            diagnosticsService.revealInFileExplorer(targetFile)
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            adminVeggieViewModel.markPdfExported(roundId, isBuyer = false)
+                                            adminVeggieViewModel.setExportResultPath(targetFile.absolutePath)
                                         }
                                     } catch (e: Exception) {
                                         AppLogger.error("App", "Failed to export Veggie Worker Sorting Matrix PDF: ${e.message}", e)
@@ -648,11 +660,28 @@ fun App(
                             onOpenExportedPdf = { filePath ->
                                 try {
                                     val file = java.io.File(filePath)
-                                    if (file.exists() && java.awt.Desktop.isDesktopSupported()) {
-                                        java.awt.Desktop.getDesktop().open(file)
+                                    if (file.exists()) {
+                                        val os = System.getProperty("os.name").lowercase(java.util.Locale.US)
+                                        when {
+                                            os.contains("mac") -> {
+                                                ProcessBuilder("open", file.absolutePath).start()
+                                            }
+                                            os.contains("win") -> {
+                                                ProcessBuilder("cmd.exe", "/c", "start", "\"\"", file.absolutePath).start()
+                                            }
+                                            else -> {
+                                                ProcessBuilder("xdg-open", file.absolutePath).start()
+                                            }
+                                        }
                                     }
                                 } catch (e: Exception) {
                                     AppLogger.warn("App", "Failed to open PDF in system viewer: ${e.message}", e)
+                                    try {
+                                        val file = java.io.File(filePath)
+                                        if (file.exists() && java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.OPEN)) {
+                                            java.awt.Desktop.getDesktop().open(file)
+                                        }
+                                    } catch (_: Exception) {}
                                 }
                             },
                             onRevealExportedFolder = { filePath ->

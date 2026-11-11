@@ -39,7 +39,8 @@ enum class TransactionType {
     ADMIN_DEPOSIT,
     ADMIN_WITHDRAWAL,
     CANCELLATION,
-    CORRECTION
+    CORRECTION,
+    VEGGIE
 }
 
 @Serializable

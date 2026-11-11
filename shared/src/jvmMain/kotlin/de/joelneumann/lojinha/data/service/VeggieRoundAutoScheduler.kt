@@ -107,10 +107,6 @@ class VeggieRoundAutoScheduler(
         }
     }
 
-    private fun parseTimeOfDay(rawTime: String): Pair<Int, Int> {
-        val parts = rawTime.trim().split(":")
-        val hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 8
-        val minute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
-        return hour to minute
-    }
+    private fun parseTimeOfDay(rawTime: String): Pair<Int, Int> =
+        de.joelneumann.lojinha.domain.service.VeggieAutoScheduleCalculator.parseTimeOfDay(rawTime)
 }

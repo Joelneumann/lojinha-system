@@ -41,6 +41,7 @@ object SystemNoteHelper {
                     TransactionType.PURCHASE.name -> strings.historyTypePurchase
                     TransactionType.CANCELLATION.name -> strings.historyTypeCancellation
                     TransactionType.CORRECTION.name -> strings.historyTypeCorrection
+                    TransactionType.VEGGIE.name -> strings.historyTypeVeggie
                     else -> rawType
                 }
                 

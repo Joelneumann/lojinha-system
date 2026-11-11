@@ -1019,6 +1019,42 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
         }
     }
 
+    override suspend fun deleteRound(roundId: String): Boolean {
+        return try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/veggie/rounds/$roundId")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "deleteRound failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf/exported")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "markBuyerPdfExported failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf/exported")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "markWorkerPdfExported failed: ${e.message}", e)
+            false
+        }
+    }
+
     override suspend fun getEntriesForRound(roundId: String): List<VeggieOrderEntry> {
         return try {
             client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/$roundId/entries")) {

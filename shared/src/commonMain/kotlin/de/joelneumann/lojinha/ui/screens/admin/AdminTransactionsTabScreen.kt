@@ -134,6 +134,7 @@ fun AdminTransactionsTabScreen(
         val filterOptions = listOf(
             null to strings.historyFilterAll,
             TransactionType.PURCHASE to strings.historyTypePurchase,
+            TransactionType.VEGGIE to strings.historyTypeVeggie,
             TransactionType.ADMIN_DEPOSIT to strings.historyTypeDeposit,
             TransactionType.ADMIN_WITHDRAWAL to strings.historyTypeDebit,
             TransactionType.CORRECTION to strings.historyTypeCorrection,

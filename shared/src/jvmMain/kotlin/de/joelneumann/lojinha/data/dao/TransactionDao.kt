@@ -88,6 +88,9 @@ interface TransactionDao {
     """)
     suspend fun getTransactionsForProduct(productId: String): List<TransactionEntity>
 
+    @Query("SELECT * FROM transactions WHERE note LIKE '%|' || :roundId ORDER BY timestamp ASC")
+    suspend fun getTransactionsForRound(roundId: String): List<TransactionEntity>
+
 
 
     @Query("SELECT balance FROM users WHERE id = :id")

@@ -299,6 +299,7 @@ object TransactionPdfGenerator {
                     TransactionType.ADMIN_WITHDRAWAL -> if (tx.items.isNotEmpty()) strings.historyTypeCustomExpense else strings.historyTypeDebit
                     TransactionType.CORRECTION -> strings.historyTypeCorrection
                     TransactionType.CANCELLATION -> strings.historyTypeCancellation
+                    TransactionType.VEGGIE -> strings.historyTypeVeggie
                 }
                 val typeFont = when {
                     tx.type == TransactionType.CANCELLATION -> FONT_AMOUNT_NEG

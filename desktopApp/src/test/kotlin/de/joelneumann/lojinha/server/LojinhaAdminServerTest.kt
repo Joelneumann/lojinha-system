@@ -210,6 +210,23 @@ class LojinhaAdminServerTest {
             fakeVeggieRounds[idx] = fakeVeggieRounds[idx].copy(status = VeggieRoundStatus.OPEN, closedAt = null)
             return true
         }
+        override suspend fun deleteRound(roundId: String): Boolean {
+            fakeVeggieEntries.removeIf { it.roundId == roundId }
+            fakeVeggieSettlements.removeIf { it.roundId == roundId }
+            return fakeVeggieRounds.removeIf { it.id == roundId }
+        }
+        override suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean {
+            val idx = fakeVeggieRounds.indexOfFirst { it.id == roundId }
+            if (idx < 0) return false
+            fakeVeggieRounds[idx] = fakeVeggieRounds[idx].copy(buyerPdfExportedAt = timestamp)
+            return true
+        }
+        override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean {
+            val idx = fakeVeggieRounds.indexOfFirst { it.id == roundId }
+            if (idx < 0) return false
+            fakeVeggieRounds[idx] = fakeVeggieRounds[idx].copy(workerPdfExportedAt = timestamp)
+            return true
+        }
         override suspend fun getEntriesForRound(roundId: String): List<VeggieOrderEntry> =
             fakeVeggieEntries.filter { it.roundId == roundId }
         override suspend fun getEntriesForUserInRound(roundId: String, userId: String): List<VeggieOrderEntry> =

@@ -101,6 +101,21 @@ interface VeggieOrderDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateRounds(rounds: List<VeggieOrderRoundEntity>)
 
+    @Query("UPDATE veggie_order_rounds SET buyerPdfExportedAt = :timestamp, updatedAt = :updatedAt WHERE id = :roundId")
+    suspend fun markBuyerPdfExported(roundId: String, timestamp: Long, updatedAt: Long)
+
+    @Query("UPDATE veggie_order_rounds SET workerPdfExportedAt = :timestamp, updatedAt = :updatedAt WHERE id = :roundId")
+    suspend fun markWorkerPdfExported(roundId: String, timestamp: Long, updatedAt: Long)
+
+    @Query("DELETE FROM veggie_order_rounds WHERE id = :roundId")
+    suspend fun deleteRound(roundId: String)
+
+    @Query("DELETE FROM veggie_round_product_settlements WHERE roundId = :roundId")
+    suspend fun deleteProductSettlementsForRound(roundId: String)
+
+    @Query("DELETE FROM veggie_order_entries WHERE roundId = :roundId")
+    suspend fun deleteEntriesForRound(roundId: String)
+
     @Query("DELETE FROM veggie_order_rounds")
     suspend fun deleteAllRounds()
 
