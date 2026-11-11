@@ -905,6 +905,8 @@ object GermanStrings : AppStrings {
     override val markFavoriteTooltip = "Als Favorit markieren"
     override val unmarkFavoriteTooltip = "Aus Favoriten entfernen"
     override val noFavoriteProductsFound = "Keine Favoriten gefunden"
+    override val veggieFixedRoundFeesLabel = "Feste Gebühren der Runde (Einkauf & Transport)"
+    override val veggieSharedFeeNotice = "Wird zu gleichen Teilen auf alle Besteller dieser Runde aufgeteilt — Ihr Anteil sinkt, je mehr Personen bestellen."
 }
 
 

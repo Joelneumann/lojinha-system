@@ -885,6 +885,8 @@ interface AppStrings {
     val markFavoriteTooltip: String
     val unmarkFavoriteTooltip: String
     val noFavoriteProductsFound: String
+    val veggieFixedRoundFeesLabel: String
+    val veggieSharedFeeNotice: String
 }
 
 
