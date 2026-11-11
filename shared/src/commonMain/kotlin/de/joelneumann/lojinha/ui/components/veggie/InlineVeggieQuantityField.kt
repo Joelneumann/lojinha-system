@@ -38,6 +38,8 @@ fun InlineVeggieQuantityField(
     enabled: Boolean,
     onQuantityChange: (Long) -> Unit,
     onCommit: (() -> Unit)? = null,
+    onCommitPrevious: (() -> Unit)? = null,
+    onFocused: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
@@ -51,17 +53,17 @@ fun InlineVeggieQuantityField(
         }
     }
 
-    var textFieldValue by remember(quantityScaled) {
+    var textFieldValue by remember {
         val formatted = formatCurrent(quantityScaled)
         mutableStateOf(
             TextFieldValue(
                 text = formatted,
-                selection = if (isFocused) TextRange(0, formatted.length) else TextRange(formatted.length)
+                selection = TextRange(0, formatted.length)
             )
         )
     }
 
-    LaunchedEffect(quantityScaled, isFocused) {
+    LaunchedEffect(quantityScaled) {
         if (!isFocused) {
             val formatted = formatCurrent(quantityScaled)
             if (textFieldValue.text != formatted) {
@@ -73,17 +75,36 @@ fun InlineVeggieQuantityField(
         }
     }
 
+    val isOrdered = quantityScaled > 0L
+
     val borderColor = when {
         isFocused -> AccentNavy
-        quantityScaled > 0L -> ColorSuccessEmerald.copy(alpha = 0.6f)
+        isOrdered -> ColorSuccessEmerald
         else -> DividerBorder
     }
 
-    val borderWidth = if (isFocused) 1.5.dp else 1.dp
+    val borderWidth = when {
+        isFocused -> 1.5.dp
+        isOrdered -> 1.5.dp
+        else -> 1.dp
+    }
+
     val backgroundColor = when {
-        isFocused -> SurfaceWhite
-        quantityScaled > 0L -> ColorSuccessEmerald.copy(alpha = 0.04f)
+        isFocused -> if (isOrdered) ColorSuccessEmerald.copy(alpha = 0.16f) else SurfaceWhite
+        isOrdered -> ColorSuccessEmerald.copy(alpha = 0.12f)
         else -> SurfaceContainerLight
+    }
+
+    val textColor = when {
+        isOrdered -> ColorSuccessEmerald
+        isFocused -> PrimaryNavy
+        else -> TextSecondaryMuted
+    }
+
+    val unitColor = when {
+        isOrdered -> ColorSuccessEmerald
+        isFocused -> PrimaryNavy
+        else -> TextSecondaryMuted
     }
 
     Surface(
@@ -91,7 +112,7 @@ fun InlineVeggieQuantityField(
         color = backgroundColor,
         border = BorderStroke(borderWidth, borderColor),
         modifier = modifier
-            .height(26.dp)
+            .height(28.dp)
             .widthIn(min = 72.dp, max = 92.dp)
     ) {
         Row(
@@ -122,25 +143,36 @@ fun InlineVeggieQuantityField(
                         val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
                         onQuantityChange(parsed)
                         onCommit?.invoke()
+                    },
+                    onDone = {
+                        val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
+                        onQuantityChange(parsed)
+                        onCommit?.invoke()
                     }
                 ),
                 textStyle = LocalTextStyle.current.copy(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (quantityScaled > 0L || isFocused) PrimaryNavy else TextSecondaryMuted,
+                    color = textColor,
                     textAlign = TextAlign.End
                 ),
-                cursorBrush = SolidColor(AccentNavy),
+                cursorBrush = SolidColor(if (isOrdered) ColorSuccessEmerald else AccentNavy),
                 modifier = Modifier
                     .weight(1f)
                     .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                     .onFocusChanged { focusState ->
+                        val wasFocused = isFocused
                         isFocused = focusState.isFocused
                         if (focusState.isFocused) {
-                            textFieldValue = textFieldValue.copy(
-                                selection = TextRange(0, textFieldValue.text.length)
-                            )
-                        } else {
+                            onFocused?.invoke()
+                            if (!wasFocused) {
+                                val formatted = formatCurrent(quantityScaled)
+                                textFieldValue = TextFieldValue(
+                                    text = formatted,
+                                    selection = TextRange(0, formatted.length)
+                                )
+                            }
+                        } else if (wasFocused) {
                             val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
                             onQuantityChange(parsed)
                             val cleaned = formatCurrent(parsed)
@@ -151,6 +183,16 @@ fun InlineVeggieQuantityField(
                         if (event.type == KeyEventType.KeyDown) {
                             val step = if (allowDecimals) (VEGGIE_QTY_SCALE / 2) else VEGGIE_QTY_SCALE
                             when (event.key) {
+                                Key.Tab -> {
+                                    val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
+                                    onQuantityChange(parsed)
+                                    if (event.isShiftPressed) {
+                                        onCommitPrevious?.invoke()
+                                    } else {
+                                        onCommit?.invoke()
+                                    }
+                                    true
+                                }
                                 Key.DirectionUp -> {
                                     val current = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
                                     val next = current + step
@@ -183,7 +225,7 @@ fun InlineVeggieQuantityField(
                 text = unitName,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = TextSecondaryMuted,
+                color = unitColor,
                 maxLines = 1
             )
         }
