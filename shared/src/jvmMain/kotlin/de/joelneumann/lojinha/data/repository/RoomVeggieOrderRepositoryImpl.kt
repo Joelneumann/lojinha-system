@@ -310,6 +310,11 @@ class RoomVeggieOrderRepositoryImpl(
         }
 
         veggieOrderDao.replaceUserOrderEntriesForRound(entriesToUpsert, entryIdsToDelete)
+        veggieOrderDao.getRoundById(roundId)?.let { roundEntity ->
+            veggieOrderDao.insertOrUpdateRound(
+                roundEntity.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null, updatedAt = now)
+            )
+        }
         onDataChanged?.invoke()
         true
     }
@@ -401,11 +406,10 @@ class RoomVeggieOrderRepositoryImpl(
             updatedAt = now
         )
         veggieOrderDao.insertOrUpdateEntry(VeggieOrderEntryEntity.fromDomain(merged))
-        if (round.updatedAt < now) {
-            veggieOrderDao.insertOrUpdateRound(
-                VeggieOrderRoundEntity.fromDomain(round.copy(updatedAt = now))
-            )
-        }
+        val updatedRound = round.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null, updatedAt = now)
+        veggieOrderDao.insertOrUpdateRound(
+            VeggieOrderRoundEntity.fromDomain(updatedRound)
+        )
         onDataChanged?.invoke()
         true
     }
@@ -443,6 +447,8 @@ class RoomVeggieOrderRepositoryImpl(
             buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
             transportFeeCents = transportFeeCents.coerceAtLeast(0L),
             transporterUserId = transporterUserId?.takeIf { it.isNotBlank() },
+            buyerPdfExportedAt = null,
+            workerPdfExportedAt = null,
             updatedAt = now
         )
 
@@ -631,6 +637,8 @@ class RoomVeggieOrderRepositoryImpl(
             buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
             transportFeeCents = transportFeeCents.coerceAtLeast(0L),
             transporterUserId = calculationResult.transporterUserId,
+            buyerPdfExportedAt = null,
+            workerPdfExportedAt = null,
             updatedAt = now
         )
 

@@ -814,6 +814,8 @@ interface AppStrings {
     val openNewRoundBtn: String
     fun nextAutoRoundScheduled(day: String, date: String, time: String): String
     val closeRoundBtn: String
+    val confirmCloseRoundTitle: String
+    val confirmCloseRoundMsg: String
     val reopenRoundBtn: String
     val exportBuyerPdfBtn: String
     val exportWorkerPdfBtn: String

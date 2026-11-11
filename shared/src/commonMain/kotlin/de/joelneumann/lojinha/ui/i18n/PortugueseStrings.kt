@@ -834,6 +834,8 @@ object PortugueseStrings : AppStrings {
     override val openNewRoundBtn = "Novo Pedido"
     override fun nextAutoRoundScheduled(day: String, date: String, time: String): String = "Próxima rodada começa automaticamente: $day, $date às $time"
     override val closeRoundBtn = "Fechar Rodada"
+    override val confirmCloseRoundTitle = "Fechar Rodada de Pedidos?"
+    override val confirmCloseRoundMsg = "Tem certeza de que deseja fechar esta rodada de verduras? Os clientes não poderão mais fazer ou alterar pedidos."
     override val reopenRoundBtn = "Reabrir Rodada"
     override val exportBuyerPdfBtn = "Lista de Compras (PDF)"
     override val exportWorkerPdfBtn = "Matriz de Separação (PDF)"

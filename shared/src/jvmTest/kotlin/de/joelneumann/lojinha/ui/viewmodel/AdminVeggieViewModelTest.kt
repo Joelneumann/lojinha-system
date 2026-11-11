@@ -104,8 +104,17 @@ class AdminVeggieViewModelTest {
             return rounds.removeIf { it.id == roundId }
         }
 
-        override suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean = true
-        override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean = true
+        override suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean {
+            val idx = rounds.indexOfFirst { it.id == roundId }
+            if (idx >= 0) rounds[idx] = rounds[idx].copy(buyerPdfExportedAt = timestamp)
+            return true
+        }
+
+        override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean {
+            val idx = rounds.indexOfFirst { it.id == roundId }
+            if (idx >= 0) rounds[idx] = rounds[idx].copy(workerPdfExportedAt = timestamp)
+            return true
+        }
 
         override suspend fun getEntriesForRound(roundId: String): List<VeggieOrderEntry> {
             return entries.filter { it.roundId == roundId }
@@ -138,7 +147,9 @@ class AdminVeggieViewModelTest {
                 rounds[idx] = rounds[idx].copy(
                     buyerOperationFeeCents = buyerOperationFeeCents,
                     transportFeeCents = transportFeeCents,
-                    transporterUserId = transporterUserId
+                    transporterUserId = transporterUserId,
+                    buyerPdfExportedAt = null,
+                    workerPdfExportedAt = null
                 )
             }
             settlements.removeIf { it.roundId == roundId }
@@ -553,5 +564,35 @@ class AdminVeggieViewModelTest {
         assertEquals(1, vm.historyTotalPages.value)
         assertEquals(0, vm.historyCurrentPage.value) // Clamped to 0
         assertEquals(9, vm.pagedSettledRounds.value.size)
+    }
+
+    @Test
+    fun testChangingListInvalidatesPdfExportCheckmark() = runTest {
+        val (veggieRepo, userRepo) = setupTestFixture()
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        val roundId = "round-active"
+        vm.markPdfExported(roundId, isBuyer = true)
+        vm.markPdfExported(roundId, isBuyer = false)
+        advanceUntilIdle()
+
+        assertNotNull(vm.activeRound.value?.buyerPdfExportedAt)
+        assertNotNull(vm.activeRound.value?.workerPdfExportedAt)
+
+        // Change a quantity in the list
+        vm.updateEntryActualQuantity("entry-act-1", "99")
+
+        // Immediately, export timestamps should be invalidated/cleared
+        assertNull(vm.activeRound.value?.buyerPdfExportedAt)
+        assertNull(vm.activeRound.value?.workerPdfExportedAt)
+
+        // Save draft settlement
+        vm.saveDraftSettlement()
+        advanceUntilIdle()
+
+        // After save, export timestamps remain cleared until next export
+        assertNull(vm.activeRound.value?.buyerPdfExportedAt)
+        assertNull(vm.activeRound.value?.workerPdfExportedAt)
     }
 }

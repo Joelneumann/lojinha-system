@@ -349,6 +349,7 @@ class AdminVeggieViewModel(
         newQuantities[entryId] = input
         _draftActualQuantities.value = newQuantities
         _hasUnsavedSettlementChanges.value = true
+        invalidatePdfExportTimestamps()
 
         val productId = entry.veggieProductId
         if (productId !in _manuallyEditedTotalSpentProductIds.value) {
@@ -370,6 +371,7 @@ class AdminVeggieViewModel(
         newPrices[productId] = input
         _draftMarketPrices.value = newPrices
         _hasUnsavedSettlementChanges.value = true
+        invalidatePdfExportTimestamps()
 
         val unitPriceCents = parseBrlInputToCents(input)
         if (unitPriceCents != null && unitPriceCents >= 0L) {
@@ -389,25 +391,44 @@ class AdminVeggieViewModel(
         _draftTotalSpent.value = newSpentMap
         _manuallyEditedTotalSpentProductIds.value = _manuallyEditedTotalSpentProductIds.value + productId
         _hasUnsavedSettlementChanges.value = true
+        invalidatePdfExportTimestamps()
         recomputeLivePreview()
     }
 
     fun updateBuyerFeeInput(input: String) {
         _draftBuyerFeeInput.value = input
         _hasUnsavedSettlementChanges.value = true
+        invalidatePdfExportTimestamps()
         recomputeLivePreview()
     }
 
     fun updateTransportFeeInput(input: String) {
         _draftTransportFeeInput.value = input
         _hasUnsavedSettlementChanges.value = true
+        invalidatePdfExportTimestamps()
         recomputeLivePreview()
     }
 
     fun updateTransporterUserId(userId: String?) {
         _draftTransporterUserId.value = userId
         _hasUnsavedSettlementChanges.value = true
+        invalidatePdfExportTimestamps()
         recomputeLivePreview()
+    }
+
+    private fun invalidatePdfExportTimestamps() {
+        val active = _activeRound.value
+        if (active != null && (active.buyerPdfExportedAt != null || active.workerPdfExportedAt != null)) {
+            val cleared = active.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null)
+            _activeRound.value = cleared
+            _rounds.value = _rounds.value.map { if (it.id == cleared.id) cleared else it }
+        }
+        val editing = _editingPastRound.value
+        if (editing != null && (editing.buyerPdfExportedAt != null || editing.workerPdfExportedAt != null)) {
+            val cleared = editing.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null)
+            _editingPastRound.value = cleared
+            _rounds.value = _rounds.value.map { if (it.id == cleared.id) cleared else it }
+        }
     }
 
     private fun calculateDraftTotalDeliveredForProduct(
@@ -702,6 +723,7 @@ class AdminVeggieViewModel(
         val allowDecimals = unit?.allowDecimals ?: false
         val qtyScaled = VeggieQuantityScaling.parseQuantityScaled(quantityInput, allowDecimals) ?: return
 
+        invalidatePdfExportTimestamps()
         activeScope.launch {
             try {
                 val existing = _selectedRoundEntries.value.find { it.userId == user.id && it.veggieProductId == product.id }

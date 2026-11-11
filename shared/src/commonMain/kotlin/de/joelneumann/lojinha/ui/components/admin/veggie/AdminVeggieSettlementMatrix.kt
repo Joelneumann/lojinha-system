@@ -52,7 +52,9 @@ import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import kotlinx.coroutines.delay
 
 private val COL_PRODUCT_WIDTH = 170.dp
 private val COL_CUSTOMER_WIDTH = 80.dp
@@ -100,6 +102,7 @@ fun AdminVeggieSettlementMatrix(
     val currentLanguage = LanguageManager.currentLanguage
     val isoWeek = remember(round.openedAt) { IsoWeekUtils.fromEpochMillis(round.openedAt) }
 
+    var showConfirmCloseRound by remember { mutableStateOf(false) }
     var showConfirmResetChanges by remember { mutableStateOf(false) }
     var showConfirmSettle by remember { mutableStateOf(false) }
     var showConfirmCompleteEmpty by remember { mutableStateOf(false) }
@@ -351,7 +354,7 @@ fun AdminVeggieSettlementMatrix(
                                 }
 
                                 Button(
-                                    onClick = onCloseRound,
+                                    onClick = { showConfirmCloseRound = true },
                                     enabled = !isSaving,
                                     colors = ButtonDefaults.buttonColors(containerColor = ColorWarningAmber),
                                     shape = RoundedCornerShape(8.dp)
@@ -363,16 +366,6 @@ fun AdminVeggieSettlementMatrix(
                             }
 
                             VeggieRoundStatus.CLOSED -> {
-                                OutlinedButton(
-                                    onClick = onReopenRound,
-                                    enabled = !isSaving,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(strings.reopenRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                                }
-
                                 if (onResetChanges != null) {
                                     OutlinedButton(
                                         onClick = { showConfirmResetChanges = true },
@@ -431,6 +424,16 @@ fun AdminVeggieSettlementMatrix(
                                         fontWeight = FontWeight.Bold,
                                         color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                                     )
+                                }
+
+                                OutlinedButton(
+                                    onClick = onReopenRound,
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(strings.reopenRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
 
                                 if (entries.isEmpty()) {
@@ -1141,6 +1144,21 @@ fun AdminVeggieSettlementMatrix(
         }
     }
 
+    if (showConfirmCloseRound) {
+        ConfirmationDialog(
+            title = strings.confirmCloseRoundTitle,
+            message = strings.confirmCloseRoundMsg,
+            confirmText = strings.closeRoundBtn,
+            cancelText = strings.cancel,
+            confirmButtonColor = ColorWarningAmber,
+            onConfirm = {
+                showConfirmCloseRound = false
+                onCloseRound()
+            },
+            onDismiss = { showConfirmCloseRound = false }
+        )
+    }
+
     if (showConfirmResetChanges) {
         ConfirmationDialog(
             title = strings.confirmResetChangesTitle,
@@ -1412,13 +1430,37 @@ private fun MatrixNumberInputField(
     prevFocusRequester: FocusRequester? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    var textFieldValue by remember(value) {
+    var hadFocus by remember { mutableStateOf(false) }
+    var focusGainedTime by remember { mutableStateOf(0L) }
+    var textOnFocusGain by remember { mutableStateOf("") }
+
+    var textFieldValue by remember {
         mutableStateOf(
             TextFieldValue(
                 text = value,
-                selection = if (isFocused) TextRange(0, value.length) else TextRange(value.length)
+                selection = TextRange(value.length)
             )
         )
+    }
+
+    LaunchedEffect(value) {
+        if (value != textFieldValue.text) {
+            textFieldValue = textFieldValue.copy(
+                text = value,
+                selection = TextRange(value.length)
+            )
+        }
+    }
+
+    LaunchedEffect(hadFocus) {
+        if (hadFocus) {
+            delay(60)
+            if (hadFocus && textFieldValue.text == textOnFocusGain && textFieldValue.selection != TextRange(0, textFieldValue.text.length)) {
+                textFieldValue = textFieldValue.copy(
+                    selection = TextRange(0, textFieldValue.text.length)
+                )
+            }
+        }
     }
 
     Surface(
@@ -1449,9 +1491,18 @@ private fun MatrixNumberInputField(
             BasicTextField(
                 value = textFieldValue,
                 onValueChange = { newValue ->
-                    textFieldValue = newValue
-                    if (newValue.text != value) {
-                        onValueChange(newValue.text)
+                    val isInitialFocusEvent = hadFocus &&
+                            (currentTimeMillis() - focusGainedTime < 300L) &&
+                            (newValue.text == textFieldValue.text)
+                    if (isInitialFocusEvent) {
+                        textFieldValue = newValue.copy(
+                            selection = TextRange(0, newValue.text.length)
+                        )
+                    } else {
+                        textFieldValue = newValue
+                        if (newValue.text != value) {
+                            onValueChange(newValue.text)
+                        }
                     }
                 },
                 singleLine = true,
@@ -1468,8 +1519,20 @@ private fun MatrixNumberInputField(
                     .onFocusChanged { focusState ->
                         isFocused = focusState.isFocused
                         if (focusState.isFocused) {
+                            if (!hadFocus) {
+                                hadFocus = true
+                                focusGainedTime = currentTimeMillis()
+                                textOnFocusGain = textFieldValue.text
+                                textFieldValue = textFieldValue.copy(
+                                    selection = TextRange(0, textFieldValue.text.length)
+                                )
+                            }
+                        } else {
+                            hadFocus = false
+                            focusGainedTime = 0L
+                            textOnFocusGain = ""
                             textFieldValue = textFieldValue.copy(
-                                selection = TextRange(0, textFieldValue.text.length)
+                                selection = TextRange(textFieldValue.text.length)
                             )
                         }
                     }

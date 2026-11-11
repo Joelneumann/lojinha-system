@@ -169,7 +169,7 @@ fun AdminVeggieTabScreen(
                                     Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(strings.exportBuyerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
-                                    if (currentRound.buyerPdfExportedAt != null) {
+                                    if (currentRound.buyerPdfExportedAt != null && !hasUnsavedSettlementChanges) {
                                         Spacer(modifier = Modifier.width(6.dp))
                                         ExportedBadgePill()
                                     }
@@ -185,7 +185,7 @@ fun AdminVeggieTabScreen(
                                     Icon(Icons.Default.GridOn, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(strings.exportWorkerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
-                                    if (currentRound.workerPdfExportedAt != null) {
+                                    if (currentRound.workerPdfExportedAt != null && !hasUnsavedSettlementChanges) {
                                         Spacer(modifier = Modifier.width(6.dp))
                                         ExportedBadgePill()
                                     }
@@ -221,7 +221,7 @@ fun AdminVeggieTabScreen(
                                     Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(strings.exportBuyerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
-                                    if (pastRound.buyerPdfExportedAt != null) {
+                                    if (pastRound.buyerPdfExportedAt != null && !hasUnsavedSettlementChanges) {
                                         Spacer(modifier = Modifier.width(6.dp))
                                         ExportedBadgePill()
                                     }
@@ -237,7 +237,7 @@ fun AdminVeggieTabScreen(
                                     Icon(Icons.Default.GridOn, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(strings.exportWorkerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
-                                    if (pastRound.workerPdfExportedAt != null) {
+                                    if (pastRound.workerPdfExportedAt != null && !hasUnsavedSettlementChanges) {
                                         Spacer(modifier = Modifier.width(6.dp))
                                         ExportedBadgePill()
                                     }
