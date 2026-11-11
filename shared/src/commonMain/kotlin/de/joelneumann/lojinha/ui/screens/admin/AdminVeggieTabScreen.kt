@@ -474,7 +474,7 @@ fun AdminVeggieTabScreen(
                                     )
                                     if (hasUnsavedSettlementChanges) {
                                         AdminStatusBadge(
-                                            text = "● ${strings.unsavedChangesBadge}",
+                                            text = strings.unsavedChangesBadge,
                                             type = AdminBadgeType.WARNING
                                         )
                                     }

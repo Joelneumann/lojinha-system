@@ -76,7 +76,7 @@ fun AdminAccordionCard(
                             )
                             if (isExpanded && hasUnsaved) {
                                 AdminStatusBadge(
-                                    text = "● Unsaved",
+                                    text = "Unsaved",
                                     type = AdminBadgeType.WARNING
                                 )
                             }

@@ -357,15 +357,24 @@ class AdminVeggieViewModelTest {
         advanceUntilIdle()
 
         val origQty = vm.draftActualQuantities.value["entry-act-1"]
+        val origPrice = vm.draftMarketPrices.value["prod-1"]
+        val origBuyerFee = vm.draftBuyerFeeInput.value
+
         vm.updateEntryActualQuantity("entry-act-1", "99")
+        vm.updateProductMarketUnitPrice("prod-1", "99,00")
+        vm.updateBuyerFeeInput("12,34")
         assertTrue(vm.hasUnsavedSettlementChanges.value)
         assertEquals("99", vm.draftActualQuantities.value["entry-act-1"])
+        assertEquals("99,00", vm.draftMarketPrices.value["prod-1"])
+        assertEquals("12,34", vm.draftBuyerFeeInput.value)
 
         vm.discardDraft()
         advanceUntilIdle()
 
         assertFalse(vm.hasUnsavedSettlementChanges.value)
         assertEquals(origQty, vm.draftActualQuantities.value["entry-act-1"])
+        assertEquals(origPrice, vm.draftMarketPrices.value["prod-1"])
+        assertEquals(origBuyerFee, vm.draftBuyerFeeInput.value)
     }
 
     @Test

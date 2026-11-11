@@ -140,7 +140,7 @@ object GermanStrings : AppStrings {
     override val searchAccountAdminPlaceholder = "Konto nach Name oder Barcode suchen..."
     override val searchTransactionAdminPlaceholder = "Transaktion nach Benutzer, Typ, Produkt oder Datum suchen..."
     override val systemAdminSettingsTitle = "System- & Admin-Einstellungen"
-    override val unsavedEditsBadge = "● Ungespeicherte Änderungen"
+    override val unsavedEditsBadge = "Ungespeicherte Änderungen"
     override val revertChanges = "Änderungen rückgängig machen"
     override val saveSettings = "Einstellungen speichern"
     override val saved = "Gespeichert"

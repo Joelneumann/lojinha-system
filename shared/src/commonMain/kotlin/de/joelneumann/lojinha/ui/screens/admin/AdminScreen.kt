@@ -292,13 +292,6 @@ fun AdminScreen(
                                     softWrap = false
                                 )
                             }
-                            if (isSelected && hasUnsavedChanges) {
-                                Text(
-                                    text = "●",
-                                    fontSize = 10.sp,
-                                    color = ColorWarningAmber
-                                )
-                            }
                         }
                     }
                 }
@@ -417,6 +410,13 @@ fun AdminScreen(
         }
         val confirmDiscard = {
             hasUnsavedChanges = false
+            veggieViewModel?.let { vm ->
+                if (vm.editingPastRound.value != null) {
+                    vm.closePastRoundEditor()
+                } else {
+                    vm.discardDraft()
+                }
+            }
             if (isExitAdminPending) {
                 isExitAdminPending = false
                 onExitAdmin()

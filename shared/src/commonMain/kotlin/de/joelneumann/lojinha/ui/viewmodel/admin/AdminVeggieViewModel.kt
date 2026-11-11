@@ -279,6 +279,7 @@ class AdminVeggieViewModel(
     }
 
     fun discardDraft() {
+        _hasUnsavedSettlementChanges.value = false
         val editing = _editingPastRound.value
         if (editing != null) {
             activeScope.launch {

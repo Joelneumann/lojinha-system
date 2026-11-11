@@ -232,7 +232,7 @@ fun AdminVeggieSettlementMatrix(
                                 )
                                 if (hasUnsavedChanges) {
                                     AdminStatusBadge(
-                                        text = "● ${strings.unsavedChangesBadge}",
+                                        text = strings.unsavedChangesBadge,
                                         type = AdminBadgeType.WARNING
                                     )
                                 }
