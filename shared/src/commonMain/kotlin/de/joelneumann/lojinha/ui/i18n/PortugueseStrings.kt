@@ -837,6 +837,7 @@ object PortugueseStrings : AppStrings {
     override val reopenRoundBtn = "Reabrir Rodada"
     override val exportBuyerPdfBtn = "Lista de Compras (PDF)"
     override val exportWorkerPdfBtn = "Matriz de Separação (PDF)"
+    override val exportOrderFormPdfBtn = "Formulário de Pedido (PDF)"
     override val noActiveRoundTitle = "Nenhuma Rodada de Verduras Ativa"
     override val noActiveRoundDesc = "Abra uma nova rodada para que os clientes possam enviar seus pedidos semanais."
     override val settlementMatrixTitle = "Matriz de Fechamento 2D"

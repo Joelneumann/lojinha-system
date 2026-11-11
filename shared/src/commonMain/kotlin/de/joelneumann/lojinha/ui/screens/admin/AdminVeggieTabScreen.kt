@@ -41,6 +41,7 @@ fun AdminVeggieTabScreen(
     onUnsavedStateChanged: (Boolean) -> Unit = {},
     onExportBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onExportWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
+    onExportOrderFormPdf: ((language: Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null
 ) {
@@ -313,6 +314,7 @@ fun AdminVeggieTabScreen(
                     onDeleteProduct = viewModel::deleteVeggieProduct,
                     onSaveUnitType = viewModel::saveUnitType,
                     onDeleteUnitType = viewModel::deleteUnitType,
+                    onExportOrderFormPdf = onExportOrderFormPdf?.let { cb -> { cb(currentLanguage) } },
                     isSavingProduct = isSaving,
                     modifier = Modifier.weight(1f)
                 )

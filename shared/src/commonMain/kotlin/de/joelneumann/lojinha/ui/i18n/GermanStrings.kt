@@ -837,6 +837,7 @@ object GermanStrings : AppStrings {
     override val reopenRoundBtn = "Runde wieder öffnen"
     override val exportBuyerPdfBtn = "Einkaufsliste (PDF)"
     override val exportWorkerPdfBtn = "Verteilmatrix (PDF)"
+    override val exportOrderFormPdfBtn = "Bestellformular (PDF)"
     override val noActiveRoundTitle = "Keine aktive Gemüse-Bestellrunde"
     override val noActiveRoundDesc = "Öffne eine neue Runde, damit Kunden ihre wöchentliche Gemüsebestellung aufgeben können."
     override val settlementMatrixTitle = "2D-Abrechnungsmatrix"

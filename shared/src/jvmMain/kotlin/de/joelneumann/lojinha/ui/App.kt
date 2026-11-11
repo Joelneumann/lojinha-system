@@ -657,6 +657,32 @@ fun App(
                                     }
                                 }
                             },
+                            onExportVeggieOrderFormPdf = { language ->
+                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        val products = effectiveVeggieRepo.getAllVeggieProducts()
+                                        val unitTypes = effectiveVeggieRepo.getAllUnitTypes().associateBy { it.id }
+                                        val targetDir = java.io.File(defaultSaveDir)
+                                        if (!targetDir.exists()) targetDir.mkdirs()
+                                        val dateStamp = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                                        val targetFile = java.io.File(
+                                            targetDir,
+                                            "Veggie_Order_Form_$dateStamp.pdf"
+                                        )
+                                        de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator.generateCustomerOrderFormPdf(
+                                            outputFile = targetFile,
+                                            products = products,
+                                            unitMap = unitTypes,
+                                            language = language
+                                        )
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            adminVeggieViewModel.setExportResultPath(targetFile.absolutePath)
+                                        }
+                                    } catch (e: Exception) {
+                                        AppLogger.error("App", "Failed to export Veggie Customer Order Form PDF: ${e.message}", e)
+                                    }
+                                }
+                            },
                             onOpenExportedPdf = { filePath ->
                                 try {
                                     val file = java.io.File(filePath)

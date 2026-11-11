@@ -592,6 +592,27 @@ class LojinhaAdminServer(
                             val repo = resolveVeggieRepo() ?: return@get call.respond(emptyList<VeggieProduct>())
                             call.respond(repo.getAllVeggieProducts())
                         }
+                        get("/order-form-pdf") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(HttpStatusCode.ServiceUnavailable)
+                            val langStr = call.request.queryParameters["lang"] ?: "BR"
+                            val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+                            try {
+                                val products = repo.getAllVeggieProducts()
+                                val unitTypes = repo.getAllUnitTypes().associateBy { it.id }
+                                val pdfBytes = VeggieOrderPdfGenerator.generateCustomerOrderFormBytes(products, unitTypes, language)
+                                val dateStamp = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                                val filename = "Veggie_Order_Form_$dateStamp.pdf"
+                                call.response.header(
+                                    HttpHeaders.ContentDisposition,
+                                    ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
+                                )
+                                call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                            } catch (e: Exception) {
+                                AppLogger.error("LojinhaAdminServer", "Failed to generate customer order form PDF: ${e.message}", e)
+                                call.respond(HttpStatusCode.InternalServerError, "Failed to generate customer order form PDF")
+                            }
+                        }
                         post("/products") {
                             if (!call.checkAdminAuth(settingsRepository)) return@post
                             val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)

@@ -3,7 +3,9 @@ package de.joelneumann.lojinha.data.service
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.VeggieOrderEntry
 import de.joelneumann.lojinha.domain.model.VeggieOrderRound
+import de.joelneumann.lojinha.domain.model.VeggieProduct
 import de.joelneumann.lojinha.domain.model.VeggieRoundStatus
+import de.joelneumann.lojinha.domain.model.VeggieUnitType
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
@@ -169,6 +171,88 @@ class VeggieOrderPdfGeneratorTest {
         val reader = com.lowagie.text.pdf.PdfReader(file.absolutePath)
         try {
             assertEquals(1, reader.numberOfPages, "All 25 customers should fit on 1 page")
+        } finally {
+            reader.close()
+        }
+    }
+
+    @Test
+    fun testGenerateCustomerOrderForm_generatesValidPdfWithAcroFormFields() {
+        val unitTypes = listOf(
+            VeggieUnitType(id = "u-kg", name = "kg", allowDecimals = true),
+            VeggieUnitType(id = "u-un", name = "Unidade", allowDecimals = false)
+        ).associateBy { it.id }
+
+        val products = listOf(
+            VeggieProduct(
+                id = "vp-carrot",
+                name = "Cenoura",
+                unitTypeId = "u-kg",
+                isActive = true
+            ),
+            VeggieProduct(
+                id = "vp-lettuce",
+                name = "Alface",
+                unitTypeId = "u-un",
+                isActive = true
+            )
+        )
+
+        for (lang in listOf(Language.BR, Language.EN, Language.DE)) {
+            val bytes = VeggieOrderPdfGenerator.generateCustomerOrderFormBytes(products, unitTypes, lang)
+            assertTrue(bytes.isNotEmpty(), "Order Form PDF bytes should not be empty")
+
+            val header = String(bytes.take(5).toByteArray(), Charsets.US_ASCII)
+            assertEquals("%PDF-", header, "File must start with %PDF- header")
+            assertTrue(bytes.size > 1000, "PDF should have substantial content")
+
+            val reader = com.lowagie.text.pdf.PdfReader(bytes)
+            try {
+                val acroFields = reader.acroFields
+                assertNotNull(acroFields.getFieldItem("customer_name"), "Should contain customer_name field")
+                assertNotNull(acroFields.getFieldItem("order_date"), "Should contain order_date field")
+                assertNotNull(acroFields.getFieldItem("qty_vp-carrot"), "Should contain qty_vp-carrot field")
+                assertNotNull(acroFields.getFieldItem("qty_vp-lettuce"), "Should contain qty_vp-lettuce field")
+            } finally {
+                reader.close()
+            }
+        }
+    }
+
+    @Test
+    fun testGenerateCustomerOrderForm_filtersInactiveAndDeletedProducts() {
+        val unitTypes = mapOf(
+            "u-kg" to VeggieUnitType(id = "u-kg", name = "kg", allowDecimals = true)
+        )
+
+        val products = listOf(
+            VeggieProduct(id = "vp-active", name = "Active Tomato", unitTypeId = "u-kg", isActive = true, isDeleted = false),
+            VeggieProduct(id = "vp-inactive", name = "Inactive Potato", unitTypeId = "u-kg", isActive = false, isDeleted = false),
+            VeggieProduct(id = "vp-deleted", name = "Deleted Onion", unitTypeId = "u-kg", isActive = true, isDeleted = true)
+        )
+
+        val bytes = VeggieOrderPdfGenerator.generateCustomerOrderFormBytes(products, unitTypes, Language.EN)
+        val reader = com.lowagie.text.pdf.PdfReader(bytes)
+        try {
+            val acroFields = reader.acroFields
+            assertNotNull(acroFields.getFieldItem("qty_vp-active"), "Active product should have field")
+            assertNull(acroFields.getFieldItem("qty_vp-inactive"), "Inactive product should not have field")
+            assertNull(acroFields.getFieldItem("qty_vp-deleted"), "Deleted product should not have field")
+        } finally {
+            reader.close()
+        }
+    }
+
+    @Test
+    fun testGenerateCustomerOrderForm_emptyProductsList_handlesGracefully() {
+        val bytes = VeggieOrderPdfGenerator.generateCustomerOrderFormBytes(emptyList(), emptyMap(), Language.DE)
+        assertTrue(bytes.isNotEmpty())
+        val reader = com.lowagie.text.pdf.PdfReader(bytes)
+        try {
+            assertEquals(1, reader.numberOfPages)
+            val acroFields = reader.acroFields
+            assertNotNull(acroFields.getFieldItem("customer_name"), "Should still have customer_name header field")
+            assertNotNull(acroFields.getFieldItem("order_date"), "Should still have order_date header field")
         } finally {
             reader.close()
         }

@@ -44,6 +44,7 @@ fun AdminVeggieCatalogSection(
     onDeleteProduct: (VeggieProduct) -> Unit,
     onSaveUnitType: (VeggieUnitType) -> Unit,
     onDeleteUnitType: (String) -> Unit,
+    onExportOrderFormPdf: (() -> Unit)? = null,
     isSavingProduct: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -137,6 +138,18 @@ fun AdminVeggieCatalogSection(
                             modifier = Modifier.fillMaxHeight()
                         )
                         Spacer(modifier = Modifier.weight(1f))
+                        if (onExportOrderFormPdf != null) {
+                            OutlinedButton(
+                                onClick = onExportOrderFormPdf,
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.fillMaxHeight()
+                            ) {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(strings.exportOrderFormPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 13.sp, maxLines = 1)
+                            }
+                        }
                         Button(
                             onClick = { showUnitsDialog = true },
                             colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
@@ -206,6 +219,19 @@ fun AdminVeggieCatalogSection(
                         onUnitSelected = { selectedUnitFilterId = it },
                         modifier = Modifier.fillMaxHeight()
                     )
+
+                    if (onExportOrderFormPdf != null) {
+                        OutlinedButton(
+                            onClick = onExportOrderFormPdf,
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp),
+                            modifier = Modifier.fillMaxHeight()
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(strings.exportOrderFormPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 13.sp, maxLines = 1)
+                        }
+                    }
 
                     Button(
                         onClick = { showUnitsDialog = true },

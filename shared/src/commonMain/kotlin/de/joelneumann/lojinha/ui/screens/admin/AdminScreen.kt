@@ -85,6 +85,7 @@ fun AdminScreen(
     onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
     onExportVeggieBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onExportVeggieWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
+    onExportVeggieOrderFormPdf: ((language: Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null,
     onExitAdmin: () -> Unit
@@ -383,6 +384,7 @@ fun AdminScreen(
                                 onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
                                 onExportBuyerPdf = onExportVeggieBuyerPdf,
                                 onExportWorkerPdf = onExportVeggieWorkerPdf,
+                                onExportOrderFormPdf = onExportVeggieOrderFormPdf,
                                 onOpenExportedPdf = onOpenExportedPdf,
                                 onRevealExportedFolder = onRevealExportedFolder
                             )

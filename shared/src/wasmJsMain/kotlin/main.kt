@@ -276,6 +276,11 @@ fun main() {
                                     jsTriggerDownload(url)
                                     veggieViewModel.markPdfExported(roundId, isBuyer = false)
                                 },
+                                onExportVeggieOrderFormPdf = { language ->
+                                    val token = adminNetworkClient.authToken ?: ""
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/order-form-pdf?lang=${language.name}&token=$token")
+                                    jsTriggerDownload(url)
+                                },
                                 onExitAdmin = {
                                     scope.launch {
                                         adminNetworkClient.logout()

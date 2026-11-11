@@ -837,6 +837,7 @@ object EnglishStrings : AppStrings {
     override val reopenRoundBtn = "Re-open Round"
     override val exportBuyerPdfBtn = "Buyer List (PDF)"
     override val exportWorkerPdfBtn = "Worker Matrix (PDF)"
+    override val exportOrderFormPdfBtn = "Order Form (PDF)"
     override val noActiveRoundTitle = "No Active Veggie Order Round"
     override val noActiveRoundDesc = "Open a new round so customers can submit their weekly vegetable orders."
     override val settlementMatrixTitle = "2D Settlement Matrix"

@@ -817,6 +817,7 @@ interface AppStrings {
     val reopenRoundBtn: String
     val exportBuyerPdfBtn: String
     val exportWorkerPdfBtn: String
+    val exportOrderFormPdfBtn: String
     val noActiveRoundTitle: String
     val noActiveRoundDesc: String
     val settlementMatrixTitle: String
