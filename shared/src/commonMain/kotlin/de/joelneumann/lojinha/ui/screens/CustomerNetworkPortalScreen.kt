@@ -610,7 +610,7 @@ private fun CustomerVeggieOrderTabContent(
     val handleNavigationKey: (KeyEvent) -> Boolean = { event ->
         if (event.type != KeyEventType.KeyDown) {
             false
-        } else if (activeZone == VeggieFocusZone.PRODUCTS && inputMode == VeggieInputMode.FAST_TAB) {
+        } else if (activeZone == VeggieFocusZone.PRODUCTS) {
             false
         } else {
             when (event.key) {
@@ -900,6 +900,7 @@ private fun CustomerVeggieOrderTabContent(
                         onNavigateToProduct = { idx -> navigateToProduct(idx) },
                         onNavigateToCart = { idx -> navigateToCart(idx) },
                         onReturnToSearch = { navigateToSearch() },
+                        cartProductsCount = cartProducts.size,
                         onClearError = { veggieViewModel.clearError() },
                         onQueryChange = { query ->
                             activeZone = VeggieFocusZone.SEARCH
@@ -990,6 +991,7 @@ private fun CustomerVeggieOrderTabContent(
                 onNavigateToProduct = { idx -> navigateToProduct(idx) },
                 onNavigateToCart = { idx -> navigateToCart(idx) },
                 onReturnToSearch = { navigateToSearch() },
+                cartProductsCount = cartProducts.size,
                 onClearError = { veggieViewModel.clearError() },
                 onQueryChange = { query ->
                     activeZone = VeggieFocusZone.SEARCH
@@ -1217,6 +1219,11 @@ private fun VeggieCatalogPanel(
                 placeholder = strings.searchVeggieProductsPlaceholder,
                 focusRequester = searchFocusRequester,
                 onKeyDown = onKeyDown,
+                onFocusChanged = { focusState ->
+                    if (focusState.isFocused) {
+                        onReturnToSearch?.invoke()
+                    }
+                },
                 modifier = Modifier.weight(1f)
             )
 
@@ -1242,6 +1249,7 @@ private fun VeggieCatalogPanel(
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (isStandard) AccentNavy else Color.Transparent)
+                            .focusProperties { canFocus = false }
                             .clickable { onSelectInputMode(VeggieInputMode.STANDARD) }
                             .padding(horizontal = if (isMobile) 8.dp else 12.dp)
                             .pointerHoverIcon(PointerIcon.Hand),
@@ -1274,6 +1282,7 @@ private fun VeggieCatalogPanel(
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (isFastTab) AccentNavy else Color.Transparent)
+                            .focusProperties { canFocus = false }
                             .clickable { onSelectInputMode(VeggieInputMode.FAST_TAB) }
                             .padding(horizontal = if (isMobile) 8.dp else 12.dp)
                             .pointerHoverIcon(PointerIcon.Hand),
@@ -1554,6 +1563,7 @@ private fun VeggieCatalogPanel(
                             }
                         },
                         onReturnToSearch = onReturnToSearch,
+                        onNavigateToCart = if (cartProductsCount > 0) { { onNavigateToCart?.invoke(0) } } else null,
                         onFocused = { onCardFocused?.invoke(index) },
                         onToggleFavorite = { onToggleFavorite(product.id) },
                         onKeyDown = onKeyDown,
@@ -2055,6 +2065,7 @@ private fun CustomerVeggieProductCard(
     onCommitQuantity: () -> Unit = {},
     onCommitPrevious: (() -> Unit)? = null,
     onReturnToSearch: (() -> Unit)? = null,
+    onNavigateToCart: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
     onToggleFavorite: () -> Unit,
     onKeyDown: ((KeyEvent) -> Boolean)? = null,
@@ -2066,9 +2077,10 @@ private fun CustomerVeggieProductCard(
     val isOrdered = quantityScaled > 0L
 
     val cardFocusRequester = remember { FocusRequester() }
+    var isCardFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(isHighlighted, isDialogActive) {
-        if (isHighlighted && !isDialogActive) {
+        if (isHighlighted && !isDialogActive && !isCardFocused) {
             cardFocusRequester.safeRequestFocus()
         }
     }
@@ -2076,10 +2088,9 @@ private fun CustomerVeggieProductCard(
     Card(
         onClick = {
             if (isEditable) {
-                if (inputMode == VeggieInputMode.FAST_TAB) {
-                    onFocused?.invoke()
-                    try { cardFocusRequester.requestFocus() } catch (_: Exception) {}
-                } else {
+                onFocused?.invoke()
+                try { cardFocusRequester.requestFocus() } catch (_: Exception) {}
+                if (inputMode != VeggieInputMode.FAST_TAB) {
                     onClickCard()
                 }
             }
@@ -2100,9 +2111,50 @@ private fun CustomerVeggieProductCard(
                 if (inputMode == VeggieInputMode.STANDARD) {
                     Modifier
                         .focusRequester(cardFocusRequester)
+                        .onFocusChanged { focusState ->
+                            isCardFocused = focusState.isFocused
+                        }
                         .onPreviewKeyEvent { event ->
-                            if (onKeyDown != null && onKeyDown(event)) {
-                                true
+                            if (event.type == KeyEventType.KeyDown) {
+                                when (event.key) {
+                                    Key.Tab -> {
+                                        if (event.isShiftPressed) {
+                                            onCommitPrevious?.invoke()
+                                        } else {
+                                            onCommitQuantity()
+                                        }
+                                        true
+                                    }
+                                    Key.DirectionDown -> {
+                                        onCommitQuantity()
+                                        true
+                                    }
+                                    Key.DirectionUp -> {
+                                        onCommitPrevious?.invoke()
+                                        true
+                                    }
+                                    Key.DirectionRight -> {
+                                        if (onNavigateToCart != null) {
+                                            onNavigateToCart()
+                                            true
+                                        } else false
+                                    }
+                                    Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+                                        if (isEditable) {
+                                            onClickCard()
+                                            true
+                                        } else false
+                                    }
+                                    Key.Escape -> {
+                                        onReturnToSearch?.invoke()
+                                        true
+                                    }
+                                    else -> {
+                                        if (onKeyDown != null && onKeyDown(event)) {
+                                            true
+                                        } else false
+                                    }
+                                }
                             } else false
                         }
                 } else Modifier
