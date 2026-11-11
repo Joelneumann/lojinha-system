@@ -610,6 +610,8 @@ private fun CustomerVeggieOrderTabContent(
     val handleNavigationKey: (KeyEvent) -> Boolean = { event ->
         if (event.type != KeyEventType.KeyDown) {
             false
+        } else if (activeZone == VeggieFocusZone.PRODUCTS && inputMode == VeggieInputMode.FAST_TAB) {
+            false
         } else {
             when (event.key) {
                 Key.DirectionDown -> {
@@ -883,7 +885,12 @@ private fun CustomerVeggieOrderTabContent(
                         highlightedProductIndex = if (activeZone == VeggieFocusZone.PRODUCTS) highlightedProductIndex else -1,
                         isDialogActive = (selectedProductForAmountDialog != null),
                         onKeyDown = handleNavigationKey,
-                        onCardFocused = { idx -> navigateToProduct(idx) },
+                        onCardFocused = { idx ->
+                            activeZone = VeggieFocusZone.PRODUCTS
+                            highlightedProductIndex = idx
+                            highlightedCartIndex = -1
+                        },
+                        onNavigateToProduct = { idx -> navigateToProduct(idx) },
                         onReturnToSearch = { navigateToSearch() },
                         onClearError = { veggieViewModel.clearError() },
                         onQueryChange = { query ->
@@ -966,7 +973,12 @@ private fun CustomerVeggieOrderTabContent(
                 highlightedProductIndex = if (activeZone == VeggieFocusZone.PRODUCTS) highlightedProductIndex else -1,
                 isDialogActive = (selectedProductForAmountDialog != null),
                 onKeyDown = handleNavigationKey,
-                onCardFocused = { idx -> navigateToProduct(idx) },
+                onCardFocused = { idx ->
+                    activeZone = VeggieFocusZone.PRODUCTS
+                    highlightedProductIndex = idx
+                    highlightedCartIndex = -1
+                },
+                onNavigateToProduct = { idx -> navigateToProduct(idx) },
                 onReturnToSearch = { navigateToSearch() },
                 onClearError = { veggieViewModel.clearError() },
                 onQueryChange = { query ->
@@ -1071,6 +1083,7 @@ private fun VeggieCatalogPanel(
     onUpdateProductQuantity: (String, Long) -> Unit = { _, _ -> },
     onKeyDown: ((KeyEvent) -> Boolean)? = null,
     onCardFocused: ((Int) -> Unit)? = null,
+    onNavigateToProduct: ((Int) -> Unit)? = null,
     onReturnToSearch: (() -> Unit)? = null,
     onClearError: () -> Unit,
     onQueryChange: (String) -> Unit,
@@ -1513,16 +1526,19 @@ private fun VeggieCatalogPanel(
                         onQuantityChange = { newScaled -> onUpdateProductQuantity(product.id, newScaled) },
                         onCommitQuantity = {
                             if (index < filteredProducts.lastIndex) {
-                                onCardFocused?.invoke(index + 1)
-                            }
-                        },
-                        onCommitPrevious = {
-                            if (index > 0) {
-                                onCardFocused?.invoke(index - 1)
+                                onNavigateToProduct?.invoke(index + 1)
                             } else {
                                 onReturnToSearch?.invoke()
                             }
                         },
+                        onCommitPrevious = {
+                            if (index > 0) {
+                                onNavigateToProduct?.invoke(index - 1)
+                            } else {
+                                onReturnToSearch?.invoke()
+                            }
+                        },
+                        onReturnToSearch = onReturnToSearch,
                         onFocused = { onCardFocused?.invoke(index) },
                         onToggleFavorite = { onToggleFavorite(product.id) },
                         onKeyDown = onKeyDown,
@@ -2014,6 +2030,7 @@ private fun CustomerVeggieProductCard(
     onQuantityChange: (Long) -> Unit = {},
     onCommitQuantity: () -> Unit = {},
     onCommitPrevious: (() -> Unit)? = null,
+    onReturnToSearch: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
     onToggleFavorite: () -> Unit,
     onKeyDown: ((KeyEvent) -> Boolean)? = null,
@@ -2055,12 +2072,17 @@ private fun CustomerVeggieProductCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = modifier
             .fillMaxWidth()
-            .then(if (inputMode == VeggieInputMode.STANDARD) Modifier.focusRequester(cardFocusRequester) else Modifier)
-            .onPreviewKeyEvent { event ->
-                if (onKeyDown != null && onKeyDown(event)) {
-                    true
-                } else false
-            }
+            .then(
+                if (inputMode == VeggieInputMode.STANDARD) {
+                    Modifier
+                        .focusRequester(cardFocusRequester)
+                        .onPreviewKeyEvent { event ->
+                            if (onKeyDown != null && onKeyDown(event)) {
+                                true
+                            } else false
+                        }
+                } else Modifier
+            )
     ) {
         Row(
             modifier = Modifier
@@ -2222,6 +2244,7 @@ private fun CustomerVeggieProductCard(
                         onQuantityChange = onQuantityChange,
                         onCommit = onCommitQuantity,
                         onCommitPrevious = onCommitPrevious,
+                        onReturnToSearch = onReturnToSearch,
                         onFocused = onFocused,
                         focusRequester = cardFocusRequester
                     )

@@ -39,6 +39,7 @@ fun InlineVeggieQuantityField(
     onQuantityChange: (Long) -> Unit,
     onCommit: (() -> Unit)? = null,
     onCommitPrevious: (() -> Unit)? = null,
+    onReturnToSearch: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
@@ -58,7 +59,7 @@ fun InlineVeggieQuantityField(
         mutableStateOf(
             TextFieldValue(
                 text = formatted,
-                selection = TextRange(0, formatted.length)
+                selection = TextRange(formatted.length)
             )
         )
     }
@@ -72,6 +73,16 @@ fun InlineVeggieQuantityField(
                     selection = TextRange(formatted.length)
                 )
             }
+        }
+    }
+
+    LaunchedEffect(isFocused) {
+        if (isFocused) {
+            val formatted = formatCurrent(quantityScaled)
+            textFieldValue = TextFieldValue(
+                text = formatted,
+                selection = TextRange(0, formatted.length)
+            )
         }
     }
 
@@ -164,8 +175,8 @@ fun InlineVeggieQuantityField(
                         val wasFocused = isFocused
                         isFocused = focusState.isFocused
                         if (focusState.isFocused) {
-                            onFocused?.invoke()
                             if (!wasFocused) {
+                                onFocused?.invoke()
                                 val formatted = formatCurrent(quantityScaled)
                                 textFieldValue = TextFieldValue(
                                     text = formatted,
@@ -176,7 +187,10 @@ fun InlineVeggieQuantityField(
                             val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
                             onQuantityChange(parsed)
                             val cleaned = formatCurrent(parsed)
-                            textFieldValue = TextFieldValue(text = cleaned, selection = TextRange(cleaned.length))
+                            textFieldValue = TextFieldValue(
+                                text = cleaned,
+                                selection = TextRange(cleaned.length)
+                            )
                         }
                     }
                     .onPreviewKeyEvent { event ->
@@ -213,6 +227,12 @@ fun InlineVeggieQuantityField(
                                     val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
                                     onQuantityChange(parsed)
                                     onCommit?.invoke()
+                                    true
+                                }
+                                Key.Escape -> {
+                                    val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
+                                    onQuantityChange(parsed)
+                                    onReturnToSearch?.invoke()
                                     true
                                 }
                                 else -> false
