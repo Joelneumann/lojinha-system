@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -16,9 +17,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -491,17 +496,12 @@ fun AdminVeggieSettlementMatrix(
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = TextSecondaryMuted
                                                 )
-                                                OutlinedTextField(
+                                                MatrixNumberInputField(
                                                     value = draftQtyStr,
                                                     onValueChange = { onUpdateActualQuantity(entry.id, it) },
-                                                    singleLine = true,
-                                                    textStyle = LocalTextStyle.current.copy(
-                                                        fontSize = 12.5.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        textAlign = TextAlign.Center
-                                                    ),
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    modifier = Modifier.fillMaxWidth().height(46.dp)
+                                                    isBold = true,
+                                                    fontSize = 13.sp,
+                                                    modifier = Modifier.fillMaxWidth().height(38.dp)
                                                 )
                                                 Text(
                                                     text = Formatting.formatBrl(shareCents),
@@ -532,17 +532,12 @@ fun AdminVeggieSettlementMatrix(
                                     modifier = Modifier.width(COL_MARKET_PRICE_WIDTH).padding(horizontal = 4.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    OutlinedTextField(
+                                    MatrixNumberInputField(
                                         value = draftMarketPrices[rowInfo.productId] ?: "",
                                         onValueChange = { onUpdateMarketUnitPrice(rowInfo.productId, it) },
-                                        placeholder = { Text("0,00", fontSize = 11.5.sp, color = TextSecondaryMuted) },
-                                        singleLine = true,
-                                        textStyle = LocalTextStyle.current.copy(
-                                            fontSize = 12.5.sp,
-                                            textAlign = TextAlign.Center
-                                        ),
-                                        shape = RoundedCornerShape(6.dp),
-                                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                                        placeholder = "0,00",
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.fillMaxWidth().height(38.dp)
                                     )
                                 }
 
@@ -551,18 +546,13 @@ fun AdminVeggieSettlementMatrix(
                                     modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH).padding(horizontal = 4.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    OutlinedTextField(
+                                    MatrixNumberInputField(
                                         value = draftTotalSpent[rowInfo.productId] ?: "",
                                         onValueChange = { onUpdateTotalSpent(rowInfo.productId, it) },
-                                        placeholder = { Text("0,00", fontSize = 11.5.sp, color = TextSecondaryMuted) },
-                                        singleLine = true,
-                                        textStyle = LocalTextStyle.current.copy(
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            textAlign = TextAlign.Center
-                                        ),
-                                        shape = RoundedCornerShape(6.dp),
-                                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                                        placeholder = "0,00",
+                                        isBold = true,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.fillMaxWidth().height(38.dp)
                                     )
                                 }
 
@@ -873,6 +863,62 @@ private fun AddAdminVeggieEntryDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MatrixNumberInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    isBold: Boolean = false,
+    fontSize: TextUnit = 13.sp,
+    textAlign: TextAlign = TextAlign.Center
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = SurfaceWhite,
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = SolidColor(if (isFocused) AccentNavy else DividerBorder)
+        ),
+        shadowElevation = if (isFocused) 1.dp else 0.dp,
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (value.isEmpty() && placeholder != null) {
+                Text(
+                    text = placeholder,
+                    fontSize = fontSize,
+                    fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+                    color = TextSecondaryMuted,
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(
+                    fontSize = fontSize,
+                    fontWeight = if (isBold) FontWeight.Bold else FontWeight.Medium,
+                    color = PrimaryNavy,
+                    textAlign = textAlign
+                ),
+                cursorBrush = SolidColor(AccentNavy),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { isFocused = it.isFocused }
+            )
         }
     }
 }

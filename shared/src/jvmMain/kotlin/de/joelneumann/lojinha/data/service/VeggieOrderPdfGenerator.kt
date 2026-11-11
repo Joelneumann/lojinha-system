@@ -21,7 +21,7 @@ import java.util.Locale
 object VeggieOrderPdfGenerator {
 
     private const val TAG = "VeggieOrderPdfGenerator"
-    private const val MAX_CUSTOMERS_PER_MATRIX_TABLE = 10
+    private const val MAX_CUSTOMERS_PER_MATRIX_TABLE = 25
 
     // Theme Colors (matching TransactionPdfGenerator)
     private val COLOR_PRIMARY = Color(15, 23, 42)        // Slate 900
@@ -35,11 +35,15 @@ object VeggieOrderPdfGenerator {
     private val FONT_BRAND = Font(Font.HELVETICA, 16f, Font.BOLD, COLOR_PRIMARY)
     private val FONT_TITLE = Font(Font.HELVETICA, 14f, Font.BOLD, COLOR_PRIMARY)
     private val FONT_SUBTITLE = Font(Font.HELVETICA, 10f, Font.NORMAL, COLOR_TEXT_MUTED)
-    private val FONT_TH = Font(Font.HELVETICA, 8.5f, Font.BOLD, Color.WHITE)
+    private val FONT_TH_BUYER = Font(Font.HELVETICA, 9f, Font.BOLD, COLOR_PRIMARY)
+    private val FONT_TH_LIGHT = Font(Font.HELVETICA, 7.5f, Font.BOLD, COLOR_PRIMARY)
     private val FONT_BODY = Font(Font.HELVETICA, 9.5f, Font.NORMAL, COLOR_PRIMARY)
     private val FONT_BODY_BOLD = Font(Font.HELVETICA, 9.5f, Font.BOLD, COLOR_PRIMARY)
-    private val FONT_MATRIX_ORDER = Font(Font.HELVETICA, 8.5f, Font.BOLD, COLOR_PRIMARY)
+    private val FONT_MATRIX_PROD = Font(Font.HELVETICA, 8f, Font.BOLD, COLOR_PRIMARY)
+    private val FONT_MATRIX_TOTAL = Font(Font.HELVETICA, 8f, Font.BOLD, COLOR_PRIMARY)
+    private val FONT_MATRIX_ORDER = Font(Font.HELVETICA, 7.5f, Font.BOLD, COLOR_PRIMARY)
     private val FONT_MUTED = Font(Font.HELVETICA, 8f, Font.NORMAL, COLOR_TEXT_MUTED)
+    private val FONT_MUTED_SMALL = Font(Font.HELVETICA, 7.5f, Font.NORMAL, COLOR_TEXT_MUTED)
 
     private data class VeggiePdfLabels(
         val buyerListTitle: String,
@@ -49,12 +53,13 @@ object VeggieOrderPdfGenerator {
         val customersCountLabel: (Int) -> String,
         val productsCountLabel: (Int) -> String,
         val colProductName: String,
-        val colUnit: String,
         val colTotalQty: String,
+        val colUnit: String,
         val colActualUnitPrice: String,
         val colTotalSpent: String,
-        val buyerOperationCostLabel: String,
-        val notesLabel: String,
+        val subtotalLabel: String,
+        val freightLabel: String,
+        val grandTotalLabel: String,
         val emptyRoundMessage: String,
         val matrixLegend: String,
         val pagePrefix: String
@@ -69,12 +74,13 @@ object VeggieOrderPdfGenerator {
             customersCountLabel = { count -> "$count Kunden" },
             productsCountLabel = { count -> "$count Produkte" },
             colProductName = "Produkt",
-            colUnit = "Einheit",
             colTotalQty = "Gesamtmenge",
+            colUnit = "Einheit",
             colActualUnitPrice = "Stück-/kg-Preis",
             colTotalSpent = "Gesamtpreis",
-            buyerOperationCostLabel = "Einkäufer-Gebühr (R$):",
-            notesLabel = "Notizen:",
+            subtotalLabel = "Zwischensumme:",
+            freightLabel = "Fracht / Lieferung:",
+            grandTotalLabel = "Gesamtsumme:",
             emptyRoundMessage = "Keine Bestellungen in dieser Runde vorhanden.",
             matrixLegend = "Zellenaufbau: Oben = Bestellte Menge  |  Unten = Tatsächlich gelieferte Menge eintragen",
             pagePrefix = "Seite"
@@ -87,12 +93,13 @@ object VeggieOrderPdfGenerator {
             customersCountLabel = { count -> "$count Customers" },
             productsCountLabel = { count -> "$count Products" },
             colProductName = "Product Name",
-            colUnit = "Unit",
             colTotalQty = "Total Quantity",
+            colUnit = "Unit",
             colActualUnitPrice = "Actual Unit Price",
             colTotalSpent = "Total Spent",
-            buyerOperationCostLabel = "Buyer Operation Cost (R$):",
-            notesLabel = "Notes:",
+            subtotalLabel = "Subtotal:",
+            freightLabel = "Freight:",
+            grandTotalLabel = "Grand Total:",
             emptyRoundMessage = "No orders placed in this round.",
             matrixLegend = "Cell layout: Top half = Ordered Quantity  |  Bottom half = Fill in actual delivered quantity",
             pagePrefix = "Page"
@@ -105,12 +112,13 @@ object VeggieOrderPdfGenerator {
             customersCountLabel = { count -> "$count Clientes" },
             productsCountLabel = { count -> "$count Produtos" },
             colProductName = "Produto",
-            colUnit = "Unidade",
             colTotalQty = "Qtd. Total",
+            colUnit = "Unidade",
             colActualUnitPrice = "Preço Unitário",
             colTotalSpent = "Total Gasto",
-            buyerOperationCostLabel = "Taxa do Comprador (R$):",
-            notesLabel = "Observações:",
+            subtotalLabel = "Sub-Total:",
+            freightLabel = "Frete:",
+            grandTotalLabel = "Total Geral:",
             emptyRoundMessage = "Nenhum pedido registrado nesta rodada.",
             matrixLegend = "Célula: Parte superior = Qtd. Pedida  |  Parte inferior = Preencher qtd./peso real entregue",
             pagePrefix = "Pág."
@@ -159,7 +167,6 @@ object VeggieOrderPdfGenerator {
             .filter { it.isNotEmpty() }
             .sortedByAccentInsensitive { it.first().veggieNameSnapshot }
 
-        val customerCount = positiveEntries.map { it.userId }.distinct().size
         val decimalSep = if (language == Language.EN) '.' else ','
 
         val document = Document(PageSize.A4, 36f, 36f, 36f, 45f)
@@ -171,20 +178,20 @@ object VeggieOrderPdfGenerator {
             document = document,
             title = labels.buyerListTitle,
             weekBadge = labels.weekLabel(weekInfo.weekOfYear, weekInfo.isoYear),
-            subtitle = "${labels.openedAtLabel}: ${Formatting.formatTimestamp(round.openedAt, language)}  •  " +
-                "${labels.customersCountLabel(customerCount)}  •  ${labels.productsCountLabel(groupedByProduct.size)}",
+            subtitle = labels.productsCountLabel(groupedByProduct.size),
             language = language
         )
 
-        val table = PdfPTable(floatArrayOf(36f, 13f, 15f, 18f, 18f)).apply {
+        val table = PdfPTable(floatArrayOf(36f, 15f, 13f, 18f, 18f)).apply {
             widthPercentage = 100f
             headerRows = 1
             setSpacingAfter(16f)
         }
 
+        // Light, printer-friendly header styling (avoids dark toner-heavy bars)
         fun addTh(text: String, align: Int = Element.ALIGN_LEFT) {
-            val cell = PdfPCell(Phrase(text, FONT_TH)).apply {
-                backgroundColor = COLOR_PRIMARY
+            val cell = PdfPCell(Phrase(text, FONT_TH_BUYER)).apply {
+                backgroundColor = COLOR_BG_LIGHT
                 setPaddingTop(7f)
                 setPaddingBottom(7f)
                 setPaddingLeft(6f)
@@ -192,15 +199,16 @@ object VeggieOrderPdfGenerator {
                 horizontalAlignment = align
                 verticalAlignment = Element.ALIGN_MIDDLE
                 border = Rectangle.BOX
-                borderColor = COLOR_PRIMARY
+                borderColor = COLOR_BORDER
+                borderWidth = 0.75f
             }
             table.addCell(cell)
         }
 
         // Note: No "[Write-in]" label in headers per user requirement
-        addTh(labels.colProductName)
+        addTh(labels.colProductName, Element.ALIGN_LEFT)
+        addTh(labels.colTotalQty, Element.ALIGN_CENTER)
         addTh(labels.colUnit, Element.ALIGN_CENTER)
-        addTh(labels.colTotalQty, Element.ALIGN_RIGHT)
         addTh(labels.colActualUnitPrice, Element.ALIGN_RIGHT)
         addTh(labels.colTotalSpent, Element.ALIGN_RIGHT)
 
@@ -246,49 +254,43 @@ object VeggieOrderPdfGenerator {
                 }
 
                 table.addCell(buildDataCell(sample.veggieNameSnapshot, FONT_BODY_BOLD, Element.ALIGN_LEFT))
+                table.addCell(buildDataCell(formattedTotalQty, FONT_BODY_BOLD, Element.ALIGN_CENTER))
                 table.addCell(buildDataCell(sample.unitNameSnapshot, FONT_BODY, Element.ALIGN_CENTER))
-                table.addCell(buildDataCell(formattedTotalQty, FONT_BODY_BOLD, Element.ALIGN_RIGHT))
                 // Blank write-in cells for Actual Unit Price and Total Spent
                 table.addCell(buildDataCell("", FONT_BODY, Element.ALIGN_RIGHT, Color.WHITE))
                 table.addCell(buildDataCell("", FONT_BODY, Element.ALIGN_RIGHT, Color.WHITE))
             }
+
+            // Summary rows under the list: Sub-Total, Frete, Total Geral aligning under Total Spent column
+            fun addSummaryRow(labelText: String, isGrandTotal: Boolean = false, topPadding: Float = 6f) {
+                val labelCell = PdfPCell(Phrase(labelText, if (isGrandTotal) FONT_BODY_BOLD else FONT_BODY)).apply {
+                    colspan = 4
+                    horizontalAlignment = Element.ALIGN_RIGHT
+                    verticalAlignment = Element.ALIGN_MIDDLE
+                    setPaddingRight(8f)
+                    setPaddingTop(topPadding)
+                    setPaddingBottom(5f)
+                    border = Rectangle.NO_BORDER
+                }
+                val inputCell = PdfPCell(Phrase("", FONT_BODY)).apply {
+                    colspan = 1
+                    backgroundColor = Color.WHITE
+                    border = Rectangle.BOX
+                    borderColor = if (isGrandTotal) COLOR_PRIMARY else COLOR_BORDER
+                    borderWidth = if (isGrandTotal) 1.25f else 0.75f
+                    minimumHeight = 26f
+                    setPadding(4f)
+                }
+                table.addCell(labelCell)
+                table.addCell(inputCell)
+            }
+
+            addSummaryRow(labels.subtotalLabel, isGrandTotal = false, topPadding = 10f)
+            addSummaryRow(labels.freightLabel, isGrandTotal = false, topPadding = 5f)
+            addSummaryRow(labels.grandTotalLabel, isGrandTotal = true, topPadding = 5f)
         }
 
         document.add(table)
-
-        // Footer Box for Buyer Operation Cost & Notes
-        val footerBox = PdfPTable(floatArrayOf(45f, 55f)).apply {
-            widthPercentage = 100f
-            setSpacingBefore(4f)
-        }
-        val buyerFeeHint = if (round.buyerOperationFeeCents > 0L) {
-            Formatting.formatBrl(round.buyerOperationFeeCents, language)
-        } else {
-            "____________________"
-        }
-        val feeCell = PdfPCell().apply {
-            border = Rectangle.BOX
-            borderColor = COLOR_PRIMARY
-            borderWidth = 1f
-            backgroundColor = COLOR_BG_ZEBRA
-            setPadding(10f)
-            minimumHeight = 44f
-            addElement(Paragraph(labels.buyerOperationCostLabel, FONT_BODY_BOLD).apply { spacingAfter = 6f })
-            addElement(Paragraph(buyerFeeHint, FONT_BODY))
-        }
-        val notesCell = PdfPCell().apply {
-            border = Rectangle.BOX
-            borderColor = COLOR_BORDER
-            borderWidth = 1f
-            backgroundColor = Color.WHITE
-            setPadding(10f)
-            minimumHeight = 44f
-            addElement(Paragraph(labels.notesLabel, FONT_MUTED))
-        }
-        footerBox.addCell(feeCell)
-        footerBox.addCell(notesCell)
-        document.add(footerBox)
-
         document.close()
     }
 
@@ -343,8 +345,8 @@ object VeggieOrderPdfGenerator {
 
         val entriesByProductAndUser = positiveEntries.associateBy { it.veggieProductId to it.userId }
 
-        // A4 Landscape
-        val document = Document(PageSize.A4.rotate(), 28f, 28f, 28f, 40f)
+        // A4 Landscape - Compact side margins (18f) to maximize available table width for up to 25 persons
+        val document = Document(PageSize.A4.rotate(), 18f, 18f, 20f, 35f)
         val writer = PdfWriter.getInstance(document, outputStream)
         writer.pageEvent = VeggieFooterPageEvent(labels)
         document.open()
@@ -353,8 +355,7 @@ object VeggieOrderPdfGenerator {
             document = document,
             title = labels.workerMatrixTitle,
             weekBadge = labels.weekLabel(weekInfo.weekOfYear, weekInfo.isoYear),
-            subtitle = "${labels.openedAtLabel}: ${Formatting.formatTimestamp(round.openedAt, language)}  •  " +
-                "${labels.customersCountLabel(customers.size)}  •  ${labels.productsCountLabel(products.size)}",
+            subtitle = "${labels.customersCountLabel(customers.size)}  •  ${labels.productsCountLabel(products.size)}",
             language = language
         )
 
@@ -389,12 +390,19 @@ object VeggieOrderPdfGenerator {
                 )
             }
 
-            // Column widths: Product Name (20f), Unit (7f), Total (8f), + N customer columns
+            // Adaptive column widths: compact fixed columns (24-32%) leaving up to 76% for up to 25 customers
+            val (prodWidth, qtyWidth, unitWidth) = when {
+                customerSlice.size >= 18 -> Triple(14f, 5.5f, 4.5f) // 24% fixed, 76% for customers
+                customerSlice.size >= 10 -> Triple(16f, 6.5f, 5.5f) // 28% fixed, 72% for customers
+                else -> Triple(18f, 7.5f, 6.5f)                    // 32% fixed, 68% for customers
+            }
+            val remainingWidth = 100f - prodWidth - qtyWidth - unitWidth
+            val customerWidth = remainingWidth / customerSlice.size.coerceAtLeast(1)
+
             val colWidths = FloatArray(3 + customerSlice.size).apply {
-                this[0] = 20f
-                this[1] = 7f
-                this[2] = 8f
-                val customerWidth = (65f / customerSlice.size.coerceAtLeast(1))
+                this[0] = prodWidth
+                this[1] = qtyWidth
+                this[2] = unitWidth
                 for (i in customerSlice.indices) {
                     this[3 + i] = customerWidth
                 }
@@ -406,26 +414,43 @@ object VeggieOrderPdfGenerator {
                 setSpacingAfter(12f)
             }
 
+            val isManyCustomers = customerSlice.size > 5
+            // Light, printer-friendly header styling (avoids dark toner-heavy bars)
             fun addHeaderCell(text: String, align: Int = Element.ALIGN_CENTER) {
-                val cell = PdfPCell(Phrase(text, FONT_TH)).apply {
-                    backgroundColor = COLOR_PRIMARY
-                    setPaddingTop(6f)
-                    setPaddingBottom(6f)
-                    setPaddingLeft(4f)
-                    setPaddingRight(4f)
+                val cell = PdfPCell(Phrase(text, FONT_TH_LIGHT)).apply {
+                    backgroundColor = COLOR_BG_LIGHT
+                    setPaddingTop(5f)
+                    setPaddingBottom(5f)
+                    setPaddingLeft(2f)
+                    setPaddingRight(2f)
                     horizontalAlignment = align
                     verticalAlignment = Element.ALIGN_MIDDLE
                     border = Rectangle.BOX
-                    borderColor = COLOR_PRIMARY
+                    borderColor = COLOR_BORDER
+                    borderWidth = 0.75f
                 }
                 matrixTable.addCell(cell)
             }
 
             addHeaderCell(labels.colProductName, Element.ALIGN_LEFT)
+            addHeaderCell(labels.colTotalQty, Element.ALIGN_CENTER)
             addHeaderCell(labels.colUnit, Element.ALIGN_CENTER)
-            addHeaderCell(labels.colTotalQty, Element.ALIGN_RIGHT)
             for ((_, userName) in customerSlice) {
-                addHeaderCell(userName, Element.ALIGN_CENTER)
+                val displayName = if (isManyCustomers) formatShortName(userName, 14) else userName
+                val cell = PdfPCell(Phrase(displayName, FONT_TH_LIGHT)).apply {
+                    backgroundColor = COLOR_BG_LIGHT
+                    setPadding(2f)
+                    horizontalAlignment = Element.ALIGN_CENTER
+                    verticalAlignment = Element.ALIGN_MIDDLE
+                    border = Rectangle.BOX
+                    borderColor = COLOR_BORDER
+                    borderWidth = 0.75f
+                    if (isManyCustomers) {
+                        rotation = 90
+                        minimumHeight = 75f
+                    }
+                }
+                matrixTable.addCell(cell)
             }
 
             for (productEntries in products) {
@@ -437,31 +462,39 @@ object VeggieOrderPdfGenerator {
                     decimalSeparator = decimalSep
                 )
 
-                val prodCell = PdfPCell(Phrase(sample.veggieNameSnapshot, FONT_BODY_BOLD)).apply {
+                // Product Name column: compact padding with auto text-wrapping enabled
+                val prodCell = PdfPCell(Phrase(sample.veggieNameSnapshot, FONT_MATRIX_PROD)).apply {
                     border = Rectangle.BOX
                     borderColor = COLOR_BORDER
-                    setPadding(5f)
+                    borderWidth = 0.75f
+                    setPaddingLeft(3f)
+                    setPaddingRight(3f)
+                    setPaddingTop(3f)
+                    setPaddingBottom(3f)
+                    isNoWrap = false
                     verticalAlignment = Element.ALIGN_MIDDLE
                 }
-                val unitCell = PdfPCell(Phrase(sample.unitNameSnapshot, FONT_MUTED)).apply {
+                val totalCell = PdfPCell(Phrase(totalFormatted, FONT_MATRIX_TOTAL)).apply {
                     border = Rectangle.BOX
                     borderColor = COLOR_BORDER
-                    setPadding(4f)
+                    borderWidth = 0.75f
+                    backgroundColor = COLOR_BG_ZEBRA
+                    setPadding(2f)
                     horizontalAlignment = Element.ALIGN_CENTER
                     verticalAlignment = Element.ALIGN_MIDDLE
                 }
-                val totalCell = PdfPCell(Phrase(totalFormatted, FONT_BODY_BOLD)).apply {
+                val unitCell = PdfPCell(Phrase(sample.unitNameSnapshot, FONT_MUTED_SMALL)).apply {
                     border = Rectangle.BOX
                     borderColor = COLOR_BORDER
-                    backgroundColor = COLOR_BG_ZEBRA
-                    setPadding(5f)
-                    horizontalAlignment = Element.ALIGN_RIGHT
+                    borderWidth = 0.75f
+                    setPadding(2f)
+                    horizontalAlignment = Element.ALIGN_CENTER
                     verticalAlignment = Element.ALIGN_MIDDLE
                 }
 
                 matrixTable.addCell(prodCell)
-                matrixTable.addCell(unitCell)
                 matrixTable.addCell(totalCell)
+                matrixTable.addCell(unitCell)
 
                 for ((userId, _) in customerSlice) {
                     val entry = entriesByProductAndUser[sample.veggieProductId to userId]
@@ -485,9 +518,24 @@ object VeggieOrderPdfGenerator {
     }
 
     /**
+     * Shortens long customer names for narrow matrix columns (e.g. "Maria Aparecida Silva" -> "Maria S.").
+     */
+    fun formatShortName(fullName: String, maxChars: Int = 14): String {
+        val trimmed = fullName.trim()
+        if (trimmed.length <= maxChars) return trimmed
+        val tokens = trimmed.split("\\s+".toRegex()).filter { it.isNotBlank() }
+        if (tokens.size <= 1) return trimmed.take((maxChars - 1).coerceAtLeast(1)) + "."
+        val first = tokens.first()
+        val last = tokens.last()
+        val candidate = "$first ${last.first().uppercaseChar()}."
+        if (candidate.length <= maxChars) return candidate
+        return candidate.take((maxChars - 1).coerceAtLeast(1)) + "."
+    }
+
+    /**
      * Builds a horizontally divided cell:
-     * - Top half: Printed Ordered Quantity (tinted background when non-empty)
-     * - Bottom half: Blank space to write the actual weighed/delivered quantity
+     * - Top half: Printed Ordered Quantity (tinted background when non-empty, or "-" when empty)
+     * - Bottom half: Blank space to write actual quantity (or "-" when empty)
      */
     private fun createSplitMatrixCell(orderedQtyText: String): PdfPCell {
         val hasOrder = orderedQtyText.isNotBlank()
@@ -495,23 +543,30 @@ object VeggieOrderPdfGenerator {
             widthPercentage = 100f
         }
 
-        val topHalf = PdfPCell(Phrase(if (hasOrder) orderedQtyText else "-", if (hasOrder) FONT_MATRIX_ORDER else FONT_MUTED)).apply {
+        val topHalf = PdfPCell(Phrase(if (hasOrder) orderedQtyText else "-", if (hasOrder) FONT_MATRIX_ORDER else FONT_MUTED_SMALL)).apply {
             border = Rectangle.BOTTOM
             borderColorBottom = COLOR_BORDER_SUBTLE
             borderWidthBottom = 0.5f
             backgroundColor = if (hasOrder) COLOR_BG_LIGHT else COLOR_BG_ZEBRA
             horizontalAlignment = Element.ALIGN_CENTER
             verticalAlignment = Element.ALIGN_MIDDLE
-            minimumHeight = 14f
-            setPaddingTop(2f)
-            setPaddingBottom(2f)
+            minimumHeight = 12f
+            setPaddingLeft(1f)
+            setPaddingRight(1f)
+            setPaddingTop(1f)
+            setPaddingBottom(1f)
         }
 
-        val bottomHalf = PdfPCell(Phrase("", FONT_BODY)).apply {
+        val bottomHalf = PdfPCell(Phrase(if (hasOrder) "" else "-", if (hasOrder) FONT_BODY else FONT_MUTED_SMALL)).apply {
             border = Rectangle.NO_BORDER
             backgroundColor = if (hasOrder) Color.WHITE else COLOR_BG_ZEBRA
-            minimumHeight = 18f
-            setPadding(2f)
+            horizontalAlignment = Element.ALIGN_CENTER
+            verticalAlignment = Element.ALIGN_MIDDLE
+            minimumHeight = 16f
+            setPaddingLeft(1f)
+            setPaddingRight(1f)
+            setPaddingTop(1f)
+            setPaddingBottom(1f)
         }
 
         innerTable.addCell(topHalf)
@@ -540,9 +595,10 @@ object VeggieOrderPdfGenerator {
         val leftCell = PdfPCell().apply {
             border = Rectangle.NO_BORDER
             setPaddingBottom(4f)
-            addElement(Paragraph("LOJINHA", FONT_BRAND).apply { spacingAfter = 2f })
-            addElement(Paragraph(title, FONT_TITLE).apply { spacingAfter = 2f })
-            addElement(Paragraph(subtitle, FONT_SUBTITLE))
+            addElement(Paragraph(title, FONT_BRAND).apply { spacingAfter = 3f })
+            if (subtitle.isNotBlank()) {
+                addElement(Paragraph(subtitle, FONT_SUBTITLE))
+            }
         }
         val rightCell = PdfPCell().apply {
             border = Rectangle.NO_BORDER

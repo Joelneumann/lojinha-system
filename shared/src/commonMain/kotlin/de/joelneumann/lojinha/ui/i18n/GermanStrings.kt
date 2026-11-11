@@ -827,9 +827,9 @@ object GermanStrings : AppStrings {
     override val disabledVeggieProductsSection = "Deaktivierte Gemüseprodukte"
 
     override fun weekOfYearLabel(week: Int, year: Int): String = "KW $week / $year"
-    override val roundStatusOpen = "OFFEN"
-    override val roundStatusClosed = "GESCHLOSSEN"
-    override val roundStatusSettled = "ABGERECHNET"
+    override val roundStatusOpen = "Offen"
+    override val roundStatusClosed = "Gesendet"
+    override val roundStatusSettled = "Abgerechnet"
     override val openNewRoundBtn = "Neue Runde öffnen"
     override val closeRoundBtn = "Bestellrunde schließen"
     override val reopenRoundBtn = "Runde wieder öffnen"
