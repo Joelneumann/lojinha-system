@@ -638,7 +638,11 @@ private fun CustomerVeggieOrderTabContent(
                         }
                         VeggieFocusZone.CART -> {
                             if (cartProducts.isNotEmpty()) {
-                                navigateToCart(highlightedCartIndex + 1)
+                                if (highlightedCartIndex < cartProducts.lastIndex) {
+                                    navigateToCart(highlightedCartIndex + 1)
+                                } else {
+                                    navigateToSearch()
+                                }
                                 true
                             } else false
                         }
@@ -661,9 +665,12 @@ private fun CustomerVeggieOrderTabContent(
                                 true
                             } else if (highlightedCartIndex == 0) {
                                 if (filteredProducts.isNotEmpty()) {
-                                    navigateToProduct(0)
+                                    navigateToProduct(filteredProducts.lastIndex)
                                     true
-                                } else false
+                                } else {
+                                    navigateToSearch()
+                                    true
+                                }
                             } else false
                         }
                         VeggieFocusZone.SEARCH -> false
@@ -891,6 +898,7 @@ private fun CustomerVeggieOrderTabContent(
                             highlightedCartIndex = -1
                         },
                         onNavigateToProduct = { idx -> navigateToProduct(idx) },
+                        onNavigateToCart = { idx -> navigateToCart(idx) },
                         onReturnToSearch = { navigateToSearch() },
                         onClearError = { veggieViewModel.clearError() },
                         onQueryChange = { query ->
@@ -979,6 +987,7 @@ private fun CustomerVeggieOrderTabContent(
                     highlightedCartIndex = -1
                 },
                 onNavigateToProduct = { idx -> navigateToProduct(idx) },
+                onNavigateToCart = { idx -> navigateToCart(idx) },
                 onReturnToSearch = { navigateToSearch() },
                 onClearError = { veggieViewModel.clearError() },
                 onQueryChange = { query ->
@@ -1084,7 +1093,9 @@ private fun VeggieCatalogPanel(
     onKeyDown: ((KeyEvent) -> Boolean)? = null,
     onCardFocused: ((Int) -> Unit)? = null,
     onNavigateToProduct: ((Int) -> Unit)? = null,
+    onNavigateToCart: ((Int) -> Unit)? = null,
     onReturnToSearch: (() -> Unit)? = null,
+    cartProductsCount: Int = 0,
     onClearError: () -> Unit,
     onQueryChange: (String) -> Unit,
     onOpenDetail: (VeggieProduct) -> Unit,
@@ -1527,6 +1538,8 @@ private fun VeggieCatalogPanel(
                         onCommitQuantity = {
                             if (index < filteredProducts.lastIndex) {
                                 onNavigateToProduct?.invoke(index + 1)
+                            } else if (cartProductsCount > 0) {
+                                onNavigateToCart?.invoke(0)
                             } else {
                                 onReturnToSearch?.invoke()
                             }
@@ -1891,9 +1904,10 @@ private fun VeggieCartLineItemRow(
     } else 0L
 
     val rowFocusRequester = remember { FocusRequester() }
+    var isRowFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(isHighlighted, isDialogActive) {
-        if (isHighlighted && !isDialogActive) {
+        if (isHighlighted && !isDialogActive && !isRowFocused) {
             rowFocusRequester.safeRequestFocus()
         }
     }
@@ -1907,6 +1921,9 @@ private fun VeggieCartLineItemRow(
         modifier = modifier
             .fillMaxWidth()
             .focusRequester(rowFocusRequester)
+            .onFocusChanged { focusState ->
+                isRowFocused = focusState.isFocused
+            }
             .onPreviewKeyEvent { event ->
                 if (onKeyDown != null && onKeyDown(event)) {
                     true
@@ -1946,10 +1963,8 @@ private fun VeggieCartLineItemRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Number Button (click re-opens amount dialog, excluded from Tab)
+                // Number Badge (excluded from Tab)
                 Surface(
-                    onClick = onEditQuantity,
-                    enabled = isEditable,
                     shape = RoundedCornerShape(8.dp),
                     color = SurfaceWhite,
                     border = BorderStroke(1.dp, DividerBorder),
@@ -1957,7 +1972,6 @@ private fun VeggieCartLineItemRow(
                         .height(28.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .focusProperties { canFocus = false }
-                        .pointerHoverIcon(if (isEditable) PointerIcon.Hand else PointerIcon.Default)
                 ) {
                     Box(
                         modifier = Modifier.padding(horizontal = 8.dp),

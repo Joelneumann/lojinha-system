@@ -195,7 +195,6 @@ fun InlineVeggieQuantityField(
                     }
                     .onPreviewKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
-                            val step = if (allowDecimals) (VEGGIE_QTY_SCALE / 2) else VEGGIE_QTY_SCALE
                             when (event.key) {
                                 Key.Tab -> {
                                     val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
@@ -207,20 +206,16 @@ fun InlineVeggieQuantityField(
                                     }
                                     true
                                 }
-                                Key.DirectionUp -> {
-                                    val current = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
-                                    val next = current + step
-                                    onQuantityChange(next)
-                                    val formatted = formatCurrent(next)
-                                    textFieldValue = TextFieldValue(text = formatted, selection = TextRange(0, formatted.length))
+                                Key.DirectionDown -> {
+                                    val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
+                                    onQuantityChange(parsed)
+                                    onCommit?.invoke()
                                     true
                                 }
-                                Key.DirectionDown -> {
-                                    val current = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
-                                    val next = (current - step).coerceAtLeast(0L)
-                                    onQuantityChange(next)
-                                    val formatted = formatCurrent(next)
-                                    textFieldValue = TextFieldValue(text = formatted, selection = TextRange(0, formatted.length))
+                                Key.DirectionUp -> {
+                                    val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
+                                    onQuantityChange(parsed)
+                                    onCommitPrevious?.invoke()
                                     true
                                 }
                                 Key.Enter, Key.NumPadEnter -> {
