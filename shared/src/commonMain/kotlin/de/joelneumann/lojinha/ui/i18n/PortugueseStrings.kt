@@ -913,6 +913,10 @@ object PortugueseStrings : AppStrings {
     override val noFavoriteProductsFound = "Nenhum produto favorito encontrado"
     override val veggieFixedRoundFeesLabel = "Taxas Fixas da Rodada (Comprador e Transporte)"
     override val veggieSharedFeeNotice = "Dividido igualmente entre todos que pedirem nesta rodada — sua cota diminui conforme mais pessoas pedirem."
+    override val addOrderModeOverwrite = "Sobrescrever pedido"
+    override val addOrderModeAddToExisting = "Adicionar ao pedido existente"
+    override fun addOrderCurrentQuantityLabel(quantity: String, unit: String) = "Pedido atual: $quantity $unit"
+    override fun addOrderNewTotalLabel(quantity: String, unit: String) = "Novo total: $quantity $unit"
 }
 
 

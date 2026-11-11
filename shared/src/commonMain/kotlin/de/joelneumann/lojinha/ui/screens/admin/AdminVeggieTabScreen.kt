@@ -420,6 +420,7 @@ fun AdminVeggieTabScreen(
                         onExportWorkerPdf = onExportWorkerPdf,
                         hasUnsavedChanges = hasUnsavedSettlementChanges,
                         onResetChanges = viewModel::discardDraft,
+                        unitTypes = unitTypes,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -535,6 +536,7 @@ fun AdminVeggieTabScreen(
                             onExportWorkerPdf = onExportWorkerPdf,
                             hasUnsavedChanges = hasUnsavedSettlementChanges,
                             onResetChanges = viewModel::discardDraft,
+                            unitTypes = unitTypes,
                             modifier = Modifier.weight(1f)
                         )
                     }

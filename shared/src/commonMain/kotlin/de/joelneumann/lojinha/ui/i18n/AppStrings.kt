@@ -893,6 +893,10 @@ interface AppStrings {
     val noFavoriteProductsFound: String
     val veggieFixedRoundFeesLabel: String
     val veggieSharedFeeNotice: String
+    val addOrderModeOverwrite: String
+    val addOrderModeAddToExisting: String
+    fun addOrderCurrentQuantityLabel(quantity: String, unit: String): String
+    fun addOrderNewTotalLabel(quantity: String, unit: String): String
 }
 
 

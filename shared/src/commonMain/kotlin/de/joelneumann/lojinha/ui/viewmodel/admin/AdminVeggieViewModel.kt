@@ -30,6 +30,11 @@ enum class AdminVeggieSubTab {
     HISTORY
 }
 
+enum class AddOrderEntryMode {
+    OVERWRITE,
+    ADD
+}
+
 class AdminVeggieViewModel(
     private val veggieOrderRepository: VeggieOrderRepository,
     private val userRepository: UserRepository,
@@ -697,19 +702,41 @@ class AdminVeggieViewModel(
         }
     }
 
-    fun addOrUpdateCustomerEntry(user: User, product: VeggieProduct, quantityInput: String) {
+    fun addOrUpdateCustomerEntry(
+        user: User,
+        product: VeggieProduct,
+        quantityInput: String,
+        mode: AddOrderEntryMode = AddOrderEntryMode.OVERWRITE
+    ) {
         val round = _selectedRound.value ?: return
         val unit = _unitTypes.value.find { it.id == product.unitTypeId }
         val allowDecimals = unit?.allowDecimals ?: false
         val qtyScaled = VeggieQuantityScaling.parseQuantityScaled(quantityInput, allowDecimals) ?: return
+        if (qtyScaled <= 0L) return
 
         activeScope.launch {
             try {
                 val existing = _selectedRoundEntries.value.find { it.userId == user.id && it.veggieProductId == product.id }
                 val now = currentTimeMillis()
+
+                val targetOrderedQty = when {
+                    existing == null -> qtyScaled
+                    round.status == VeggieRoundStatus.OPEN -> {
+                        if (mode == AddOrderEntryMode.ADD) existing.orderedQuantityScaled + qtyScaled else qtyScaled
+                    }
+                    else -> existing.orderedQuantityScaled
+                }
+
+                val currentActual = existing?.actualQuantityScaled ?: existing?.orderedQuantityScaled ?: 0L
+                val targetActualQty = when {
+                    existing == null -> qtyScaled
+                    mode == AddOrderEntryMode.ADD -> currentActual + qtyScaled
+                    else -> qtyScaled
+                }
+
                 val entry = existing?.copy(
-                    orderedQuantityScaled = if (round.status == VeggieRoundStatus.OPEN) qtyScaled else existing.orderedQuantityScaled,
-                    actualQuantityScaled = qtyScaled,
+                    orderedQuantityScaled = targetOrderedQty,
+                    actualQuantityScaled = targetActualQty,
                     updatedAt = now
                 ) ?: VeggieOrderEntry(
                     id = generateUuid(),
@@ -720,11 +747,16 @@ class AdminVeggieViewModel(
                     veggieNameSnapshot = product.name,
                     unitNameSnapshot = unit?.name ?: product.unitTypeId,
                     allowDecimalsSnapshot = allowDecimals,
-                    orderedQuantityScaled = qtyScaled,
-                    actualQuantityScaled = qtyScaled,
+                    orderedQuantityScaled = targetOrderedQty,
+                    actualQuantityScaled = targetActualQty,
                     updatedAt = now
                 )
                 veggieOrderRepository.upsertAdminOrderEntry(entry)
+
+                if (existing != null && _draftActualQuantities.value.containsKey(existing.id)) {
+                    _draftActualQuantities.value = _draftActualQuantities.value - existing.id
+                }
+
                 loadData(preserveDraftEdits = true)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to add order entry"

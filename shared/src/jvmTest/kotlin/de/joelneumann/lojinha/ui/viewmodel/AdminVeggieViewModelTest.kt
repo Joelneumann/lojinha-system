@@ -6,6 +6,7 @@ import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.domain.repository.VeggieOrderRepository
 import de.joelneumann.lojinha.domain.service.VeggieRoundSettlementResult
+import de.joelneumann.lojinha.ui.viewmodel.admin.AddOrderEntryMode
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieSubTab
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -132,6 +133,18 @@ class AdminVeggieViewModelTest {
 
         override suspend fun getProductSettlementsForRound(roundId: String): List<VeggieRoundProductSettlement> {
             return settlements.filter { it.roundId == roundId }
+        }
+
+        override suspend fun upsertAdminOrderEntry(entry: VeggieOrderEntry): Boolean {
+            val idx = entries.indexOfFirst {
+                it.id == entry.id || (it.roundId == entry.roundId && it.userId == entry.userId && it.veggieProductId == entry.veggieProductId)
+            }
+            if (idx >= 0) {
+                entries[idx] = entry
+            } else {
+                entries.add(entry)
+            }
+            return true
         }
 
         override suspend fun saveDraftSettlement(
@@ -595,5 +608,97 @@ class AdminVeggieViewModelTest {
         assertTrue(callbackCalled)
         assertNull(vm.activeRound.value?.buyerPdfExportedAt)
         assertNull(vm.activeRound.value?.workerPdfExportedAt)
+    }
+
+    @Test
+    fun testAddOrUpdateCustomerEntry_newEntry_createsOrderEntryWithScaledQuantity() = runTest {
+        val (veggieRepo, userRepo, _) = setupTestFixture()
+        val newUser = User(id = "user-2", name = "Maria", isActive = true)
+        userRepo.saveUser(newUser)
+        val product = veggieRepo.products.first()
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        vm.addOrUpdateCustomerEntry(user = newUser, product = product, quantityInput = "2.5")
+        advanceUntilIdle()
+
+        val created = veggieRepo.entries.find { it.userId == "user-2" && it.veggieProductId == product.id && it.roundId == "round-active" }
+        assertNotNull(created)
+        assertEquals(2500L, created.orderedQuantityScaled)
+        assertEquals(2500L, created.actualQuantityScaled)
+    }
+
+    @Test
+    fun testAddOrUpdateCustomerEntry_existingEntry_overwriteMode_replacesQuantity() = runTest {
+        val (veggieRepo, userRepo, testUser) = setupTestFixture()
+        val product = veggieRepo.products.first()
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Existing entry is 1000L. Overwrite with 3.5
+        vm.addOrUpdateCustomerEntry(
+            user = testUser,
+            product = product,
+            quantityInput = "3.5",
+            mode = AddOrderEntryMode.OVERWRITE
+        )
+        advanceUntilIdle()
+
+        val updated = veggieRepo.entries.find { it.userId == testUser.id && it.veggieProductId == product.id && it.roundId == "round-active" }
+        assertNotNull(updated)
+        assertEquals(3500L, updated.orderedQuantityScaled)
+        assertEquals(3500L, updated.actualQuantityScaled)
+    }
+
+    @Test
+    fun testAddOrUpdateCustomerEntry_existingEntry_addMode_sumsQuantities() = runTest {
+        val (veggieRepo, userRepo, testUser) = setupTestFixture()
+        val product = veggieRepo.products.first()
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Existing entry is 1000L. Add 2.0 => 3000L
+        vm.addOrUpdateCustomerEntry(
+            user = testUser,
+            product = product,
+            quantityInput = "2.0",
+            mode = AddOrderEntryMode.ADD
+        )
+        advanceUntilIdle()
+
+        val updated = veggieRepo.entries.find { it.userId == testUser.id && it.veggieProductId == product.id && it.roundId == "round-active" }
+        assertNotNull(updated)
+        assertEquals(3000L, updated.orderedQuantityScaled)
+        assertEquals(3000L, updated.actualQuantityScaled)
+    }
+
+    @Test
+    fun testAddOrUpdateCustomerEntry_closedRound_preservesOrderedQuantityAndUpdatesActual() = runTest {
+        val (veggieRepo, userRepo, testUser) = setupTestFixture()
+        val product = veggieRepo.products.first()
+
+        // Close the round
+        val activeRound = veggieRepo.rounds.first { it.id == "round-active" }
+        veggieRepo.rounds[veggieRepo.rounds.indexOf(activeRound)] = activeRound.copy(status = VeggieRoundStatus.CLOSED)
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Existing entry was 1000L ordered and 1000L actual. In closed round, adding 1.5 should keep ordered at 1000L and set actual to 2500L
+        vm.addOrUpdateCustomerEntry(
+            user = testUser,
+            product = product,
+            quantityInput = "1.5",
+            mode = AddOrderEntryMode.ADD
+        )
+        advanceUntilIdle()
+
+        val updated = veggieRepo.entries.find { it.userId == testUser.id && it.veggieProductId == product.id && it.roundId == "round-active" }
+        assertNotNull(updated)
+        assertEquals(1000L, updated.orderedQuantityScaled)
+        assertEquals(2500L, updated.actualQuantityScaled)
     }
 }
