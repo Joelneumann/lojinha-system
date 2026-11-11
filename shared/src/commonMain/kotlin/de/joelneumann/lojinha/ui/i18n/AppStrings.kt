@@ -830,6 +830,8 @@ interface AppStrings {
     val colMarketUnitPrice: String
     val colTotalSpent: String
     val colEffectivePrice: String
+    val hideBuyerOverviewBtn: String
+    val showBuyerOverviewBtn: String
     val customerPortalTabOrder: String
     val customerPortalTabVeggieHistory: String
     val customerPortalTabStoreHistory: String

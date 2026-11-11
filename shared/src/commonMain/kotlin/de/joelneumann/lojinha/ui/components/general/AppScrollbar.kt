@@ -16,3 +16,9 @@ expect fun AppVerticalScrollbar(
     scrollState: ScrollState,
     modifier: Modifier = Modifier
 )
+
+@Composable
+expect fun AppHorizontalScrollbar(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier
+)

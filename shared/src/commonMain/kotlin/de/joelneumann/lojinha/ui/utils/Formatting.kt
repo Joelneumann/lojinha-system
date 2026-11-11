@@ -324,6 +324,21 @@ object Formatting {
         val average = (currentTotal + incomingTotal) / totalUnits
         return round(average).toLong()
     }
+
+    /**
+     * Shortens long names for narrow matrix columns (e.g. "Maria Aparecida Silva" -> "Maria S.").
+     */
+    fun formatShortName(fullName: String, maxChars: Int = 14): String {
+        val trimmed = fullName.trim()
+        if (trimmed.length <= maxChars) return trimmed
+        val tokens = trimmed.split("\\s+".toRegex()).filter { it.isNotBlank() }
+        if (tokens.size <= 1) return trimmed.take((maxChars - 1).coerceAtLeast(1)) + "."
+        val first = tokens.first()
+        val last = tokens.last()
+        val candidate = "$first ${last.first().uppercaseChar()}."
+        if (candidate.length <= maxChars) return candidate
+        return candidate.take((maxChars - 1).coerceAtLeast(1)) + "."
+    }
 }
 
 

@@ -1,5 +1,9 @@
 package de.joelneumann.lojinha.ui.components.admin.veggie
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,9 +21,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -34,6 +45,7 @@ import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.components.general.AppHorizontalScrollbar
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
@@ -42,12 +54,14 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 
-private val COL_PRODUCT_WIDTH = 190.dp
-private val COL_CUSTOMER_WIDTH = 148.dp
-private val COL_TOTAL_QTY_WIDTH = 115.dp
-private val COL_MARKET_PRICE_WIDTH = 135.dp
-private val COL_TOTAL_SPENT_WIDTH = 140.dp
-private val COL_EFFECTIVE_PRICE_WIDTH = 130.dp
+private val COL_PRODUCT_WIDTH = 170.dp
+private val COL_CUSTOMER_WIDTH = 80.dp
+private val COL_TOTAL_QTY_WIDTH = 90.dp
+private val COL_MARKET_PRICE_WIDTH = 115.dp
+private val COL_TOTAL_SPENT_WIDTH = 115.dp
+private val COL_EFFECTIVE_PRICE_WIDTH = 105.dp
+private val COL_DIVIDER_WIDTH = 26.dp
+private val OVERVIEW_TOTAL_WIDTH = COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH + COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH
 
 @Composable
 fun AdminVeggieSettlementMatrix(
@@ -85,6 +99,13 @@ fun AdminVeggieSettlementMatrix(
     var showConfirmSettle by remember { mutableStateOf(false) }
     var showAddEntryDialog by remember { mutableStateOf(false) }
     var transporterDropdownExpanded by remember { mutableStateOf(false) }
+    var showBuyerOverview by remember { mutableStateOf(true) }
+
+    val animatedOverviewWidth by animateDpAsState(
+        targetValue = if (showBuyerOverview) OVERVIEW_TOTAL_WIDTH else 0.dp,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        label = "overviewWidthAnim"
+    )
 
     // Distinct customers and products in this round
     val roundCustomers = remember(entries) {
@@ -118,6 +139,32 @@ fun AdminVeggieSettlementMatrix(
     }
     val previewCustomerSummaryMap = remember(livePreview) {
         livePreview?.customerSummaries?.associateBy { it.userId } ?: emptyMap()
+    }
+
+    // Focus Requester Maps for custom Tab order
+    val matrixFocusRequesters = remember(entries) {
+        entries.associate { it.id to FocusRequester() }
+    }
+    val priceFocusRequesters = remember(roundProductRows) {
+        roundProductRows.associate { it.productId to FocusRequester() }
+    }
+    val spentFocusRequesters = remember(roundProductRows) {
+        roundProductRows.associate { it.productId to FocusRequester() }
+    }
+    val orderedMatrixEntryIds = remember(roundProductRows, roundCustomers) {
+        buildList {
+            for (row in roundProductRows) {
+                for ((userId, _) in roundCustomers) {
+                    val entry = row.entriesByUserId[userId]
+                    if (entry != null) {
+                        add(entry.id)
+                    }
+                }
+            }
+        }
+    }
+    val priceProductIds = remember(roundProductRows) {
+        roundProductRows.map { it.productId }
     }
 
     val horizontalScrollState = rememberScrollState()
@@ -185,9 +232,9 @@ fun AdminVeggieSettlementMatrix(
                         }
                     }
 
-                    Row(
+                    FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedButton(
                             onClick = { showAddEntryDialog = true },
@@ -399,26 +446,103 @@ fun AdminVeggieSettlementMatrix(
                     Text(strings.noMatchingProducts, color = TextSecondaryMuted, fontSize = 14.sp)
                 }
             } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .horizontalScroll(horizontalScrollState)
-                ) {
+                Column(modifier = Modifier.fillMaxSize()) {
                     // Matrix Table Header
                     Row(
                         modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
                             .background(PrimaryNavy)
-                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                            .padding(vertical = 4.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        MatrixHeaderCell(strings.veggieProductNameLabel, COL_PRODUCT_WIDTH, TextAlign.Start)
-                        roundCustomers.forEach { (_, customerName) ->
-                            MatrixHeaderCell(customerName, COL_CUSTOMER_WIDTH, TextAlign.Center)
+                        // 1. Fixed Product Name Header
+                        Box(
+                            modifier = Modifier.width(COL_PRODUCT_WIDTH).height(88.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Text(
+                                text = strings.veggieProductNameLabel,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SurfaceWhite
+                            )
                         }
-                        MatrixHeaderCell(strings.colActualQty, COL_TOTAL_QTY_WIDTH, TextAlign.Center)
-                        MatrixHeaderCell(strings.colMarketUnitPrice, COL_MARKET_PRICE_WIDTH, TextAlign.Center)
-                        MatrixHeaderCell(strings.colTotalSpent, COL_TOTAL_SPENT_WIDTH, TextAlign.Center)
-                        MatrixHeaderCell(strings.colEffectivePrice, COL_EFFECTIVE_PRICE_WIDTH, TextAlign.End)
+
+                        // 2. Middle Scrollable Customer Headers (90° Rotated Names)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(horizontalScrollState)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                roundCustomers.forEach { (_, customerName) ->
+                                    Box(
+                                        modifier = Modifier
+                                            .width(COL_CUSTOMER_WIDTH)
+                                            .height(88.dp)
+                                            .padding(horizontal = 2.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = Formatting.formatShortName(customerName, 14),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SurfaceWhite,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            modifier = Modifier
+                                                .wrapContentSize(unbounded = true)
+                                                .graphicsLayer { rotationZ = -90f }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. Separator Button between the two lists
+                        Box(
+                            modifier = Modifier
+                                .width(COL_DIVIDER_WIDTH)
+                                .height(88.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(
+                                onClick = { showBuyerOverview = !showBuyerOverview },
+                                shape = RoundedCornerShape(6.dp),
+                                color = SurfaceWhite.copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, SurfaceWhite.copy(alpha = 0.45f)),
+                                modifier = Modifier.size(width = 22.dp, height = 36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = if (showBuyerOverview) Icons.Default.ChevronRight else Icons.Default.ChevronLeft,
+                                        contentDescription = if (showBuyerOverview) strings.hideBuyerOverviewBtn else strings.showBuyerOverviewBtn,
+                                        tint = SurfaceWhite,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // 4. Animated Buyer Overview Headers
+                        if (animatedOverviewWidth > 0.dp) {
+                            Box(
+                                modifier = Modifier
+                                    .width(animatedOverviewWidth)
+                                    .clipToBounds()
+                            ) {
+                                Row(
+                                    modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    MatrixHeaderCell(strings.colActualQty, COL_TOTAL_QTY_WIDTH, TextAlign.Center)
+                                    MatrixHeaderCell(strings.colMarketUnitPrice, COL_MARKET_PRICE_WIDTH, TextAlign.Center)
+                                    MatrixHeaderCell(strings.colTotalSpent, COL_TOTAL_SPENT_WIDTH, TextAlign.Center)
+                                    MatrixHeaderCell(strings.colEffectivePrice, COL_EFFECTIVE_PRICE_WIDTH, TextAlign.End)
+                                }
+                            }
+                        }
                     }
 
                     // Scrollable Product Rows
@@ -444,19 +568,20 @@ fun AdminVeggieSettlementMatrix(
 
                             Row(
                                 modifier = Modifier
+                                    .fillMaxWidth()
                                     .border(0.5.dp, DividerBorder)
                                     .background(SurfaceWhite)
-                                    .padding(vertical = 8.dp, horizontal = 8.dp),
+                                    .padding(vertical = 4.dp, horizontal = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Product Name & Unit
+                                // 1. Product Name & Unit (Fixed Left)
                                 Column(
                                     modifier = Modifier.width(COL_PRODUCT_WIDTH).padding(end = 8.dp),
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     Text(
                                         text = rowInfo.productName,
-                                        fontSize = 13.5.sp,
+                                        fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = PrimaryNavy,
                                         maxLines = 2,
@@ -468,107 +593,185 @@ fun AdminVeggieSettlementMatrix(
                                     )
                                 }
 
-                                // Customer Cells
-                                roundCustomers.forEach { (userId, _) ->
-                                    val entry = rowInfo.entriesByUserId[userId]
-                                    Box(
-                                        modifier = Modifier.width(COL_CUSTOMER_WIDTH).padding(horizontal = 4.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (entry == null) {
-                                            Text("—", color = TextSecondaryMuted, fontSize = 13.sp)
-                                        } else {
-                                            val orderedFormatted = VeggieQuantityScaling.formatScaledQuantity(
-                                                entry.orderedQuantityScaled,
-                                                entry.allowDecimalsSnapshot
-                                            )
-                                            val draftQtyStr = draftActualQuantities[entry.id] ?: orderedFormatted
-                                            val previewEntry = previewEntryMap[entry.id]
-                                            val shareCents = previewEntry?.finalItemTotalCents ?: 0L
-
-                                            Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                // 2. Customer Cells (Middle Horizontally Scrolled)
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .horizontalScroll(horizontalScrollState)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        roundCustomers.forEach { (userId, _) ->
+                                            val entry = rowInfo.entriesByUserId[userId]
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(COL_CUSTOMER_WIDTH)
+                                                    .padding(horizontal = 3.dp),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Text(
-                                                    text = "${strings.colOrderedQty}: $orderedFormatted ${rowInfo.unitName}",
-                                                    fontSize = 10.5.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = TextSecondaryMuted
-                                                )
-                                                MatrixNumberInputField(
-                                                    value = draftQtyStr,
-                                                    onValueChange = { onUpdateActualQuantity(entry.id, it) },
-                                                    isBold = true,
-                                                    fontSize = 13.sp,
-                                                    modifier = Modifier.fillMaxWidth().height(38.dp)
-                                                )
-                                                Text(
-                                                    text = Formatting.formatBrl(shareCents),
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (shareCents > 0L) AccentNavy else TextSecondaryMuted
-                                                )
+                                                if (entry == null) {
+                                                    Text("—", color = TextSecondaryMuted, fontSize = 13.sp)
+                                                } else {
+                                                    val orderedFormatted = VeggieQuantityScaling.formatScaledQuantity(
+                                                        entry.orderedQuantityScaled,
+                                                        entry.allowDecimalsSnapshot
+                                                    )
+                                                    val draftQtyStr = draftActualQuantities[entry.id] ?: orderedFormatted
+                                                    val previewEntry = previewEntryMap[entry.id]
+                                                    val shareCents = previewEntry?.finalItemTotalCents ?: 0L
+
+                                                    val entryIdx = orderedMatrixEntryIds.indexOf(entry.id)
+                                                    val prevReq = if (entryIdx > 0) matrixFocusRequesters[orderedMatrixEntryIds[entryIdx - 1]] else null
+                                                    val nextReq = if (entryIdx in 0 until orderedMatrixEntryIds.size - 1) matrixFocusRequesters[orderedMatrixEntryIds[entryIdx + 1]] else null
+
+                                                    Column(
+                                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = "$orderedFormatted ${rowInfo.unitName}",
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = TextSecondaryMuted,
+                                                            maxLines = 1
+                                                        )
+                                                        MatrixNumberInputField(
+                                                            value = draftQtyStr,
+                                                            onValueChange = { onUpdateActualQuantity(entry.id, it) },
+                                                            isBold = true,
+                                                            fontSize = 12.5.sp,
+                                                            focusRequester = matrixFocusRequesters[entry.id],
+                                                            prevFocusRequester = prevReq,
+                                                            nextFocusRequester = nextReq,
+                                                            modifier = Modifier.fillMaxWidth().height(36.dp)
+                                                        )
+                                                        Text(
+                                                            text = Formatting.formatBrl(shareCents),
+                                                            fontSize = 10.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (shareCents > 0L) AccentNavy else TextSecondaryMuted,
+                                                            maxLines = 1
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
 
-                                // Total Delivered Qty
+                                // 3. Vertical Divider Line between lists
                                 Box(
-                                    modifier = Modifier.width(COL_TOTAL_QTY_WIDTH).padding(horizontal = 4.dp),
+                                    modifier = Modifier
+                                        .width(COL_DIVIDER_WIDTH)
+                                        .height(52.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = "$formattedTotalDelivered ${rowInfo.unitName}",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PrimaryNavy
-                                    )
+                                    if (showBuyerOverview || animatedOverviewWidth > 0.dp) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(1.5.dp)
+                                                .fillMaxHeight()
+                                                .background(PrimaryNavy.copy(alpha = 0.15f))
+                                        )
+                                    }
                                 }
 
-                                // Market Unit Price Input
-                                Box(
-                                    modifier = Modifier.width(COL_MARKET_PRICE_WIDTH).padding(horizontal = 4.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    MatrixNumberInputField(
-                                        value = draftMarketPrices[rowInfo.productId] ?: "",
-                                        onValueChange = { onUpdateMarketUnitPrice(rowInfo.productId, it) },
-                                        placeholder = "0,00",
-                                        fontSize = 13.sp,
-                                        modifier = Modifier.fillMaxWidth().height(38.dp)
-                                    )
-                                }
+                                // 4. Animated Overview Cells
+                                if (animatedOverviewWidth > 0.dp) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(animatedOverviewWidth)
+                                            .clipToBounds()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            // Total Delivered Qty
+                                            Box(
+                                                modifier = Modifier.width(COL_TOTAL_QTY_WIDTH).padding(horizontal = 4.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "$formattedTotalDelivered ${rowInfo.unitName}",
+                                                    fontSize = 12.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = PrimaryNavy,
+                                                    maxLines = 1
+                                                )
+                                            }
 
-                                // Total Spent Input (Authoritative)
-                                Box(
-                                    modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH).padding(horizontal = 4.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    MatrixNumberInputField(
-                                        value = draftTotalSpent[rowInfo.productId] ?: "",
-                                        onValueChange = { onUpdateTotalSpent(rowInfo.productId, it) },
-                                        placeholder = "0,00",
-                                        isBold = true,
-                                        fontSize = 13.sp,
-                                        modifier = Modifier.fillMaxWidth().height(38.dp)
-                                    )
-                                }
+                                            // Market Unit Price Input
+                                            Box(
+                                                modifier = Modifier.width(COL_MARKET_PRICE_WIDTH).padding(horizontal = 4.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                val pIdx = priceProductIds.indexOf(rowInfo.productId)
+                                                val prevPriceReq = if (pIdx > 0) priceFocusRequesters[priceProductIds[pIdx - 1]] else null
+                                                val nextPriceReq = if (pIdx in 0 until priceProductIds.size - 1) {
+                                                    priceFocusRequesters[priceProductIds[pIdx + 1]]
+                                                } else {
+                                                    spentFocusRequesters[priceProductIds.firstOrNull()]
+                                                }
 
-                                // Effective Unit Price (Read-Only)
-                                Box(
-                                    modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH).padding(horizontal = 6.dp),
-                                    contentAlignment = Alignment.CenterEnd
-                                ) {
-                                    Text(
-                                        text = if (effectiveUnitPrice > 0L) {
-                                            "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.unitName}"
-                                        } else "—",
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (effectiveUnitPrice > 0L) ColorSuccessEmerald else TextSecondaryMuted
-                                    )
+                                                MatrixNumberInputField(
+                                                    value = draftMarketPrices[rowInfo.productId] ?: "",
+                                                    onValueChange = { onUpdateMarketUnitPrice(rowInfo.productId, it) },
+                                                    placeholder = "0,00",
+                                                    fontSize = 12.5.sp,
+                                                    focusRequester = priceFocusRequesters[rowInfo.productId],
+                                                    prevFocusRequester = prevPriceReq,
+                                                    nextFocusRequester = nextPriceReq,
+                                                    modifier = Modifier.fillMaxWidth().height(36.dp)
+                                                )
+                                            }
+
+                                            // Total Spent Input (Authoritative)
+                                            Box(
+                                                modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH).padding(horizontal = 4.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                val pIdx = priceProductIds.indexOf(rowInfo.productId)
+                                                val prevSpentReq = if (pIdx > 0) {
+                                                    spentFocusRequesters[priceProductIds[pIdx - 1]]
+                                                } else {
+                                                    priceFocusRequesters[priceProductIds.lastOrNull()]
+                                                }
+                                                val nextSpentReq = if (pIdx in 0 until priceProductIds.size - 1) {
+                                                    spentFocusRequesters[priceProductIds[pIdx + 1]]
+                                                } else {
+                                                    null
+                                                }
+
+                                                MatrixNumberInputField(
+                                                    value = draftTotalSpent[rowInfo.productId] ?: "",
+                                                    onValueChange = { onUpdateTotalSpent(rowInfo.productId, it) },
+                                                    placeholder = "0,00",
+                                                    isBold = true,
+                                                    fontSize = 12.5.sp,
+                                                    focusRequester = spentFocusRequesters[rowInfo.productId],
+                                                    prevFocusRequester = prevSpentReq,
+                                                    nextFocusRequester = nextSpentReq,
+                                                    modifier = Modifier.fillMaxWidth().height(36.dp)
+                                                )
+                                            }
+
+                                            // Effective Unit Price (Read-Only)
+                                            Box(
+                                                modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH).padding(horizontal = 4.dp),
+                                                contentAlignment = Alignment.CenterEnd
+                                            ) {
+                                                Text(
+                                                    text = if (effectiveUnitPrice > 0L) {
+                                                        "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.unitName}"
+                                                    } else "—",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (effectiveUnitPrice > 0L) ColorSuccessEmerald else TextSecondaryMuted,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -579,76 +782,173 @@ fun AdminVeggieSettlementMatrix(
                     // Footer Row 1: Combined Fee Share per Customer
                     Row(
                         modifier = Modifier
+                            .fillMaxWidth()
                             .background(SurfaceContainerLight)
                             .padding(vertical = 6.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = strings.veggieCombinedFeeLabel,
-                            fontSize = 12.5.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavy,
                             modifier = Modifier.width(COL_PRODUCT_WIDTH)
                         )
-                        roundCustomers.forEach { (userId, _) ->
-                            val feeShare = previewCustomerSummaryMap[userId]?.combinedFeeShareCents ?: 0L
-                            Text(
-                                text = Formatting.formatBrl(feeShare),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TextSecondaryMuted,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.width(COL_CUSTOMER_WIDTH)
-                            )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(horizontalScrollState)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                roundCustomers.forEach { (userId, _) ->
+                                    val feeShare = previewCustomerSummaryMap[userId]?.combinedFeeShareCents ?: 0L
+                                    Text(
+                                        text = Formatting.formatBrl(feeShare),
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextSecondaryMuted,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.width(COL_CUSTOMER_WIDTH)
+                                    )
+                                }
+                            }
                         }
-                        Spacer(modifier = Modifier.width(COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH))
-                        Text(
-                            text = Formatting.formatBrl(livePreview?.combinedFeeCents ?: 0L),
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryNavy,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH)
-                        )
-                        Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH))
+                        // 3. Vertical Divider Line
+                        Box(
+                            modifier = Modifier
+                                .width(COL_DIVIDER_WIDTH)
+                                .height(28.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (showBuyerOverview || animatedOverviewWidth > 0.dp) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.5.dp)
+                                        .fillMaxHeight()
+                                        .background(PrimaryNavy.copy(alpha = 0.15f))
+                                )
+                            }
+                        }
+
+                        // 4. Animated Overview Fee Share
+                        if (animatedOverviewWidth > 0.dp) {
+                            Box(
+                                modifier = Modifier
+                                    .width(animatedOverviewWidth)
+                                    .clipToBounds()
+                            ) {
+                                Row(
+                                    modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Spacer(modifier = Modifier.width(COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH))
+                                    Text(
+                                        text = Formatting.formatBrl(livePreview?.combinedFeeCents ?: 0L),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrimaryNavy,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH)
+                                    )
+                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH))
+                                }
+                            }
+                        }
                     }
 
                     // Footer Row 2: Grand Total per Customer
                     Row(
                         modifier = Modifier
+                            .fillMaxWidth()
                             .background(SurfaceContainerHighLight)
-                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                            .padding(vertical = 8.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = strings.veggieFinalTotalLabel,
-                            fontSize = 13.5.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy,
                             modifier = Modifier.width(COL_PRODUCT_WIDTH)
                         )
-                        roundCustomers.forEach { (userId, _) ->
-                            val grandTotal = previewCustomerSummaryMap[userId]?.grandTotalCents ?: 0L
-                            Text(
-                                text = Formatting.formatBrl(grandTotal),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AccentNavy,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.width(COL_CUSTOMER_WIDTH)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(horizontalScrollState)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                roundCustomers.forEach { (userId, _) ->
+                                    val grandTotal = previewCustomerSummaryMap[userId]?.grandTotalCents ?: 0L
+                                    Text(
+                                        text = Formatting.formatBrl(grandTotal),
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AccentNavy,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.width(COL_CUSTOMER_WIDTH)
+                                    )
+                                }
+                            }
+                        }
+                        // 3. Vertical Divider Line
+                        Box(
+                            modifier = Modifier
+                                .width(COL_DIVIDER_WIDTH)
+                                .height(28.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (showBuyerOverview || animatedOverviewWidth > 0.dp) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.5.dp)
+                                        .fillMaxHeight()
+                                        .background(PrimaryNavy.copy(alpha = 0.15f))
+                                )
+                            }
+                        }
+
+                        // 4. Animated Overview Grand Total
+                        if (animatedOverviewWidth > 0.dp) {
+                            Box(
+                                modifier = Modifier
+                                    .width(animatedOverviewWidth)
+                                    .clipToBounds()
+                            ) {
+                                Row(
+                                    modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Spacer(modifier = Modifier.width(COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH))
+                                    val totalAllCharged = (livePreview?.totalMarketProductsSpentCents ?: 0L) + (livePreview?.combinedFeeCents ?: 0L)
+                                    Text(
+                                        text = Formatting.formatBrl(totalAllCharged),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ColorSuccessEmerald,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH)
+                                    )
+                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH))
+                                }
+                            }
+                        }
+                    }
+
+                    // Horizontal Scrollbar at bottom of matrix table (visible only when overflowing)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Spacer(modifier = Modifier.width(COL_PRODUCT_WIDTH))
+                        Box(modifier = Modifier.weight(1f)) {
+                            AppHorizontalScrollbar(
+                                scrollState = horizontalScrollState,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
-                        Spacer(modifier = Modifier.width(COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH))
-                        val totalAllCharged = (livePreview?.totalMarketProductsSpentCents ?: 0L) + (livePreview?.combinedFeeCents ?: 0L)
-                        Text(
-                            text = Formatting.formatBrl(totalAllCharged),
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ColorSuccessEmerald,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH)
-                        )
-                        Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH))
+                        Spacer(modifier = Modifier.width(COL_DIVIDER_WIDTH + animatedOverviewWidth))
                     }
                 }
             }
@@ -875,9 +1175,20 @@ private fun MatrixNumberInputField(
     placeholder: String? = null,
     isBold: Boolean = false,
     fontSize: TextUnit = 13.sp,
-    textAlign: TextAlign = TextAlign.Center
+    textAlign: TextAlign = TextAlign.Center,
+    focusRequester: FocusRequester? = null,
+    nextFocusRequester: FocusRequester? = null,
+    prevFocusRequester: FocusRequester? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    var textFieldValue by remember(value) {
+        mutableStateOf(
+            TextFieldValue(
+                text = value,
+                selection = if (isFocused) TextRange(0, value.length) else TextRange(value.length)
+            )
+        )
+    }
 
     Surface(
         shape = RoundedCornerShape(6.dp),
@@ -891,7 +1202,7 @@ private fun MatrixNumberInputField(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 6.dp),
+                .padding(horizontal = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             if (value.isEmpty() && placeholder != null) {
@@ -905,8 +1216,13 @@ private fun MatrixNumberInputField(
                 )
             }
             BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
+                value = textFieldValue,
+                onValueChange = { newValue ->
+                    textFieldValue = newValue
+                    if (newValue.text != value) {
+                        onValueChange(newValue.text)
+                    }
+                },
                 singleLine = true,
                 textStyle = LocalTextStyle.current.copy(
                     fontSize = fontSize,
@@ -917,7 +1233,36 @@ private fun MatrixNumberInputField(
                 cursorBrush = SolidColor(AccentNavy),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .onFocusChanged { isFocused = it.isFocused }
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    .onFocusChanged { focusState ->
+                        isFocused = focusState.isFocused
+                        if (focusState.isFocused) {
+                            textFieldValue = textFieldValue.copy(
+                                selection = TextRange(0, textFieldValue.text.length)
+                            )
+                        }
+                    }
+                    .onPreviewKeyEvent { keyEvent ->
+                        if (keyEvent.key == Key.Tab && keyEvent.type == KeyEventType.KeyDown) {
+                            if (keyEvent.isShiftPressed) {
+                                if (prevFocusRequester != null) {
+                                    prevFocusRequester.requestFocus()
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                if (nextFocusRequester != null) {
+                                    nextFocusRequester.requestFocus()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        } else {
+                            false
+                        }
+                    }
             )
         }
     }

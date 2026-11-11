@@ -850,6 +850,8 @@ object PortugueseStrings : AppStrings {
     override val colMarketUnitPrice = "Preço Unitário Real"
     override val colTotalSpent = "Total Gasto (Mercado)"
     override val colEffectivePrice = "Preço Efetivo"
+    override val hideBuyerOverviewBtn = "Ocultar Visão do Comprador"
+    override val showBuyerOverviewBtn = "Exibir Visão do Comprador"
     override val customerPortalTabOrder = "Pedido de Verduras"
     override val customerPortalTabVeggieHistory = "Histórico de Verduras"
     override val customerPortalTabStoreHistory = "Extrato da Lojinha"
