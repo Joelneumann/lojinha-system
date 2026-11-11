@@ -152,6 +152,18 @@ fun AdminVeggieTabScreen(
                     }
                 )
             }
+
+            if (onExportOrderFormPdf != null) {
+                OutlinedButton(
+                    onClick = { onExportOrderFormPdf(currentLanguage) },
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(strings.exportOrderFormPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 13.sp)
+                }
+            }
         }
 
         if (statusMessage != null) {
@@ -314,7 +326,6 @@ fun AdminVeggieTabScreen(
                     onDeleteProduct = viewModel::deleteVeggieProduct,
                     onSaveUnitType = viewModel::saveUnitType,
                     onDeleteUnitType = viewModel::deleteUnitType,
-                    onExportOrderFormPdf = onExportOrderFormPdf?.let { cb -> { cb(currentLanguage) } },
                     isSavingProduct = isSaving,
                     modifier = Modifier.weight(1f)
                 )

@@ -211,6 +211,7 @@ class VeggieOrderPdfGeneratorTest {
                 val acroFields = reader.acroFields
                 assertNotNull(acroFields.getFieldItem("customer_name"), "Should contain customer_name field")
                 assertNotNull(acroFields.getFieldItem("order_date"), "Should contain order_date field")
+                assertEquals("", acroFields.getField("order_date"), "Date field should not be prefilled")
                 assertNotNull(acroFields.getFieldItem("qty_vp-carrot"), "Should contain qty_vp-carrot field")
                 assertNotNull(acroFields.getFieldItem("qty_vp-lettuce"), "Should contain qty_vp-lettuce field")
             } finally {

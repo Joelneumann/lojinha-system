@@ -620,15 +620,6 @@ object VeggieOrderPdfGenerator {
         return outputFile
     }
 
-    private fun formatDateOnly(timestampMs: Long, language: Language): String {
-        val date = Date(timestampMs)
-        return when (language) {
-            Language.DE -> SimpleDateFormat("dd.MM.yyyy", Locale.GERMAN).format(date)
-            Language.BR -> SimpleDateFormat("dd/MM/yyyy", Locale.forLanguageTag("pt-BR")).format(date)
-            Language.EN -> SimpleDateFormat("MM/dd/yyyy", Locale.US).format(date)
-        }
-    }
-
     private fun writeCustomerOrderFormPdf(
         outputStream: java.io.OutputStream,
         products: List<VeggieProduct>,
@@ -719,7 +710,6 @@ object VeggieOrderPdfGenerator {
             addElement(Paragraph(labels.dateLabel, FONT_BODY_BOLD).apply { spacingAfter = 4f })
         }
         val dateInputTable = PdfPTable(1).apply { widthPercentage = 100f }
-        val dateFormatted = formatDateOnly(System.currentTimeMillis(), language)
         val dateInputCell = PdfPCell().apply {
             border = Rectangle.BOX
             borderColor = COLOR_BORDER
@@ -736,7 +726,6 @@ object VeggieOrderPdfGenerator {
                         borderColor = COLOR_BORDER
                         borderWidth = 0.75f
                         backgroundColor = Color.WHITE
-                        text = dateFormatted
                     }
                     writer.addAnnotation(tf.textField)
                 } catch (e: Exception) {
@@ -752,7 +741,7 @@ object VeggieOrderPdfGenerator {
         document.add(infoTable)
 
         // 3. Product Table
-        val table = PdfPTable(floatArrayOf(52f, 24f, 24f)).apply {
+        val table = PdfPTable(floatArrayOf(52f, 26f, 22f)).apply {
             widthPercentage = 100f
             headerRows = 1
             setSpacingAfter(16f)
@@ -775,8 +764,8 @@ object VeggieOrderPdfGenerator {
         }
 
         addTh(labels.colProductName, Element.ALIGN_LEFT)
-        addTh(labels.colUnit, Element.ALIGN_CENTER)
         addTh(labels.colOrderQty, Element.ALIGN_CENTER)
+        addTh(labels.colUnit, Element.ALIGN_CENTER)
 
         if (activeProducts.isEmpty()) {
             val emptyCell = PdfPCell(Phrase(labels.emptyCatalogMessage, FONT_MUTED)).apply {
@@ -845,8 +834,8 @@ object VeggieOrderPdfGenerator {
                 }
 
                 table.addCell(nameCell)
-                table.addCell(unitCell)
                 table.addCell(qtyCell)
+                table.addCell(unitCell)
             }
         }
 

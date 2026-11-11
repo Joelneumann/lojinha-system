@@ -809,7 +809,7 @@ object GermanStrings : AppStrings {
     override val veggieEstimatedPricePlaceholder = "Unbekannt / Marktpreis"
     override val veggieEstimatedPriceUnknown = "Marktpreis"
     override val veggieUnitTypeLabel = "Einheit"
-    override val manageUnitTypesBtn = "Einheiten verwalten"
+    override val manageUnitTypesBtn = "Einheiten"
     override val veggieUnitTypesDialogTitle = "Einheiten für Gemüse verwalten"
     override val addUnitTypeBtn = "Einheit hinzufügen"
     override val unitTypeNameLabel = "Bezeichnung"
