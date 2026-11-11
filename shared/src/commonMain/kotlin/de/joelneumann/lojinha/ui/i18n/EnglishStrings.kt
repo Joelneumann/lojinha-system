@@ -907,6 +907,11 @@ object EnglishStrings : AppStrings {
     override val noFavoriteProductsFound = "No favorite products found"
     override val veggieFixedRoundFeesLabel = "Fixed Round Fees (Buyer & Transport)"
     override val veggieSharedFeeNotice = "Split equally among everyone who orders in this round — your share decreases as more people order."
+    override val veggieInputModeStandard = "Standard"
+    override val veggieInputModeFastTab = "Fast Tab"
+    override val veggieFilterAll = "All"
+    override val veggieFilterInOrder = "In Order"
+    override val veggieClearItemTooltip = "Clear quantity"
 }
 
 

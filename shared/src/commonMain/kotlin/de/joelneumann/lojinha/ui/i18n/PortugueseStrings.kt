@@ -907,6 +907,11 @@ object PortugueseStrings : AppStrings {
     override val noFavoriteProductsFound = "Nenhum produto favorito encontrado"
     override val veggieFixedRoundFeesLabel = "Taxas Fixas da Rodada (Comprador e Transporte)"
     override val veggieSharedFeeNotice = "Dividido igualmente entre todos que pedirem nesta rodada — sua cota diminui conforme mais pessoas pedirem."
+    override val veggieInputModeStandard = "Padrão"
+    override val veggieInputModeFastTab = "Entrada Rápida"
+    override val veggieFilterAll = "Todos"
+    override val veggieFilterInOrder = "No Pedido"
+    override val veggieClearItemTooltip = "Zerar quantidade"
 }
 
 

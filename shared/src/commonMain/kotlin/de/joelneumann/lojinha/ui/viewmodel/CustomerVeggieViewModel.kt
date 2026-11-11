@@ -15,12 +15,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.math.roundToLong
 
+enum class VeggieInputMode {
+    STANDARD,
+    FAST_TAB
+}
+
 class CustomerVeggieViewModel(
     private val onFetchVeggieState: suspend () -> CustomerVeggieStateResponse,
     private val onSaveOrder: suspend (roundId: String, quantitiesScaled: Map<String, Long>) -> Boolean,
     private val onFetchHistory: suspend () -> List<CustomerVeggieRoundHistoryItem>,
     initialFavoriteProductIds: Set<String> = emptySet(),
     private val onFavoritesChanged: ((Set<String>) -> Unit)? = null,
+    initialInputMode: VeggieInputMode = VeggieInputMode.STANDARD,
+    private val onInputModeChanged: ((VeggieInputMode) -> Unit)? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
 
@@ -49,6 +56,12 @@ class CustomerVeggieViewModel(
 
     private val _filterFavoritesOnly = MutableStateFlow(false)
     val filterFavoritesOnly: StateFlow<Boolean> = _filterFavoritesOnly.asStateFlow()
+
+    private val _filterInOrderOnly = MutableStateFlow(false)
+    val filterInOrderOnly: StateFlow<Boolean> = _filterInOrderOnly.asStateFlow()
+
+    private val _inputMode = MutableStateFlow(initialInputMode)
+    val inputMode: StateFlow<VeggieInputMode> = _inputMode.asStateFlow()
 
     private val _productSearchQuery = MutableStateFlow("")
     val productSearchQuery: StateFlow<String> = _productSearchQuery.asStateFlow()
@@ -152,6 +165,24 @@ class CustomerVeggieViewModel(
     fun setFavoriteProductIds(ids: Set<String>) {
         _favoriteProductIds.value = ids
         onFavoritesChanged?.invoke(ids)
+    }
+
+    fun setInputMode(mode: VeggieInputMode) {
+        _inputMode.value = mode
+        onInputModeChanged?.invoke(mode)
+    }
+
+    fun toggleInputMode() {
+        val next = if (_inputMode.value == VeggieInputMode.FAST_TAB) VeggieInputMode.STANDARD else VeggieInputMode.FAST_TAB
+        setInputMode(next)
+    }
+
+    fun setFilterInOrderOnly(enabled: Boolean) {
+        _filterInOrderOnly.value = enabled
+    }
+
+    fun toggleFilterInOrderOnly() {
+        _filterInOrderOnly.value = !_filterInOrderOnly.value
     }
 
     fun updateHistorySearchQuery(query: String) {

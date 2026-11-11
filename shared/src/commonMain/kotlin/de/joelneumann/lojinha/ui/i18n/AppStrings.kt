@@ -887,6 +887,11 @@ interface AppStrings {
     val noFavoriteProductsFound: String
     val veggieFixedRoundFeesLabel: String
     val veggieSharedFeeNotice: String
+    val veggieInputModeStandard: String
+    val veggieInputModeFastTab: String
+    val veggieFilterAll: String
+    val veggieFilterInOrder: String
+    val veggieClearItemTooltip: String
 }
 
 
