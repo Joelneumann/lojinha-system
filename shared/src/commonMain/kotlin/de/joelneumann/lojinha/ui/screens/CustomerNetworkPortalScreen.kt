@@ -943,6 +943,7 @@ private fun CustomerVeggieOrderTabContent(
                             highlightedProductIndex = -1
                         },
                         isDesktop = false,
+                        inputMode = inputMode,
                         onFillFromLastWeek = { veggieViewModel.copyPreviousRoundOrder() },
                         onEditQuantity = { selectedProductForAmountDialog = it },
                         onRemoveProduct = { veggieViewModel.updateProductQuantity(it.id, 0L) },
@@ -1034,6 +1035,7 @@ private fun CustomerVeggieOrderTabContent(
                     highlightedProductIndex = -1
                 },
                 isDesktop = true,
+                inputMode = inputMode,
                 onFillFromLastWeek = { veggieViewModel.copyPreviousRoundOrder() },
                 onEditQuantity = { selectedProductForAmountDialog = it },
                 onRemoveProduct = { veggieViewModel.updateProductQuantity(it.id, 0L) },
@@ -1589,7 +1591,8 @@ private fun VeggieCartPanel(
     onRemoveProduct: (VeggieProduct) -> Unit,
     onSaveOrder: () -> Unit,
     modifier: Modifier = Modifier,
-    isDesktop: Boolean = false
+    isDesktop: Boolean = false,
+    inputMode: VeggieInputMode = VeggieInputMode.STANDARD
 ) {
     val strings = I18n.current
     val hasPricelessItemsInCart = remember(cartProducts) {
@@ -1737,6 +1740,7 @@ private fun VeggieCartPanel(
                             isHighlighted = (index == highlightedCartIndex),
                             isDialogActive = isDialogActive,
                             isEditable = isRoundOpen,
+                            isReadOnly = (inputMode == VeggieInputMode.FAST_TAB),
                             decimalSeparator = decimalSep,
                             onEditQuantity = { onEditQuantity(product) },
                             onRemove = { onRemoveProduct(product) },
@@ -1888,6 +1892,7 @@ private fun VeggieCartLineItemRow(
     quantityScaled: Long,
     isEditable: Boolean,
     decimalSeparator: Char,
+    isReadOnly: Boolean = false,
     isHighlighted: Boolean = false,
     isDialogActive: Boolean = false,
     onEditQuantity: () -> Unit,
@@ -1907,33 +1912,38 @@ private fun VeggieCartLineItemRow(
     var isRowFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(isHighlighted, isDialogActive) {
-        if (isHighlighted && !isDialogActive && !isRowFocused) {
+        if (!isReadOnly && isHighlighted && !isDialogActive && !isRowFocused) {
             rowFocusRequester.safeRequestFocus()
         }
     }
 
     Surface(
         onClick = onEditQuantity,
-        enabled = isEditable,
+        enabled = isEditable && !isReadOnly,
         shape = RoundedCornerShape(10.dp),
-        color = if (isHighlighted) Color(0xFFEFF6FF) else SurfaceContainerLight,
-        border = if (isHighlighted) BorderStroke(2.dp, AccentNavy) else BorderStroke(1.dp, DividerBorder),
+        color = if (!isReadOnly && isHighlighted) Color(0xFFEFF6FF) else SurfaceContainerLight,
+        border = if (!isReadOnly && isHighlighted) BorderStroke(2.dp, AccentNavy) else BorderStroke(1.dp, DividerBorder),
         modifier = modifier
             .fillMaxWidth()
-            .focusRequester(rowFocusRequester)
-            .onFocusChanged { focusState ->
-                isRowFocused = focusState.isFocused
-            }
-            .onPreviewKeyEvent { event ->
-                if (onKeyDown != null && onKeyDown(event)) {
-                    true
-                } else false
-            }
+            .then(if (!isReadOnly) Modifier.focusRequester(rowFocusRequester) else Modifier.focusProperties { canFocus = false })
+            .then(
+                if (!isReadOnly) {
+                    Modifier
+                        .onFocusChanged { focusState ->
+                            isRowFocused = focusState.isFocused
+                        }
+                        .onPreviewKeyEvent { event ->
+                            if (onKeyDown != null && onKeyDown(event)) {
+                                true
+                            } else false
+                        }
+                } else Modifier
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1986,8 +1996,8 @@ private fun VeggieCartLineItemRow(
                     }
                 }
 
-                // Disconnected Trashcan Button to remove (excluded from Tab)
-                if (isEditable) {
+                // Disconnected Trashcan Button to remove (ONLY in standard / interactive mode)
+                if (isEditable && !isReadOnly) {
                     Surface(
                         onClick = onRemove,
                         shape = RoundedCornerShape(8.dp),
