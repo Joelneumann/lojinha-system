@@ -1713,12 +1713,23 @@ class BackupRestoreService(
             rawAllowDecimals: Boolean?,
             existingUnitTypeId: String?
         ): VeggieUnitTypeEntity {
+            fun ensureActive(unit: VeggieUnitTypeEntity): VeggieUnitTypeEntity {
+                if (!unit.isActive) {
+                    val reactivated = unit.copy(isActive = true, updatedAt = importTimestamp)
+                    unitsById[reactivated.id] = reactivated
+                    newUnitsToInsert.removeAll { it.id == reactivated.id }
+                    newUnitsToInsert.add(reactivated)
+                    return reactivated
+                }
+                return unit
+            }
+
             if (rawUnitId.isNotEmpty()) {
-                unitsById[rawUnitId]?.let { return it }
+                unitsById[rawUnitId]?.let { return ensureActive(it) }
             }
             if (rawUnitName.isNotEmpty()) {
                 // Direct name match
-                unitsById.values.firstOrNull { it.name.equals(rawUnitName, ignoreCase = true) }?.let { return it }
+                unitsById.values.firstOrNull { it.name.equals(rawUnitName, ignoreCase = true) }?.let { return ensureActive(it) }
                 // Common alias match
                 val aliasId = when (rawUnitName.lowercase()) {
                     "kg", "kilo", "kilogram", "weight", "g", "gram" -> "unit-kg"
@@ -1728,7 +1739,7 @@ class BackupRestoreService(
                     else -> null
                 }
                 if (aliasId != null) {
-                    unitsById[aliasId]?.let { return it }
+                    unitsById[aliasId]?.let { return ensureActive(it) }
                 }
                 // Auto-create new custom unit type
                 val newId = if (rawUnitId.isNotEmpty()) rawUnitId else "unit-imp-${rawUnitName.lowercase().replace(Regex("[^a-z0-9]+"), "-")}"
@@ -1744,9 +1755,10 @@ class BackupRestoreService(
                 return created
             }
             if (existingUnitTypeId != null) {
-                unitsById[existingUnitTypeId]?.let { return it }
+                unitsById[existingUnitTypeId]?.let { return ensureActive(it) }
             }
-            return unitsById["unit-piece"] ?: existingUnitsList.first()
+            val fallback = unitsById["unit-piece"] ?: existingUnitsList.first()
+            return ensureActive(fallback)
         }
 
         val existingProductsList = db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true)

@@ -1506,5 +1506,28 @@ class BackupRestoreServiceJvmTest {
         assertEquals("Tray", trayUnit.name)
         assertFalse(trayUnit.allowDecimals)
     }
+
+    @Test
+    fun testImportVeggieProductsFromCsv_reactivatesDeactivatedUnitType() = runTest {
+        val initialUnits = DatabaseFactory.defaultVeggieUnitTypes(1000L).map {
+            if (it.id == "unit-piece") it.copy(isActive = false) else it
+        }
+        db.veggieOrderDao().insertOrUpdateUnitTypes(initialUnits)
+        assertFalse(db.veggieOrderDao().getUnitTypeById("unit-piece")!!.isActive)
+
+        val csvFile = File(tempDir, "reactivate_unit_veggies.csv")
+        csvFile.writeText(
+            """
+            id;name;estimatedPrice;unitTypeName
+            vp-avocado;Avocado;5,00;Unit
+            """.trimIndent()
+        )
+
+        val liveResult = service.importVeggieProductsFromCsv(csvFile, dryRun = false)
+        assertEquals(1, liveResult.addedCount)
+
+        val unitPiece = db.veggieOrderDao().getUnitTypeById("unit-piece")!!
+        assertTrue(unitPiece.isActive, "Deactivated unit type 'unit-piece' must be reactivated upon CSV import")
+    }
 }
 

@@ -163,8 +163,16 @@ class AdminVeggieViewModel(
         loadJob?.cancel()
         loadJob = activeScope.launch {
             try {
-                val allUnits = veggieOrderRepository.getAllUnitTypes()
+                var allUnits = veggieOrderRepository.getAllUnitTypes()
                 val allProducts = veggieOrderRepository.getAllVeggieProducts()
+                val usedUnitIds = allProducts.filter { !it.isDeleted }.map { it.unitTypeId }.toSet()
+                val unitsToReactivate = allUnits.filter { it.id in usedUnitIds && !it.isActive }
+                if (unitsToReactivate.isNotEmpty()) {
+                    unitsToReactivate.forEach { unit ->
+                        veggieOrderRepository.saveUnitType(unit.copy(isActive = true, updatedAt = currentTimeMillis()))
+                    }
+                    allUnits = veggieOrderRepository.getAllUnitTypes()
+                }
                 val allUsers = userRepository.getAllUsers().filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
                 val allRounds = veggieOrderRepository.getAllRounds().sortedByDescending { it.openedAt }
                 val settings = settingsRepository?.getSettings() ?: SystemSettings()
@@ -839,7 +847,21 @@ class AdminVeggieViewModel(
     fun saveUnitType(unitType: VeggieUnitType) {
         activeScope.launch {
             try {
-                veggieOrderRepository.saveUnitType(unitType)
+                // If this is a new unit, check if there is an inactive unit with the same name and reactivate it
+                val existingInactive = _unitTypes.value.find {
+                    !it.isActive && it.name.equals(unitType.name.trim(), ignoreCase = true)
+                }
+                val toSave = if (existingInactive != null && existingInactive.id != unitType.id) {
+                    existingInactive.copy(
+                        name = unitType.name.trim(),
+                        allowDecimals = unitType.allowDecimals,
+                        isActive = true,
+                        updatedAt = currentTimeMillis()
+                    )
+                } else {
+                    unitType
+                }
+                veggieOrderRepository.saveUnitType(toSave)
                 loadData()
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to save unit type"

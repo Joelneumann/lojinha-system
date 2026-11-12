@@ -417,8 +417,18 @@ object DatabaseFactory {
                 veggieDao.insertOrUpdateUnitTypes(defaultVeggieUnitTypes())
                 AppLogger.info(TAG, "Seeded default Veggie Unit Types (kg, Unit, Pack, Bunch).")
             }
+            // Ensure any unit type in active use by catalog products is active
+            val usedUnitIds = veggieDao.getAllVeggieProducts(includeDeleted = false).map { it.unitTypeId }.toSet()
+            if (usedUnitIds.isNotEmpty()) {
+                val allUnits = veggieDao.getAllUnitTypes()
+                val unitsToReactivate = allUnits.filter { it.id in usedUnitIds && !it.isActive }
+                if (unitsToReactivate.isNotEmpty()) {
+                    veggieDao.insertOrUpdateUnitTypes(unitsToReactivate.map { it.copy(isActive = true, updatedAt = System.currentTimeMillis()) })
+                    AppLogger.info(TAG, "Reactivated unit types in use by catalog products: ${unitsToReactivate.map { it.name }}")
+                }
+            }
         } catch (e: Exception) {
-            AppLogger.warn(TAG, "Failed to seed default Veggie Unit Types: ${e.message}", e)
+            AppLogger.warn(TAG, "Failed to seed or heal default Veggie Unit Types: ${e.message}", e)
         }
 
         // Seed a default automated local backup routine if no routines currently exist
