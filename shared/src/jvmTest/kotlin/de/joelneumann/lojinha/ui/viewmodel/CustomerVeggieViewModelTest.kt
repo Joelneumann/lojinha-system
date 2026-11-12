@@ -18,8 +18,6 @@ class CustomerVeggieViewModelTest {
     private fun createViewModel(
         initialFavorites: Set<String> = emptySet(),
         onFavoritesChanged: ((Set<String>) -> Unit)? = null,
-        initialInputMode: VeggieInputMode = VeggieInputMode.STANDARD,
-        onInputModeChanged: ((VeggieInputMode) -> Unit)? = null,
         testScope: TestScope
     ): CustomerVeggieViewModel {
         val fakeRound = VeggieOrderRound(
@@ -56,8 +54,6 @@ class CustomerVeggieViewModelTest {
             onFetchHistory = { emptyList() },
             initialFavoriteProductIds = initialFavorites,
             onFavoritesChanged = onFavoritesChanged,
-            initialInputMode = initialInputMode,
-            onInputModeChanged = onInputModeChanged,
             coroutineScope = testScope
         )
     }
@@ -156,34 +152,6 @@ class CustomerVeggieViewModelTest {
         vm.updateHistorySearchQuery("tomato")
         assertEquals("tomato", vm.historySearchQuery.value)
         assertEquals(0, vm.historyPage.value)
-    }
-
-    @Test
-    fun testInputModeDefaultAndToggle() = runTest {
-        var notifiedMode: VeggieInputMode? = null
-        val vm = createViewModel(
-            initialInputMode = VeggieInputMode.STANDARD,
-            onInputModeChanged = { notifiedMode = it },
-            testScope = this
-        )
-        advanceUntilIdle()
-
-        assertEquals(VeggieInputMode.STANDARD, vm.inputMode.value)
-
-        // Toggle to FAST_TAB
-        vm.toggleInputMode()
-        assertEquals(VeggieInputMode.FAST_TAB, vm.inputMode.value)
-        assertEquals(VeggieInputMode.FAST_TAB, notifiedMode)
-
-        // Toggle back to STANDARD
-        vm.toggleInputMode()
-        assertEquals(VeggieInputMode.STANDARD, vm.inputMode.value)
-        assertEquals(VeggieInputMode.STANDARD, notifiedMode)
-
-        // Explicit set
-        vm.setInputMode(VeggieInputMode.FAST_TAB)
-        assertEquals(VeggieInputMode.FAST_TAB, vm.inputMode.value)
-        assertEquals(VeggieInputMode.FAST_TAB, notifiedMode)
     }
 
     @Test

@@ -65,14 +65,12 @@ import de.joelneumann.lojinha.ui.utils.setBrowserBeforeUnloadWarning
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
-import de.joelneumann.lojinha.ui.viewmodel.VeggieInputMode
 import kotlinx.coroutines.launch
 import kotlin.math.roundToLong
 
 private enum class VeggieFocusZone {
     SEARCH,
-    PRODUCTS,
-    CART
+    PRODUCTS
 }
 
 enum class CustomerPortalTab {
@@ -474,7 +472,6 @@ private fun CustomerVeggieOrderTabContent(
     val errorMessage by veggieViewModel.errorMessage.collectAsState()
     val hasUnsavedChanges by veggieViewModel.hasUnsavedOrderChanges.collectAsState()
     val filterInOrderOnly by veggieViewModel.filterInOrderOnly.collectAsState()
-    val inputMode by veggieViewModel.inputMode.collectAsState()
 
     var selectedProductForAmountDialog by remember { mutableStateOf<VeggieProduct?>(null) }
     var mobileSubTab by remember { mutableStateOf(MobileVeggieSubTab.CATALOG) }
@@ -531,13 +528,6 @@ private fun CustomerVeggieOrderTabContent(
     val isRoundOpen = round.status == VeggieRoundStatus.OPEN
     val decimalSep = if (currentLanguage == Language.EN) '.' else ','
 
-    val inOrderCount = remember(draftQuantitiesScaled, products) {
-        products.count { (draftQuantitiesScaled[it.id] ?: 0L) > 0L }
-    }
-    val favoritesCount = remember(favoriteProductIds, products) {
-        products.count { it.id in favoriteProductIds }
-    }
-
     val filteredProducts = remember(
         products,
         searchQuery,
@@ -587,36 +577,47 @@ private fun CustomerVeggieOrderTabContent(
     var highlightedProductIndex by remember(filteredProducts, searchQuery) {
         mutableStateOf(if (searchQuery.isNotBlank() && filteredProducts.isNotEmpty()) 0 else -1)
     }
-    var highlightedCartIndex by remember { mutableStateOf(-1) }
+    var pendingFocusProductId by remember { mutableStateOf<String?>(null) }
 
     fun navigateToProduct(index: Int) {
         if (filteredProducts.isEmpty()) return
         val targetIndex = index.coerceIn(0, filteredProducts.lastIndex)
         activeZone = VeggieFocusZone.PRODUCTS
         highlightedProductIndex = targetIndex
-        highlightedCartIndex = -1
         coroutineScope.launch {
             productListState.animateScrollToItem(targetIndex)
-        }
-    }
-
-    fun navigateToCart(index: Int) {
-        if (cartProducts.isEmpty()) return
-        val targetIndex = index.coerceIn(0, cartProducts.lastIndex)
-        activeZone = VeggieFocusZone.CART
-        highlightedCartIndex = targetIndex
-        highlightedProductIndex = -1
-        coroutineScope.launch {
-            cartListState.animateScrollToItem(targetIndex)
         }
     }
 
     fun navigateToSearch() {
         activeZone = VeggieFocusZone.SEARCH
         highlightedProductIndex = if (searchQuery.isNotBlank() && filteredProducts.isNotEmpty()) 0 else -1
-        highlightedCartIndex = -1
         coroutineScope.launch {
             searchFocusRequester.safeRequestFocus()
+        }
+    }
+
+    fun selectProductFromCart(product: VeggieProduct) {
+        if (!product.isActive || product.isDeleted) {
+            selectedProductForAmountDialog = product
+            return
+        }
+        if (isMobile && mobileSubTab != MobileVeggieSubTab.CATALOG) {
+            mobileSubTab = MobileVeggieSubTab.CATALOG
+        }
+        val currentIdx = filteredProducts.indexOfFirst { it.id == product.id }
+        if (currentIdx >= 0 && (!isMobile || mobileSubTab == MobileVeggieSubTab.CATALOG)) {
+            navigateToProduct(currentIdx)
+        } else {
+            if (currentIdx < 0) {
+                if (searchQuery.isNotBlank()) {
+                    veggieViewModel.updateProductSearchQuery("")
+                }
+                if (filterFavoritesOnly) {
+                    veggieViewModel.toggleFilterFavoritesOnly()
+                }
+            }
+            pendingFocusProductId = product.id
         }
     }
 
@@ -632,9 +633,13 @@ private fun CustomerVeggieOrderTabContent(
         }
     }
 
-    LaunchedEffect(cartProducts) {
-        if (highlightedCartIndex >= cartProducts.size) {
-            highlightedCartIndex = (cartProducts.size - 1).coerceAtLeast(-1)
+    LaunchedEffect(filteredProducts, pendingFocusProductId, mobileSubTab) {
+        val targetId = pendingFocusProductId ?: return@LaunchedEffect
+        if (isMobile && mobileSubTab != MobileVeggieSubTab.CATALOG) return@LaunchedEffect
+        val targetIndex = filteredProducts.indexOfFirst { it.id == targetId }
+        if (targetIndex >= 0) {
+            pendingFocusProductId = null
+            navigateToProduct(targetIndex)
         }
     }
 
@@ -643,166 +648,34 @@ private fun CustomerVeggieOrderTabContent(
     }
 
     val handleNavigationKey: (KeyEvent) -> Boolean = { event ->
-        if (event.type != KeyEventType.KeyDown) {
-            false
-        } else if (activeZone == VeggieFocusZone.PRODUCTS) {
+        if (event.type != KeyEventType.KeyDown || activeZone != VeggieFocusZone.SEARCH) {
             false
         } else {
             when (event.key) {
                 Key.DirectionDown -> {
-                    when (activeZone) {
-                        VeggieFocusZone.SEARCH -> {
-                            if (filteredProducts.isNotEmpty()) {
-                                val targetIdx = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
-                                navigateToProduct(targetIdx)
-                                true
-                            } else if (cartProducts.isNotEmpty()) {
-                                navigateToCart(0)
-                                true
-                            } else false
-                        }
-                        VeggieFocusZone.CART -> {
-                            if (cartProducts.isNotEmpty()) {
-                                if (highlightedCartIndex < cartProducts.lastIndex) {
-                                    navigateToCart(highlightedCartIndex + 1)
-                                } else {
-                                    navigateToSearch()
-                                }
-                                true
-                            } else false
-                        }
-                        VeggieFocusZone.PRODUCTS -> false
-                    }
-                }
-                Key.DirectionUp -> {
-                    when (activeZone) {
-                        VeggieFocusZone.CART -> {
-                            if (highlightedCartIndex > 0) {
-                                navigateToCart(highlightedCartIndex - 1)
-                                true
-                            } else if (highlightedCartIndex == 0) {
-                                if (filteredProducts.isNotEmpty()) {
-                                    navigateToProduct(filteredProducts.lastIndex)
-                                    true
-                                } else {
-                                    navigateToSearch()
-                                    true
-                                }
-                            } else false
-                        }
-                        VeggieFocusZone.SEARCH, VeggieFocusZone.PRODUCTS -> false
-                    }
-                }
-                Key.Tab -> {
-                    if (event.isShiftPressed) {
-                        when (activeZone) {
-                            VeggieFocusZone.CART -> {
-                                if (highlightedCartIndex > 0) {
-                                    navigateToCart(highlightedCartIndex - 1)
-                                    true
-                                } else {
-                                    if (filteredProducts.isNotEmpty()) {
-                                        navigateToProduct(filteredProducts.lastIndex)
-                                    } else {
-                                        navigateToSearch()
-                                    }
-                                    true
-                                }
-                            }
-                            VeggieFocusZone.SEARCH -> {
-                                if (cartProducts.isNotEmpty()) {
-                                    navigateToCart(cartProducts.lastIndex)
-                                    true
-                                } else if (filteredProducts.isNotEmpty()) {
-                                    navigateToProduct(filteredProducts.lastIndex)
-                                    true
-                                } else false
-                            }
-                            VeggieFocusZone.PRODUCTS -> false
-                        }
-                    } else {
-                        when (activeZone) {
-                            VeggieFocusZone.SEARCH -> {
-                                if (filteredProducts.isNotEmpty()) {
-                                    val targetIdx = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
-                                    navigateToProduct(targetIdx)
-                                    true
-                                } else if (cartProducts.isNotEmpty()) {
-                                    navigateToCart(0)
-                                    true
-                                } else false
-                            }
-                            VeggieFocusZone.CART -> {
-                                if (highlightedCartIndex < cartProducts.lastIndex) {
-                                    navigateToCart(highlightedCartIndex + 1)
-                                    true
-                                } else {
-                                    navigateToSearch()
-                                    true
-                                }
-                            }
-                            VeggieFocusZone.PRODUCTS -> false
-                        }
-                    }
-                }
-                Key.DirectionRight -> {
-                    if (activeZone == VeggieFocusZone.SEARCH && searchQuery.isBlank() && cartProducts.isNotEmpty()) {
-                        navigateToCart(0)
+                    if (filteredProducts.isNotEmpty()) {
+                        val targetIdx = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
+                        navigateToProduct(targetIdx)
                         true
                     } else false
                 }
-                Key.DirectionLeft -> {
-                    if (activeZone == VeggieFocusZone.CART) {
-                        if (filteredProducts.isNotEmpty()) {
-                            navigateToProduct(0)
-                            true
+                Key.Tab -> {
+                    if (filteredProducts.isNotEmpty()) {
+                        val targetIdx = if (event.isShiftPressed) {
+                            filteredProducts.lastIndex
+                        } else if (highlightedProductIndex in filteredProducts.indices) {
+                            highlightedProductIndex
                         } else {
-                            navigateToSearch()
-                            true
+                            0
                         }
+                        navigateToProduct(targetIdx)
+                        true
                     } else false
                 }
                 Key.Enter, Key.NumPadEnter -> {
-                    when (activeZone) {
-                        VeggieFocusZone.CART -> {
-                            if (highlightedCartIndex in cartProducts.indices && isRoundOpen) {
-                                selectedProductForAmountDialog = cartProducts[highlightedCartIndex]
-                                true
-                            } else false
-                        }
-                        VeggieFocusZone.SEARCH -> {
-                            if (searchQuery.isNotBlank() && isRoundOpen && filteredProducts.isNotEmpty()) {
-                                val targetIndex = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
-                                if (inputMode == VeggieInputMode.FAST_TAB) {
-                                    navigateToProduct(targetIndex)
-                                } else {
-                                    selectedProductForAmountDialog = filteredProducts[targetIndex]
-                                }
-                                true
-                            } else false
-                        }
-                        VeggieFocusZone.PRODUCTS -> false
-                    }
-                }
-                Key.Spacebar -> {
-                    if (activeZone == VeggieFocusZone.CART && highlightedCartIndex in cartProducts.indices && isRoundOpen) {
-                        selectedProductForAmountDialog = cartProducts[highlightedCartIndex]
-                        true
-                    } else false
-                }
-                Key.Backspace, Key.Delete -> {
-                    if (activeZone == VeggieFocusZone.CART && highlightedCartIndex in cartProducts.indices && isRoundOpen) {
-                        val prod = cartProducts[highlightedCartIndex]
-                        veggieViewModel.updateProductQuantity(prod.id, 0L)
-                        if (highlightedCartIndex >= cartProducts.size - 1) {
-                            highlightedCartIndex = (cartProducts.size - 2).coerceAtLeast(0)
-                        }
-                        true
-                    } else false
-                }
-                Key.Escape -> {
-                    if (activeZone != VeggieFocusZone.SEARCH) {
-                        navigateToSearch()
+                    if (searchQuery.isNotBlank() && isRoundOpen && filteredProducts.isNotEmpty()) {
+                        val targetIndex = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
+                        navigateToProduct(targetIndex)
                         true
                     } else false
                 }
@@ -810,9 +683,6 @@ private fun CustomerVeggieOrderTabContent(
             }
         }
     }
-
-    val onSearchKeyDown: (KeyEvent) -> Boolean = handleNavigationKey
-    val onGlobalKeyEvent: (KeyEvent) -> Boolean = handleNavigationKey
 
     if (isMobile) {
         Column(
@@ -888,13 +758,10 @@ private fun CustomerVeggieOrderTabContent(
                         isProductZoneActive = (activeZone == VeggieFocusZone.PRODUCTS),
                         onKeyDown = handleNavigationKey,
                         onNavigateToProduct = { idx -> navigateToProduct(idx) },
-                        onNavigateToCart = { idx -> navigateToCart(idx) },
                         onReturnToSearch = { navigateToSearch() },
-                        cartProductsCount = cartProducts.size,
                         onCardFocused = { idx ->
                             activeZone = VeggieFocusZone.PRODUCTS
                             highlightedProductIndex = idx
-                            highlightedCartIndex = -1
                         },
                         onSearchFocused = { navigateToSearch() },
                         onClearError = { veggieViewModel.clearError() },
@@ -905,22 +772,13 @@ private fun CustomerVeggieOrderTabContent(
                         onSearchSubmitted = {
                             if (searchQuery.isNotBlank() && isRoundOpen && filteredProducts.isNotEmpty()) {
                                 val targetIndex = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
-                                if (inputMode == VeggieInputMode.FAST_TAB) {
-                                    navigateToProduct(targetIndex)
-                                } else {
-                                    selectedProductForAmountDialog = filteredProducts[targetIndex]
-                                }
+                                navigateToProduct(targetIndex)
                             }
                         },
                         onOpenDetail = { veggieViewModel.openProductDetail(it) },
-                        onSelectProduct = { selectedProductForAmountDialog = it },
                         onToggleFavorite = { veggieViewModel.toggleFavorite(it) },
                         onToggleFavoriteFilter = { veggieViewModel.toggleFilterFavoritesOnly() },
-                        inputMode = inputMode,
                         filterInOrderOnly = filterInOrderOnly,
-                        inOrderCount = inOrderCount,
-                        favoritesCount = favoritesCount,
-                        onSelectInputMode = { veggieViewModel.setInputMode(it) },
                         onToggleFilterInOrderOnly = { veggieViewModel.toggleFilterInOrderOnly() },
                         onUpdateProductQuantity = { id, qty -> veggieViewModel.updateProductQuantity(id, qty) },
                         modifier = Modifier.fillMaxSize()
@@ -931,7 +789,6 @@ private fun CustomerVeggieOrderTabContent(
                         cartProducts = cartProducts,
                         unitTypesById = unitTypesById,
                         draftQuantitiesScaled = draftQuantitiesScaled,
-                        highlightedCartIndex = if (activeZone == VeggieFocusZone.CART) highlightedCartIndex else -1,
                         cartListState = cartListState,
                         isRoundOpen = isRoundOpen,
                         decimalSep = decimalSep,
@@ -939,17 +796,9 @@ private fun CustomerVeggieOrderTabContent(
                         hasUnsavedChanges = hasUnsavedChanges,
                         isSavingOrder = isSavingOrder,
                         hasPreviousRoundItems = hasPreviousRoundItems,
-                        isDialogActive = (selectedProductForAmountDialog != null),
-                        onCartKeyDown = handleNavigationKey,
-                        onCartItemFocused = { idx ->
-                            activeZone = VeggieFocusZone.CART
-                            highlightedCartIndex = idx
-                            highlightedProductIndex = -1
-                        },
                         isDesktop = false,
-                        inputMode = inputMode,
                         onFillFromLastWeek = { veggieViewModel.copyPreviousRoundOrder() },
-                        onEditQuantity = { selectedProductForAmountDialog = it },
+                        onEditQuantity = { selectProductFromCart(it) },
                         onRemoveProduct = { veggieViewModel.updateProductQuantity(it.id, 0L) },
                         onSaveOrder = { veggieViewModel.saveOrder() },
                         modifier = Modifier.fillMaxSize()
@@ -988,13 +837,10 @@ private fun CustomerVeggieOrderTabContent(
                 isProductZoneActive = (activeZone == VeggieFocusZone.PRODUCTS),
                 onKeyDown = handleNavigationKey,
                 onNavigateToProduct = { idx -> navigateToProduct(idx) },
-                onNavigateToCart = { idx -> navigateToCart(idx) },
                 onReturnToSearch = { navigateToSearch() },
-                cartProductsCount = cartProducts.size,
                 onCardFocused = { idx ->
                     activeZone = VeggieFocusZone.PRODUCTS
                     highlightedProductIndex = idx
-                    highlightedCartIndex = -1
                 },
                 onSearchFocused = { navigateToSearch() },
                 onClearError = { veggieViewModel.clearError() },
@@ -1005,22 +851,13 @@ private fun CustomerVeggieOrderTabContent(
                 onSearchSubmitted = {
                     if (searchQuery.isNotBlank() && isRoundOpen && filteredProducts.isNotEmpty()) {
                         val targetIndex = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
-                        if (inputMode == VeggieInputMode.FAST_TAB) {
-                            navigateToProduct(targetIndex)
-                        } else {
-                            selectedProductForAmountDialog = filteredProducts[targetIndex]
-                        }
+                        navigateToProduct(targetIndex)
                     }
                 },
                 onOpenDetail = { veggieViewModel.openProductDetail(it) },
-                onSelectProduct = { selectedProductForAmountDialog = it },
                 onToggleFavorite = { veggieViewModel.toggleFavorite(it) },
                 onToggleFavoriteFilter = { veggieViewModel.toggleFilterFavoritesOnly() },
-                inputMode = inputMode,
                 filterInOrderOnly = filterInOrderOnly,
-                inOrderCount = inOrderCount,
-                favoritesCount = favoritesCount,
-                onSelectInputMode = { veggieViewModel.setInputMode(it) },
                 onToggleFilterInOrderOnly = { veggieViewModel.toggleFilterInOrderOnly() },
                 onUpdateProductQuantity = { id, qty -> veggieViewModel.updateProductQuantity(id, qty) },
                 modifier = Modifier
@@ -1033,7 +870,6 @@ private fun CustomerVeggieOrderTabContent(
                 cartProducts = cartProducts,
                 unitTypesById = unitTypesById,
                 draftQuantitiesScaled = draftQuantitiesScaled,
-                highlightedCartIndex = if (activeZone == VeggieFocusZone.CART) highlightedCartIndex else -1,
                 cartListState = cartListState,
                 isRoundOpen = isRoundOpen,
                 decimalSep = decimalSep,
@@ -1041,17 +877,9 @@ private fun CustomerVeggieOrderTabContent(
                 hasUnsavedChanges = hasUnsavedChanges,
                 isSavingOrder = isSavingOrder,
                 hasPreviousRoundItems = hasPreviousRoundItems,
-                isDialogActive = (selectedProductForAmountDialog != null),
-                onCartKeyDown = handleNavigationKey,
-                onCartItemFocused = { idx ->
-                    activeZone = VeggieFocusZone.CART
-                    highlightedCartIndex = idx
-                    highlightedProductIndex = -1
-                },
                 isDesktop = true,
-                inputMode = inputMode,
                 onFillFromLastWeek = { veggieViewModel.copyPreviousRoundOrder() },
-                onEditQuantity = { selectedProductForAmountDialog = it },
+                onEditQuantity = { selectProductFromCart(it) },
                 onRemoveProduct = { veggieViewModel.updateProductQuantity(it.id, 0L) },
                 onSaveOrder = { veggieViewModel.saveOrder() },
                 modifier = Modifier
@@ -1121,26 +949,19 @@ private fun VeggieCatalogPanel(
     searchFocusRequester: FocusRequester,
     highlightedProductIndex: Int,
     isDialogActive: Boolean = false,
-    inputMode: VeggieInputMode = VeggieInputMode.STANDARD,
     filterInOrderOnly: Boolean = false,
-    inOrderCount: Int = 0,
-    favoritesCount: Int = 0,
-    onSelectInputMode: (VeggieInputMode) -> Unit = {},
     onToggleFilterInOrderOnly: () -> Unit = {},
     onUpdateProductQuantity: (String, Long) -> Unit = { _, _ -> },
     isProductZoneActive: Boolean = false,
     onKeyDown: ((KeyEvent) -> Boolean)? = null,
     onNavigateToProduct: ((Int) -> Unit)? = null,
-    onNavigateToCart: ((Int) -> Unit)? = null,
     onReturnToSearch: (() -> Unit)? = null,
-    cartProductsCount: Int = 0,
     onCardFocused: ((Int) -> Unit)? = null,
     onSearchFocused: (() -> Unit)? = null,
     onClearError: () -> Unit,
     onQueryChange: (String) -> Unit,
     onSearchSubmitted: () -> Unit = {},
     onOpenDetail: (VeggieProduct) -> Unit,
-    onSelectProduct: (VeggieProduct) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onToggleFavoriteFilter: () -> Unit,
     modifier: Modifier = Modifier
@@ -1244,7 +1065,7 @@ private fun VeggieCatalogPanel(
             }
         }
 
-        // Search Bar Input + Mode Switcher + Filter by ★
+        // Search Bar Input + Filter by ★ + Filter by Cart
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1264,90 +1085,6 @@ private fun VeggieCatalogPanel(
                 },
                 modifier = Modifier.weight(1f)
             )
-
-            // Segmented Mode Switcher (Standard vs Fast Tab)
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = SurfaceContainerHighLight,
-                border = BorderStroke(1.dp, DividerBorder),
-                modifier = Modifier
-                    .height(56.dp)
-                    .focusProperties { canFocus = false }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val isStandard = inputMode == VeggieInputMode.STANDARD
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isStandard) AccentNavy else Color.Transparent)
-                            .focusProperties { canFocus = false }
-                            .clickable { onSelectInputMode(VeggieInputMode.STANDARD) }
-                            .padding(horizontal = if (isMobile) 8.dp else 12.dp)
-                            .pointerHoverIcon(PointerIcon.Hand),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ViewAgenda,
-                                contentDescription = strings.veggieInputModeStandard,
-                                tint = if (isStandard) SurfaceWhite else TextSecondaryMuted,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            if (!isMobile) {
-                                Text(
-                                    text = strings.veggieInputModeStandard,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isStandard) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isStandard) SurfaceWhite else TextSecondaryMuted
-                                )
-                            }
-                        }
-                    }
-
-                    val isFastTab = inputMode == VeggieInputMode.FAST_TAB
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isFastTab) AccentNavy else Color.Transparent)
-                            .focusProperties { canFocus = false }
-                            .clickable { onSelectInputMode(VeggieInputMode.FAST_TAB) }
-                            .padding(horizontal = if (isMobile) 8.dp else 12.dp)
-                            .pointerHoverIcon(PointerIcon.Hand),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Bolt,
-                                contentDescription = strings.veggieInputModeFastTab,
-                                tint = if (isFastTab) ColorStarYellow else TextSecondaryMuted,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            if (!isMobile) {
-                                Text(
-                                    text = strings.veggieInputModeFastTab,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isFastTab) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isFastTab) SurfaceWhite else TextSecondaryMuted
-                                )
-                            }
-                        }
-                    }
-                }
-            }
 
             Surface(
                 onClick = onToggleFavoriteFilter,
@@ -1375,107 +1112,30 @@ private fun VeggieCatalogPanel(
                     )
                 }
             }
-        }
 
-        // Quick Filter Chips (All | In Order | Favorites)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val isAllSelected = !filterFavoritesOnly && !filterInOrderOnly
             Surface(
-                onClick = {
-                    if (!isAllSelected) {
-                        if (filterFavoritesOnly) onToggleFavoriteFilter()
-                        if (filterInOrderOnly) onToggleFilterInOrderOnly()
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                color = if (isAllSelected) AccentNavy else SurfaceWhite,
-                border = BorderStroke(1.dp, if (isAllSelected) AccentNavy else DividerBorder),
+                onClick = onToggleFilterInOrderOnly,
+                shape = RoundedCornerShape(12.dp),
+                color = Color.Transparent,
+                border = BorderStroke(
+                    width = if (filterInOrderOnly) 1.5.dp else 1.dp,
+                    color = if (filterInOrderOnly) ColorSuccessEmerald else DividerBorder
+                ),
+                shadowElevation = 0.dp,
                 modifier = Modifier
-                    .height(28.dp)
+                    .size(56.dp)
                     .focusProperties { canFocus = false }
                     .pointerHoverIcon(PointerIcon.Hand)
             ) {
                 Box(
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "${strings.veggieFilterAll} ($allProductsCount)",
-                        fontSize = 11.5.sp,
-                        fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isAllSelected) SurfaceWhite else PrimaryNavy
-                    )
-                }
-            }
-
-            Surface(
-                onClick = {
-                    if (filterFavoritesOnly) onToggleFavoriteFilter()
-                    onToggleFilterInOrderOnly()
-                },
-                shape = RoundedCornerShape(8.dp),
-                color = if (filterInOrderOnly) ColorSuccessEmerald else SurfaceWhite,
-                border = BorderStroke(1.dp, if (filterInOrderOnly) ColorSuccessEmerald else DividerBorder),
-                modifier = Modifier
-                    .height(28.dp)
-                    .focusProperties { canFocus = false }
-                    .pointerHoverIcon(PointerIcon.Hand)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.ShoppingCart,
-                        contentDescription = null,
-                        tint = if (filterInOrderOnly) SurfaceWhite else ColorSuccessEmerald,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Text(
-                        text = "${strings.veggieFilterInOrder} ($inOrderCount)",
-                        fontSize = 11.5.sp,
-                        fontWeight = if (filterInOrderOnly) FontWeight.Bold else FontWeight.Medium,
-                        color = if (filterInOrderOnly) SurfaceWhite else PrimaryNavy
-                    )
-                }
-            }
-
-            Surface(
-                onClick = {
-                    if (filterInOrderOnly) onToggleFilterInOrderOnly()
-                    onToggleFavoriteFilter()
-                },
-                shape = RoundedCornerShape(8.dp),
-                color = if (filterFavoritesOnly) ColorStarYellow.copy(alpha = 0.2f) else SurfaceWhite,
-                border = BorderStroke(1.dp, if (filterFavoritesOnly) ColorStarYellow else DividerBorder),
-                modifier = Modifier
-                    .height(28.dp)
-                    .focusProperties { canFocus = false }
-                    .pointerHoverIcon(PointerIcon.Hand)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = if (filterFavoritesOnly) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = null,
-                        tint = if (filterFavoritesOnly) ColorStarYellow else TextSecondaryMuted,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Text(
-                        text = "${strings.filterFavoritesTooltip} ($favoritesCount)",
-                        fontSize = 11.5.sp,
-                        fontWeight = if (filterFavoritesOnly) FontWeight.Bold else FontWeight.Medium,
-                        color = PrimaryNavy
+                        contentDescription = strings.veggieFilterInOrder,
+                        tint = if (filterInOrderOnly) ColorSuccessEmerald else TextSecondaryMuted,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -1579,17 +1239,13 @@ private fun VeggieCatalogPanel(
                         isFocused = (isProductZoneActive && index == highlightedProductIndex),
                         isDialogActive = isDialogActive,
                         isEditable = isRoundOpen,
-                        inputMode = inputMode,
                         decimalSeparator = decimalSep,
                         isMobile = isMobile,
                         onOpenDetail = { onOpenDetail(product) },
-                        onClickCard = { onSelectProduct(product) },
                         onQuantityChange = { newScaled -> onUpdateProductQuantity(product.id, newScaled) },
                         onCommitQuantity = {
                             if (index < filteredProducts.lastIndex) {
                                 onNavigateToProduct?.invoke(index + 1)
-                            } else if (cartProductsCount > 0) {
-                                onNavigateToCart?.invoke(0)
                             } else {
                                 onReturnToSearch?.invoke()
                             }
@@ -1602,10 +1258,8 @@ private fun VeggieCatalogPanel(
                             }
                         },
                         onReturnToSearch = onReturnToSearch,
-                        onNavigateToCart = if (cartProductsCount > 0) { { onNavigateToCart?.invoke(0) } } else null,
                         onFocused = { onCardFocused?.invoke(index) },
                         onToggleFavorite = { onToggleFavorite(product.id) },
-                        onKeyDown = onKeyDown,
                         modifier = Modifier.onFocusChanged { focusState ->
                             if (focusState.isFocused || focusState.hasFocus) {
                                 onCardFocused?.invoke(index)
@@ -1623,7 +1277,6 @@ private fun VeggieCartPanel(
     cartProducts: List<VeggieProduct>,
     unitTypesById: Map<String, VeggieUnitType>,
     draftQuantitiesScaled: Map<String, Long>,
-    highlightedCartIndex: Int = -1,
     cartListState: LazyListState = rememberLazyListState(),
     isRoundOpen: Boolean,
     decimalSep: Char,
@@ -1631,16 +1284,12 @@ private fun VeggieCartPanel(
     hasUnsavedChanges: Boolean,
     isSavingOrder: Boolean,
     hasPreviousRoundItems: Boolean,
-    isDialogActive: Boolean = false,
-    onCartKeyDown: ((KeyEvent) -> Boolean)? = null,
-    onCartItemFocused: ((Int) -> Unit)? = null,
     onFillFromLastWeek: () -> Unit,
     onEditQuantity: (VeggieProduct) -> Unit,
     onRemoveProduct: (VeggieProduct) -> Unit,
     onSaveOrder: () -> Unit,
     modifier: Modifier = Modifier,
-    isDesktop: Boolean = false,
-    inputMode: VeggieInputMode = VeggieInputMode.STANDARD
+    isDesktop: Boolean = false
 ) {
     val strings = I18n.current
     val hasPricelessItemsInCart = remember(cartProducts) {
@@ -1778,26 +1427,17 @@ private fun VeggieCartPanel(
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    itemsIndexed(cartProducts, key = { _, it -> it.id }) { index, product ->
+                    itemsIndexed(cartProducts, key = { _, it -> it.id }) { _, product ->
                         val qtyScaled = draftQuantitiesScaled[product.id] ?: 0L
                         val unitType = unitTypesById[product.unitTypeId]
                         VeggieCartLineItemRow(
                             product = product,
                             unitType = unitType,
                             quantityScaled = qtyScaled,
-                            isHighlighted = (index == highlightedCartIndex),
-                            isDialogActive = isDialogActive,
                             isEditable = isRoundOpen,
-                            isReadOnly = (inputMode == VeggieInputMode.FAST_TAB),
                             decimalSeparator = decimalSep,
                             onEditQuantity = { onEditQuantity(product) },
-                            onRemove = { onRemoveProduct(product) },
-                            onKeyDown = onCartKeyDown,
-                            modifier = Modifier.onFocusChanged { focusState ->
-                                if (focusState.isFocused) {
-                                    onCartItemFocused?.invoke(index)
-                                }
-                            }
+                            onRemove = { onRemoveProduct(product) }
                         )
                     }
                 }
@@ -1870,7 +1510,7 @@ private fun VeggieCartPanel(
                             Spacer(modifier = Modifier.width(6.dp))
                         }
                         Text(
-                            text = strings.saveVeggieOrderBtn,
+                            text = if (hasUnsavedChanges || isSavingOrder) strings.saveVeggieOrderBtn else strings.veggieOrderAllSavedBtn,
                             color = if (canSave) SurfaceWhite else TextSecondaryMuted,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
@@ -1889,12 +1529,8 @@ private fun VeggieCartLineItemRow(
     quantityScaled: Long,
     isEditable: Boolean,
     decimalSeparator: Char,
-    isReadOnly: Boolean = false,
-    isHighlighted: Boolean = false,
-    isDialogActive: Boolean = false,
     onEditQuantity: () -> Unit,
     onRemove: () -> Unit,
-    onKeyDown: ((KeyEvent) -> Boolean)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -1907,37 +1543,16 @@ private fun VeggieCartLineItemRow(
         ((quantityScaled.toDouble() / VEGGIE_QTY_SCALE.toDouble()) * product.estimatedPriceCents.toDouble()).roundToLong()
     } else 0L
 
-    val rowFocusRequester = remember { FocusRequester() }
-    var isRowFocused by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isHighlighted, isDialogActive) {
-        if (!isReadOnly && isHighlighted && !isDialogActive && !isRowFocused) {
-            rowFocusRequester.safeRequestFocus()
-        }
-    }
-
     Surface(
         onClick = onEditQuantity,
-        enabled = isEditable && !isReadOnly,
+        enabled = isEditable,
         shape = RoundedCornerShape(10.dp),
-        color = if (!isReadOnly && isHighlighted) Color(0xFFEFF6FF) else SurfaceContainerLight,
-        border = if (!isReadOnly && isHighlighted) BorderStroke(2.dp, AccentNavy) else BorderStroke(1.dp, DividerBorder),
+        color = SurfaceContainerLight,
+        border = BorderStroke(1.dp, DividerBorder),
         modifier = modifier
             .fillMaxWidth()
-            .then(if (!isReadOnly) Modifier.focusRequester(rowFocusRequester) else Modifier.focusProperties { canFocus = false })
-            .then(
-                if (!isReadOnly) {
-                    Modifier
-                        .onFocusChanged { focusState ->
-                            isRowFocused = focusState.isFocused
-                        }
-                        .onPreviewKeyEvent { event ->
-                            if (onKeyDown != null && onKeyDown(event)) {
-                                true
-                            } else false
-                        }
-                } else Modifier
-            )
+            .focusProperties { canFocus = false }
+            .pointerHoverIcon(if (isEditable) PointerIcon.Hand else PointerIcon.Default)
     ) {
         Row(
             modifier = Modifier
@@ -2007,8 +1622,17 @@ private fun VeggieCartLineItemRow(
                     }
                 }
 
-                // Disconnected Trashcan Button to remove (ONLY in standard / interactive mode)
-                if (isEditable && !isReadOnly) {
+                Text(
+                    text = Formatting.formatBrl(lineTotalCents),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy,
+                    modifier = Modifier.widthIn(min = 52.dp),
+                    textAlign = TextAlign.End
+                )
+
+                // Trashcan Button on the complete right to remove item
+                if (isEditable) {
                     Surface(
                         onClick = onRemove,
                         shape = RoundedCornerShape(8.dp),
@@ -2033,15 +1657,6 @@ private fun VeggieCartLineItemRow(
                         }
                     }
                 }
-
-                Text(
-                    text = Formatting.formatBrl(lineTotalCents),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy,
-                    modifier = Modifier.widthIn(min = 52.dp),
-                    textAlign = TextAlign.End
-                )
             }
         }
     }
@@ -2058,19 +1673,15 @@ private fun CustomerVeggieProductCard(
     isFocused: Boolean = false,
     isDialogActive: Boolean = false,
     isEditable: Boolean,
-    inputMode: VeggieInputMode = VeggieInputMode.STANDARD,
     decimalSeparator: Char,
     isMobile: Boolean,
     onOpenDetail: () -> Unit,
-    onClickCard: () -> Unit,
     onQuantityChange: (Long) -> Unit = {},
     onCommitQuantity: () -> Unit = {},
     onCommitPrevious: (() -> Unit)? = null,
     onReturnToSearch: (() -> Unit)? = null,
-    onNavigateToCart: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
     onToggleFavorite: () -> Unit,
-    onKeyDown: ((KeyEvent) -> Boolean)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -2079,10 +1690,9 @@ private fun CustomerVeggieProductCard(
     val isOrdered = quantityScaled > 0L
 
     val cardFocusRequester = remember { FocusRequester() }
-    var isCardFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(isFocused, isDialogActive) {
-        if (isFocused && !isDialogActive && !isCardFocused) {
+        if (isFocused && !isDialogActive) {
             cardFocusRequester.safeRequestFocus()
         }
     }
@@ -2092,9 +1702,6 @@ private fun CustomerVeggieProductCard(
             if (isEditable) {
                 onFocused?.invoke()
                 try { cardFocusRequester.requestFocus() } catch (_: Exception) {}
-                if (inputMode != VeggieInputMode.FAST_TAB) {
-                    onClickCard()
-                }
             }
         },
         shape = RoundedCornerShape(10.dp),
@@ -2107,60 +1714,7 @@ private fun CustomerVeggieProductCard(
             BorderStroke(1.dp, DividerBorder)
         },
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .then(
-                if (inputMode == VeggieInputMode.STANDARD) {
-                    Modifier
-                        .focusRequester(cardFocusRequester)
-                        .onFocusChanged { focusState ->
-                            isCardFocused = focusState.isFocused || focusState.hasFocus
-                        }
-                        .onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown) {
-                                when (event.key) {
-                                    Key.Tab -> {
-                                        if (event.isShiftPressed) {
-                                            onCommitPrevious?.invoke()
-                                        } else {
-                                            onCommitQuantity()
-                                        }
-                                        true
-                                    }
-                                    Key.DirectionDown -> {
-                                        onCommitQuantity()
-                                        true
-                                    }
-                                    Key.DirectionUp -> {
-                                        onCommitPrevious?.invoke()
-                                        true
-                                    }
-                                    Key.DirectionRight -> {
-                                        if (onNavigateToCart != null) {
-                                            onNavigateToCart()
-                                            true
-                                        } else false
-                                    }
-                                    Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
-                                        if (isEditable) {
-                                            onClickCard()
-                                            true
-                                        } else false
-                                    }
-                                    Key.Escape -> {
-                                        onReturnToSearch?.invoke()
-                                        true
-                                    }
-                                    else -> {
-                                        if (onKeyDown != null && onKeyDown(event)) {
-                                            true
-                                        } else false
-                                    }
-                                }
-                            } else false
-                        }
-                } else Modifier
-            )
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
@@ -2236,184 +1790,90 @@ private fun CustomerVeggieProductCard(
                 }
             }
 
-            // Right side: Controls depend on inputMode
-            if (inputMode == VeggieInputMode.FAST_TAB) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // Previous order badge (clickable to fill quantity)
-                    if (previousQuantityScaled > 0L) {
-                        val formattedPrev = VeggieQuantityScaling.formatScaledQuantity(
-                            previousQuantityScaled,
-                            allowDecimals,
-                            decimalSeparator
-                        )
-                        Surface(
-                            onClick = { if (isEditable) onQuantityChange(previousQuantityScaled) },
-                            enabled = isEditable,
-                            shape = RoundedCornerShape(6.dp),
-                            color = SurfaceContainerHighLight,
-                            border = BorderStroke(1.dp, DividerBorder),
-                            modifier = Modifier
-                                .height(26.dp)
-                                .focusProperties { canFocus = false }
-                                .pointerHoverIcon(if (isEditable) PointerIcon.Hand else PointerIcon.Default)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .padding(horizontal = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = strings.lastOrderBadge(formattedPrev, unitName),
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = PrimaryNavy,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-
-                    // Line total preview (shown if ordered)
-                    if (isOrdered) {
-                        val lineTotalCents = if (product.estimatedPriceCents != null) {
-                            ((quantityScaled.toDouble() / VEGGIE_QTY_SCALE.toDouble()) * product.estimatedPriceCents.toDouble()).roundToLong()
-                        } else 0L
-                        if (lineTotalCents > 0L) {
-                            Text(
-                                text = "~ ${Formatting.formatBrl(lineTotalCents)}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = ColorSuccessEmerald,
-                                maxLines = 1
-                            )
-                        }
-
-                        // Disconnected Clear button (✕)
-                        IconButton(
-                            onClick = { onQuantityChange(0L) },
-                            enabled = isEditable,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .focusProperties { canFocus = false }
-                                .pointerHoverIcon(PointerIcon.Hand)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = strings.veggieClearItemTooltip,
-                                tint = TextSecondaryMuted,
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
-                    }
-
-                    // Direct inline quantity input field (with cardFocusRequester)
-                    InlineVeggieQuantityField(
-                        quantityScaled = quantityScaled,
-                        allowDecimals = allowDecimals,
-                        unitName = unitName,
-                        decimalSeparator = decimalSeparator,
-                        enabled = isEditable,
-                        onQuantityChange = onQuantityChange,
-                        onCommit = onCommitQuantity,
-                        onCommitPrevious = onCommitPrevious,
-                        onReturnToSearch = onReturnToSearch,
-                        onFocused = onFocused,
-                        focusRequester = cardFocusRequester
+            // Right side: Inline fast quantity controls
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Previous order badge (view-only)
+                if (previousQuantityScaled > 0L) {
+                    val formattedPrev = VeggieQuantityScaling.formatScaledQuantity(
+                        previousQuantityScaled,
+                        allowDecimals,
+                        decimalSeparator
                     )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = SurfaceContainerHighLight,
+                        border = BorderStroke(1.dp, DividerBorder),
+                        modifier = Modifier.height(26.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .padding(horizontal = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = strings.lastOrderBadge(formattedPrev, unitName),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
 
-                    // VERY END: Star ☆ / ★ (excluded from Tab)
+                // Line total preview (shown if ordered)
+                if (isOrdered) {
+                    val lineTotalCents = if (product.estimatedPriceCents != null) {
+                        ((quantityScaled.toDouble() / VEGGIE_QTY_SCALE.toDouble()) * product.estimatedPriceCents.toDouble()).roundToLong()
+                    } else 0L
+                    if (lineTotalCents > 0L) {
+                        Text(
+                            text = "~ ${Formatting.formatBrl(lineTotalCents)}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorSuccessEmerald,
+                            maxLines = 1
+                        )
+                    }
+
+                    // Disconnected Clear button (✕)
                     IconButton(
-                        onClick = onToggleFavorite,
+                        onClick = { onQuantityChange(0L) },
+                        enabled = isEditable,
                         modifier = Modifier
-                            .size(if (isMobile) 32.dp else 36.dp)
+                            .size(24.dp)
                             .focusProperties { canFocus = false }
                             .pointerHoverIcon(PointerIcon.Hand)
                     ) {
                         Icon(
-                            imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                            contentDescription = if (isFavorite) strings.unmarkFavoriteTooltip else strings.markFavoriteTooltip,
-                            tint = if (isFavorite) ColorStarYellow else TextSecondaryMuted.copy(alpha = 0.5f),
-                            modifier = Modifier.size(if (isMobile) 20.dp else 22.dp)
+                            imageVector = Icons.Default.Close,
+                            contentDescription = strings.veggieClearItemTooltip,
+                            tint = TextSecondaryMuted,
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
-            } else {
-                // STANDARD MODE: Badges (Added X and/or Last Week Order)
-                if (isOrdered || previousQuantityScaled > 0L) {
-                    Column(
-                        modifier = Modifier.width(if (isMobile) 100.dp else 125.dp),
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        if (isOrdered) {
-                            val currentFormatted = VeggieQuantityScaling.formatScaledQuantity(
-                                quantityScaled,
-                                allowDecimals,
-                                decimalSeparator
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = ColorSuccessEmerald.copy(alpha = 0.12f),
-                                border = BorderStroke(1.dp, ColorSuccessEmerald.copy(alpha = 0.4f)),
-                                modifier = Modifier.fillMaxWidth().height(24.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 6.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = strings.addedOrderBadge(currentFormatted, unitName),
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ColorSuccessEmerald,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
 
-                        if (previousQuantityScaled > 0L) {
-                            val formattedPrev = VeggieQuantityScaling.formatScaledQuantity(
-                                previousQuantityScaled,
-                                allowDecimals,
-                                decimalSeparator
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = SurfaceContainerHighLight,
-                                border = BorderStroke(1.dp, DividerBorder),
-                                modifier = Modifier.fillMaxWidth().height(24.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 6.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = strings.lastOrderBadge(formattedPrev, unitName),
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = PrimaryNavy,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                // Direct inline quantity input field (with cardFocusRequester)
+                InlineVeggieQuantityField(
+                    quantityScaled = quantityScaled,
+                    allowDecimals = allowDecimals,
+                    unitName = unitName,
+                    decimalSeparator = decimalSeparator,
+                    enabled = isEditable,
+                    onQuantityChange = onQuantityChange,
+                    onCommit = onCommitQuantity,
+                    onCommitPrevious = onCommitPrevious,
+                    onReturnToSearch = onReturnToSearch,
+                    onFocused = onFocused,
+                    focusRequester = cardFocusRequester
+                )
 
                 // VERY END: Star ☆ / ★ (excluded from Tab)
                 IconButton(

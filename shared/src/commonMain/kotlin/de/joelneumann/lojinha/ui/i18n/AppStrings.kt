@@ -875,6 +875,7 @@ interface AppStrings {
     val customerPortalTabStoreHistory: String
     fun lastOrderBadge(qty: String, unit: String): String
     val saveVeggieOrderBtn: String
+    val veggieOrderAllSavedBtn: String
     val veggieOrderSavedMsg: String
     val veggieOrderClosedBanner: String
     val veggieCombinedFeeLabel: String
@@ -897,7 +898,6 @@ interface AppStrings {
     val veggieUnsavedBadge: String
     val lastOrderNone: String
     val veggiePricelessItemsNotice: String
-    fun addedOrderBadge(qty: String, unit: String): String
     val btnFillFromLastWeek: String
     val filterFavoritesTooltip: String
     val filterFavoritesActiveTooltip: String
@@ -906,9 +906,6 @@ interface AppStrings {
     val noFavoriteProductsFound: String
     val veggieFixedRoundFeesLabel: String
     val veggieSharedFeeNotice: String
-    val veggieInputModeStandard: String
-    val veggieInputModeFastTab: String
-    val veggieFilterAll: String
     val veggieFilterInOrder: String
     val veggieClearItemTooltip: String
     val addOrderModeOverwrite: String

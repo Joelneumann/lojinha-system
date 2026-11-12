@@ -19,7 +19,6 @@ import de.joelneumann.lojinha.ui.theme.LojinhaTheme
 import de.joelneumann.lojinha.ui.theme.WEB_UI_SCALE_FACTOR
 import de.joelneumann.lojinha.ui.utils.PdfFilenames
 import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
-import de.joelneumann.lojinha.ui.viewmodel.VeggieInputMode
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
@@ -143,10 +142,6 @@ fun main() {
                                         },
                                         onSaveFavorites = { favorites ->
                                             customerNetworkClient.saveVeggieFavorites(favorites)
-                                        },
-                                        initialInputMode = loadUserInputMode(activeCustomer.id),
-                                        onInputModeChanged = { mode ->
-                                            saveUserInputMode(activeCustomer.id, mode)
                                         }
                                     )
                                 }
@@ -362,20 +357,5 @@ private fun loadUserFavorites(userId: String): Set<String> {
 private fun saveUserFavorites(userId: String, favorites: Set<String>) {
     try {
         jsSetLocalItem("lojinha_veggie_favorites_$userId", favorites.joinToString(","))
-    } catch (_: Exception) {}
-}
-
-private fun loadUserInputMode(userId: String): VeggieInputMode {
-    return try {
-        val raw = jsGetLocalItem("lojinha_veggie_input_mode_$userId") ?: return VeggieInputMode.STANDARD
-        if (raw == VeggieInputMode.FAST_TAB.name) VeggieInputMode.FAST_TAB else VeggieInputMode.STANDARD
-    } catch (_: Exception) {
-        VeggieInputMode.STANDARD
-    }
-}
-
-private fun saveUserInputMode(userId: String, mode: VeggieInputMode) {
-    try {
-        jsSetLocalItem("lojinha_veggie_input_mode_$userId", mode.name)
     } catch (_: Exception) {}
 }
