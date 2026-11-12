@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -68,12 +69,14 @@ fun VeggieProductImage(
     val clickModifier = if (onClick != null) {
         Modifier
             .pointerHoverIcon(PointerIcon.Hand)
+            .focusProperties { canFocus = false }
             .clickable(onClick = onClick)
     } else Modifier
 
     Box(
         modifier = modifier
             .clip(shape)
+            .focusProperties { canFocus = false }
             .then(clickModifier)
             .background(SurfaceContainerHighLight),
         contentAlignment = Alignment.Center

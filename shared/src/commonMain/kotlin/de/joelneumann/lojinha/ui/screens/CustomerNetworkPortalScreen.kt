@@ -536,16 +536,43 @@ private fun CustomerVeggieOrderTabContent(
     val cartListState = rememberLazyListState()
 
     var activeZone by remember { mutableStateOf(VeggieFocusZone.SEARCH) }
-    var highlightedProductIndex by remember(filteredProducts) {
-        mutableStateOf(if (filteredProducts.isNotEmpty()) 0 else -1)
+    var highlightedProductIndex by remember { mutableStateOf(-1) }
+    var highlightedCartIndex by remember { mutableStateOf(-1) }
+
+    fun navigateToProduct(index: Int) {
+        if (filteredProducts.isEmpty()) return
+        val targetIndex = index.coerceIn(0, filteredProducts.lastIndex)
+        activeZone = VeggieFocusZone.PRODUCTS
+        highlightedProductIndex = targetIndex
+        highlightedCartIndex = -1
+        coroutineScope.launch {
+            productListState.animateScrollToItem(targetIndex)
+        }
     }
-    var highlightedCartIndex by remember(cartProducts) {
-        mutableStateOf(if (cartProducts.isNotEmpty()) 0 else -1)
+
+    fun navigateToCart(index: Int) {
+        if (cartProducts.isEmpty()) return
+        val targetIndex = index.coerceIn(0, cartProducts.lastIndex)
+        activeZone = VeggieFocusZone.CART
+        highlightedCartIndex = targetIndex
+        highlightedProductIndex = -1
+        coroutineScope.launch {
+            cartListState.animateScrollToItem(targetIndex)
+        }
+    }
+
+    fun navigateToSearch() {
+        activeZone = VeggieFocusZone.SEARCH
+        highlightedProductIndex = -1
+        highlightedCartIndex = -1
+        coroutineScope.launch {
+            searchFocusRequester.safeRequestFocus()
+        }
     }
 
     LaunchedEffect(filteredProducts) {
         if (highlightedProductIndex >= filteredProducts.size) {
-            highlightedProductIndex = if (filteredProducts.isNotEmpty()) 0 else -1
+            highlightedProductIndex = -1
         }
     }
 
@@ -562,239 +589,156 @@ private fun CustomerVeggieOrderTabContent(
     val handleNavigationKey: (KeyEvent) -> Boolean = { event ->
         if (event.type != KeyEventType.KeyDown) {
             false
+        } else if (activeZone == VeggieFocusZone.PRODUCTS) {
+            false
         } else {
             when (event.key) {
                 Key.DirectionDown -> {
                     when (activeZone) {
                         VeggieFocusZone.SEARCH -> {
                             if (filteredProducts.isNotEmpty()) {
-                                activeZone = VeggieFocusZone.PRODUCTS
-                                highlightedProductIndex = 0
-                                highlightedCartIndex = -1
-                                coroutineScope.launch { productListState.animateScrollToItem(0) }
+                                navigateToProduct(0)
                                 true
                             } else if (cartProducts.isNotEmpty()) {
-                                activeZone = VeggieFocusZone.CART
-                                highlightedCartIndex = 0
-                                highlightedProductIndex = -1
-                                coroutineScope.launch { cartListState.animateScrollToItem(0) }
+                                navigateToCart(0)
                                 true
-                            } else false
-                        }
-                        VeggieFocusZone.PRODUCTS -> {
-                            if (filteredProducts.isNotEmpty()) {
-                                if (highlightedProductIndex < filteredProducts.lastIndex) {
-                                    highlightedProductIndex += 1
-                                    coroutineScope.launch { productListState.animateScrollToItem(highlightedProductIndex) }
-                                    true
-                                } else if (cartProducts.isNotEmpty()) {
-                                    activeZone = VeggieFocusZone.CART
-                                    highlightedCartIndex = 0
-                                    highlightedProductIndex = -1
-                                    coroutineScope.launch { cartListState.animateScrollToItem(0) }
-                                    true
-                                } else true
                             } else false
                         }
                         VeggieFocusZone.CART -> {
                             if (cartProducts.isNotEmpty()) {
-                                highlightedCartIndex = (highlightedCartIndex + 1).coerceAtMost(cartProducts.lastIndex)
-                                coroutineScope.launch { cartListState.animateScrollToItem(highlightedCartIndex) }
-                                true
+                                if (highlightedCartIndex < cartProducts.lastIndex) {
+                                    navigateToCart(highlightedCartIndex + 1)
+                                    true
+                                } else false
                             } else false
                         }
+                        VeggieFocusZone.PRODUCTS -> false
                     }
                 }
                 Key.DirectionUp -> {
                     when (activeZone) {
-                        VeggieFocusZone.PRODUCTS -> {
-                            if (highlightedProductIndex > 0) {
-                                highlightedProductIndex -= 1
-                                coroutineScope.launch { productListState.animateScrollToItem(highlightedProductIndex) }
-                                true
-                            } else if (highlightedProductIndex == 0) {
-                                activeZone = VeggieFocusZone.SEARCH
-                                highlightedProductIndex = -1
-                                coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
-                                true
-                            } else false
-                        }
                         VeggieFocusZone.CART -> {
                             if (highlightedCartIndex > 0) {
-                                highlightedCartIndex -= 1
-                                coroutineScope.launch { cartListState.animateScrollToItem(highlightedCartIndex) }
+                                navigateToCart(highlightedCartIndex - 1)
                                 true
                             } else if (highlightedCartIndex == 0) {
-                                activeZone = VeggieFocusZone.PRODUCTS
-                                highlightedProductIndex = if (filteredProducts.isNotEmpty()) 0 else -1
-                                highlightedCartIndex = -1
-                                true
+                                if (filteredProducts.isNotEmpty()) {
+                                    navigateToProduct(0)
+                                    true
+                                } else {
+                                    navigateToSearch()
+                                    true
+                                }
                             } else false
                         }
-                        VeggieFocusZone.SEARCH -> false
+                        VeggieFocusZone.SEARCH, VeggieFocusZone.PRODUCTS -> false
                     }
                 }
                 Key.Tab -> {
                     if (event.isShiftPressed) {
                         when (activeZone) {
-                            VeggieFocusZone.PRODUCTS -> {
-                                if (highlightedProductIndex > 0) {
-                                    highlightedProductIndex -= 1
-                                    coroutineScope.launch { productListState.animateScrollToItem(highlightedProductIndex) }
-                                    true
-                                } else {
-                                    activeZone = VeggieFocusZone.SEARCH
-                                    highlightedProductIndex = -1
-                                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
-                                    true
-                                }
-                            }
                             VeggieFocusZone.CART -> {
                                 if (highlightedCartIndex > 0) {
-                                    highlightedCartIndex -= 1
-                                    coroutineScope.launch { cartListState.animateScrollToItem(highlightedCartIndex) }
+                                    navigateToCart(highlightedCartIndex - 1)
                                     true
                                 } else {
-                                    activeZone = VeggieFocusZone.PRODUCTS
-                                    highlightedProductIndex = if (filteredProducts.isNotEmpty()) filteredProducts.lastIndex else -1
-                                    highlightedCartIndex = -1
                                     if (filteredProducts.isNotEmpty()) {
-                                        coroutineScope.launch { productListState.animateScrollToItem(filteredProducts.lastIndex) }
+                                        navigateToProduct(filteredProducts.lastIndex)
+                                    } else {
+                                        navigateToSearch()
                                     }
                                     true
                                 }
                             }
                             VeggieFocusZone.SEARCH -> {
                                 if (cartProducts.isNotEmpty()) {
-                                    activeZone = VeggieFocusZone.CART
-                                    highlightedCartIndex = cartProducts.lastIndex
-                                    highlightedProductIndex = -1
-                                    coroutineScope.launch { cartListState.animateScrollToItem(cartProducts.lastIndex) }
+                                    navigateToCart(cartProducts.lastIndex)
                                     true
                                 } else if (filteredProducts.isNotEmpty()) {
-                                    activeZone = VeggieFocusZone.PRODUCTS
-                                    highlightedProductIndex = filteredProducts.lastIndex
-                                    coroutineScope.launch { productListState.animateScrollToItem(filteredProducts.lastIndex) }
+                                    navigateToProduct(filteredProducts.lastIndex)
                                     true
                                 } else false
                             }
+                            VeggieFocusZone.PRODUCTS -> false
                         }
                     } else {
                         when (activeZone) {
                             VeggieFocusZone.SEARCH -> {
                                 if (filteredProducts.isNotEmpty()) {
-                                    activeZone = VeggieFocusZone.PRODUCTS
-                                    highlightedProductIndex = 0
-                                    highlightedCartIndex = -1
-                                    coroutineScope.launch { productListState.animateScrollToItem(0) }
+                                    navigateToProduct(0)
                                     true
                                 } else if (cartProducts.isNotEmpty()) {
-                                    activeZone = VeggieFocusZone.CART
-                                    highlightedCartIndex = 0
-                                    highlightedProductIndex = -1
-                                    coroutineScope.launch { cartListState.animateScrollToItem(0) }
+                                    navigateToCart(0)
                                     true
                                 } else false
                             }
-                            VeggieFocusZone.PRODUCTS -> {
-                                if (highlightedProductIndex < filteredProducts.lastIndex) {
-                                    highlightedProductIndex += 1
-                                    coroutineScope.launch { productListState.animateScrollToItem(highlightedProductIndex) }
-                                    true
-                                } else if (cartProducts.isNotEmpty()) {
-                                    activeZone = VeggieFocusZone.CART
-                                    highlightedCartIndex = 0
-                                    highlightedProductIndex = -1
-                                    coroutineScope.launch { cartListState.animateScrollToItem(0) }
-                                    true
-                                } else {
-                                    activeZone = VeggieFocusZone.SEARCH
-                                    highlightedProductIndex = -1
-                                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
-                                    true
-                                }
-                            }
                             VeggieFocusZone.CART -> {
                                 if (highlightedCartIndex < cartProducts.lastIndex) {
-                                    highlightedCartIndex += 1
-                                    coroutineScope.launch { cartListState.animateScrollToItem(highlightedCartIndex) }
+                                    navigateToCart(highlightedCartIndex + 1)
                                     true
                                 } else {
-                                    activeZone = VeggieFocusZone.SEARCH
-                                    highlightedCartIndex = -1
-                                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                                    navigateToSearch()
                                     true
                                 }
                             }
+                            VeggieFocusZone.PRODUCTS -> false
                         }
                     }
                 }
-            Key.DirectionRight -> {
-                if ((activeZone == VeggieFocusZone.PRODUCTS || (activeZone == VeggieFocusZone.SEARCH && searchQuery.isBlank())) && cartProducts.isNotEmpty()) {
-                    activeZone = VeggieFocusZone.CART
-                    highlightedCartIndex = 0
-                    highlightedProductIndex = -1
-                    coroutineScope.launch { cartListState.animateScrollToItem(0) }
-                    true
-                } else false
-            }
-            Key.DirectionLeft -> {
-                if (activeZone == VeggieFocusZone.CART) {
-                    activeZone = VeggieFocusZone.PRODUCTS
-                    highlightedProductIndex = if (filteredProducts.isNotEmpty()) 0 else -1
-                    highlightedCartIndex = -1
-                    true
-                } else false
-            }
-            Key.Enter, Key.NumPadEnter -> {
-                when (activeZone) {
-                    VeggieFocusZone.PRODUCTS -> {
-                        if (highlightedProductIndex in filteredProducts.indices && isRoundOpen) {
-                            selectedProductForAmountDialog = filteredProducts[highlightedProductIndex]
-                            true
-                        } else false
-                    }
-                    VeggieFocusZone.CART -> {
-                        if (highlightedCartIndex in cartProducts.indices && isRoundOpen) {
-                            selectedProductForAmountDialog = cartProducts[highlightedCartIndex]
-                            true
-                        } else false
-                    }
-                    VeggieFocusZone.SEARCH -> false
+                Key.DirectionRight -> {
+                    if (activeZone == VeggieFocusZone.SEARCH && searchQuery.isBlank() && cartProducts.isNotEmpty()) {
+                        navigateToCart(0)
+                        true
+                    } else false
                 }
-            }
-            Key.Spacebar -> {
-                if (activeZone == VeggieFocusZone.PRODUCTS && highlightedProductIndex in filteredProducts.indices && isRoundOpen) {
-                    selectedProductForAmountDialog = filteredProducts[highlightedProductIndex]
-                    true
-                } else if (activeZone == VeggieFocusZone.CART && highlightedCartIndex in cartProducts.indices && isRoundOpen) {
-                    selectedProductForAmountDialog = cartProducts[highlightedCartIndex]
-                    true
-                } else false
-            }
-            Key.Backspace, Key.Delete -> {
-                if (activeZone == VeggieFocusZone.CART && highlightedCartIndex in cartProducts.indices && isRoundOpen) {
-                    val prod = cartProducts[highlightedCartIndex]
-                    veggieViewModel.updateProductQuantity(prod.id, 0L)
-                    if (highlightedCartIndex >= cartProducts.size - 1) {
-                        highlightedCartIndex = (cartProducts.size - 2).coerceAtLeast(0)
+                Key.DirectionLeft -> {
+                    if (activeZone == VeggieFocusZone.CART) {
+                        if (filteredProducts.isNotEmpty()) {
+                            navigateToProduct(0)
+                            true
+                        } else {
+                            navigateToSearch()
+                            true
+                        }
+                    } else false
+                }
+                Key.Enter, Key.NumPadEnter -> {
+                    when (activeZone) {
+                        VeggieFocusZone.CART -> {
+                            if (highlightedCartIndex in cartProducts.indices && isRoundOpen) {
+                                selectedProductForAmountDialog = cartProducts[highlightedCartIndex]
+                                true
+                            } else false
+                        }
+                        VeggieFocusZone.PRODUCTS, VeggieFocusZone.SEARCH -> false
                     }
-                    true
-                } else false
+                }
+                Key.Spacebar -> {
+                    if (activeZone == VeggieFocusZone.CART && highlightedCartIndex in cartProducts.indices && isRoundOpen) {
+                        selectedProductForAmountDialog = cartProducts[highlightedCartIndex]
+                        true
+                    } else false
+                }
+                Key.Backspace, Key.Delete -> {
+                    if (activeZone == VeggieFocusZone.CART && highlightedCartIndex in cartProducts.indices && isRoundOpen) {
+                        val prod = cartProducts[highlightedCartIndex]
+                        veggieViewModel.updateProductQuantity(prod.id, 0L)
+                        if (highlightedCartIndex >= cartProducts.size - 1) {
+                            highlightedCartIndex = (cartProducts.size - 2).coerceAtLeast(0)
+                        }
+                        true
+                    } else false
+                }
+                Key.Escape -> {
+                    if (activeZone != VeggieFocusZone.SEARCH) {
+                        navigateToSearch()
+                        true
+                    } else false
+                }
+                else -> false
             }
-            Key.Escape -> {
-                if (activeZone != VeggieFocusZone.SEARCH) {
-                    activeZone = VeggieFocusZone.SEARCH
-                    highlightedProductIndex = -1
-                    highlightedCartIndex = -1
-                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
-                    true
-                } else false
-            }
-            else -> false
         }
     }
-}
 
     val onSearchKeyDown: (KeyEvent) -> Boolean = handleNavigationKey
     val onGlobalKeyEvent: (KeyEvent) -> Boolean = handleNavigationKey
@@ -871,11 +815,16 @@ private fun CustomerVeggieOrderTabContent(
                         highlightedProductIndex = if (activeZone == VeggieFocusZone.PRODUCTS) highlightedProductIndex else -1,
                         isDialogActive = (selectedProductForAmountDialog != null),
                         onKeyDown = handleNavigationKey,
+                        onNavigateToProduct = { idx -> navigateToProduct(idx) },
+                        onNavigateToCart = { idx -> navigateToCart(idx) },
+                        onReturnToSearch = { navigateToSearch() },
+                        cartProductsCount = cartProducts.size,
                         onCardFocused = { idx ->
                             activeZone = VeggieFocusZone.PRODUCTS
                             highlightedProductIndex = idx
                             highlightedCartIndex = -1
                         },
+                        onSearchFocused = { navigateToSearch() },
                         onClearError = { veggieViewModel.clearError() },
                         onQueryChange = { query ->
                             activeZone = VeggieFocusZone.SEARCH
@@ -895,7 +844,6 @@ private fun CustomerVeggieOrderTabContent(
                         cartProducts = cartProducts,
                         unitTypesById = unitTypesById,
                         draftQuantitiesScaled = draftQuantitiesScaled,
-                        combinedFeeCents = round.combinedFeeCents,
                         highlightedCartIndex = if (activeZone == VeggieFocusZone.CART) highlightedCartIndex else -1,
                         cartListState = cartListState,
                         isRoundOpen = isRoundOpen,
@@ -950,11 +898,16 @@ private fun CustomerVeggieOrderTabContent(
                 highlightedProductIndex = if (activeZone == VeggieFocusZone.PRODUCTS) highlightedProductIndex else -1,
                 isDialogActive = (selectedProductForAmountDialog != null),
                 onKeyDown = handleNavigationKey,
+                onNavigateToProduct = { idx -> navigateToProduct(idx) },
+                onNavigateToCart = { idx -> navigateToCart(idx) },
+                onReturnToSearch = { navigateToSearch() },
+                cartProductsCount = cartProducts.size,
                 onCardFocused = { idx ->
                     activeZone = VeggieFocusZone.PRODUCTS
                     highlightedProductIndex = idx
                     highlightedCartIndex = -1
                 },
+                onSearchFocused = { navigateToSearch() },
                 onClearError = { veggieViewModel.clearError() },
                 onQueryChange = { query ->
                     activeZone = VeggieFocusZone.SEARCH
@@ -976,7 +929,6 @@ private fun CustomerVeggieOrderTabContent(
                 cartProducts = cartProducts,
                 unitTypesById = unitTypesById,
                 draftQuantitiesScaled = draftQuantitiesScaled,
-                combinedFeeCents = round.combinedFeeCents,
                 highlightedCartIndex = if (activeZone == VeggieFocusZone.CART) highlightedCartIndex else -1,
                 cartListState = cartListState,
                 isRoundOpen = isRoundOpen,
@@ -1043,7 +995,12 @@ private fun VeggieCatalogPanel(
     highlightedProductIndex: Int,
     isDialogActive: Boolean = false,
     onKeyDown: ((KeyEvent) -> Boolean)? = null,
+    onNavigateToProduct: ((Int) -> Unit)? = null,
+    onNavigateToCart: ((Int) -> Unit)? = null,
+    onReturnToSearch: (() -> Unit)? = null,
+    cartProductsCount: Int = 0,
     onCardFocused: ((Int) -> Unit)? = null,
+    onSearchFocused: (() -> Unit)? = null,
     onClearError: () -> Unit,
     onQueryChange: (String) -> Unit,
     onOpenDetail: (VeggieProduct) -> Unit,
@@ -1163,6 +1120,11 @@ private fun VeggieCatalogPanel(
                 placeholder = strings.searchVeggieProductsPlaceholder,
                 focusRequester = searchFocusRequester,
                 onKeyDown = onKeyDown,
+                onFocusChanged = { focusState ->
+                    if (focusState.isFocused) {
+                        onReturnToSearch?.invoke() ?: onSearchFocused?.invoke()
+                    }
+                },
                 modifier = Modifier.weight(1f)
             )
 
@@ -1291,10 +1253,29 @@ private fun VeggieCatalogPanel(
                         isMobile = isMobile,
                         onOpenDetail = { onOpenDetail(product) },
                         onClickCard = { onSelectProduct(product) },
+                        onCommitQuantity = {
+                            if (index < filteredProducts.lastIndex) {
+                                onNavigateToProduct?.invoke(index + 1)
+                            } else if (cartProductsCount > 0) {
+                                onNavigateToCart?.invoke(0)
+                            } else {
+                                onReturnToSearch?.invoke()
+                            }
+                        },
+                        onCommitPrevious = {
+                            if (index > 0) {
+                                onNavigateToProduct?.invoke(index - 1)
+                            } else {
+                                onReturnToSearch?.invoke()
+                            }
+                        },
+                        onReturnToSearch = onReturnToSearch,
+                        onNavigateToCart = if (cartProductsCount > 0) { { onNavigateToCart?.invoke(0) } } else null,
+                        onFocused = { onCardFocused?.invoke(index) },
                         onToggleFavorite = { onToggleFavorite(product.id) },
                         onKeyDown = onKeyDown,
                         modifier = Modifier.onFocusChanged { focusState ->
-                            if (focusState.isFocused) {
+                            if (focusState.isFocused || focusState.hasFocus) {
                                 onCardFocused?.invoke(index)
                             }
                         }
@@ -1310,7 +1291,6 @@ private fun VeggieCartPanel(
     cartProducts: List<VeggieProduct>,
     unitTypesById: Map<String, VeggieUnitType>,
     draftQuantitiesScaled: Map<String, Long>,
-    combinedFeeCents: Long = 0L,
     highlightedCartIndex: Int = -1,
     cartListState: LazyListState = rememberLazyListState(),
     isRoundOpen: Boolean,
@@ -1516,57 +1496,6 @@ private fun VeggieCartPanel(
                     )
                 }
 
-                if (combinedFeeCents > 0L) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = SurfaceContainerHighLight.copy(alpha = 0.6f),
-                        border = BorderStroke(1.dp, DividerBorder),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.weight(1f, fill = false)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        tint = AccentNavy,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = strings.veggieFixedRoundFeesLabel,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = PrimaryNavy
-                                    )
-                                }
-                                Text(
-                                    text = Formatting.formatBrl(combinedFeeCents),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PrimaryNavy
-                                )
-                            }
-                            Text(
-                                text = strings.veggieSharedFeeNotice,
-                                fontSize = 11.sp,
-                                color = TextSecondaryMuted,
-                                lineHeight = 15.sp
-                            )
-                        }
-                    }
-                }
-
                 if (hasPricelessItemsInCart) {
                     Text(
                         text = strings.veggiePricelessItemsNotice,
@@ -1642,9 +1571,10 @@ private fun VeggieCartLineItemRow(
     } else 0L
 
     val rowFocusRequester = remember { FocusRequester() }
+    var isRowFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(isHighlighted, isDialogActive) {
-        if (isHighlighted && !isDialogActive) {
+        if (isHighlighted && !isDialogActive && !isRowFocused) {
             rowFocusRequester.safeRequestFocus()
         }
     }
@@ -1658,6 +1588,9 @@ private fun VeggieCartLineItemRow(
         modifier = modifier
             .fillMaxWidth()
             .focusRequester(rowFocusRequester)
+            .onFocusChanged { focusState ->
+                isRowFocused = focusState.isFocused
+            }
             .onPreviewKeyEvent { event ->
                 if (onKeyDown != null && onKeyDown(event)) {
                     true
@@ -1697,10 +1630,8 @@ private fun VeggieCartLineItemRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Number Button (click re-opens amount dialog, excluded from Tab)
+                // Number Badge (click handled by outer row, excluded from Tab)
                 Surface(
-                    onClick = onEditQuantity,
-                    enabled = isEditable,
                     shape = RoundedCornerShape(8.dp),
                     color = SurfaceWhite,
                     border = BorderStroke(1.dp, DividerBorder),
@@ -1708,7 +1639,6 @@ private fun VeggieCartLineItemRow(
                         .height(28.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .focusProperties { canFocus = false }
-                        .pointerHoverIcon(if (isEditable) PointerIcon.Hand else PointerIcon.Default)
                 ) {
                     Box(
                         modifier = Modifier.padding(horizontal = 8.dp),
@@ -1777,6 +1707,11 @@ private fun CustomerVeggieProductCard(
     isMobile: Boolean,
     onOpenDetail: () -> Unit,
     onClickCard: () -> Unit,
+    onCommitQuantity: () -> Unit = {},
+    onCommitPrevious: (() -> Unit)? = null,
+    onReturnToSearch: (() -> Unit)? = null,
+    onNavigateToCart: (() -> Unit)? = null,
+    onFocused: (() -> Unit)? = null,
     onToggleFavorite: () -> Unit,
     onKeyDown: ((KeyEvent) -> Boolean)? = null,
     modifier: Modifier = Modifier
@@ -1787,16 +1722,21 @@ private fun CustomerVeggieProductCard(
     val isOrdered = quantityScaled > 0L
 
     val cardFocusRequester = remember { FocusRequester() }
+    var isCardFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(isHighlighted, isDialogActive) {
-        if (isHighlighted && !isDialogActive) {
+        if (isHighlighted && !isDialogActive && !isCardFocused) {
             cardFocusRequester.safeRequestFocus()
         }
     }
 
     Card(
         onClick = {
-            if (isEditable) onClickCard()
+            if (isEditable) {
+                onFocused?.invoke()
+                try { cardFocusRequester.requestFocus() } catch (_: Exception) {}
+                onClickCard()
+            }
         },
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(
@@ -1811,9 +1751,50 @@ private fun CustomerVeggieProductCard(
         modifier = modifier
             .fillMaxWidth()
             .focusRequester(cardFocusRequester)
+            .onFocusChanged { focusState ->
+                isCardFocused = focusState.isFocused || focusState.hasFocus
+            }
             .onPreviewKeyEvent { event ->
-                if (onKeyDown != null && onKeyDown(event)) {
-                    true
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.Tab -> {
+                            if (event.isShiftPressed) {
+                                onCommitPrevious?.invoke()
+                            } else {
+                                onCommitQuantity()
+                            }
+                            true
+                        }
+                        Key.DirectionDown -> {
+                            onCommitQuantity()
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            onCommitPrevious?.invoke()
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            if (onNavigateToCart != null) {
+                                onNavigateToCart()
+                                true
+                            } else false
+                        }
+                        Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+                            if (isEditable) {
+                                onClickCard()
+                                true
+                            } else false
+                        }
+                        Key.Escape -> {
+                            onReturnToSearch?.invoke()
+                            true
+                        }
+                        else -> {
+                            if (onKeyDown != null && onKeyDown(event)) {
+                                true
+                            } else false
+                        }
+                    }
                 } else false
             }
     ) {
@@ -2234,23 +2215,48 @@ private fun CustomerVeggieHistoryRoundCard(
             // Single Combined Fee Line (Buyer Operation Fee + Transport Fee share combined)
             if (item.combinedFeeShareCents > 0L) {
                 HorizontalDivider(color = DividerBorder.copy(alpha = 0.6f))
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = strings.veggieCombinedFeeLabel,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = TextSecondaryMuted
-                    )
-                    Text(
-                        text = Formatting.formatBrl(item.combinedFeeShareCents),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = PrimaryNavy
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = AccentNavy,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = strings.veggieCombinedFeeLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = PrimaryNavy
+                            )
+                        }
+                        Text(
+                            text = (if (!isSettled) "~ " else "") + Formatting.formatBrl(item.combinedFeeShareCents),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryNavy
+                        )
+                    }
+                    if (!isSettled) {
+                        Text(
+                            text = strings.veggieSharedFeeNotice,
+                            fontSize = 11.sp,
+                            color = TextSecondaryMuted,
+                            lineHeight = 15.sp
+                        )
+                    }
                 }
             }
         }
