@@ -1,7 +1,12 @@
 package de.joelneumann.lojinha
 
+import de.joelneumann.lojinha.domain.model.VeggieProduct
+import de.joelneumann.lojinha.domain.model.VeggieUnitType
+import de.joelneumann.lojinha.ui.components.admin.veggie.VeggieSortOption
+import de.joelneumann.lojinha.ui.components.admin.veggie.toComparator
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
+import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
 import de.joelneumann.lojinha.ui.utils.removeAccents
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -222,6 +227,113 @@ class SearchUtilsTest {
         val ranked = products.filterAndRankProducts("O")
 
         assertEquals(listOf("Orange", "Oreo", "Ovos Brancos"), ranked.map { it.name })
+    }
+
+    private fun sampleVeggie(
+        id: String,
+        name: String,
+        description: String? = null,
+        priceCents: Long? = 500L,
+        unitId: String = "unit_kg"
+    ) = VeggieProduct(
+        id = id,
+        name = name,
+        description = description,
+        estimatedPriceCents = priceCents,
+        unitTypeId = unitId,
+        imageFileName = null,
+        isActive = true,
+        isDeleted = false,
+        updatedAt = 0L
+    )
+
+    @Test
+    fun testVeggieEmptyQueryReturnsOriginalList() {
+        val v1 = sampleVeggie("1", "Tomate")
+        val v2 = sampleVeggie("2", "Alface")
+        val list = listOf(v1, v2)
+
+        assertEquals(list, list.filterAndRankVeggieProducts(""))
+        assertEquals(list, list.filterAndRankVeggieProducts("   "))
+    }
+
+    @Test
+    fun testVeggieRankExactBeforePrefixBeforeWordBeforeSubstring() {
+        val p1 = sampleVeggie("1", "Cenoura", priceCents = 400L)
+        val p2 = sampleVeggie("2", "Cenoura Ralada", priceCents = 600L)
+        val p3 = sampleVeggie("3", "Bolo de Cenoura", priceCents = 800L)
+        val p4 = sampleVeggie("4", "Suco Tropical", description = "Feito com cenoura e laranja", priceCents = 500L)
+        val p5 = sampleVeggie("5", "Mini Cenoura", priceCents = 700L)
+
+        val list = listOf(p4, p3, p2, p5, p1)
+        val ranked = list.filterAndRankVeggieProducts("Cenoura")
+
+        // 1. "Cenoura" (Tier 0: exact match)
+        // 2. "Cenoura Ralada" (Tier 1: starts with)
+        // 3. "Bolo de Cenoura" & "Mini Cenoura" (Tier 2: word starts with, sorted alphabetically)
+        // 4. "Suco Tropical" (Tier 6: description contains)
+        val names = ranked.map { it.name }
+        assertEquals(listOf("Cenoura", "Cenoura Ralada", "Bolo de Cenoura", "Mini Cenoura", "Suco Tropical"), names)
+    }
+
+    @Test
+    fun testVeggieMultiTokenMatchingAndPrefixes() {
+        val p1 = sampleVeggie("1", "Alface Crespa Hidropônica")
+        val p2 = sampleVeggie("2", "Alface Americana")
+        val p3 = sampleVeggie("3", "Rúcula Hidropônica")
+        val p4 = sampleVeggie("4", "Mix de Alface Crespa")
+
+        val list = listOf(p1, p2, p3, p4)
+
+        // "alf cres" matches both Alface Crespa Hidropônica and Mix de Alface Crespa in Tier 3
+        val res = list.filterAndRankVeggieProducts("alf cres")
+        assertEquals(listOf("Alface Crespa Hidropônica", "Mix de Alface Crespa"), res.map { it.name })
+
+        // Out-of-order tokens "cres alf" also matches both
+        val resRev = list.filterAndRankVeggieProducts("cres alf")
+        assertEquals(listOf("Alface Crespa Hidropônica", "Mix de Alface Crespa"), resRev.map { it.name })
+    }
+
+    @Test
+    fun testVeggieAccentInsensitivity() {
+        val p1 = sampleVeggie("1", "Maçã Gala")
+        val p2 = sampleVeggie("2", "Mamão Formosa")
+        val p3 = sampleVeggie("3", "Limão Tahiti")
+
+        val list = listOf(p1, p2, p3)
+
+        assertEquals(listOf("Maçã Gala"), list.filterAndRankVeggieProducts("maca").map { it.name })
+        assertEquals(listOf("Mamão Formosa"), list.filterAndRankVeggieProducts("mamao").map { it.name })
+        assertEquals(listOf("Limão Tahiti"), list.filterAndRankVeggieProducts("limao").map { it.name })
+    }
+
+    @Test
+    fun testVeggieUnitTypeAwareSearch() {
+        val unitKg = VeggieUnitType(id = "unit_kg", name = "kg", allowDecimals = true, isActive = true, updatedAt = 0L)
+        val unitMaco = VeggieUnitType(id = "unit_maco", name = "Maço", allowDecimals = false, isActive = true, updatedAt = 0L)
+        val units = mapOf(unitKg.id to unitKg, unitMaco.id to unitMaco)
+
+        val p1 = sampleVeggie("1", "Couve", unitId = unitMaco.id)
+        val p2 = sampleVeggie("2", "Tomate", unitId = unitKg.id)
+
+        val list = listOf(p1, p2)
+
+        val matched = list.filterAndRankVeggieProducts("tomate kg", unitTypesById = units)
+        assertEquals(1, matched.size)
+        assertEquals("Tomate", matched.first().name)
+    }
+
+    @Test
+    fun testVeggieSecondaryComparatorBreaksTiesByPrice() {
+        val p1 = sampleVeggie("1", "Tomate Cereja", priceCents = 1000L)
+        val p2 = sampleVeggie("2", "Tomate Italiano", priceCents = 500L)
+        val p3 = sampleVeggie("3", "Tomate Débora", priceCents = 700L)
+
+        val list = listOf(p1, p2, p3)
+
+        // All 3 start with "Tomate" (Tier 1). Using PRICE_ASC comparator should sort Italiano (500), Débora (700), Cereja (1000).
+        val ranked = list.filterAndRankVeggieProducts("Tomate", secondaryComparator = VeggieSortOption.PRICE_ASC.toComparator())
+        assertEquals(listOf("Tomate Italiano", "Tomate Débora", "Tomate Cereja"), ranked.map { it.name })
     }
 }
 

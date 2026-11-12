@@ -173,6 +173,9 @@ interface VeggieOrderDao {
     @Query("DELETE FROM veggie_order_entries WHERE roundId = :roundId AND userId = :userId AND veggieProductId = :veggieProductId")
     suspend fun deleteEntryByRoundUserProduct(roundId: String, userId: String, veggieProductId: String)
 
+    @Query("DELETE FROM veggie_order_entries WHERE roundId = :roundId AND veggieProductId = :productId")
+    suspend fun deleteEntriesForProductInRound(roundId: String, productId: String)
+
     @Query("SELECT COUNT(*) FROM veggie_order_entries WHERE userId = :userId")
     suspend fun getEntryCountForUser(userId: String): Int
 
@@ -216,4 +219,30 @@ interface VeggieOrderDao {
             }
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Customer Veggie Favorites
+    // -------------------------------------------------------------------------
+    @Query("SELECT veggieProductId FROM veggie_user_favorites WHERE userId = :userId")
+    suspend fun getFavoriteProductIdsForUser(userId: String): List<String>
+
+    @Query("DELETE FROM veggie_user_favorites WHERE userId = :userId")
+    suspend fun deleteFavoritesForUser(userId: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFavorites(favorites: List<VeggieUserFavoriteEntity>)
+
+    @Transaction
+    suspend fun replaceFavoritesForUser(userId: String, favorites: List<VeggieUserFavoriteEntity>) {
+        deleteFavoritesForUser(userId)
+        if (favorites.isNotEmpty()) {
+            insertFavorites(favorites)
+        }
+    }
+
+    @Query("DELETE FROM veggie_user_favorites WHERE veggieProductId = :productId")
+    suspend fun deleteFavoritesForProduct(productId: String)
+
+    @Query("DELETE FROM veggie_user_favorites")
+    suspend fun deleteAllFavorites()
 }

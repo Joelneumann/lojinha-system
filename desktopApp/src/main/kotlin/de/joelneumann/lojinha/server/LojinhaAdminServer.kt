@@ -23,6 +23,7 @@ import de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl
 import de.joelneumann.lojinha.data.service.VeggieImageService
 import de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
+import de.joelneumann.lojinha.ui.utils.PdfFilenames
 import de.joelneumann.lojinha.util.AppLogger
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -365,8 +366,7 @@ class LojinhaAdminServer(
                                 toTimestamp = toTimestamp,
                                 language = language
                             )
-                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
-                            val filename = "Extrato_${cleanUserName}.pdf"
+                            val filename = PdfFilenames.transactionStatementFilename(user.name, language)
                             call.response.header(
                                 HttpHeaders.ContentDisposition,
                                 ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
@@ -592,6 +592,27 @@ class LojinhaAdminServer(
                             val repo = resolveVeggieRepo() ?: return@get call.respond(emptyList<VeggieProduct>())
                             call.respond(repo.getAllVeggieProducts())
                         }
+                        get("/order-form-pdf") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = resolveVeggieRepo() ?: return@get call.respond(HttpStatusCode.ServiceUnavailable)
+                            val langStr = call.request.queryParameters["lang"] ?: "BR"
+                            val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+                            try {
+                                val products = repo.getAllVeggieProducts()
+                                val unitTypes = repo.getAllUnitTypes().associateBy { it.id }
+                                val pdfBytes = VeggieOrderPdfGenerator.generateCustomerOrderFormBytes(products, unitTypes, language)
+                                val dateStamp = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                                val filename = PdfFilenames.customerOrderFormFilename(dateStamp, language)
+                                call.response.header(
+                                    HttpHeaders.ContentDisposition,
+                                    ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
+                                )
+                                call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                            } catch (e: Exception) {
+                                AppLogger.error("LojinhaAdminServer", "Failed to generate customer order form PDF: ${e.message}", e)
+                                call.respond(HttpStatusCode.InternalServerError, "Failed to generate customer order form PDF")
+                            }
+                        }
                         post("/products") {
                             if (!call.checkAdminAuth(settingsRepository)) return@post
                             val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
@@ -630,9 +651,20 @@ class LojinhaAdminServer(
                                 return@post
                             }
                             val existing = repo.getVeggieProductById(id)
+                            val productName = call.request.queryParameters["name"] ?: existing?.name
+                            val otherProductKeys = repo.getAllVeggieProducts()
+                                .filter { it.id != id }
+                                .mapNotNull { it.imageFileName }
                             val fileName = try {
-                                veggieImageService.saveProductImage(id, bytes, existing?.imageFileName)
+                                veggieImageService.saveProductImage(
+                                    productId = id,
+                                    productName = productName,
+                                    rawImageBytes = bytes,
+                                    previousImageFileName = existing?.imageFileName,
+                                    existingImageKeys = otherProductKeys
+                                )
                             } catch (e: Exception) {
+                                AppLogger.error("LojinhaAdminServer", "Failed to save product image for $id: ${e.message}", e)
                                 call.respond(HttpStatusCode.BadRequest, "Invalid or unsupported image data")
                                 return@post
                             }
@@ -802,7 +834,7 @@ class LojinhaAdminServer(
                                 val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(round, entries, language)
                                 repo.markBuyerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
-                                val filename = "Buyer_Shopping_List_W${isoWeek.weekOfYear.toString().padStart(2, '0')}_${isoWeek.isoYear}.pdf"
+                                val filename = PdfFilenames.buyerShoppingListFilename(isoWeek.weekOfYear, isoWeek.isoYear, language)
                                 call.response.header(
                                     HttpHeaders.ContentDisposition,
                                     ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
@@ -832,7 +864,7 @@ class LojinhaAdminServer(
                                 val pdfBytes = VeggieOrderPdfGenerator.generateWorkerSortingMatrixBytes(round, entries, language)
                                 repo.markWorkerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
-                                val filename = "Worker_Sorting_Matrix_W${isoWeek.weekOfYear.toString().padStart(2, '0')}_${isoWeek.isoYear}.pdf"
+                                val filename = PdfFilenames.workerSortingMatrixFilename(isoWeek.weekOfYear, isoWeek.isoYear, language)
                                 call.response.header(
                                     HttpHeaders.ContentDisposition,
                                     ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
@@ -1056,8 +1088,7 @@ class LojinhaAdminServer(
                                 toTimestamp = toTimestamp,
                                 language = language
                             )
-                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
-                            val filename = "Extrato_${cleanUserName}.pdf"
+                            val filename = PdfFilenames.transactionStatementFilename(user.name, language)
                             call.response.header(
                                 HttpHeaders.ContentDisposition,
                                 ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
@@ -1103,27 +1134,48 @@ class LojinhaAdminServer(
                             return@get
                         }
                         val unitTypes = repo.getAllUnitTypes().filter { it.isActive }
-                        val products = repo.getAllVeggieProducts().filter { it.isActive && !it.isDeleted }
                         val activeRound = repo.getActiveOrLatestRound()
                         val currentEntries = if (activeRound != null) {
                             repo.getEntriesForUserInRound(activeRound.id, userId)
                         } else {
                             emptyList()
                         }
+                        val orderedProductIds = currentEntries
+                            .filter { it.orderedQuantityScaled > 0L }
+                            .map { it.veggieProductId }
+                            .toSet()
+                        val products = repo.getAllVeggieProducts().filter {
+                            !it.isDeleted && (it.isActive || it.id in orderedProductIds)
+                        }
                         val previousQuantities = if (activeRound != null) {
                             repo.getPreviousRoundQuantitiesForUser(activeRound.id, userId)
                         } else {
                             emptyMap()
                         }
+                        val favoriteProductIds = repo.getFavoriteProductIdsForUser(userId)
                         call.respond(
                             CustomerVeggieStateResponse(
                                 unitTypes = unitTypes,
                                 products = products,
                                 activeRound = activeRound,
                                 currentEntries = currentEntries,
-                                previousRoundQuantities = previousQuantities
+                                previousRoundQuantities = previousQuantities,
+                                favoriteProductIds = favoriteProductIds
                             )
                         )
+                    }
+
+                    post("/veggie/favorites") {
+                        val userId = call.requireCustomerUserId() ?: return@post
+                        val user = userRepository.getUserById(userId)
+                        if (user == null || !user.isActive || user.isDeleted) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@post
+                        }
+                        val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                        val req = call.receive<UpdateCustomerVeggieFavoritesRequest>()
+                        repo.setFavoriteProductIdsForUser(userId, req.productIds)
+                        call.respond(HttpStatusCode.OK)
                     }
 
                     post("/veggie/order") {

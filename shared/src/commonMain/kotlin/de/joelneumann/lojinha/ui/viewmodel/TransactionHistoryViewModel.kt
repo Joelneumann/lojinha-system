@@ -39,6 +39,15 @@ class TransactionHistoryViewModel(
     private val _showSettingsModal = MutableStateFlow(false)
     val showSettingsModal: StateFlow<Boolean> = _showSettingsModal.asStateFlow()
 
+    private val _showExportPdfModal = MutableStateFlow(false)
+    val showExportPdfModal: StateFlow<Boolean> = _showExportPdfModal.asStateFlow()
+
+    private val _exportPdfTransactions = MutableStateFlow<List<Transaction>>(emptyList())
+    val exportPdfTransactions: StateFlow<List<Transaction>> = _exportPdfTransactions.asStateFlow()
+
+    private val _isExportingPdf = MutableStateFlow(false)
+    val isExportingPdf: StateFlow<Boolean> = _isExportingPdf.asStateFlow()
+
     private val _pinInput = MutableStateFlow("")
     val pinInput: StateFlow<String> = _pinInput.asStateFlow()
 
@@ -157,6 +166,28 @@ class TransactionHistoryViewModel(
 
     fun closeSettingsModal() {
         _showSettingsModal.value = false
+    }
+
+    fun openExportPdfModal(userId: String) {
+        _showExportPdfModal.value = true
+        activeScope.launch {
+            try {
+                _exportPdfTransactions.value = transactionRepository.getTransactionsByUserId(userId)
+            } catch (e: Exception) {
+                AppLogger.warn("TransactionHistoryViewModel", "Failed to load transactions for PDF: ${e.message}", e)
+                _exportPdfTransactions.value = emptyList()
+            }
+        }
+    }
+
+    fun closeExportPdfModal() {
+        _showExportPdfModal.value = false
+        _exportPdfTransactions.value = emptyList()
+        _isExportingPdf.value = false
+    }
+
+    fun setIsExportingPdf(loading: Boolean) {
+        _isExportingPdf.value = loading
     }
 
     fun updatePinInput(pin: String) {

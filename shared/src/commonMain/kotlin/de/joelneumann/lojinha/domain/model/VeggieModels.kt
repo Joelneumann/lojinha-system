@@ -28,6 +28,7 @@ data class VeggieProduct(
     val description: String? = null,
     val estimatedPriceCents: Long? = null,
     val unitTypeId: String,
+    val deliveryUnitTypeId: String? = null,
     val imageFileName: String? = null,
     val isActive: Boolean = true,
     val isDeleted: Boolean = false,
@@ -71,6 +72,8 @@ data class VeggieOrderEntry(
     val veggieNameSnapshot: String,
     val unitNameSnapshot: String,
     val allowDecimalsSnapshot: Boolean = false,
+    val deliveryUnitNameSnapshot: String? = null,
+    val deliveryAllowDecimalsSnapshot: Boolean? = null,
     val orderedQuantityScaled: Long,
     val actualQuantityScaled: Long? = null,
     val effectiveUnitPriceCents: Long? = null,
@@ -79,6 +82,12 @@ data class VeggieOrderEntry(
 ) {
     val deliveredQuantityScaled: Long
         get() = actualQuantityScaled ?: orderedQuantityScaled
+
+    val effectiveDeliveryUnitName: String
+        get() = deliveryUnitNameSnapshot ?: unitNameSnapshot
+
+    val effectiveAllowDecimals: Boolean
+        get() = deliveryAllowDecimalsSnapshot ?: allowDecimalsSnapshot
 }
 
 object VeggieQuantityScaling {

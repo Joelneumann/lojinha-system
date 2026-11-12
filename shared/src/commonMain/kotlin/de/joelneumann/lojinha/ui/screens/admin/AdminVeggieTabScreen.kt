@@ -27,6 +27,7 @@ import de.joelneumann.lojinha.ui.components.admin.veggie.ExportedBadgePill
 import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.general.PaginationBar
+import de.joelneumann.lojinha.ui.components.general.PdfExportConfirmDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
@@ -35,12 +36,21 @@ import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieSubTab
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel
 
+private data class PendingPdfExport(val roundId: String, val isBuyer: Boolean)
+
+private sealed interface VeggiePdfExportTarget {
+    data class Buyer(val roundId: String) : VeggiePdfExportTarget
+    data class Worker(val roundId: String) : VeggiePdfExportTarget
+    data object OrderForm : VeggiePdfExportTarget
+}
+
 @Composable
 fun AdminVeggieTabScreen(
     viewModel: AdminVeggieViewModel,
     onUnsavedStateChanged: (Boolean) -> Unit = {},
     onExportBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onExportWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
+    onExportOrderFormPdf: ((language: Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null
 ) {
@@ -79,6 +89,8 @@ fun AdminVeggieTabScreen(
     var pendingSubTab by remember { mutableStateOf<AdminVeggieSubTab?>(null) }
     var pendingBackFromHistoryEdit by remember { mutableStateOf(false) }
     var showDiscardConfirmDialog by remember { mutableStateOf(false) }
+    var pendingPdfExport by remember { mutableStateOf<PendingPdfExport?>(null) }
+    var pendingPdfConfirmation by remember { mutableStateOf<VeggiePdfExportTarget?>(null) }
 
     LaunchedEffect(hasUnsavedSettlementChanges) {
         onUnsavedStateChanged(hasUnsavedSettlementChanges)
@@ -136,7 +148,7 @@ fun AdminVeggieTabScreen(
                     }
                 )
                 SubTabButton(
-                    label = "${strings.veggieSubTabHistory} ($historyTotalCount)",
+                    label = strings.veggieSubTabHistory,
                     icon = Icons.Default.History,
                     selected = currentSubTab == AdminVeggieSubTab.HISTORY,
                     onClick = {
@@ -150,6 +162,125 @@ fun AdminVeggieTabScreen(
                         }
                     }
                 )
+            }
+
+            // Top action buttons based on selected sub-tab
+            when (currentSubTab) {
+                AdminVeggieSubTab.ACTIVE_ROUND -> {
+                    val currentRound = activeRound
+                    if (currentRound != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (onExportBuyerPdf != null) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (hasUnsavedSettlementChanges) {
+                                            pendingPdfExport = PendingPdfExport(currentRound.id, isBuyer = true)
+                                        } else {
+                                            pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(currentRound.id)
+                                        }
+                                    },
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.exportBuyerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                                    if (currentRound.buyerPdfExportedAt != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        ExportedBadgePill()
+                                    }
+                                }
+                            }
+                            if (onExportWorkerPdf != null) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (hasUnsavedSettlementChanges) {
+                                            pendingPdfExport = PendingPdfExport(currentRound.id, isBuyer = false)
+                                        } else {
+                                            pendingPdfConfirmation = VeggiePdfExportTarget.Worker(currentRound.id)
+                                        }
+                                    },
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.GridOn, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.exportWorkerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                                    if (currentRound.workerPdfExportedAt != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        ExportedBadgePill()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                AdminVeggieSubTab.CATALOG -> {
+                    if (onExportOrderFormPdf != null) {
+                        OutlinedButton(
+                            onClick = { pendingPdfConfirmation = VeggiePdfExportTarget.OrderForm },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(strings.exportOrderFormPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                        }
+                    }
+                }
+                AdminVeggieSubTab.HISTORY -> {
+                    val pastRound = editingPastRound
+                    if (pastRound != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (onExportBuyerPdf != null) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (hasUnsavedSettlementChanges) {
+                                            pendingPdfExport = PendingPdfExport(pastRound.id, isBuyer = true)
+                                        } else {
+                                            pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(pastRound.id)
+                                        }
+                                    },
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.exportBuyerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                                    if (pastRound.buyerPdfExportedAt != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        ExportedBadgePill()
+                                    }
+                                }
+                            }
+                            if (onExportWorkerPdf != null) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (hasUnsavedSettlementChanges) {
+                                            pendingPdfExport = PendingPdfExport(pastRound.id, isBuyer = false)
+                                        } else {
+                                            pendingPdfConfirmation = VeggiePdfExportTarget.Worker(pastRound.id)
+                                        }
+                                    },
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.GridOn, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(strings.exportWorkerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                                    if (pastRound.workerPdfExportedAt != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        ExportedBadgePill()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -297,6 +428,7 @@ fun AdminVeggieTabScreen(
                         onExportWorkerPdf = onExportWorkerPdf,
                         hasUnsavedChanges = hasUnsavedSettlementChanges,
                         onResetChanges = viewModel::discardDraft,
+                        unitTypes = unitTypes,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -313,6 +445,16 @@ fun AdminVeggieTabScreen(
                     onDeleteProduct = viewModel::deleteVeggieProduct,
                     onSaveUnitType = viewModel::saveUnitType,
                     onDeleteUnitType = viewModel::deleteUnitType,
+                    openRoundOrderCountForProduct = { productId ->
+                        val openRound = activeRound?.takeIf { it.status == VeggieRoundStatus.OPEN }
+                        if (openRound != null && selectedRound?.id == openRound.id) {
+                            selectedRoundEntries.count {
+                                it.veggieProductId == productId && it.orderedQuantityScaled > 0L
+                            }
+                        } else {
+                            0
+                        }
+                    },
                     isSavingProduct = isSaving,
                     modifier = Modifier.weight(1f)
                 )
@@ -372,13 +514,9 @@ fun AdminVeggieTabScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    AdminStatusBadge(
-                                        text = strings.roundStatusSettled,
-                                        type = AdminBadgeType.NAVY
-                                    )
                                     if (hasUnsavedSettlementChanges) {
                                         AdminStatusBadge(
-                                            text = "● ${strings.unsavedChangesBadge}",
+                                            text = strings.unsavedChangesBadge,
                                             type = AdminBadgeType.WARNING
                                         )
                                     }
@@ -416,6 +554,7 @@ fun AdminVeggieTabScreen(
                             onExportWorkerPdf = onExportWorkerPdf,
                             hasUnsavedChanges = hasUnsavedSettlementChanges,
                             onResetChanges = viewModel::discardDraft,
+                            unitTypes = unitTypes,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -451,8 +590,8 @@ fun AdminVeggieTabScreen(
                                         isSelected = false,
                                         transporterName = users.find { it.id == round.transporterUserId }?.name,
                                         onOpenInMatrix = { viewModel.openPastRoundForEditing(round.id) },
-                                        onExportBuyerPdf = onExportBuyerPdf?.let { cb -> { cb(round.id, currentLanguage) } },
-                                        onExportWorkerPdf = onExportWorkerPdf?.let { cb -> { cb(round.id, currentLanguage) } }
+                                        onExportBuyerPdf = onExportBuyerPdf?.let { { pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(round.id) } },
+                                        onExportWorkerPdf = onExportWorkerPdf?.let { { pendingPdfConfirmation = VeggiePdfExportTarget.Worker(round.id) } }
                                     )
                                 }
                             }
@@ -512,6 +651,51 @@ fun AdminVeggieTabScreen(
                 pendingBackFromHistoryEdit = false
                 pendingSubTab = null
             }
+        )
+    }
+
+    if (pendingPdfExport != null) {
+        val target = pendingPdfExport!!
+        ConfirmationDialog(
+            title = strings.unsavedExportTitle,
+            message = strings.unsavedExportMsg,
+            confirmText = strings.saveAndExportBtn,
+            cancelText = strings.cancel,
+            confirmButtonColor = AccentNavy,
+            onConfirm = {
+                pendingPdfExport = null
+                viewModel.saveDraftSettlement {
+                    if (target.isBuyer) {
+                        pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(target.roundId)
+                    } else {
+                        pendingPdfConfirmation = VeggiePdfExportTarget.Worker(target.roundId)
+                    }
+                }
+            },
+            onDismiss = {
+                pendingPdfExport = null
+            }
+        )
+    }
+
+    pendingPdfConfirmation?.let { target ->
+        val question = when (target) {
+            is VeggiePdfExportTarget.Buyer -> strings.exportBuyerPdfQuestion
+            is VeggiePdfExportTarget.Worker -> strings.exportWorkerPdfQuestion
+            is VeggiePdfExportTarget.OrderForm -> strings.exportOrderFormPdfQuestion
+        }
+        PdfExportConfirmDialog(
+            question = question,
+            initialLanguage = currentLanguage,
+            onConfirm = { lang ->
+                pendingPdfConfirmation = null
+                when (target) {
+                    is VeggiePdfExportTarget.Buyer -> onExportBuyerPdf?.invoke(target.roundId, lang)
+                    is VeggiePdfExportTarget.Worker -> onExportWorkerPdf?.invoke(target.roundId, lang)
+                    is VeggiePdfExportTarget.OrderForm -> onExportOrderFormPdf?.invoke(lang)
+                }
+            },
+            onDismiss = { pendingPdfConfirmation = null }
         )
     }
 
@@ -653,18 +837,6 @@ private fun RoundHistoryCard(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
-                    )
-                    AdminStatusBadge(
-                        text = when (round.status) {
-                            VeggieRoundStatus.OPEN -> strings.roundStatusOpen
-                            VeggieRoundStatus.CLOSED -> strings.roundStatusClosed
-                            VeggieRoundStatus.SETTLED -> strings.roundStatusSettled
-                        },
-                        type = when (round.status) {
-                            VeggieRoundStatus.OPEN -> AdminBadgeType.SUCCESS
-                            VeggieRoundStatus.CLOSED -> AdminBadgeType.WARNING
-                            VeggieRoundStatus.SETTLED -> AdminBadgeType.NAVY
-                        }
                     )
                 }
 

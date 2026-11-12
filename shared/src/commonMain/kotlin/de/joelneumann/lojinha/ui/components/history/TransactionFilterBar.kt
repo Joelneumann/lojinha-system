@@ -5,6 +5,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,7 +30,8 @@ fun TransactionFilterBar(
     onTypeFilterSelect: (TransactionType?) -> Unit,
     modifier: Modifier = Modifier,
     onEscape: () -> Unit = {},
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    onExportPdf: (() -> Unit)? = null
 ) {
     val strings = I18n.current
 
@@ -88,6 +91,38 @@ fun TransactionFilterBar(
                             maxLines = 1
                         )
                     }
+                }
+            }
+        }
+
+        if (onExportPdf != null) {
+            Surface(
+                onClick = onExportPdf,
+                shape = RoundedCornerShape(12.dp),
+                color = SurfaceWhite,
+                contentColor = PrimaryNavy,
+                border = BorderStroke(1.dp, DividerBorder),
+                shadowElevation = 1.dp,
+                modifier = Modifier.fillMaxHeight().pointerHoverIcon(PointerIcon.Hand)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxHeight().padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PictureAsPdf,
+                        contentDescription = null,
+                        tint = PrimaryNavy,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = strings.exportPdf,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy,
+                        maxLines = 1
+                    )
                 }
             }
         }

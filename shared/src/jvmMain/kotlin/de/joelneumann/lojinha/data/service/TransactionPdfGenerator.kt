@@ -285,6 +285,7 @@ object TransactionPdfGenerator {
                         setPaddingLeft(5f)
                         setPaddingRight(5f)
                         horizontalAlignment = align
+                        verticalAlignment = Element.ALIGN_TOP
                     }
                 }
 
@@ -310,7 +311,7 @@ object TransactionPdfGenerator {
 
                 // Col 3: Description / Items
                 val desc = buildDescription(tx, strings, language)
-                ledgerTable.addCell(createCell(Phrase(desc, FONT_BODY)))
+                ledgerTable.addCell(createCell(Phrase(12f, desc, FONT_BODY)))
 
                 // Col 4: Amount
                 val amountStr = when {
@@ -352,20 +353,20 @@ object TransactionPdfGenerator {
         document.close()
     }
 
-    private fun buildDescription(
+    internal fun buildDescription(
         tx: Transaction,
         strings: de.joelneumann.lojinha.ui.i18n.AppStrings,
         language: Language
     ): String {
         return when {
             tx.items.isNotEmpty() -> {
-                val itemLines = tx.items.joinToString(", ") { item ->
+                val itemLines = tx.items.joinToString("\n") { item ->
                     val qtyStr = Formatting.formatQuantity(item.quantity, item.unitType, strings)
                     "$qtyStr ${item.productName} (${Formatting.formatBrl(item.totalLinePrice, language)})"
                 }
                 if (!tx.note.isNullOrBlank()) {
                     val decoded = SystemNoteHelper.decodeNote(tx.note, strings) ?: tx.note
-                    "$itemLines - $decoded"
+                    "$itemLines\n$decoded"
                 } else {
                     itemLines
                 }

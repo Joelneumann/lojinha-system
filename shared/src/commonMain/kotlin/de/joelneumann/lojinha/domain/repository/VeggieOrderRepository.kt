@@ -26,6 +26,7 @@ interface VeggieOrderRepository {
     suspend fun getVeggieProductById(id: String): VeggieProduct?
     suspend fun saveVeggieProduct(product: VeggieProduct)
     suspend fun deactivateVeggieProduct(id: String)
+    suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean = false
     suspend fun hardDeleteVeggieProduct(id: String)
 
     // 3. Order Rounds
@@ -75,4 +76,8 @@ interface VeggieOrderRepository {
         actualQuantitiesByEntryId: Map<String, Long>,
         settledAt: Long
     ): VeggieRoundSettlementResult?
+
+    // 6. Customer Favorites
+    suspend fun getFavoriteProductIdsForUser(userId: String): Set<String> = emptySet()
+    suspend fun setFavoriteProductIdsForUser(userId: String, productIds: Set<String>) {}
 }

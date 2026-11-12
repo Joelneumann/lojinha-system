@@ -19,13 +19,38 @@ import kotlinx.serialization.json.Json
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
-@JsFun("(key, value) => window.sessionStorage.setItem(key, value)")
+@JsFun("""
+(key, value) => {
+    try {
+        window.sessionStorage.setItem(key, value);
+    } catch (e) {
+        console.warn('Failed to set sessionStorage item:', e);
+    }
+}
+""")
 private external fun jsSetSessionItem(key: String, value: String)
 
-@JsFun("(key) => window.sessionStorage.getItem(key)")
+@JsFun("""
+(key) => {
+    try {
+        return window.sessionStorage.getItem(key);
+    } catch (e) {
+        console.warn('Failed to get sessionStorage item:', e);
+        return null;
+    }
+}
+""")
 private external fun jsGetSessionItem(key: String): String?
 
-@JsFun("(key) => window.sessionStorage.removeItem(key)")
+@JsFun("""
+(key) => {
+    try {
+        window.sessionStorage.removeItem(key);
+    } catch (e) {
+        console.warn('Failed to remove sessionStorage item:', e);
+    }
+}
+""")
 private external fun jsRemoveSessionItem(key: String)
 
 @JsFun("""
@@ -150,7 +175,7 @@ class AdminNetworkClient(val baseUrl: String = "") {
     }
 
     suspend fun tryRestoreSession(): Boolean {
-        val storedToken = try { jsGetSessionItem("lojinha_admin_token") } catch (e: Exception) { null }
+        val storedToken = try { jsGetSessionItem("lojinha_admin_token") } catch (e: Throwable) { null }
         if (storedToken.isNullOrBlank()) return false
         authToken = storedToken
         return try {
@@ -167,7 +192,8 @@ class AdminNetworkClient(val baseUrl: String = "") {
                 authToken = null
                 false
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
             // Transient network failure - keep stored token
             authToken = null
             false
@@ -896,11 +922,14 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
         }
     }
 
-    suspend fun uploadProductImage(productId: String, imageBytes: ByteArray): String? {
+    suspend fun uploadProductImage(productId: String, productName: String?, imageBytes: ByteArray): String? {
         return try {
             val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/products/$productId/image")) {
                 contentType(ContentType.Application.OctetStream)
                 client.run { appendAdminAuth() }
+                if (!productName.isNullOrBlank()) {
+                    parameter("name", productName)
+                }
                 setBody(imageBytes)
             }
             if (response.status.isSuccess()) {
@@ -914,6 +943,9 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
             null
         }
     }
+
+    suspend fun uploadProductImage(productId: String, imageBytes: ByteArray): String? =
+        uploadProductImage(productId, null, imageBytes)
 
     suspend fun deleteProductImage(productId: String): Boolean {
         return try {
@@ -1272,7 +1304,7 @@ class CustomerNetworkClient(val baseUrl: String = "") {
     }
 
     suspend fun tryRestoreCustomerSession(): User? {
-        val storedToken = try { jsGetSessionItem("lojinha_customer_token") } catch (_: Exception) { null }
+        val storedToken = try { jsGetSessionItem("lojinha_customer_token") } catch (_: Throwable) { null }
         if (storedToken.isNullOrBlank()) return null
         authToken = storedToken
         return try {
@@ -1290,7 +1322,8 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                 authToken = null
                 null
             }
-        } catch (_: Exception) {
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
             authToken = null
             null
         }
@@ -1368,6 +1401,20 @@ class CustomerNetworkClient(val baseUrl: String = "") {
             response.status.isSuccess()
         } catch (e: Exception) {
             AppLogger.error("CustomerNetworkClient", "saveCustomerOrder failed: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun saveVeggieFavorites(productIds: Set<String>): Boolean {
+        return try {
+            val response = httpClient.post(resolveUrl("/api/customer/veggie/favorites")) {
+                contentType(ContentType.Application.Json)
+                appendCustomerAuth()
+                setBody(UpdateCustomerVeggieFavoritesRequest(productIds))
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("CustomerNetworkClient", "saveVeggieFavorites failed: ${e.message}", e)
             false
         }
     }

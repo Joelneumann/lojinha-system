@@ -86,7 +86,25 @@ class RoomVeggieOrderRepositoryImpl(
         onDataChanged?.invoke()
     }
 
+    override suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val round = roundEntity.toDomain()
+        if (round.status != VeggieRoundStatus.OPEN) return@withLock false
+
+        veggieOrderDao.deleteEntriesForProductInRound(roundId, productId)
+        veggieOrderDao.insertOrUpdateRound(
+            roundEntity.copy(
+                buyerPdfExportedAt = null,
+                workerPdfExportedAt = null,
+                updatedAt = currentTimeMillis()
+            )
+        )
+        onDataChanged?.invoke()
+        true
+    }
+
     override suspend fun hardDeleteVeggieProduct(id: String) {
+        veggieOrderDao.deleteFavoritesForProduct(id)
         val entryCount = veggieOrderDao.getEntryCountForProduct(id)
         if (entryCount == 0) {
             veggieOrderDao.hardDeleteVeggieProduct(id)
@@ -279,12 +297,19 @@ class RoomVeggieOrderRepositoryImpl(
                 continue
             }
             val unit = product?.let { allUnits[it.unitTypeId] }
+            val deliveryUnit = product?.deliveryUnitTypeId?.let { allUnits[it] }
             val allowDecimals = unit?.allowDecimals ?: existing?.allowDecimalsSnapshot ?: false
             // Round to nearest whole unit if decimals are disallowed
-            val normalizedQty = if (allowDecimals) {
+            val roundedQty = if (allowDecimals) {
                 rawQty
             } else {
                 (rawQty / VEGGIE_QTY_SCALE) * VEGGIE_QTY_SCALE
+            }
+            val isProductInactive = product == null || !product.isActive || product.isDeleted
+            val normalizedQty = if (existing != null && isProductInactive) {
+                roundedQty.coerceAtMost(existing.orderedQuantityScaled)
+            } else {
+                roundedQty
             }
             if (normalizedQty <= 0L) {
                 if (existing != null) entryIdsToDelete.add(existing.id)
@@ -300,6 +325,8 @@ class RoomVeggieOrderRepositoryImpl(
                 veggieNameSnapshot = product?.name ?: existing?.veggieNameSnapshot ?: productId,
                 unitNameSnapshot = unit?.name ?: existing?.unitNameSnapshot ?: "",
                 allowDecimalsSnapshot = allowDecimals,
+                deliveryUnitNameSnapshot = deliveryUnit?.name ?: existing?.deliveryUnitNameSnapshot,
+                deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals ?: existing?.deliveryAllowDecimalsSnapshot,
                 orderedQuantityScaled = normalizedQty,
                 actualQuantityScaled = existing?.actualQuantityScaled,
                 effectiveUnitPriceCents = existing?.effectiveUnitPriceCents,
@@ -310,6 +337,11 @@ class RoomVeggieOrderRepositoryImpl(
         }
 
         veggieOrderDao.replaceUserOrderEntriesForRound(entriesToUpsert, entryIdsToDelete)
+        veggieOrderDao.getRoundById(roundId)?.let { roundEntity ->
+            veggieOrderDao.insertOrUpdateRound(
+                roundEntity.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null, updatedAt = now)
+            )
+        }
         onDataChanged?.invoke()
         true
     }
@@ -401,11 +433,10 @@ class RoomVeggieOrderRepositoryImpl(
             updatedAt = now
         )
         veggieOrderDao.insertOrUpdateEntry(VeggieOrderEntryEntity.fromDomain(merged))
-        if (round.updatedAt < now) {
-            veggieOrderDao.insertOrUpdateRound(
-                VeggieOrderRoundEntity.fromDomain(round.copy(updatedAt = now))
-            )
-        }
+        val updatedRound = round.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null, updatedAt = now)
+        veggieOrderDao.insertOrUpdateRound(
+            VeggieOrderRoundEntity.fromDomain(updatedRound)
+        )
         onDataChanged?.invoke()
         true
     }
@@ -443,6 +474,8 @@ class RoomVeggieOrderRepositoryImpl(
             buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
             transportFeeCents = transportFeeCents.coerceAtLeast(0L),
             transporterUserId = transporterUserId?.takeIf { it.isNotBlank() },
+            buyerPdfExportedAt = null,
+            workerPdfExportedAt = null,
             updatedAt = now
         )
 
@@ -631,6 +664,8 @@ class RoomVeggieOrderRepositoryImpl(
             buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
             transportFeeCents = transportFeeCents.coerceAtLeast(0L),
             transporterUserId = calculationResult.transporterUserId,
+            buyerPdfExportedAt = null,
+            workerPdfExportedAt = null,
             updatedAt = now
         )
 
@@ -646,5 +681,29 @@ class RoomVeggieOrderRepositoryImpl(
 
         onDataChanged?.invoke()
         calculationResult
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. Customer Favorites
+    // -------------------------------------------------------------------------
+    override suspend fun getFavoriteProductIdsForUser(userId: String): Set<String> {
+        return veggieOrderDao.getFavoriteProductIdsForUser(userId).toSet()
+    }
+
+    override suspend fun setFavoriteProductIdsForUser(userId: String, productIds: Set<String>) {
+        val now = currentTimeMillis()
+        val entities = productIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .map { productId ->
+                VeggieUserFavoriteEntity(
+                    userId = userId,
+                    veggieProductId = productId,
+                    createdAt = now
+                )
+            }
+        veggieOrderDao.replaceFavoritesForUser(userId, entities)
+        onDataChanged?.invoke()
     }
 }

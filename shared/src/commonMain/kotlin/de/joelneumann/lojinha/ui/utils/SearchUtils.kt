@@ -1,5 +1,9 @@
 package de.joelneumann.lojinha.ui.utils
 
+import de.joelneumann.lojinha.domain.model.Product
+import de.joelneumann.lojinha.domain.model.VeggieProduct
+import de.joelneumann.lojinha.domain.model.VeggieUnitType
+
 /**
  * Normalizes a string by stripping combining diacritics and converting
  * accented / special Latin characters (e.g. Á, Â, Ã, ç, etc.) into their base ASCII counterparts.
@@ -151,5 +155,93 @@ fun List<de.joelneumann.lojinha.domain.model.Product>.filterAndRankProducts(quer
                 .thenBy(ACCENT_INSENSITIVE_COMPARATOR) { it.second.name }
         )
         .map { it.second }
+}
+
+/**
+ * Filters and ranks a list of veggie products against a search query using tiered relevance ranking,
+ * mirroring the search functionality on Lojinha products.
+ *
+ * If [query] is blank, returns the list as-is (or sorted with [secondaryComparator] if provided).
+ *
+ * Relevance tiers:
+ * Tier 0: Exact match with product name
+ * Tier 1: Product name starts with query
+ * Tier 2: A word in the product name starts with query
+ * Tier 3: Multi-token query where all tokens match prefixes of words in product name or unit name
+ * Tier 4: Multi-token query where all tokens are contained in product name, description, or unit name
+ * Tier 5: Substring match inside the product name
+ * Tier 6: Description contains query, or unit name contains query
+ *
+ * Within each tier, products are sorted by [secondaryComparator] or alphabetically by name.
+ */
+fun List<VeggieProduct>.filterAndRankVeggieProducts(
+    query: String,
+    unitTypesById: Map<String, VeggieUnitType>? = null,
+    secondaryComparator: Comparator<VeggieProduct>? = null
+): List<VeggieProduct> {
+    val trimmed = query.trim()
+    if (trimmed.isEmpty()) {
+        return if (secondaryComparator != null) sortedWith(secondaryComparator) else this
+    }
+
+    val normQuery = trimmed.removeAccents().lowercase()
+    val queryTokens = normQuery.split("\\s+".toRegex()).filter { it.isNotEmpty() }
+
+    val rankedList = mutableListOf<Pair<Int, VeggieProduct>>()
+
+    for (product in this) {
+        val normName = product.name.removeAccents().lowercase()
+        val nameWords = normName.split("[\\s\\-_/(),.:;+]+".toRegex()).filter { it.isNotEmpty() }
+        val normDesc = product.description?.trim()?.removeAccents()?.lowercase()
+        val unitName = unitTypesById?.get(product.unitTypeId)?.name?.trim()?.removeAccents()?.lowercase()
+        val deliveryUnitName = product.deliveryUnitTypeId?.let { unitTypesById?.get(it)?.name }?.trim()?.removeAccents()?.lowercase()
+
+        val tier: Int? = when {
+            // Tier 0: Exact name match
+            normName == normQuery -> 0
+
+            // Tier 1: Product name starts with query
+            normName.startsWith(normQuery) -> 1
+
+            // Tier 2: Any word in product name starts with query
+            nameWords.any { it.startsWith(normQuery) } -> 2
+
+            // Tier 3: Multi-token query where all tokens match prefixes of words in product name or unit name
+            queryTokens.size > 1 && queryTokens.all { token ->
+                nameWords.any { word -> word.startsWith(token) } || token == unitName || token == deliveryUnitName
+            } -> 3
+
+            // Tier 4: Multi-token query where all tokens are found in product name, description, or unit name
+            queryTokens.size > 1 && queryTokens.all { token ->
+                normName.contains(token) ||
+                        (normDesc != null && normDesc.contains(token)) ||
+                        (unitName != null && unitName.contains(token)) ||
+                        (deliveryUnitName != null && deliveryUnitName.contains(token))
+            } -> 4
+
+            // Tier 5: Substring match inside product name
+            normName.contains(normQuery) -> 5
+
+            // Tier 6: Description contains query, or unit name contains query
+            (normDesc != null && normDesc.contains(normQuery)) ||
+                    (unitName != null && unitName.contains(normQuery)) ||
+                    (deliveryUnitName != null && deliveryUnitName.contains(normQuery)) -> 6
+
+            else -> null
+        }
+
+        if (tier != null) {
+            rankedList.add(tier to product)
+        }
+    }
+
+    val itemComparator = secondaryComparator ?: compareBy(ACCENT_INSENSITIVE_COMPARATOR) { it.name }
+    val tierComparator = Comparator<Pair<Int, VeggieProduct>> { a, b ->
+        val cmp = a.first.compareTo(b.first)
+        if (cmp != 0) cmp
+        else itemComparator.compare(a.second, b.second)
+    }
+
+    return rankedList.sortedWith(tierComparator).map { it.second }
 }
 

@@ -712,6 +712,10 @@ interface AppStrings {
     val errInvalidDateRange: String
     val errNoTransactionsToExport: String
     val errPdfExportFailed: String
+    val exportBuyerPdfQuestion: String
+    val exportWorkerPdfQuestion: String
+    val exportOrderFormPdfQuestion: String
+    val exportStatementPdfQuestion: String
 
     // Admin Notes & Suggestions
     val tabNotes: String
@@ -763,6 +767,7 @@ interface AppStrings {
     val veggieStandardBuyerFeeLabel: String
     val veggieStandardTransportFeeLabel: String
     val importVeggieProductsCsvBtn: String
+    val openVeggieImagesFolderBtn: String
     val selectVeggieProductsCsvFile: String
     val csvTypeVeggieProducts: String
     val weekdayMonday: String
@@ -791,6 +796,9 @@ interface AppStrings {
     val manageUnitTypesBtn: String
     val veggieUnitTypesDialogTitle: String
     val addUnitTypeBtn: String
+    val addUnitTypeSectionTitle: String
+    fun editUnitTypeSectionTitle(name: String): String
+    val editingBadge: String
     val unitTypeNameLabel: String
     val unitTypeNamePlaceholder: String
     val allUnitsFilter: String
@@ -800,6 +808,8 @@ interface AppStrings {
     val allowDecimalsLabel: String
     val unitIntegerOnly: String
     val unitAllowDecimals: String
+    val settlementUnitLabel: String
+    val sameAsCustomerUnitOption: String
     val veggieProductPhotoLabel: String
     val uploadPhotoBtn: String
     val removePhotoBtn: String
@@ -814,9 +824,12 @@ interface AppStrings {
     val openNewRoundBtn: String
     fun nextAutoRoundScheduled(day: String, date: String, time: String): String
     val closeRoundBtn: String
+    val confirmCloseRoundTitle: String
+    val confirmCloseRoundMsg: String
     val reopenRoundBtn: String
     val exportBuyerPdfBtn: String
     val exportWorkerPdfBtn: String
+    val exportOrderFormPdfBtn: String
     val noActiveRoundTitle: String
     val noActiveRoundDesc: String
     val settlementMatrixTitle: String
@@ -828,6 +841,12 @@ interface AppStrings {
     val saveChangesBtn: String
     val resetChangesBtn: String
     val unsavedChangesBadge: String
+    val unsavedExportTitle: String
+    val unsavedExportMsg: String
+    val saveAndExportBtn: String
+    val unsavedSettleTitle: String
+    val unsavedSettleMsg: String
+    val saveAndSettleBtn: String
     val confirmResetChangesTitle: String
     val confirmResetChangesMsg: String
     val deleteRoundBtn: String
@@ -892,6 +911,15 @@ interface AppStrings {
     val veggieFilterAll: String
     val veggieFilterInOrder: String
     val veggieClearItemTooltip: String
+    val addOrderModeOverwrite: String
+    val addOrderModeAddToExisting: String
+    fun addOrderCurrentQuantityLabel(quantity: String, unit: String): String
+    fun addOrderNewTotalLabel(quantity: String, unit: String): String
+    val veggieProductDiscontinuedBadge: String
+    fun veggieAmountMaxExceededError(maxFormatted: String, unitName: String): String
+    fun confirmDeactivateWithOrdersMsg(productName: String, orderCount: Int): String
+    val deactivateStopNewOrdersOnly: String
+    val deactivateCancelExistingOrders: String
 }
 
 

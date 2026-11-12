@@ -48,7 +48,8 @@ class CustomerVeggieViewModelTest {
                     unitTypes = listOf(fakeUnitType),
                     products = listOf(fakeProduct),
                     currentEntries = emptyList(),
-                    previousRoundQuantities = emptyMap()
+                    previousRoundQuantities = emptyMap(),
+                    favoriteProductIds = initialFavorites
                 )
             },
             onSaveOrder = { _, _ -> true },
@@ -200,5 +201,103 @@ class CustomerVeggieViewModelTest {
 
         vm.setFilterInOrderOnly(true)
         assertTrue(vm.filterInOrderOnly.value)
+    }
+
+    @Test
+    fun testInactiveOrderedProductExposedAndIncludedInSubtotal() = runTest {
+        val fakeRound = VeggieOrderRound(
+            id = "round-1",
+            openedAt = 1731150000000L,
+            status = VeggieRoundStatus.OPEN
+        )
+        val activeProd = VeggieProduct(
+            id = "prod-active",
+            name = "Carrots",
+            unitTypeId = "unit-kg",
+            estimatedPriceCents = 500L,
+            isActive = true
+        )
+        val inactiveProd = VeggieProduct(
+            id = "prod-inactive",
+            name = "Strawberries",
+            unitTypeId = "unit-kg",
+            estimatedPriceCents = 1200L,
+            isActive = false
+        )
+        val unitKg = VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true)
+        val entryInactive = VeggieOrderEntry(
+            id = "entry-1",
+            roundId = "round-1",
+            userId = "user-1",
+            userNameSnapshot = "Alice",
+            veggieProductId = "prod-inactive",
+            veggieNameSnapshot = "Strawberries",
+            unitNameSnapshot = "kg",
+            allowDecimalsSnapshot = true,
+            orderedQuantityScaled = 2000L
+        )
+
+        val vm = CustomerVeggieViewModel(
+            onFetchVeggieState = {
+                CustomerVeggieStateResponse(
+                    activeRound = fakeRound,
+                    unitTypes = listOf(unitKg),
+                    products = listOf(activeProd, inactiveProd),
+                    currentEntries = listOf(entryInactive),
+                    previousRoundQuantities = mapOf("prod-inactive" to 1000L, "prod-active" to 1000L)
+                )
+            },
+            onSaveOrder = { _, _ -> true },
+            onFetchHistory = { emptyList() },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        // Catalog only has active product; inactiveOrderedProducts has the ordered inactive product
+        assertEquals(listOf("prod-active"), vm.products.value.map { it.id })
+        assertEquals(listOf("prod-inactive"), vm.inactiveOrderedProducts.value.map { it.id })
+
+        // Subtotal includes 2 kg * 1200 cents = 2400 cents for the inactive ordered product
+        assertEquals(2400L, vm.calculateEstimatedItemsSubtotalCents())
+
+        // Copying previous round order still excludes inactive products
+        vm.copyPreviousRoundOrder()
+        assertEquals(mapOf("prod-active" to 1000L), vm.draftQuantitiesScaled.value)
+    }
+
+    @Test
+    fun testFavoritesSyncFromServerStateAndInvokeOnSaveFavorites() = runTest {
+        var serverFavorites = setOf("prod-1")
+        val savedBatches = mutableListOf<Set<String>>()
+
+        val vm = CustomerVeggieViewModel(
+            onFetchVeggieState = {
+                CustomerVeggieStateResponse(
+                    favoriteProductIds = serverFavorites
+                )
+            },
+            onSaveOrder = { _, _ -> true },
+            onFetchHistory = { emptyList() },
+            onSaveFavorites = { ids ->
+                savedBatches.add(ids)
+                serverFavorites = ids
+                true
+            },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        assertEquals(setOf("prod-1"), vm.favoriteProductIds.value)
+
+        vm.toggleFavorite("prod-2")
+        advanceUntilIdle()
+        assertEquals(setOf("prod-1", "prod-2"), vm.favoriteProductIds.value)
+        assertEquals(listOf(setOf("prod-1", "prod-2")), savedBatches)
+
+        // Simulate server-side update from another device
+        serverFavorites = setOf("prod-3")
+        vm.loadData()
+        advanceUntilIdle()
+        assertEquals(setOf("prod-3"), vm.favoriteProductIds.value)
     }
 }

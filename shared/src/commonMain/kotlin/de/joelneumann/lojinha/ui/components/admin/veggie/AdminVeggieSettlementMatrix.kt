@@ -8,12 +8,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,23 +47,30 @@ import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.components.admin.DualUnitBadge
 import de.joelneumann.lojinha.ui.components.general.AppHorizontalScrollbar
+import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
+import de.joelneumann.lojinha.ui.components.veggie.filterVeggieAmountInput
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import de.joelneumann.lojinha.ui.viewmodel.admin.AddOrderEntryMode
+import kotlinx.coroutines.delay
 
 private val COL_PRODUCT_WIDTH = 170.dp
 private val COL_CUSTOMER_WIDTH = 80.dp
 private val COL_TOTAL_QTY_WIDTH = 90.dp
 private val COL_MARKET_PRICE_WIDTH = 115.dp
 private val COL_TOTAL_SPENT_WIDTH = 115.dp
-private val COL_EFFECTIVE_PRICE_WIDTH = 105.dp
+private val COL_EFFECTIVE_PRICE_WIDTH = 130.dp
 private val COL_DIVIDER_WIDTH = 26.dp
-private val OVERVIEW_TOTAL_WIDTH = COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH + COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH
+private val COL_SCROLLBAR_GUTTER = 14.dp
+private val OVERVIEW_TOTAL_WIDTH = COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH + COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER
 
 @Composable
 fun AdminVeggieSettlementMatrix(
@@ -85,23 +94,26 @@ fun AdminVeggieSettlementMatrix(
     onUpdateTransporterUser: (String?) -> Unit,
     onCloseRound: () -> Unit,
     onReopenRound: () -> Unit,
-    onSaveDraft: () -> Unit,
+    onSaveDraft: ((onSuccess: (() -> Unit)?) -> Unit),
     onExecuteSettlement: () -> Unit,
     onDeleteRound: (() -> Unit)? = null,
     onCompleteEmptyRound: (() -> Unit)? = null,
-    onAddAdminEntry: (user: User, product: VeggieProduct, quantityInput: String) -> Unit,
+    onAddAdminEntry: (user: User, product: VeggieProduct, quantityInput: String, mode: AddOrderEntryMode) -> Unit,
     onExportBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onExportWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     hasUnsavedChanges: Boolean = false,
     onResetChanges: (() -> Unit)? = null,
+    unitTypes: List<VeggieUnitType> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
     val currentLanguage = LanguageManager.currentLanguage
     val isoWeek = remember(round.openedAt) { IsoWeekUtils.fromEpochMillis(round.openedAt) }
 
+    var showConfirmCloseRound by remember { mutableStateOf(false) }
     var showConfirmResetChanges by remember { mutableStateOf(false) }
     var showConfirmSettle by remember { mutableStateOf(false) }
+    var showUnsavedSettleDialog by remember { mutableStateOf(false) }
     var showConfirmCompleteEmpty by remember { mutableStateOf(false) }
     var showConfirmDeleteRound by remember { mutableStateOf(false) }
     var showAddEntryDialog by remember { mutableStateOf(false) }
@@ -122,16 +134,41 @@ fun AdminVeggieSettlementMatrix(
             .sortedByAccentInsensitive { it.second }
     }
 
-    val roundProductRows = remember(entries) {
+    val roundProductRows = remember(entries, products, unitTypes) {
+        val productsById = products.associateBy { it.id }
+        val unitTypesById = unitTypes.associateBy { it.id }
         entries
             .groupBy { it.veggieProductId }
             .map { (productId, prodEntries) ->
                 val sample = prodEntries.first()
+                val currentProduct = productsById[productId]
+                val currentUnit = currentProduct?.unitTypeId?.let { unitTypesById[it] }
+                val currentDeliveryUnit = currentProduct?.deliveryUnitTypeId?.let { unitTypesById[it] }
+
+                val resolvedUnitName = currentUnit?.name?.takeIf { it.isNotBlank() }
+                    ?: sample.unitNameSnapshot.takeIf { it.isNotBlank() }
+                    ?: ""
+                val resolvedAllowDecimals = currentUnit?.allowDecimals
+                    ?: sample.allowDecimalsSnapshot
+
+                val resolvedDeliveryUnitName = currentDeliveryUnit?.name?.takeIf { it.isNotBlank() }
+                    ?: sample.deliveryUnitNameSnapshot?.takeIf { it.isNotBlank() }
+                    ?: resolvedUnitName
+                val resolvedDeliveryAllowDecimals = currentDeliveryUnit?.allowDecimals
+                    ?: sample.deliveryAllowDecimalsSnapshot
+                    ?: resolvedAllowDecimals
+
+                val resolvedProductName = currentProduct?.name?.takeIf { it.isNotBlank() }
+                    ?: sample.veggieNameSnapshot.takeIf { it.isNotBlank() }
+                    ?: productId
+
                 VeggieMatrixProductRowInfo(
                     productId = productId,
-                    productName = sample.veggieNameSnapshot,
-                    unitName = sample.unitNameSnapshot,
-                    allowDecimals = sample.allowDecimalsSnapshot,
+                    productName = resolvedProductName,
+                    unitName = resolvedUnitName,
+                    allowDecimals = resolvedAllowDecimals,
+                    deliveryUnitName = resolvedDeliveryUnitName,
+                    deliveryAllowDecimals = resolvedDeliveryAllowDecimals,
                     entriesByUserId = prodEntries.associateBy { it.userId }
                 )
             }
@@ -175,6 +212,7 @@ fun AdminVeggieSettlementMatrix(
     }
 
     val horizontalScrollState = rememberScrollState()
+    val verticalScrollState = rememberScrollState()
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -232,7 +270,7 @@ fun AdminVeggieSettlementMatrix(
                                 )
                                 if (hasUnsavedChanges) {
                                     AdminStatusBadge(
-                                        text = "● ${strings.unsavedChangesBadge}",
+                                        text = strings.unsavedChangesBadge,
                                         type = AdminBadgeType.WARNING
                                     )
                                 }
@@ -259,52 +297,8 @@ fun AdminVeggieSettlementMatrix(
                             Text(strings.addUserToList, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
 
-                        if (onExportBuyerPdf != null) {
-                            OutlinedButton(
-                                onClick = { onExportBuyerPdf(round.id, currentLanguage) },
-                                enabled = !isSaving,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(strings.exportBuyerPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                                if (round.buyerPdfExportedAt != null) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    ExportedBadgePill()
-                                }
-                            }
-                        }
-
-                        if (onExportWorkerPdf != null) {
-                            OutlinedButton(
-                                onClick = { onExportWorkerPdf(round.id, currentLanguage) },
-                                enabled = !isSaving,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Icon(Icons.Default.GridOn, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(strings.exportWorkerPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                                if (round.workerPdfExportedAt != null) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    ExportedBadgePill()
-                                }
-                            }
-                        }
-
                         when (round.status) {
                             VeggieRoundStatus.OPEN -> {
-                                OutlinedButton(
-                                    onClick = onSaveDraft,
-                                    enabled = !isSaving,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = AccentNavy)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(strings.saveChangesBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy)
-                                }
-
                                 if (onResetChanges != null) {
                                     OutlinedButton(
                                         onClick = { showConfirmResetChanges = true },
@@ -334,6 +328,35 @@ fun AdminVeggieSettlementMatrix(
                                             color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
                                         )
                                     }
+                                }
+
+                                OutlinedButton(
+                                    onClick = { onSaveDraft(null) },
+                                    enabled = hasUnsavedChanges && !isSaving,
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
+                                        disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Default.Save,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        strings.saveChangesBtn,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                    )
                                 }
 
                                 if (entries.isEmpty()) {
@@ -366,7 +389,7 @@ fun AdminVeggieSettlementMatrix(
                                 }
 
                                 Button(
-                                    onClick = onCloseRound,
+                                    onClick = { showConfirmCloseRound = true },
                                     enabled = !isSaving,
                                     colors = ButtonDefaults.buttonColors(containerColor = ColorWarningAmber),
                                     shape = RoundedCornerShape(8.dp)
@@ -378,26 +401,6 @@ fun AdminVeggieSettlementMatrix(
                             }
 
                             VeggieRoundStatus.CLOSED -> {
-                                OutlinedButton(
-                                    onClick = onReopenRound,
-                                    enabled = !isSaving,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(strings.reopenRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
-                                }
-
-                                OutlinedButton(
-                                    onClick = onSaveDraft,
-                                    enabled = !isSaving,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp), tint = AccentNavy)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(strings.saveDraftBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentNavy)
-                                }
-
                                 if (onResetChanges != null) {
                                     OutlinedButton(
                                         onClick = { showConfirmResetChanges = true },
@@ -429,6 +432,45 @@ fun AdminVeggieSettlementMatrix(
                                     }
                                 }
 
+                                OutlinedButton(
+                                    onClick = { onSaveDraft(null) },
+                                    enabled = hasUnsavedChanges && !isSaving,
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
+                                        disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Default.Save,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        strings.saveDraftBtn,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = onReopenRound,
+                                    enabled = !isSaving,
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(strings.reopenRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+
                                 if (entries.isEmpty()) {
                                     if (onCompleteEmptyRound != null) {
                                         Button(
@@ -458,7 +500,13 @@ fun AdminVeggieSettlementMatrix(
                                     }
                                 } else {
                                     Button(
-                                        onClick = { showConfirmSettle = true },
+                                        onClick = {
+                                            if (hasUnsavedChanges) {
+                                                showUnsavedSettleDialog = true
+                                            } else {
+                                                showConfirmSettle = true
+                                            }
+                                        },
                                         enabled = !isSaving,
                                         colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
                                         shape = RoundedCornerShape(8.dp)
@@ -503,7 +551,13 @@ fun AdminVeggieSettlementMatrix(
                                 }
 
                                 Button(
-                                    onClick = { showConfirmSettle = true },
+                                    onClick = {
+                                        if (hasUnsavedChanges) {
+                                            showUnsavedSettleDialog = true
+                                        } else {
+                                            showConfirmSettle = true
+                                        }
+                                    },
                                     enabled = !isSaving && entries.isNotEmpty(),
                                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                                     shape = RoundedCornerShape(8.dp)
@@ -718,27 +772,41 @@ fun AdminVeggieSettlementMatrix(
                                     modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    MatrixHeaderCell(strings.colActualQty, COL_TOTAL_QTY_WIDTH, TextAlign.Center)
+                                    MatrixHeaderCell("${strings.colOrderedQty} /\n${strings.colActualQty}", COL_TOTAL_QTY_WIDTH, TextAlign.Center)
                                     MatrixHeaderCell(strings.colMarketUnitPrice, COL_MARKET_PRICE_WIDTH, TextAlign.Center)
                                     MatrixHeaderCell(strings.colTotalSpent, COL_TOTAL_SPENT_WIDTH, TextAlign.Center)
                                     MatrixHeaderCell(strings.colEffectivePrice, COL_EFFECTIVE_PRICE_WIDTH, TextAlign.End)
+                                    Spacer(modifier = Modifier.width(COL_SCROLLBAR_GUTTER))
                                 }
                             }
                         }
                     }
 
                     // Scrollable Product Rows
-                    LazyColumn(
-                        modifier = Modifier.weight(1f)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
                     ) {
-                        items(roundProductRows, key = { it.productId }) { rowInfo ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(verticalScrollState)
+                        ) {
+                            roundProductRows.forEach { rowInfo ->
+                                key(rowInfo.productId) {
                             val productSettlement = previewProductSettlementMap[rowInfo.productId]
+                            val totalOrderedScaled = rowInfo.entriesByUserId.values.sumOf { it.orderedQuantityScaled }
+                            val formattedTotalOrdered = VeggieQuantityScaling.formatScaledQuantity(
+                                totalOrderedScaled,
+                                rowInfo.allowDecimals
+                            )
                             val totalDeliveredScaled = rowInfo.entriesByUserId.values.sumOf { entry ->
                                 previewEntryMap[entry.id]?.deliveredQuantityScaled ?: entry.deliveredQuantityScaled
                             }
                             val formattedTotalDelivered = VeggieQuantityScaling.formatScaledQuantity(
                                 totalDeliveredScaled,
-                                rowInfo.allowDecimals
+                                rowInfo.deliveryAllowDecimals
                             )
                             val effectiveUnitPrice = productSettlement?.marketUnitPriceCents?.let {
                                 val spent = productSettlement.totalSpentCents ?: 0L
@@ -769,10 +837,17 @@ fun AdminVeggieSettlementMatrix(
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    AdminStatusBadge(
-                                        text = rowInfo.unitName,
-                                        type = if (rowInfo.allowDecimals) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
-                                    )
+                                    if (rowInfo.deliveryUnitName != rowInfo.unitName) {
+                                        DualUnitBadge(
+                                            orderUnitName = rowInfo.unitName,
+                                            deliveryUnitName = rowInfo.deliveryUnitName
+                                        )
+                                    } else {
+                                        AdminStatusBadge(
+                                            text = rowInfo.unitName,
+                                            type = if (rowInfo.deliveryAllowDecimals) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
+                                        )
+                                    }
                                 }
 
                                 // 2. Customer Cells (Middle Horizontally Scrolled)
@@ -797,7 +872,16 @@ fun AdminVeggieSettlementMatrix(
                                                         entry.orderedQuantityScaled,
                                                         entry.allowDecimalsSnapshot
                                                     )
-                                                    val draftQtyStr = draftActualQuantities[entry.id] ?: orderedFormatted
+                                                    val draftQtyStr = draftActualQuantities[entry.id] ?: run {
+                                                        if (entry.actualQuantityScaled != null) {
+                                                            VeggieQuantityScaling.formatScaledQuantity(
+                                                                entry.actualQuantityScaled,
+                                                                rowInfo.deliveryAllowDecimals
+                                                            )
+                                                        } else {
+                                                            orderedFormatted
+                                                        }
+                                                    }
                                                     val previewEntry = previewEntryMap[entry.id]
                                                     val shareCents = previewEntry?.finalItemTotalCents ?: 0L
 
@@ -819,6 +903,7 @@ fun AdminVeggieSettlementMatrix(
                                                         MatrixNumberInputField(
                                                             value = draftQtyStr,
                                                             onValueChange = { onUpdateActualQuantity(entry.id, it) },
+                                                            allowDecimals = rowInfo.deliveryAllowDecimals,
                                                             isBold = true,
                                                             fontSize = 12.5.sp,
                                                             focusRequester = matrixFocusRequesters[entry.id],
@@ -864,91 +949,137 @@ fun AdminVeggieSettlementMatrix(
                                             .width(animatedOverviewWidth)
                                             .clipToBounds()
                                     ) {
-                                        Row(
+                                        Column(
                                             modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
-                                            // Total Delivered Qty
-                                            Box(
-                                                modifier = Modifier.width(COL_TOTAL_QTY_WIDTH).padding(horizontal = 4.dp),
-                                                contentAlignment = Alignment.Center
+                                            // Top row: Total Ordered Qty directly over Column 1
+                                            Row(
+                                                modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier.width(COL_TOTAL_QTY_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = "$formattedTotalOrdered ${rowInfo.unitName}",
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = TextSecondaryMuted,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(COL_MARKET_PRICE_WIDTH + COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER))
+                                            }
+
+                                            // Middle row: Delivered, Market Price input, Total Spent input, Effective Price
+                                            // All in ONE single 36.dp row, perfectly centered and in one line
+                                            Row(
+                                                modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH).height(36.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                // Delivered Qty
+                                                Box(
+                                                    modifier = Modifier.width(COL_TOTAL_QTY_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = "$formattedTotalDelivered ${rowInfo.deliveryUnitName}",
+                                                        fontSize = 12.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = PrimaryNavy,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+
+                                                // Market Unit Price Input
+                                                Box(
+                                                    modifier = Modifier.width(COL_MARKET_PRICE_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    val pIdx = priceProductIds.indexOf(rowInfo.productId)
+                                                    val prevPriceReq = if (pIdx > 0) priceFocusRequesters[priceProductIds[pIdx - 1]] else null
+                                                    val nextPriceReq = if (pIdx in 0 until priceProductIds.size - 1) {
+                                                        priceFocusRequesters[priceProductIds[pIdx + 1]]
+                                                    } else {
+                                                        spentFocusRequesters[priceProductIds.firstOrNull()]
+                                                    }
+
+                                                    MatrixNumberInputField(
+                                                        value = draftMarketPrices[rowInfo.productId] ?: "",
+                                                        onValueChange = { onUpdateMarketUnitPrice(rowInfo.productId, it) },
+                                                        placeholder = "0,00",
+                                                        fontSize = 12.5.sp,
+                                                        focusRequester = priceFocusRequesters[rowInfo.productId],
+                                                        prevFocusRequester = prevPriceReq,
+                                                        nextFocusRequester = nextPriceReq,
+                                                        modifier = Modifier.fillMaxWidth().height(36.dp)
+                                                    )
+                                                }
+
+                                                // Total Spent Input (Authoritative)
+                                                Box(
+                                                    modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    val pIdx = priceProductIds.indexOf(rowInfo.productId)
+                                                    val prevSpentReq = if (pIdx > 0) {
+                                                        spentFocusRequesters[priceProductIds[pIdx - 1]]
+                                                    } else {
+                                                        priceFocusRequesters[priceProductIds.lastOrNull()]
+                                                    }
+                                                    val nextSpentReq = if (pIdx in 0 until priceProductIds.size - 1) {
+                                                        spentFocusRequesters[priceProductIds[pIdx + 1]]
+                                                    } else {
+                                                        null
+                                                    }
+
+                                                    MatrixNumberInputField(
+                                                        value = draftTotalSpent[rowInfo.productId] ?: "",
+                                                        onValueChange = { onUpdateTotalSpent(rowInfo.productId, it) },
+                                                        placeholder = "0,00",
+                                                        isBold = true,
+                                                        fontSize = 12.5.sp,
+                                                        focusRequester = spentFocusRequesters[rowInfo.productId],
+                                                        prevFocusRequester = prevSpentReq,
+                                                        nextFocusRequester = nextSpentReq,
+                                                        modifier = Modifier.fillMaxWidth().height(36.dp)
+                                                    )
+                                                }
+
+                                                // Effective Unit Price (Read-Only)
+                                                Box(
+                                                    modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.CenterEnd
+                                                ) {
+                                                    Text(
+                                                        text = if (effectiveUnitPrice > 0L) {
+                                                            "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.deliveryUnitName}"
+                                                        } else "—",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (effectiveUnitPrice > 0L) ColorSuccessEmerald else TextSecondaryMuted,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.width(COL_SCROLLBAR_GUTTER))
+                                            }
+
+                                            // Bottom spacer matching customer cell's price line height
+                                            Row(
+                                                modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Text(
-                                                    text = "$formattedTotalDelivered ${rowInfo.unitName}",
-                                                    fontSize = 12.5.sp,
+                                                    text = " ",
+                                                    fontSize = 10.5.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = PrimaryNavy,
-                                                    maxLines = 1
-                                                )
-                                            }
-
-                                            // Market Unit Price Input
-                                            Box(
-                                                modifier = Modifier.width(COL_MARKET_PRICE_WIDTH).padding(horizontal = 4.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                val pIdx = priceProductIds.indexOf(rowInfo.productId)
-                                                val prevPriceReq = if (pIdx > 0) priceFocusRequesters[priceProductIds[pIdx - 1]] else null
-                                                val nextPriceReq = if (pIdx in 0 until priceProductIds.size - 1) {
-                                                    priceFocusRequesters[priceProductIds[pIdx + 1]]
-                                                } else {
-                                                    spentFocusRequesters[priceProductIds.firstOrNull()]
-                                                }
-
-                                                MatrixNumberInputField(
-                                                    value = draftMarketPrices[rowInfo.productId] ?: "",
-                                                    onValueChange = { onUpdateMarketUnitPrice(rowInfo.productId, it) },
-                                                    placeholder = "0,00",
-                                                    fontSize = 12.5.sp,
-                                                    focusRequester = priceFocusRequesters[rowInfo.productId],
-                                                    prevFocusRequester = prevPriceReq,
-                                                    nextFocusRequester = nextPriceReq,
-                                                    modifier = Modifier.fillMaxWidth().height(36.dp)
-                                                )
-                                            }
-
-                                            // Total Spent Input (Authoritative)
-                                            Box(
-                                                modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH).padding(horizontal = 4.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                val pIdx = priceProductIds.indexOf(rowInfo.productId)
-                                                val prevSpentReq = if (pIdx > 0) {
-                                                    spentFocusRequesters[priceProductIds[pIdx - 1]]
-                                                } else {
-                                                    priceFocusRequesters[priceProductIds.lastOrNull()]
-                                                }
-                                                val nextSpentReq = if (pIdx in 0 until priceProductIds.size - 1) {
-                                                    spentFocusRequesters[priceProductIds[pIdx + 1]]
-                                                } else {
-                                                    null
-                                                }
-
-                                                MatrixNumberInputField(
-                                                    value = draftTotalSpent[rowInfo.productId] ?: "",
-                                                    onValueChange = { onUpdateTotalSpent(rowInfo.productId, it) },
-                                                    placeholder = "0,00",
-                                                    isBold = true,
-                                                    fontSize = 12.5.sp,
-                                                    focusRequester = spentFocusRequesters[rowInfo.productId],
-                                                    prevFocusRequester = prevSpentReq,
-                                                    nextFocusRequester = nextSpentReq,
-                                                    modifier = Modifier.fillMaxWidth().height(36.dp)
-                                                )
-                                            }
-
-                                            // Effective Unit Price (Read-Only)
-                                            Box(
-                                                modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH).padding(horizontal = 4.dp),
-                                                contentAlignment = Alignment.CenterEnd
-                                            ) {
-                                                Text(
-                                                    text = if (effectiveUnitPrice > 0L) {
-                                                        "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.unitName}"
-                                                    } else "—",
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (effectiveUnitPrice > 0L) ColorSuccessEmerald else TextSecondaryMuted,
+                                                    color = androidx.compose.ui.graphics.Color.Transparent,
                                                     maxLines = 1
                                                 )
                                             }
@@ -958,6 +1089,15 @@ fun AdminVeggieSettlementMatrix(
                             }
                         }
                     }
+                }
+                AppVerticalScrollbar(
+                    scrollState = verticalScrollState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .padding(end = 2.dp, top = 4.dp, bottom = 4.dp)
+                )
+            }
 
                     HorizontalDivider(thickness = 1.5.dp, color = PrimaryNavy.copy(alpha = 0.25f))
 
@@ -1032,7 +1172,7 @@ fun AdminVeggieSettlementMatrix(
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH)
                                     )
-                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH))
+                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER))
                                 }
                             }
                         }
@@ -1110,7 +1250,7 @@ fun AdminVeggieSettlementMatrix(
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH)
                                     )
-                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH))
+                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER))
                                 }
                             }
                         }
@@ -1137,6 +1277,21 @@ fun AdminVeggieSettlementMatrix(
         }
     }
 
+    if (showConfirmCloseRound) {
+        ConfirmationDialog(
+            title = strings.confirmCloseRoundTitle,
+            message = strings.confirmCloseRoundMsg,
+            confirmText = strings.closeRoundBtn,
+            cancelText = strings.cancel,
+            confirmButtonColor = ColorWarningAmber,
+            onConfirm = {
+                showConfirmCloseRound = false
+                onCloseRound()
+            },
+            onDismiss = { showConfirmCloseRound = false }
+        )
+    }
+
     if (showConfirmResetChanges) {
         ConfirmationDialog(
             title = strings.confirmResetChangesTitle,
@@ -1149,6 +1304,23 @@ fun AdminVeggieSettlementMatrix(
                 onResetChanges?.invoke()
             },
             onDismiss = { showConfirmResetChanges = false }
+        )
+    }
+
+    if (showUnsavedSettleDialog) {
+        ConfirmationDialog(
+            title = strings.unsavedSettleTitle,
+            message = strings.unsavedSettleMsg,
+            confirmText = strings.saveAndSettleBtn,
+            cancelText = strings.cancel,
+            confirmButtonColor = AccentNavy,
+            onConfirm = {
+                showUnsavedSettleDialog = false
+                onSaveDraft {
+                    showConfirmSettle = true
+                }
+            },
+            onDismiss = { showUnsavedSettleDialog = false }
         )
     }
 
@@ -1203,8 +1375,10 @@ fun AdminVeggieSettlementMatrix(
         AddAdminVeggieEntryDialog(
             users = users,
             products = products.filter { !it.isDeleted && it.isActive },
-            onConfirm = { user, product, qtyInput ->
-                onAddAdminEntry(user, product, qtyInput)
+            unitTypes = unitTypes,
+            existingEntries = entries,
+            onConfirm = { user, product, qtyInput, mode ->
+                onAddAdminEntry(user, product, qtyInput, mode)
                 showAddEntryDialog = false
             },
             onDismiss = { showAddEntryDialog = false }
@@ -1217,6 +1391,8 @@ private data class VeggieMatrixProductRowInfo(
     val productName: String,
     val unitName: String,
     val allowDecimals: Boolean,
+    val deliveryUnitName: String,
+    val deliveryAllowDecimals: Boolean,
     val entriesByUserId: Map<String, VeggieOrderEntry>
 )
 
@@ -1242,17 +1418,64 @@ private fun MatrixHeaderCell(
 private fun AddAdminVeggieEntryDialog(
     users: List<User>,
     products: List<VeggieProduct>,
-    onConfirm: (User, VeggieProduct, String) -> Unit,
+    unitTypes: List<VeggieUnitType>,
+    existingEntries: List<VeggieOrderEntry>,
+    onConfirm: (User, VeggieProduct, String, AddOrderEntryMode) -> Unit,
     onDismiss: () -> Unit
 ) {
     val strings = I18n.current
     var selectedUser by remember { mutableStateOf(users.firstOrNull()) }
     var selectedProduct by remember { mutableStateOf(products.firstOrNull()) }
-    var quantityInput by remember { mutableStateOf("1") }
     var userMenuExpanded by remember { mutableStateOf(false) }
     var productMenuExpanded by remember { mutableStateOf(false) }
 
-    val canAdd = selectedUser != null && selectedProduct != null && quantityInput.trim().isNotBlank()
+    val unitTypesById = remember(unitTypes) { unitTypes.associateBy { it.id } }
+    val unitType = selectedProduct?.let { unitTypesById[it.unitTypeId] }
+    val allowDecimals = unitType?.allowDecimals ?: false
+    val unitName = unitType?.name ?: "Unit"
+
+    val existingEntry = remember(selectedUser?.id, selectedProduct?.id, existingEntries) {
+        val uid = selectedUser?.id ?: return@remember null
+        val pid = selectedProduct?.id ?: return@remember null
+        existingEntries.find { it.userId == uid && it.veggieProductId == pid }
+    }
+
+    var mode by remember(selectedUser?.id, selectedProduct?.id) {
+        mutableStateOf(AddOrderEntryMode.OVERWRITE)
+    }
+
+    val existingScaled = existingEntry?.actualQuantityScaled ?: existingEntry?.orderedQuantityScaled ?: 0L
+
+    val initialText = remember(selectedUser?.id, selectedProduct?.id) {
+        if (existingEntry != null) {
+            VeggieQuantityScaling.formatScaledQuantity(existingScaled, allowDecimals)
+        } else {
+            "1"
+        }
+    }
+
+    var textFieldValue by remember(selectedUser?.id, selectedProduct?.id) {
+        mutableStateOf(TextFieldValue(initialText, selection = TextRange(0, initialText.length)))
+    }
+    var hadFocus by remember { mutableStateOf(false) }
+    var justFocused by remember { mutableStateOf(false) }
+
+    val parsedQtyScaled = remember(textFieldValue.text, allowDecimals) {
+        VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals)
+    }
+
+    val canAdd = selectedUser != null && selectedProduct != null && parsedQtyScaled != null && parsedQtyScaled > 0L
+
+    val newTotalScaled = when (mode) {
+        AddOrderEntryMode.OVERWRITE -> parsedQtyScaled ?: 0L
+        AddOrderEntryMode.ADD -> existingScaled + (parsedQtyScaled ?: 0L)
+    }
+    val newTotalFormatted = remember(newTotalScaled, allowDecimals) {
+        VeggieQuantityScaling.formatScaledQuantity(newTotalScaled, allowDecimals)
+    }
+    val existingFormatted = remember(existingScaled, allowDecimals) {
+        VeggieQuantityScaling.formatScaledQuantity(existingScaled, allowDecimals)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1354,13 +1577,166 @@ private fun AddAdminVeggieEntryDialog(
                     }
                 }
 
-                AdminLabeledField(
-                    label = strings.quantity,
-                    value = quantityInput,
-                    onValueChange = { quantityInput = it },
-                    placeholder = "1",
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // Quantity Field with Unit Badge
+                Column {
+                    Text(strings.quantity, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = textFieldValue,
+                            onValueChange = { newVal ->
+                                if (justFocused && newVal.text == textFieldValue.text) {
+                                    textFieldValue = newVal.copy(selection = TextRange(0, newVal.text.length))
+                                    justFocused = false
+                                } else {
+                                    justFocused = false
+                                    val filteredText = filterVeggieAmountInput(newVal.text, allowDecimals)
+                                    if (filteredText == newVal.text) {
+                                        textFieldValue = newVal
+                                    } else {
+                                        textFieldValue = TextFieldValue(
+                                            text = filteredText,
+                                            selection = TextRange(filteredText.length)
+                                        )
+                                    }
+                                }
+                            },
+                            placeholder = { Text("1", fontSize = 15.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            ),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = if (allowDecimals) KeyboardType.Decimal else KeyboardType.Number
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .onFocusChanged { focusState ->
+                                    if (focusState.isFocused) {
+                                        if (!hadFocus) {
+                                            hadFocus = true
+                                            justFocused = true
+                                            textFieldValue = textFieldValue.copy(
+                                                selection = TextRange(0, textFieldValue.text.length)
+                                            )
+                                        }
+                                    } else {
+                                        hadFocus = false
+                                        justFocused = false
+                                    }
+                                }
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = AccentNavy.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, AccentNavy.copy(alpha = 0.25f)),
+                            modifier = Modifier
+                                .height(56.dp)
+                                .widthIn(min = 64.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            ) {
+                                Text(
+                                    text = unitName,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryNavy,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Existing Order Detection & Mode Choice
+                if (existingEntry != null) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = SurfaceContainerLight,
+                        border = BorderStroke(1.dp, DividerBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = strings.addOrderCurrentQuantityLabel(existingFormatted, unitName),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextSecondaryMuted
+                                )
+                                Text(
+                                    text = strings.addOrderNewTotalLabel(newTotalFormatted, unitName),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (canAdd) ColorSuccessEmerald else TextSecondaryMuted
+                                )
+                            }
+
+                            HorizontalDivider(color = DividerBorder.copy(alpha = 0.5f))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { mode = AddOrderEntryMode.OVERWRITE }
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                RadioButton(
+                                    selected = (mode == AddOrderEntryMode.OVERWRITE),
+                                    onClick = { mode = AddOrderEntryMode.OVERWRITE },
+                                    colors = RadioButtonDefaults.colors(selectedColor = AccentNavy)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = strings.addOrderModeOverwrite,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (mode == AddOrderEntryMode.OVERWRITE) FontWeight.Bold else FontWeight.Normal,
+                                    color = PrimaryNavy
+                                )
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { mode = AddOrderEntryMode.ADD }
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                RadioButton(
+                                    selected = (mode == AddOrderEntryMode.ADD),
+                                    onClick = { mode = AddOrderEntryMode.ADD },
+                                    colors = RadioButtonDefaults.colors(selectedColor = AccentNavy)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = strings.addOrderModeAddToExisting,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (mode == AddOrderEntryMode.ADD) FontWeight.Bold else FontWeight.Normal,
+                                    color = PrimaryNavy
+                                )
+                            }
+                        }
+                    }
+                }
 
                 HorizontalDivider(color = DividerBorder)
 
@@ -1378,7 +1754,7 @@ private fun AddAdminVeggieEntryDialog(
                     Button(
                         onClick = {
                             if (canAdd) {
-                                onConfirm(selectedUser!!, selectedProduct!!, quantityInput)
+                                onConfirm(selectedUser!!, selectedProduct!!, textFieldValue.text, mode)
                             }
                         },
                         enabled = canAdd,
@@ -1405,16 +1781,41 @@ private fun MatrixNumberInputField(
     textAlign: TextAlign = TextAlign.Center,
     focusRequester: FocusRequester? = null,
     nextFocusRequester: FocusRequester? = null,
-    prevFocusRequester: FocusRequester? = null
+    prevFocusRequester: FocusRequester? = null,
+    allowDecimals: Boolean = true
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    var textFieldValue by remember(value) {
+    var hadFocus by remember { mutableStateOf(false) }
+    var focusGainedTime by remember { mutableStateOf(0L) }
+    var textOnFocusGain by remember { mutableStateOf("") }
+
+    var textFieldValue by remember {
         mutableStateOf(
             TextFieldValue(
                 text = value,
-                selection = if (isFocused) TextRange(0, value.length) else TextRange(value.length)
+                selection = TextRange(value.length)
             )
         )
+    }
+
+    LaunchedEffect(value) {
+        if (value != textFieldValue.text) {
+            textFieldValue = textFieldValue.copy(
+                text = value,
+                selection = TextRange(value.length)
+            )
+        }
+    }
+
+    LaunchedEffect(hadFocus) {
+        if (hadFocus) {
+            delay(60)
+            if (hadFocus && textFieldValue.text == textOnFocusGain && textFieldValue.selection != TextRange(0, textFieldValue.text.length)) {
+                textFieldValue = textFieldValue.copy(
+                    selection = TextRange(0, textFieldValue.text.length)
+                )
+            }
+        }
     }
 
     Surface(
@@ -1445,12 +1846,33 @@ private fun MatrixNumberInputField(
             BasicTextField(
                 value = textFieldValue,
                 onValueChange = { newValue ->
-                    textFieldValue = newValue
-                    if (newValue.text != value) {
-                        onValueChange(newValue.text)
+                    val isInitialFocusEvent = hadFocus &&
+                            (currentTimeMillis() - focusGainedTime < 300L) &&
+                            (newValue.text == textFieldValue.text)
+                    if (isInitialFocusEvent) {
+                        textFieldValue = newValue.copy(
+                            selection = TextRange(0, newValue.text.length)
+                        )
+                    } else {
+                        val filteredText = filterVeggieAmountInput(newValue.text, allowDecimals)
+                        if (filteredText == newValue.text) {
+                            textFieldValue = newValue
+                        } else {
+                            textFieldValue = TextFieldValue(
+                                text = filteredText,
+                                selection = TextRange(filteredText.length)
+                            )
+                        }
+                        if (filteredText != value) {
+                            onValueChange(filteredText)
+                        }
                     }
                 },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (allowDecimals) KeyboardType.Decimal else KeyboardType.Number,
+                    imeAction = ImeAction.Next
+                ),
                 textStyle = LocalTextStyle.current.copy(
                     fontSize = fontSize,
                     fontWeight = if (isBold) FontWeight.Bold else FontWeight.Medium,
@@ -1464,8 +1886,20 @@ private fun MatrixNumberInputField(
                     .onFocusChanged { focusState ->
                         isFocused = focusState.isFocused
                         if (focusState.isFocused) {
+                            if (!hadFocus) {
+                                hadFocus = true
+                                focusGainedTime = currentTimeMillis()
+                                textOnFocusGain = textFieldValue.text
+                                textFieldValue = textFieldValue.copy(
+                                    selection = TextRange(0, textFieldValue.text.length)
+                                )
+                            }
+                        } else {
+                            hadFocus = false
+                            focusGainedTime = 0L
+                            textOnFocusGain = ""
                             textFieldValue = textFieldValue.copy(
-                                selection = TextRange(0, textFieldValue.text.length)
+                                selection = TextRange(textFieldValue.text.length)
                             )
                         }
                     }

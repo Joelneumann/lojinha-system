@@ -35,6 +35,8 @@ class AdminSettingsViewModel(
     private val onOpenLogFolder: (() -> Unit)? = null,
     val logDirectoryPath: String = "",
     private val getLogFolderSizeFormatted: (() -> String)? = null,
+    private val onOpenVeggieImagesFolder: (() -> Unit)? = null,
+    val veggieImagesDirectoryPath: String = "",
     val serverUrls: List<String> = emptyList(),
     private val onExitApplication: (() -> Unit)? = null
 ) : ViewModel() {
@@ -144,6 +146,14 @@ class AdminSettingsViewModel(
             onOpenLogFolder?.invoke()
         } catch (e: Exception) {
             _errorMessage.value = "Could not open log folder: ${e.message}"
+        }
+    }
+
+    fun openVeggieImagesFolder() {
+        try {
+            onOpenVeggieImagesFolder?.invoke()
+        } catch (e: Exception) {
+            _errorMessage.value = "Could not open veggie images folder: ${e.message}"
         }
     }
 

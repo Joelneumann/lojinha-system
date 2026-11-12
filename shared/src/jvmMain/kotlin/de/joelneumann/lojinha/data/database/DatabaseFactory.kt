@@ -240,6 +240,42 @@ object DatabaseFactory {
         }
     }
 
+    internal val MIGRATION_19_20 = object : Migration(19, 20) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v19 -> v20 (adding deliveryUnitTypeId and delivery snapshot fields)...")
+            try {
+                connection.execSQL("ALTER TABLE `veggie_products` ADD COLUMN `deliveryUnitTypeId` TEXT DEFAULT NULL")
+                connection.execSQL("ALTER TABLE `veggie_order_entries` ADD COLUMN `deliveryUnitNameSnapshot` TEXT DEFAULT NULL")
+                connection.execSQL("ALTER TABLE `veggie_order_entries` ADD COLUMN `deliveryAllowDecimalsSnapshot` INTEGER DEFAULT NULL")
+                AppLogger.info(TAG, "Database migration v19 -> v20 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v19 -> v20 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
+    internal val MIGRATION_20_21 = object : Migration(20, 21) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v20 -> v21 (adding veggie_user_favorites table)...")
+            try {
+                connection.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `veggie_user_favorites` (`userId` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`userId`, `veggieProductId`))"
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_userId` ON `veggie_user_favorites` (`userId`)"
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_veggieProductId` ON `veggie_user_favorites` (`veggieProductId`)"
+                )
+                AppLogger.info(TAG, "Database migration v20 -> v21 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v20 -> v21 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
     fun defaultVeggieUnitTypes(timestamp: Long = System.currentTimeMillis()): List<VeggieUnitTypeEntity> = listOf(
         VeggieUnitTypeEntity(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true, updatedAt = timestamp),
         VeggieUnitTypeEntity(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true, updatedAt = timestamp),
@@ -302,7 +338,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")
@@ -417,8 +453,18 @@ object DatabaseFactory {
                 veggieDao.insertOrUpdateUnitTypes(defaultVeggieUnitTypes())
                 AppLogger.info(TAG, "Seeded default Veggie Unit Types (kg, Unit, Pack, Bunch).")
             }
+            // Ensure any unit type in active use by catalog products is active
+            val usedUnitIds = veggieDao.getAllVeggieProducts(includeDeleted = false).map { it.unitTypeId }.toSet()
+            if (usedUnitIds.isNotEmpty()) {
+                val allUnits = veggieDao.getAllUnitTypes()
+                val unitsToReactivate = allUnits.filter { it.id in usedUnitIds && !it.isActive }
+                if (unitsToReactivate.isNotEmpty()) {
+                    veggieDao.insertOrUpdateUnitTypes(unitsToReactivate.map { it.copy(isActive = true, updatedAt = System.currentTimeMillis()) })
+                    AppLogger.info(TAG, "Reactivated unit types in use by catalog products: ${unitsToReactivate.map { it.name }}")
+                }
+            }
         } catch (e: Exception) {
-            AppLogger.warn(TAG, "Failed to seed default Veggie Unit Types: ${e.message}", e)
+            AppLogger.warn(TAG, "Failed to seed or heal default Veggie Unit Types: ${e.message}", e)
         }
 
         // Seed a default automated local backup routine if no routines currently exist

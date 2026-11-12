@@ -154,6 +154,7 @@ fun TransactionHistoryScreen(
             onUserInteracted(true)
             viewModel.saveUserSettings(user, removePin = removePin, onSaved = onUserUpdated)
         },
+        onExportPdf = if (isNetworkPortal) { { viewModel.openExportPdfModal(user.id) } } else null,
         onUserInteracted = onUserInteracted
     )
 }
@@ -193,6 +194,7 @@ fun TransactionHistoryContent(
     onUpdateAvatar: (UserAvatarConfig) -> Unit,
     onUpdateRequirePinOnKiosk: (Boolean) -> Unit = {},
     onSaveUserSettings: (removePin: Boolean) -> Unit,
+    onExportPdf: (() -> Unit)? = null,
     onUserInteracted: (force: Boolean) -> Unit = {}
 ) {
     val strings = I18n.current
@@ -368,13 +370,14 @@ fun TransactionHistoryContent(
 
                 // Search & Filter Bar reusing SearchInputField
                 TransactionFilterBar(
-                searchFilter = searchFilter,
-                selectedTypeFilter = selectedTypeFilter,
-                onSearchFilterChange = onSearchFilterChange,
-                onTypeFilterSelect = onTypeFilterSelect,
-                onEscape = onContinueShopping,
-                focusRequester = searchFocusRequester
-            )
+                    searchFilter = searchFilter,
+                    selectedTypeFilter = selectedTypeFilter,
+                    onSearchFilterChange = onSearchFilterChange,
+                    onTypeFilterSelect = onTypeFilterSelect,
+                    onEscape = onContinueShopping,
+                    focusRequester = searchFocusRequester,
+                    onExportPdf = onExportPdf
+                )
 
             Spacer(modifier = Modifier.height(16.dp))
 

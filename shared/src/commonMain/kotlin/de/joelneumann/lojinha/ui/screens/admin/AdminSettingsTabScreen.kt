@@ -1554,6 +1554,27 @@ fun AdminSettingsTabScreen(
                                     Text(strings.importVeggieProductsCsvBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                                 }
                             }
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.openVeggieImagesFolder()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FolderOpen,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(strings.openVeggieImagesFolderBtn, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                                }
+                            }
                         }
                     }
                 }

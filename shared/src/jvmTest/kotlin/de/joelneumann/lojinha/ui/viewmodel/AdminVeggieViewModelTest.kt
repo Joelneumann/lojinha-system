@@ -6,6 +6,7 @@ import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.domain.repository.VeggieOrderRepository
 import de.joelneumann.lojinha.domain.service.VeggieRoundSettlementResult
+import de.joelneumann.lojinha.ui.viewmodel.admin.AddOrderEntryMode
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieSubTab
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -56,13 +57,28 @@ class AdminVeggieViewModelTest {
     ) : VeggieOrderRepository {
         override fun getUnitTypesFlow(): Flow<List<VeggieUnitType>> = flowOf(unitTypes)
         override suspend fun getAllUnitTypes(): List<VeggieUnitType> = unitTypes
-        override suspend fun saveUnitType(unitType: VeggieUnitType) {}
+        override suspend fun saveUnitType(unitType: VeggieUnitType) {
+            val idx = unitTypes.indexOfFirst { it.id == unitType.id }
+            if (idx >= 0) unitTypes[idx] = unitType else unitTypes.add(unitType)
+        }
 
         override fun getVeggieProductsFlow(): Flow<List<VeggieProduct>> = flowOf(products)
         override suspend fun getAllVeggieProducts(): List<VeggieProduct> = products
         override suspend fun getVeggieProductById(id: String): VeggieProduct? = products.find { it.id == id }
-        override suspend fun saveVeggieProduct(product: VeggieProduct) {}
-        override suspend fun deactivateVeggieProduct(id: String) {}
+        override suspend fun saveVeggieProduct(product: VeggieProduct) {
+            val idx = products.indexOfFirst { it.id == product.id }
+            if (idx >= 0) products[idx] = product else products.add(product)
+        }
+        override suspend fun deactivateVeggieProduct(id: String) {
+            val idx = products.indexOfFirst { it.id == id }
+            if (idx >= 0) products[idx] = products[idx].copy(isActive = false)
+        }
+        override suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean {
+            val round = rounds.find { it.id == roundId } ?: return false
+            if (round.status != VeggieRoundStatus.OPEN) return false
+            entries.removeAll { it.roundId == roundId && it.veggieProductId == productId }
+            return true
+        }
         override suspend fun hardDeleteVeggieProduct(id: String) {}
 
         override fun getRoundsFlow(): Flow<List<VeggieOrderRound>> = flowOf(rounds)
@@ -104,8 +120,17 @@ class AdminVeggieViewModelTest {
             return rounds.removeIf { it.id == roundId }
         }
 
-        override suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean = true
-        override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean = true
+        override suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean {
+            val idx = rounds.indexOfFirst { it.id == roundId }
+            if (idx >= 0) rounds[idx] = rounds[idx].copy(buyerPdfExportedAt = timestamp)
+            return true
+        }
+
+        override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean {
+            val idx = rounds.indexOfFirst { it.id == roundId }
+            if (idx >= 0) rounds[idx] = rounds[idx].copy(workerPdfExportedAt = timestamp)
+            return true
+        }
 
         override suspend fun getEntriesForRound(roundId: String): List<VeggieOrderEntry> {
             return entries.filter { it.roundId == roundId }
@@ -125,6 +150,18 @@ class AdminVeggieViewModelTest {
             return settlements.filter { it.roundId == roundId }
         }
 
+        override suspend fun upsertAdminOrderEntry(entry: VeggieOrderEntry): Boolean {
+            val idx = entries.indexOfFirst {
+                it.id == entry.id || (it.roundId == entry.roundId && it.userId == entry.userId && it.veggieProductId == entry.veggieProductId)
+            }
+            if (idx >= 0) {
+                entries[idx] = entry
+            } else {
+                entries.add(entry)
+            }
+            return true
+        }
+
         override suspend fun saveDraftSettlement(
             roundId: String,
             buyerOperationFeeCents: Long,
@@ -138,7 +175,9 @@ class AdminVeggieViewModelTest {
                 rounds[idx] = rounds[idx].copy(
                     buyerOperationFeeCents = buyerOperationFeeCents,
                     transportFeeCents = transportFeeCents,
-                    transporterUserId = transporterUserId
+                    transporterUserId = transporterUserId,
+                    buyerPdfExportedAt = null,
+                    workerPdfExportedAt = null
                 )
             }
             settlements.removeIf { it.roundId == roundId }
@@ -357,15 +396,24 @@ class AdminVeggieViewModelTest {
         advanceUntilIdle()
 
         val origQty = vm.draftActualQuantities.value["entry-act-1"]
+        val origPrice = vm.draftMarketPrices.value["prod-1"]
+        val origBuyerFee = vm.draftBuyerFeeInput.value
+
         vm.updateEntryActualQuantity("entry-act-1", "99")
+        vm.updateProductMarketUnitPrice("prod-1", "99,00")
+        vm.updateBuyerFeeInput("12,34")
         assertTrue(vm.hasUnsavedSettlementChanges.value)
         assertEquals("99", vm.draftActualQuantities.value["entry-act-1"])
+        assertEquals("99,00", vm.draftMarketPrices.value["prod-1"])
+        assertEquals("12,34", vm.draftBuyerFeeInput.value)
 
         vm.discardDraft()
         advanceUntilIdle()
 
         assertFalse(vm.hasUnsavedSettlementChanges.value)
         assertEquals(origQty, vm.draftActualQuantities.value["entry-act-1"])
+        assertEquals(origPrice, vm.draftMarketPrices.value["prod-1"])
+        assertEquals(origBuyerFee, vm.draftBuyerFeeInput.value)
     }
 
     @Test
@@ -544,5 +592,287 @@ class AdminVeggieViewModelTest {
         assertEquals(1, vm.historyTotalPages.value)
         assertEquals(0, vm.historyCurrentPage.value) // Clamped to 0
         assertEquals(9, vm.pagedSettledRounds.value.size)
+    }
+
+    @Test
+    fun testSavingDraftInvalidatesPdfExportCheckmark() = runTest {
+        val (veggieRepo, userRepo) = setupTestFixture()
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        val roundId = "round-active"
+        vm.markPdfExported(roundId, isBuyer = true)
+        vm.markPdfExported(roundId, isBuyer = false)
+        advanceUntilIdle()
+
+        assertNotNull(vm.activeRound.value?.buyerPdfExportedAt)
+        assertNotNull(vm.activeRound.value?.workerPdfExportedAt)
+
+        // Change a quantity in the list (unsaved draft changes)
+        vm.updateEntryActualQuantity("entry-act-1", "99")
+
+        // Unsaved draft edits do NOT invalidate export timestamps
+        assertNotNull(vm.activeRound.value?.buyerPdfExportedAt)
+        assertNotNull(vm.activeRound.value?.workerPdfExportedAt)
+
+        // Save draft settlement triggers onSuccess callback and resets timestamps
+        var callbackCalled = false
+        vm.saveDraftSettlement(onSuccess = { callbackCalled = true })
+        advanceUntilIdle()
+
+        assertTrue(callbackCalled)
+        assertNull(vm.activeRound.value?.buyerPdfExportedAt)
+        assertNull(vm.activeRound.value?.workerPdfExportedAt)
+    }
+
+    @Test
+    fun testAddOrUpdateCustomerEntry_newEntry_createsOrderEntryWithScaledQuantity() = runTest {
+        val (veggieRepo, userRepo, _) = setupTestFixture()
+        val newUser = User(id = "user-2", name = "Maria", isActive = true)
+        userRepo.saveUser(newUser)
+        val product = veggieRepo.products.first()
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        vm.addOrUpdateCustomerEntry(user = newUser, product = product, quantityInput = "2.5")
+        advanceUntilIdle()
+
+        val created = veggieRepo.entries.find { it.userId == "user-2" && it.veggieProductId == product.id && it.roundId == "round-active" }
+        assertNotNull(created)
+        assertEquals(2500L, created.orderedQuantityScaled)
+        assertEquals(2500L, created.actualQuantityScaled)
+    }
+
+    @Test
+    fun testAddOrUpdateCustomerEntry_existingEntry_overwriteMode_replacesQuantity() = runTest {
+        val (veggieRepo, userRepo, testUser) = setupTestFixture()
+        val product = veggieRepo.products.first()
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Existing entry is 1000L. Overwrite with 3.5
+        vm.addOrUpdateCustomerEntry(
+            user = testUser,
+            product = product,
+            quantityInput = "3.5",
+            mode = AddOrderEntryMode.OVERWRITE
+        )
+        advanceUntilIdle()
+
+        val updated = veggieRepo.entries.find { it.userId == testUser.id && it.veggieProductId == product.id && it.roundId == "round-active" }
+        assertNotNull(updated)
+        assertEquals(3500L, updated.orderedQuantityScaled)
+        assertEquals(3500L, updated.actualQuantityScaled)
+    }
+
+    @Test
+    fun testAddOrUpdateCustomerEntry_existingEntry_addMode_sumsQuantities() = runTest {
+        val (veggieRepo, userRepo, testUser) = setupTestFixture()
+        val product = veggieRepo.products.first()
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Existing entry is 1000L. Add 2.0 => 3000L
+        vm.addOrUpdateCustomerEntry(
+            user = testUser,
+            product = product,
+            quantityInput = "2.0",
+            mode = AddOrderEntryMode.ADD
+        )
+        advanceUntilIdle()
+
+        val updated = veggieRepo.entries.find { it.userId == testUser.id && it.veggieProductId == product.id && it.roundId == "round-active" }
+        assertNotNull(updated)
+        assertEquals(3000L, updated.orderedQuantityScaled)
+        assertEquals(3000L, updated.actualQuantityScaled)
+    }
+
+    @Test
+    fun testAddOrUpdateCustomerEntry_closedRound_preservesOrderedQuantityAndUpdatesActual() = runTest {
+        val (veggieRepo, userRepo, testUser) = setupTestFixture()
+        val product = veggieRepo.products.first()
+
+        // Close the round
+        val activeRound = veggieRepo.rounds.first { it.id == "round-active" }
+        veggieRepo.rounds[veggieRepo.rounds.indexOf(activeRound)] = activeRound.copy(status = VeggieRoundStatus.CLOSED)
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Existing entry was 1000L ordered and 1000L actual. In closed round, adding 1.5 should keep ordered at 1000L and set actual to 2500L
+        vm.addOrUpdateCustomerEntry(
+            user = testUser,
+            product = product,
+            quantityInput = "1.5",
+            mode = AddOrderEntryMode.ADD
+        )
+        advanceUntilIdle()
+
+        val updated = veggieRepo.entries.find { it.userId == testUser.id && it.veggieProductId == product.id && it.roundId == "round-active" }
+        assertNotNull(updated)
+        assertEquals(1000L, updated.orderedQuantityScaled)
+        assertEquals(2500L, updated.actualQuantityScaled)
+    }
+
+    @Test
+    fun testSaveUnitType_editingExistingUnit_updatesExistingWithoutCreatingDuplicate() = runTest {
+        val (veggieRepo, userRepo, _) = setupTestFixture()
+        val existingUnit = VeggieUnitType(id = "unit-pack", name = "Pack", allowDecimals = false, isActive = true)
+        val inactiveUnit = VeggieUnitType(id = "unit-old-pacote", name = "Pacote", allowDecimals = false, isActive = false)
+        veggieRepo.unitTypes.add(existingUnit)
+        veggieRepo.unitTypes.add(inactiveUnit)
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Edit existing unit from "Pack" to "Pacote"
+        vm.saveUnitType(existingUnit.copy(name = "Pacote"))
+        advanceUntilIdle()
+
+        // Existing unit should have its name updated and keep its id
+        val updated = veggieRepo.unitTypes.find { it.id == "unit-pack" }
+        assertNotNull(updated)
+        assertEquals("Pacote", updated.name)
+
+        // Inactive unit should still exist unchanged and not have hijacked the edit
+        val inactive = veggieRepo.unitTypes.find { it.id == "unit-old-pacote" }
+        assertNotNull(inactive)
+        assertFalse(inactive.isActive)
+    }
+
+    @Test
+    fun testSaveUnitType_addingNewUnitWithSameNameAsInactive_reactivatesInactive() = runTest {
+        val (veggieRepo, userRepo, _) = setupTestFixture()
+        val inactiveUnit = VeggieUnitType(id = "unit-old-box", name = "Box", allowDecimals = false, isActive = false)
+        veggieRepo.unitTypes.add(inactiveUnit)
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Add brand new unit with name "Box" (id is generated or different)
+        val newUnit = VeggieUnitType(id = "new-temp-id", name = "Box", allowDecimals = true, isActive = true)
+        vm.saveUnitType(newUnit)
+        advanceUntilIdle()
+
+        // It should have reactivated the inactive unit with id "unit-old-box" rather than creating a duplicate
+        val reactivated = veggieRepo.unitTypes.find { it.id == "unit-old-box" }
+        assertNotNull(reactivated)
+        assertTrue(reactivated.isActive)
+        assertTrue(reactivated.allowDecimals)
+    }
+
+    @Test
+    fun testSaveVeggieProduct_passesProductNameToImageSaverAndUpdatesFileName() = runTest {
+        val (veggieRepo, userRepo, _) = setupTestFixture()
+        var receivedProductName: String? = null
+        var receivedProductId: String? = null
+
+        val vm = AdminVeggieViewModel(
+            veggieOrderRepository = veggieRepo,
+            userRepository = userRepo,
+            onSaveProductImage = { prodId, prodName, bytes, prevFileName ->
+                receivedProductId = prodId
+                receivedProductName = prodName
+                "tomate_italiano"
+            },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        val product = veggieRepo.products.first().copy(name = "Tomate Italiano")
+        vm.saveVeggieProduct(product, newImageBytes = byteArrayOf(1, 2, 3), removeExistingImage = false)
+        advanceUntilIdle()
+
+        assertEquals(product.id, receivedProductId)
+        assertEquals("Tomate Italiano", receivedProductName)
+
+        val updatedProduct = veggieRepo.products.find { it.id == product.id }
+        assertNotNull(updatedProduct)
+        assertEquals("tomate_italiano", updatedProduct.imageFileName)
+    }
+
+    @Test
+    fun testDualUnitProduct_preservesDecimalActualQuantityAndCalculatesSettlement() = runTest {
+        val (veggieRepo, userRepo, testUser) = setupTestFixture()
+        // Watermelon: Customer Unit = unit-piece (integers), Settlement Unit = unit-kg (decimals)
+        val unitKg = VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true)
+        val unitPiece = VeggieUnitType(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true)
+        veggieRepo.unitTypes.clear()
+        veggieRepo.unitTypes.addAll(listOf(unitKg, unitPiece))
+
+        val watermelon = VeggieProduct(
+            id = "prod-watermelon",
+            name = "Watermelon",
+            unitTypeId = "unit-piece",
+            deliveryUnitTypeId = "unit-kg",
+            isActive = true
+        )
+        veggieRepo.products.clear()
+        veggieRepo.products.add(watermelon)
+
+        val entry = VeggieOrderEntry(
+            id = "entry-wm",
+            roundId = "round-active",
+            userId = testUser.id,
+            userNameSnapshot = testUser.name,
+            veggieProductId = watermelon.id,
+            veggieNameSnapshot = watermelon.name,
+            unitNameSnapshot = "Unit",
+            allowDecimalsSnapshot = false,
+            deliveryUnitNameSnapshot = "kg",
+            deliveryAllowDecimalsSnapshot = true,
+            orderedQuantityScaled = 1000L, // 1 Unit
+            actualQuantityScaled = null
+        )
+        veggieRepo.entries.clear()
+        veggieRepo.entries.add(entry)
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Admin enters 3.2 kg delivered for the entry
+        vm.updateEntryActualQuantity(entryId = "entry-wm", input = "3.2")
+        vm.updateProductTotalSpent(productId = "prod-watermelon", input = "16,00")
+        advanceUntilIdle()
+
+        val preview = vm.liveSettlementPreview.value
+        assertNotNull(preview)
+        val updatedEntry = preview.updatedEntries.find { it.id == "entry-wm" }
+        assertNotNull(updatedEntry)
+        assertEquals(3200L, updatedEntry.actualQuantityScaled) // 3.2 kg preserved!
+        assertEquals("kg", updatedEntry.effectiveDeliveryUnitName)
+        assertEquals(1600L, updatedEntry.finalItemTotalCents) // Full spent attributed
+        assertEquals(500L, updatedEntry.effectiveUnitPriceCents) // 16.00 / 3.2 = 5.00/kg
+    }
+
+    @Test
+    fun testToggleVeggieProductActive_stopNewOrdersOnly_vs_cancelExistingOrders() = runTest {
+        val (veggieRepo, userRepo) = setupTestFixture()
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        val product = veggieRepo.products.first()
+        assertTrue(product.isActive)
+        assertEquals(1, vm.selectedRoundEntries.value.size)
+
+        // 1. Stop new orders only -> product deactivated, existing entry preserved
+        vm.toggleVeggieProductActive(product, cancelOpenRoundOrders = false)
+        advanceUntilIdle()
+        assertFalse(veggieRepo.products.first().isActive)
+        assertEquals(1, vm.selectedRoundEntries.value.size)
+
+        // Reactivate
+        vm.toggleVeggieProductActive(veggieRepo.products.first())
+        advanceUntilIdle()
+        assertTrue(veggieRepo.products.first().isActive)
+
+        // 2. Cancel existing orders too -> product deactivated AND entry removed from open round
+        vm.toggleVeggieProductActive(veggieRepo.products.first(), cancelOpenRoundOrders = true)
+        advanceUntilIdle()
+        assertFalse(veggieRepo.products.first().isActive)
+        assertEquals(0, vm.selectedRoundEntries.value.size)
     }
 }

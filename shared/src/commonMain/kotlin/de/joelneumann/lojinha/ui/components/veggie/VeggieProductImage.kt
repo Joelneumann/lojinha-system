@@ -69,12 +69,14 @@ fun VeggieProductImage(
     val clickModifier = if (onClick != null) {
         Modifier
             .pointerHoverIcon(PointerIcon.Hand)
+            .focusProperties { canFocus = false }
             .clickable(onClick = onClick)
     } else Modifier
 
     Box(
         modifier = modifier
             .clip(shape)
+            .focusProperties { canFocus = false }
             .then(clickModifier)
             .focusProperties { canFocus = false }
             .background(SurfaceContainerHighLight),

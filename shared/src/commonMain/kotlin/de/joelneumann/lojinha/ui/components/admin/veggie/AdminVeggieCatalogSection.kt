@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -22,6 +23,7 @@ import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminCountPill
 import de.joelneumann.lojinha.ui.components.admin.AdminExpandableSection
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.components.admin.DualUnitBadge
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.components.veggie.VeggieProductImage
@@ -31,6 +33,7 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
 import de.joelneumann.lojinha.ui.utils.generateUuid
 
 @Composable
@@ -40,10 +43,11 @@ fun AdminVeggieCatalogSection(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onSaveProduct: (product: VeggieProduct, newImageBytes: ByteArray?, removeExistingImage: Boolean) -> Unit,
-    onToggleProductActive: (VeggieProduct) -> Unit,
+    onToggleProductActive: (VeggieProduct, Boolean) -> Unit,
     onDeleteProduct: (VeggieProduct) -> Unit,
     onSaveUnitType: (VeggieUnitType) -> Unit,
     onDeleteUnitType: (String) -> Unit,
+    openRoundOrderCountForProduct: (String) -> Int = { 0 },
     isSavingProduct: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -57,34 +61,44 @@ fun AdminVeggieCatalogSection(
     var selectedSortOption by remember { mutableStateOf(VeggieSortOption.NAME_ASC) }
     var selectedUnitFilterId by remember { mutableStateOf<String?>(null) }
 
-    val nonDeleted = remember(products) { products.filter { !it.isDeleted } }
+    val listState = rememberLazyListState()
 
-    val filteredActiveProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption) {
-        var list = nonDeleted.filter { it.isActive }
-        if (selectedUnitFilterId != null) {
-            list = list.filter { it.unitTypeId == selectedUnitFilterId }
-        }
-        if (searchQuery.isNotBlank()) {
-            val q = searchQuery.trim()
-            list = list.filter {
-                it.name.containsIgnoreAccents(q) || (it.description?.containsIgnoreAccents(q) == true)
-            }
-        }
-        list.sortWithOption(selectedSortOption)
+    LaunchedEffect(searchQuery, selectedUnitFilterId, selectedSortOption) {
+        listState.scrollToItem(0)
     }
 
-    val filteredDisabledProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption) {
-        var list = nonDeleted.filter { !it.isActive }
+    val nonDeleted = remember(products) { products.filter { !it.isDeleted } }
+
+    val filteredActiveProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption, unitMap) {
+        var list = nonDeleted.filter { it.isActive }
         if (selectedUnitFilterId != null) {
-            list = list.filter { it.unitTypeId == selectedUnitFilterId }
+            list = list.filter { it.unitTypeId == selectedUnitFilterId || it.deliveryUnitTypeId == selectedUnitFilterId }
         }
         if (searchQuery.isNotBlank()) {
-            val q = searchQuery.trim()
-            list = list.filter {
-                it.name.containsIgnoreAccents(q) || (it.description?.containsIgnoreAccents(q) == true)
-            }
+            list.filterAndRankVeggieProducts(
+                query = searchQuery,
+                unitTypesById = unitMap,
+                secondaryComparator = selectedSortOption.toComparator()
+            )
+        } else {
+            list.sortWithOption(selectedSortOption)
         }
-        list.sortWithOption(selectedSortOption)
+    }
+
+    val filteredDisabledProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption, unitMap) {
+        var list = nonDeleted.filter { !it.isActive }
+        if (selectedUnitFilterId != null) {
+            list = list.filter { it.unitTypeId == selectedUnitFilterId || it.deliveryUnitTypeId == selectedUnitFilterId }
+        }
+        if (searchQuery.isNotBlank()) {
+            list.filterAndRankVeggieProducts(
+                query = searchQuery,
+                unitTypesById = unitMap,
+                secondaryComparator = selectedSortOption.toComparator()
+            )
+        } else {
+            list.sortWithOption(selectedSortOption)
+        }
     }
 
     val totalActiveNonDeleted = remember(nonDeleted) { nonDeleted.count { it.isActive } }
@@ -113,6 +127,11 @@ fun AdminVeggieCatalogSection(
                         query = searchQuery,
                         onQueryChange = onSearchQueryChange,
                         placeholder = strings.searchVeggieProductsPlaceholder,
+                        onSearchSubmitted = {
+                            if (filteredActiveProducts.isNotEmpty()) {
+                                editingProduct = filteredActiveProducts.first()
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     )
 
@@ -185,6 +204,11 @@ fun AdminVeggieCatalogSection(
                             query = searchQuery,
                             onQueryChange = onSearchQueryChange,
                             placeholder = strings.searchVeggieProductsPlaceholder,
+                            onSearchSubmitted = {
+                                if (filteredActiveProducts.isNotEmpty()) {
+                                    editingProduct = filteredActiveProducts.first()
+                                }
+                            },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -248,6 +272,7 @@ fun AdminVeggieCatalogSection(
         }
 
         LazyColumn(
+            state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
@@ -269,6 +294,7 @@ fun AdminVeggieCatalogSection(
                 VeggieCatalogProductRow(
                     product = product,
                     unitType = unitMap[product.unitTypeId],
+                    deliveryUnitType = product.deliveryUnitTypeId?.let { unitMap[it] },
                     onEdit = { editingProduct = product },
                     onToggleActive = { productToToggleActive = product },
                     onDelete = { productToDelete = product }
@@ -288,6 +314,7 @@ fun AdminVeggieCatalogSection(
                             VeggieCatalogProductRow(
                                 product = product,
                                 unitType = unitMap[product.unitTypeId],
+                                deliveryUnitType = product.deliveryUnitTypeId?.let { unitMap[it] },
                                 onEdit = { editingProduct = product },
                                 onToggleActive = { productToToggleActive = product },
                                 onDelete = { productToDelete = product }
@@ -325,53 +352,116 @@ fun AdminVeggieCatalogSection(
     if (productToToggleActive != null) {
         val target = productToToggleActive!!
         val isCurrentlyActive = target.isActive
+        val openOrderCount = if (isCurrentlyActive) openRoundOrderCountForProduct(target.id) else 0
         val dismissDialog = { productToToggleActive = null }
-        val confirmToggle = {
-            onToggleProductActive(target)
-            productToToggleActive = null
-        }
 
-        AlertDialog(
-            onDismissRequest = dismissDialog,
-            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
-            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmToggle),
-            title = {
-                Text(
-                    text = strings.confirmProductStatusChangeTitle,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                )
-            },
-            text = {
-                Text(
-                    text = strings.confirmProductStatusChangeMsg(isCurrentlyActive, target.name),
-                    color = PrimaryNavy
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = confirmToggle,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isCurrentlyActive) ColorWarningAmber else ColorSuccessEmerald
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
+        if (isCurrentlyActive && openOrderCount > 0) {
+            AlertDialog(
+                onDismissRequest = dismissDialog,
+                properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+                title = {
                     Text(
-                        text = if (isCurrentlyActive) strings.disable else strings.enable,
-                        color = SurfaceWhite,
-                        fontWeight = FontWeight.Bold
+                        text = strings.confirmProductStatusChangeTitle,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
                     )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = strings.confirmDeactivateWithOrdersMsg(target.name, openOrderCount),
+                            color = PrimaryNavy
+                        )
+                        Button(
+                            onClick = {
+                                onToggleProductActive(target, false)
+                                productToToggleActive = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ColorWarningAmber),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = strings.deactivateStopNewOrdersOnly,
+                                color = SurfaceWhite,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                onToggleProductActive(target, true)
+                                productToToggleActive = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = strings.deactivateCancelExistingOrders,
+                                color = SurfaceWhite,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = dismissDialog,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(strings.cancel)
+                    }
                 }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = dismissDialog,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(strings.cancel)
-                }
+            )
+        } else {
+            val confirmToggle = {
+                onToggleProductActive(target, false)
+                productToToggleActive = null
             }
-        )
+
+            AlertDialog(
+                onDismissRequest = dismissDialog,
+                properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+                modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmToggle),
+                title = {
+                    Text(
+                        text = strings.confirmProductStatusChangeTitle,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
+                    )
+                },
+                text = {
+                    Text(
+                        text = strings.confirmProductStatusChangeMsg(isCurrentlyActive, target.name),
+                        color = PrimaryNavy
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = confirmToggle,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isCurrentlyActive) ColorWarningAmber else ColorSuccessEmerald
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (isCurrentlyActive) strings.disable else strings.enable,
+                            color = SurfaceWhite,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = dismissDialog,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(strings.cancel)
+                    }
+                }
+            )
+        }
     }
 
     if (productToDelete != null) {
@@ -395,12 +485,14 @@ fun AdminVeggieCatalogSection(
 private fun VeggieCatalogProductRow(
     product: VeggieProduct,
     unitType: VeggieUnitType?,
+    deliveryUnitType: VeggieUnitType? = null,
     onEdit: () -> Unit,
     onToggleActive: () -> Unit,
     onDelete: () -> Unit
 ) {
     val strings = I18n.current
     val unitName = unitType?.name ?: product.unitTypeId
+    val deliveryUnitName = deliveryUnitType?.name
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -438,10 +530,17 @@ private fun VeggieCatalogProductRow(
                         fontWeight = FontWeight.Bold,
                         color = if (product.isActive) PrimaryNavy else TextSecondaryMuted
                     )
-                    AdminStatusBadge(
-                        text = unitName,
-                        type = if (unitType?.allowDecimals == true) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
-                    )
+                    if (deliveryUnitName != null && deliveryUnitType.id != product.unitTypeId) {
+                        DualUnitBadge(
+                            orderUnitName = unitName,
+                            deliveryUnitName = deliveryUnitName
+                        )
+                    } else {
+                        AdminStatusBadge(
+                            text = unitName,
+                            type = if (unitType?.allowDecimals == true) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
+                        )
+                    }
                     if (!product.isActive) {
                         AdminStatusBadge(
                             text = strings.disabled,

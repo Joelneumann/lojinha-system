@@ -30,11 +30,16 @@ enum class AdminVeggieSubTab {
     HISTORY
 }
 
+enum class AddOrderEntryMode {
+    OVERWRITE,
+    ADD
+}
+
 class AdminVeggieViewModel(
     private val veggieOrderRepository: VeggieOrderRepository,
     private val userRepository: UserRepository,
     private val settingsRepository: SettingsRepository? = null,
-    private val onSaveProductImage: (suspend (productId: String, bytes: ByteArray, previousFileName: String?) -> String?)? = null,
+    private val onSaveProductImage: (suspend (productId: String, productName: String, bytes: ByteArray, previousFileName: String?) -> String?)? = null,
     private val onDeleteProductImage: (suspend (productId: String, previousFileName: String?) -> Unit)? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
@@ -158,8 +163,16 @@ class AdminVeggieViewModel(
         loadJob?.cancel()
         loadJob = activeScope.launch {
             try {
-                val allUnits = veggieOrderRepository.getAllUnitTypes()
+                var allUnits = veggieOrderRepository.getAllUnitTypes()
                 val allProducts = veggieOrderRepository.getAllVeggieProducts()
+                val usedUnitIds = allProducts.filter { !it.isDeleted }.map { it.unitTypeId }.toSet()
+                val unitsToReactivate = allUnits.filter { it.id in usedUnitIds && !it.isActive }
+                if (unitsToReactivate.isNotEmpty()) {
+                    unitsToReactivate.forEach { unit ->
+                        veggieOrderRepository.saveUnitType(unit.copy(isActive = true, updatedAt = currentTimeMillis()))
+                    }
+                    allUnits = veggieOrderRepository.getAllUnitTypes()
+                }
                 val allUsers = userRepository.getAllUsers().filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
                 val allRounds = veggieOrderRepository.getAllRounds().sortedByDescending { it.openedAt }
                 val settings = settingsRepository?.getSettings() ?: SystemSettings()
@@ -279,6 +292,7 @@ class AdminVeggieViewModel(
     }
 
     fun discardDraft() {
+        _hasUnsavedSettlementChanges.value = false
         val editing = _editingPastRound.value
         if (editing != null) {
             activeScope.launch {
@@ -413,12 +427,17 @@ class AdminVeggieViewModel(
         productId: String,
         quantitiesMap: Map<String, String>
     ): Long {
+        val product = _products.value.find { it.id == productId }
+        val deliveryUnit = product?.deliveryUnitTypeId?.let { did -> _unitTypes.value.find { it.id == did } }
         return _selectedRoundEntries.value
             .filter { it.veggieProductId == productId }
             .sumOf { entry ->
                 val raw = quantitiesMap[entry.id]
+                val allowDecimals = deliveryUnit?.allowDecimals
+                    ?: entry.deliveryAllowDecimalsSnapshot
+                    ?: entry.allowDecimalsSnapshot
                 if (raw != null) {
-                    VeggieQuantityScaling.parseQuantityScaled(raw, entry.allowDecimalsSnapshot) ?: entry.deliveredQuantityScaled
+                    VeggieQuantityScaling.parseQuantityScaled(raw, allowDecimals) ?: entry.deliveredQuantityScaled
                 } else {
                     entry.deliveredQuantityScaled
                 }
@@ -428,10 +447,18 @@ class AdminVeggieViewModel(
     private fun buildCurrentDraftPayload(): DraftSettlementPayload? {
         val round = _selectedRound.value ?: return null
         val entries = _selectedRoundEntries.value
+        val productsById = _products.value.associateBy { it.id }
+        val unitTypesById = _unitTypes.value.associateBy { it.id }
+
         val actualByEntryId = entries.associate { entry ->
             val raw = _draftActualQuantities.value[entry.id]
+            val product = productsById[entry.veggieProductId]
+            val deliveryUnit = product?.deliveryUnitTypeId?.let { unitTypesById[it] }
+            val allowDecimals = deliveryUnit?.allowDecimals
+                ?: entry.deliveryAllowDecimalsSnapshot
+                ?: entry.allowDecimalsSnapshot
             val parsed = if (raw != null) {
-                VeggieQuantityScaling.parseQuantityScaled(raw, entry.allowDecimalsSnapshot) ?: entry.deliveredQuantityScaled
+                VeggieQuantityScaling.parseQuantityScaled(raw, allowDecimals) ?: entry.deliveredQuantityScaled
             } else {
                 entry.deliveredQuantityScaled
             }
@@ -439,7 +466,13 @@ class AdminVeggieViewModel(
         }
 
         val entriesWithDraftQty = entries.map { entry ->
-            entry.copy(actualQuantityScaled = actualByEntryId[entry.id] ?: entry.deliveredQuantityScaled)
+            val product = productsById[entry.veggieProductId]
+            val deliveryUnit = product?.deliveryUnitTypeId?.let { unitTypesById[it] }
+            entry.copy(
+                deliveryUnitNameSnapshot = deliveryUnit?.name ?: entry.deliveryUnitNameSnapshot,
+                deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals ?: entry.deliveryAllowDecimalsSnapshot,
+                actualQuantityScaled = actualByEntryId[entry.id] ?: entry.deliveredQuantityScaled
+            )
         }
 
         val productIds = entries.map { it.veggieProductId }.distinct()
@@ -552,7 +585,7 @@ class AdminVeggieViewModel(
         }
     }
 
-    fun saveDraftSettlement() {
+    fun saveDraftSettlement(onSuccess: (() -> Unit)? = null) {
         val payload = buildCurrentDraftPayload() ?: return
         if (_isSaving.value) return
         _isSaving.value = true
@@ -571,6 +604,7 @@ class AdminVeggieViewModel(
                     _hasUnsavedSettlementChanges.value = false
                     _statusMessage.value = I18n.get().saved
                     loadData(preserveDraftEdits = false)
+                    onSuccess?.invoke()
                 } else {
                     _errorMessage.value = "Failed to save draft settlement"
                 }
@@ -695,19 +729,44 @@ class AdminVeggieViewModel(
         }
     }
 
-    fun addOrUpdateCustomerEntry(user: User, product: VeggieProduct, quantityInput: String) {
+    fun addOrUpdateCustomerEntry(
+        user: User,
+        product: VeggieProduct,
+        quantityInput: String,
+        mode: AddOrderEntryMode = AddOrderEntryMode.OVERWRITE
+    ) {
         val round = _selectedRound.value ?: return
         val unit = _unitTypes.value.find { it.id == product.unitTypeId }
+        val deliveryUnit = product.deliveryUnitTypeId?.let { did -> _unitTypes.value.find { it.id == did } }
         val allowDecimals = unit?.allowDecimals ?: false
         val qtyScaled = VeggieQuantityScaling.parseQuantityScaled(quantityInput, allowDecimals) ?: return
+        if (qtyScaled <= 0L) return
 
         activeScope.launch {
             try {
                 val existing = _selectedRoundEntries.value.find { it.userId == user.id && it.veggieProductId == product.id }
                 val now = currentTimeMillis()
+
+                val targetOrderedQty = when {
+                    existing == null -> qtyScaled
+                    round.status == VeggieRoundStatus.OPEN -> {
+                        if (mode == AddOrderEntryMode.ADD) existing.orderedQuantityScaled + qtyScaled else qtyScaled
+                    }
+                    else -> existing.orderedQuantityScaled
+                }
+
+                val currentActual = existing?.actualQuantityScaled ?: existing?.orderedQuantityScaled ?: 0L
+                val targetActualQty = when {
+                    existing == null -> qtyScaled
+                    mode == AddOrderEntryMode.ADD -> currentActual + qtyScaled
+                    else -> qtyScaled
+                }
+
                 val entry = existing?.copy(
-                    orderedQuantityScaled = if (round.status == VeggieRoundStatus.OPEN) qtyScaled else existing.orderedQuantityScaled,
-                    actualQuantityScaled = qtyScaled,
+                    deliveryUnitNameSnapshot = deliveryUnit?.name ?: existing.deliveryUnitNameSnapshot,
+                    deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals ?: existing.deliveryAllowDecimalsSnapshot,
+                    orderedQuantityScaled = targetOrderedQty,
+                    actualQuantityScaled = targetActualQty,
                     updatedAt = now
                 ) ?: VeggieOrderEntry(
                     id = generateUuid(),
@@ -718,11 +777,18 @@ class AdminVeggieViewModel(
                     veggieNameSnapshot = product.name,
                     unitNameSnapshot = unit?.name ?: product.unitTypeId,
                     allowDecimalsSnapshot = allowDecimals,
-                    orderedQuantityScaled = qtyScaled,
-                    actualQuantityScaled = qtyScaled,
+                    deliveryUnitNameSnapshot = deliveryUnit?.name,
+                    deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals,
+                    orderedQuantityScaled = targetOrderedQty,
+                    actualQuantityScaled = targetActualQty,
                     updatedAt = now
                 )
                 veggieOrderRepository.upsertAdminOrderEntry(entry)
+
+                if (existing != null && _draftActualQuantities.value.containsKey(existing.id)) {
+                    _draftActualQuantities.value = _draftActualQuantities.value - existing.id
+                }
+
                 loadData(preserveDraftEdits = true)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to add order entry"
@@ -752,7 +818,12 @@ class AdminVeggieViewModel(
                 veggieOrderRepository.saveVeggieProduct(initialProduct)
 
                 if (newImageBytes != null && newImageBytes.isNotEmpty()) {
-                    val savedFileName = onSaveProductImage?.invoke(product.id, newImageBytes, product.imageFileName)
+                    val savedFileName = onSaveProductImage?.invoke(
+                        product.id,
+                        product.name,
+                        newImageBytes,
+                        product.imageFileName
+                    )
                     if (!savedFileName.isNullOrBlank()) {
                         veggieOrderRepository.saveVeggieProduct(
                             initialProduct.copy(
@@ -772,11 +843,17 @@ class AdminVeggieViewModel(
         }
     }
 
-    fun toggleVeggieProductActive(product: VeggieProduct) {
+    fun toggleVeggieProductActive(product: VeggieProduct, cancelOpenRoundOrders: Boolean = false) {
         activeScope.launch {
             try {
                 if (product.isActive) {
                     veggieOrderRepository.deactivateVeggieProduct(product.id)
+                    if (cancelOpenRoundOrders) {
+                        val openRound = _activeRound.value
+                        if (openRound != null && openRound.status == VeggieRoundStatus.OPEN) {
+                            veggieOrderRepository.cancelProductEntriesInOpenRound(openRound.id, product.id)
+                        }
+                    }
                 } else {
                     veggieOrderRepository.saveVeggieProduct(
                         product.copy(isActive = true, updatedAt = currentTimeMillis())
@@ -805,7 +882,27 @@ class AdminVeggieViewModel(
     fun saveUnitType(unitType: VeggieUnitType) {
         activeScope.launch {
             try {
-                veggieOrderRepository.saveUnitType(unitType)
+                val isExisting = _unitTypes.value.any { it.id == unitType.id }
+                val toSave = if (!isExisting) {
+                    // Only for NEW units: reactivate matching inactive unit if one exists
+                    val existingInactive = _unitTypes.value.find {
+                        !it.isActive && it.name.equals(unitType.name.trim(), ignoreCase = true)
+                    }
+                    if (existingInactive != null) {
+                        existingInactive.copy(
+                            name = unitType.name.trim(),
+                            allowDecimals = unitType.allowDecimals,
+                            isActive = true,
+                            updatedAt = currentTimeMillis()
+                        )
+                    } else {
+                        unitType
+                    }
+                } else {
+                    // For EXISTING units: keep the unit's ID and update its properties directly
+                    unitType
+                }
+                veggieOrderRepository.saveUnitType(toSave)
                 loadData()
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to save unit type"

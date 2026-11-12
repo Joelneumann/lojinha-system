@@ -5,7 +5,9 @@ import com.lowagie.text.pdf.*
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.VeggieOrderEntry
 import de.joelneumann.lojinha.domain.model.VeggieOrderRound
+import de.joelneumann.lojinha.domain.model.VeggieProduct
 import de.joelneumann.lojinha.domain.model.VeggieQuantityScaling
+import de.joelneumann.lojinha.domain.model.VeggieUnitType
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
@@ -48,6 +50,11 @@ object VeggieOrderPdfGenerator {
     private data class VeggiePdfLabels(
         val buyerListTitle: String,
         val workerMatrixTitle: String,
+        val orderFormTitle: String,
+        val customerNameLabel: String,
+        val dateLabel: String,
+        val colOrderQty: String,
+        val emptyCatalogMessage: String,
         val weekLabel: (Int, Int) -> String,
         val openedAtLabel: String,
         val customersCountLabel: (Int) -> String,
@@ -69,6 +76,11 @@ object VeggieOrderPdfGenerator {
         Language.DE -> VeggiePdfLabels(
             buyerListTitle = "Gemüsebestellung — Einkaufsliste",
             workerMatrixTitle = "Gemüsebestellung — Verteilmatrix",
+            orderFormTitle = "Gemüsebestellung — Bestellformular",
+            customerNameLabel = "Kunde / Name:",
+            dateLabel = "Datum:",
+            colOrderQty = "Bestellmenge",
+            emptyCatalogMessage = "Keine aktiven Produkte im Katalog vorhanden.",
             weekLabel = { week, year -> "Kalenderwoche $week / $year" },
             openedAtLabel = "Eröffnet am",
             customersCountLabel = { count -> "$count Kunden" },
@@ -88,6 +100,11 @@ object VeggieOrderPdfGenerator {
         Language.EN -> VeggiePdfLabels(
             buyerListTitle = "Veggie Order — Buyer Shopping List",
             workerMatrixTitle = "Veggie Order — Worker Sorting Matrix",
+            orderFormTitle = "Veggie Order — Customer Order Form",
+            customerNameLabel = "Customer Name:",
+            dateLabel = "Date:",
+            colOrderQty = "Order Quantity",
+            emptyCatalogMessage = "No active products available in catalog.",
             weekLabel = { week, year -> "Week $week / $year" },
             openedAtLabel = "Opened",
             customersCountLabel = { count -> "$count Customers" },
@@ -107,6 +124,11 @@ object VeggieOrderPdfGenerator {
         Language.BR -> VeggiePdfLabels(
             buyerListTitle = "Pedido de Verduras — Lista de Compras",
             workerMatrixTitle = "Pedido de Verduras — Matriz de Separação",
+            orderFormTitle = "Pedido de Verduras — Formulário de Pedido",
+            customerNameLabel = "Nome do Cliente:",
+            dateLabel = "Data:",
+            colOrderQty = "Quantidade",
+            emptyCatalogMessage = "Nenhum produto ativo disponível no catálogo.",
             weekLabel = { week, year -> "Semana $week / $year" },
             openedAtLabel = "Aberto em",
             customersCountLabel = { count -> "$count Clientes" },
@@ -253,9 +275,14 @@ object VeggieOrderPdfGenerator {
                     }
                 }
 
+                val unitDisplay = if (sample.deliveryUnitNameSnapshot != null && sample.deliveryUnitNameSnapshot != sample.unitNameSnapshot) {
+                    "${sample.unitNameSnapshot} (${sample.deliveryUnitNameSnapshot})"
+                } else {
+                    sample.unitNameSnapshot
+                }
                 table.addCell(buildDataCell(sample.veggieNameSnapshot, FONT_BODY_BOLD, Element.ALIGN_LEFT))
                 table.addCell(buildDataCell(formattedTotalQty, FONT_BODY_BOLD, Element.ALIGN_CENTER))
-                table.addCell(buildDataCell(sample.unitNameSnapshot, FONT_BODY, Element.ALIGN_CENTER))
+                table.addCell(buildDataCell(unitDisplay, FONT_BODY, Element.ALIGN_CENTER))
                 // Blank write-in cells for Actual Unit Price and Total Spent
                 table.addCell(buildDataCell("", FONT_BODY, Element.ALIGN_RIGHT, Color.WHITE))
                 table.addCell(buildDataCell("", FONT_BODY, Element.ALIGN_RIGHT, Color.WHITE))
@@ -483,7 +510,12 @@ object VeggieOrderPdfGenerator {
                     horizontalAlignment = Element.ALIGN_CENTER
                     verticalAlignment = Element.ALIGN_MIDDLE
                 }
-                val unitCell = PdfPCell(Phrase(sample.unitNameSnapshot, FONT_MUTED_SMALL)).apply {
+                val unitDisplay = if (sample.deliveryUnitNameSnapshot != null && sample.deliveryUnitNameSnapshot != sample.unitNameSnapshot) {
+                    "${sample.unitNameSnapshot} (${sample.deliveryUnitNameSnapshot})"
+                } else {
+                    sample.unitNameSnapshot
+                }
+                val unitCell = PdfPCell(Phrase(unitDisplay, FONT_MUTED_SMALL)).apply {
                     border = Rectangle.BOX
                     borderColor = COLOR_BORDER
                     borderWidth = 0.75f
@@ -569,6 +601,256 @@ object VeggieOrderPdfGenerator {
             borderWidth = 0.75f
             setPadding(0f)
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // PDF 3: Customer Order Form (A4 Portrait, Interactive AcroForm Fields)
+    // -------------------------------------------------------------------------
+    fun generateCustomerOrderFormBytes(
+        products: List<VeggieProduct>,
+        unitMap: Map<String, VeggieUnitType>,
+        language: Language = Language.BR
+    ): ByteArray {
+        val out = ByteArrayOutputStream()
+        writeCustomerOrderFormPdf(out, products, unitMap, language)
+        return out.toByteArray()
+    }
+
+    fun generateCustomerOrderFormPdf(
+        outputFile: File,
+        products: List<VeggieProduct>,
+        unitMap: Map<String, VeggieUnitType>,
+        language: Language = Language.BR
+    ): File {
+        outputFile.parentFile?.mkdirs()
+        FileOutputStream(outputFile).use { fos ->
+            writeCustomerOrderFormPdf(fos, products, unitMap, language)
+        }
+        AppLogger.info(TAG, "Generated Customer Order Form PDF at: ${outputFile.absolutePath} (${outputFile.length()} bytes)")
+        return outputFile
+    }
+
+    private fun writeCustomerOrderFormPdf(
+        outputStream: java.io.OutputStream,
+        products: List<VeggieProduct>,
+        unitMap: Map<String, VeggieUnitType>,
+        language: Language
+    ) {
+        val labels = labelsFor(language)
+        val activeProducts = products
+            .filter { it.isActive && !it.isDeleted }
+            .sortedByAccentInsensitive { it.name }
+
+        val document = Document(PageSize.A4, 36f, 36f, 36f, 45f)
+        val writer = PdfWriter.getInstance(document, outputStream)
+        writer.pageEvent = VeggieFooterPageEvent(labels)
+        document.open()
+
+        // 1. Header
+        val headerTable = PdfPTable(1).apply {
+            widthPercentage = 100f
+            setSpacingAfter(4f)
+        }
+        val titleCell = PdfPCell().apply {
+            border = Rectangle.NO_BORDER
+            setPaddingBottom(3f)
+            addElement(Paragraph(labels.orderFormTitle, FONT_BRAND).apply { spacingAfter = 2f })
+            addElement(Paragraph(labels.productsCountLabel(activeProducts.size), FONT_SUBTITLE))
+        }
+        headerTable.addCell(titleCell)
+        document.add(headerTable)
+
+        // Divider
+        val divider = PdfPTable(1).apply {
+            widthPercentage = 100f
+            setSpacingAfter(12f)
+        }
+        divider.addCell(PdfPCell().apply {
+            border = Rectangle.BOTTOM
+            borderWidthBottom = 1.5f
+            borderColorBottom = COLOR_PRIMARY
+            setPadding(0f)
+            fixedHeight = 2f
+        })
+        document.add(divider)
+
+        // 2. Customer Name & Date interactive input boxes
+        val infoTable = PdfPTable(floatArrayOf(68f, 32f)).apply {
+            widthPercentage = 100f
+            setSpacingAfter(14f)
+        }
+
+        val nameCell = PdfPCell().apply {
+            border = Rectangle.NO_BORDER
+            setPaddingRight(10f)
+            setPaddingBottom(4f)
+            addElement(Paragraph(labels.customerNameLabel, FONT_BODY_BOLD).apply { spacingAfter = 4f })
+        }
+        val nameInputTable = PdfPTable(1).apply { widthPercentage = 100f }
+        val nameInputCell = PdfPCell().apply {
+            border = Rectangle.BOX
+            borderColor = COLOR_BORDER
+            borderWidth = 0.75f
+            backgroundColor = Color.WHITE
+            minimumHeight = 26f
+            cellEvent = PdfPCellEvent { _, position, _ ->
+                try {
+                    val rect = Rectangle(position.left + 2f, position.bottom + 2f, position.right - 2f, position.top - 2f)
+                    val tf = TextField(writer, rect, "customer_name").apply {
+                        fontSize = 10.5f
+                        textColor = COLOR_PRIMARY
+                        alignment = Element.ALIGN_LEFT
+                        borderColor = COLOR_BORDER
+                        borderWidth = 0.75f
+                        backgroundColor = Color.WHITE
+                    }
+                    writer.addAnnotation(tf.textField)
+                } catch (e: Exception) {
+                    AppLogger.error(TAG, "Failed to create customer_name field: ${e.message}", e)
+                }
+            }
+        }
+        nameInputTable.addCell(nameInputCell)
+        nameCell.addElement(nameInputTable)
+
+        val dateCell = PdfPCell().apply {
+            border = Rectangle.NO_BORDER
+            setPaddingLeft(6f)
+            setPaddingBottom(4f)
+            addElement(Paragraph(labels.dateLabel, FONT_BODY_BOLD).apply { spacingAfter = 4f })
+        }
+        val dateInputTable = PdfPTable(1).apply { widthPercentage = 100f }
+        val dateInputCell = PdfPCell().apply {
+            border = Rectangle.BOX
+            borderColor = COLOR_BORDER
+            borderWidth = 0.75f
+            backgroundColor = Color.WHITE
+            minimumHeight = 26f
+            cellEvent = PdfPCellEvent { _, position, _ ->
+                try {
+                    val rect = Rectangle(position.left + 2f, position.bottom + 2f, position.right - 2f, position.top - 2f)
+                    val tf = TextField(writer, rect, "order_date").apply {
+                        fontSize = 10.5f
+                        textColor = COLOR_PRIMARY
+                        alignment = Element.ALIGN_CENTER
+                        borderColor = COLOR_BORDER
+                        borderWidth = 0.75f
+                        backgroundColor = Color.WHITE
+                    }
+                    writer.addAnnotation(tf.textField)
+                } catch (e: Exception) {
+                    AppLogger.error(TAG, "Failed to create order_date field: ${e.message}", e)
+                }
+            }
+        }
+        dateInputTable.addCell(dateInputCell)
+        dateCell.addElement(dateInputTable)
+
+        infoTable.addCell(nameCell)
+        infoTable.addCell(dateCell)
+        document.add(infoTable)
+
+        // 3. Product Table
+        val table = PdfPTable(floatArrayOf(52f, 26f, 22f)).apply {
+            widthPercentage = 100f
+            headerRows = 1
+            setSpacingAfter(16f)
+        }
+
+        fun addTh(text: String, align: Int = Element.ALIGN_LEFT) {
+            val cell = PdfPCell(Phrase(text, FONT_TH_BUYER)).apply {
+                backgroundColor = COLOR_BG_LIGHT
+                setPaddingTop(7f)
+                setPaddingBottom(7f)
+                setPaddingLeft(6f)
+                setPaddingRight(6f)
+                horizontalAlignment = align
+                verticalAlignment = Element.ALIGN_MIDDLE
+                border = Rectangle.BOX
+                borderColor = COLOR_BORDER
+                borderWidth = 0.75f
+            }
+            table.addCell(cell)
+        }
+
+        addTh(labels.colProductName, Element.ALIGN_LEFT)
+        addTh(labels.colOrderQty, Element.ALIGN_CENTER)
+        addTh(labels.colUnit, Element.ALIGN_CENTER)
+
+        if (activeProducts.isEmpty()) {
+            val emptyCell = PdfPCell(Phrase(labels.emptyCatalogMessage, FONT_MUTED)).apply {
+                colspan = 3
+                setPadding(18f)
+                horizontalAlignment = Element.ALIGN_CENTER
+                border = Rectangle.BOX
+                borderColor = COLOR_BORDER
+            }
+            table.addCell(emptyCell)
+        } else {
+            activeProducts.forEachIndexed { idx, product ->
+                val rowBg = if (idx % 2 == 0) Color.WHITE else COLOR_BG_ZEBRA
+                val unitName = unitMap[product.unitTypeId]?.name ?: ""
+
+                val nameCell = PdfPCell(Phrase(product.name, FONT_BODY_BOLD)).apply {
+                    backgroundColor = rowBg
+                    border = Rectangle.BOX
+                    borderColor = COLOR_BORDER
+                    borderWidth = 0.75f
+                    minimumHeight = 26f
+                    setPaddingLeft(6f)
+                    setPaddingRight(6f)
+                    setPaddingTop(5f)
+                    setPaddingBottom(5f)
+                    horizontalAlignment = Element.ALIGN_LEFT
+                    verticalAlignment = Element.ALIGN_MIDDLE
+                }
+
+                val unitCell = PdfPCell(Phrase(unitName, FONT_BODY)).apply {
+                    backgroundColor = rowBg
+                    border = Rectangle.BOX
+                    borderColor = COLOR_BORDER
+                    borderWidth = 0.75f
+                    minimumHeight = 26f
+                    setPaddingLeft(6f)
+                    setPaddingRight(6f)
+                    setPaddingTop(5f)
+                    setPaddingBottom(5f)
+                    horizontalAlignment = Element.ALIGN_CENTER
+                    verticalAlignment = Element.ALIGN_MIDDLE
+                }
+
+                val qtyCell = PdfPCell().apply {
+                    backgroundColor = Color.WHITE
+                    border = Rectangle.BOX
+                    borderColor = COLOR_BORDER
+                    borderWidth = 0.75f
+                    minimumHeight = 26f
+                    cellEvent = PdfPCellEvent { _, position, _ ->
+                        try {
+                            val rect = Rectangle(position.left + 2f, position.bottom + 2f, position.right - 2f, position.top - 2f)
+                            val tf = TextField(writer, rect, "qty_${product.id}").apply {
+                                fontSize = 10f
+                                textColor = COLOR_PRIMARY
+                                alignment = Element.ALIGN_CENTER
+                                borderColor = COLOR_BORDER
+                                borderWidth = 0.75f
+                                backgroundColor = Color.WHITE
+                            }
+                            writer.addAnnotation(tf.textField)
+                        } catch (e: Exception) {
+                            AppLogger.error(TAG, "Failed to create qty field for ${product.id}: ${e.message}", e)
+                        }
+                    }
+                }
+
+                table.addCell(nameCell)
+                table.addCell(qtyCell)
+                table.addCell(unitCell)
+            }
+        }
+
+        document.add(table)
+        document.close()
     }
 
     private fun addDocumentHeader(

@@ -17,6 +17,7 @@ import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
 import de.joelneumann.lojinha.ui.screens.admin.AdminScreen
 import de.joelneumann.lojinha.ui.theme.LojinhaTheme
 import de.joelneumann.lojinha.ui.theme.WEB_UI_SCALE_FACTOR
+import de.joelneumann.lojinha.ui.utils.PdfFilenames
 import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
 import de.joelneumann.lojinha.ui.viewmodel.VeggieInputMode
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
@@ -140,6 +141,9 @@ fun main() {
                                         onFavoritesChanged = { favorites ->
                                             saveUserFavorites(activeCustomer.id, favorites)
                                         },
+                                        onSaveFavorites = { favorites ->
+                                            customerNetworkClient.saveVeggieFavorites(favorites)
+                                        },
                                         initialInputMode = loadUserInputMode(activeCustomer.id),
                                         onInputModeChanged = { mode ->
                                             saveUserInputMode(activeCustomer.id, mode)
@@ -201,6 +205,16 @@ fun main() {
                                             LanguageManager.resetToDefault()
                                             currentScreen = WebPortalScreen.USER_SELECTION
                                         }
+                                    },
+                                    onExecuteCustomerPdfExport = { customer, fromTimestamp, toTimestamp, language ->
+                                        historyViewModel.setIsExportingPdf(true)
+                                        val token = customerNetworkClient.authToken ?: ""
+                                        val fromQuery = if (fromTimestamp != null) "&from=$fromTimestamp" else ""
+                                        val toQuery = if (toTimestamp != null) "&to=$toTimestamp" else ""
+                                        val url = customerNetworkClient.resolveUrl("/api/customer/transactions-pdf?lang=${language.name}&token=$token$fromQuery$toQuery")
+                                        jsTriggerDownload(url)
+                                        historyViewModel.setIsExportingPdf(false)
+                                        historyViewModel.closeExportPdfModal()
                                     }
                                 )
                             }
@@ -216,8 +230,8 @@ fun main() {
                                 AdminVeggieViewModel(
                                     veggieOrderRepository = veggieOrderRepository,
                                     userRepository = userRepository,
-                                    onSaveProductImage = { productId, bytes, _ ->
-                                        veggieOrderRepository.uploadProductImage(productId, bytes)
+                                    onSaveProductImage = { productId, productName, bytes, _ ->
+                                        veggieOrderRepository.uploadProductImage(productId, productName, bytes)
                                     },
                                     onDeleteProductImage = { productId, _ ->
                                         veggieOrderRepository.deleteProductImage(productId)
@@ -267,7 +281,7 @@ fun main() {
                                     val url = adminNetworkClient.resolveUrl("/api/admin/users/${user.id}/transactions-pdf?lang=${language.name}&token=$token$fromQuery$toQuery")
                                     jsTriggerDownload(url)
                                     usersViewModel.setIsExportingPdf(false)
-                                    usersViewModel.setExportResultPath("Extrato_${user.name}.pdf")
+                                    usersViewModel.setExportResultPath(PdfFilenames.transactionStatementFilename(user.name, language))
                                 },
                                 onExportVeggieBuyerPdf = { roundId, language ->
                                     val token = adminNetworkClient.authToken ?: ""
@@ -280,6 +294,11 @@ fun main() {
                                     val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf?lang=${language.name}&token=$token")
                                     jsTriggerDownload(url)
                                     veggieViewModel.markPdfExported(roundId, isBuyer = false)
+                                },
+                                onExportVeggieOrderFormPdf = { language ->
+                                    val token = adminNetworkClient.authToken ?: ""
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/order-form-pdf?lang=${language.name}&token=$token")
+                                    jsTriggerDownload(url)
                                 },
                                 onExitAdmin = {
                                     scope.launch {
@@ -360,4 +379,3 @@ private fun saveUserInputMode(userId: String, mode: VeggieInputMode) {
         jsSetLocalItem("lojinha_veggie_input_mode_$userId", mode.name)
     } catch (_: Exception) {}
 }
-

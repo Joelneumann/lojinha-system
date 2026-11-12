@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.data.service
 
+import de.joelneumann.lojinha.ui.utils.removeAccents
 import de.joelneumann.lojinha.util.AppLogger
 import java.awt.Color
 import java.awt.RenderingHints
@@ -22,6 +23,16 @@ class VeggieImageService(
         const val FULL_MAX_DIMENSION_PX = 800
         private const val THUMB_QUALITY = 0.82f
         private const val FULL_QUALITY = 0.85f
+
+        fun sanitizeProductNameToImageKey(productName: String?): String {
+            if (productName.isNullOrBlank()) return ""
+            return productName
+                .removeAccents()
+                .lowercase()
+                .replace(Regex("[^a-z0-9]+"), "_")
+                .replace(Regex("_+"), "_")
+                .trim('_')
+        }
     }
 
     init {
@@ -33,14 +44,66 @@ class VeggieImageService(
     fun getImageDirectory(): File = imageDirectory
 
     /**
+     * Determines an image key based on [productName].
+     * If [productName] is available, generates a clean key (e.g. `tomate`).
+     * If there are multiple products/files with the same name, appends `_2`, `_3`, etc.
+     */
+    fun generateUniqueImageKey(
+        productId: String,
+        productName: String? = null,
+        previousImageFileName: String? = null,
+        existingImageKeys: Collection<String>? = null
+    ): String {
+        val cleanPrev = sanitizeFileName(previousImageFileName)
+        val base = sanitizeProductNameToImageKey(productName).ifBlank {
+            productId.replace(Regex("[^a-zA-Z0-9_-]"), "_").trim('_').ifBlank { "product" }
+        }
+
+        var index = 1
+        while (true) {
+            val candidate = if (index == 1) base else "${base}_$index"
+
+            // If candidate matches the product's own previous image file name, it's not a collision
+            if (cleanPrev != null && candidate.equals(cleanPrev, ignoreCase = true)) {
+                return candidate
+            }
+
+            // Check if any other product has this key
+            val inExistingKeys = existingImageKeys?.any { key ->
+                val cleanKey = sanitizeFileName(key)
+                cleanKey != null && cleanKey.equals(candidate, ignoreCase = true)
+            } == true
+
+            // Check if files exist on disk for this candidate
+            val fileExistsOnDisk = isAnyImageFileExisting(candidate)
+
+            if (!inExistingKeys && !fileExistsOnDisk) {
+                return candidate
+            }
+            index++
+        }
+    }
+
+    private fun isAnyImageFileExisting(candidate: String): Boolean {
+        val suffixes = listOf("_thumb.jpg", "_full.jpg", ".jpg", ".jpeg", ".png", ".webp")
+        return suffixes.any { suffix ->
+            val f = File(imageDirectory, "$candidate$suffix")
+            f.exists() && f.isFile
+        }
+    }
+
+    /**
      * Decodes [rawImageBytes], generates both `<imageKey>_thumb.jpg` (`96x96` square center-cropped)
      * and `<imageKey>_full.jpg` (up to `800x800` preserving aspect ratio) inside [imageDirectory],
-     * removes any older image files for [productId], and returns the new `imageFileName` key.
+     * removes older image files for [previousImageFileName] (unless still in use by another product),
+     * and returns the new `imageFileName` key.
      */
     fun saveProductImage(
         productId: String,
         rawImageBytes: ByteArray,
-        previousImageFileName: String? = null
+        previousImageFileName: String? = null,
+        productName: String? = null,
+        existingImageKeys: Collection<String>? = null
     ): String {
         require(rawImageBytes.isNotEmpty()) { "Image byte array cannot be empty" }
         if (!imageDirectory.exists()) {
@@ -50,8 +113,12 @@ class VeggieImageService(
         val sourceImage = ImageIO.read(ByteArrayInputStream(rawImageBytes))
             ?: throw IllegalArgumentException("Unsupported or corrupted image format")
 
-        val sanitizedId = productId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-        val imageKey = "${sanitizedId}_${System.currentTimeMillis()}"
+        val imageKey = generateUniqueImageKey(
+            productId = productId,
+            productName = productName,
+            previousImageFileName = previousImageFileName,
+            existingImageKeys = existingImageKeys
+        )
 
         val thumbImg = createSquareThumbnail(sourceImage, THUMB_SIZE_PX)
         val fullImg = createScaledImagePreservingAspect(sourceImage, FULL_MAX_DIMENSION_PX)
@@ -63,23 +130,44 @@ class VeggieImageService(
         writeJpegFile(fullImg, fullFile, FULL_QUALITY)
 
         if (!previousImageFileName.isNullOrBlank() && previousImageFileName != imageKey) {
-            deleteProductImages(previousImageFileName)
+            val cleanPrev = sanitizeFileName(previousImageFileName)
+            val isStillUsedByOther = existingImageKeys?.any { key ->
+                val cleanKey = sanitizeFileName(key)
+                cleanKey != null && cleanKey.equals(cleanPrev, ignoreCase = true)
+            } == true
+            if (!isStillUsedByOther) {
+                deleteProductImages(previousImageFileName)
+            }
         }
 
-        AppLogger.info(TAG, "Saved veggie images for '$productId' as '$imageKey' (thumb: ${thumbFile.length()} B, full: ${fullFile.length()} B)")
+        AppLogger.info(TAG, "Saved veggie images for '$productId' ($productName) as '$imageKey' (thumb: ${thumbFile.length()} B, full: ${fullFile.length()} B)")
         return imageKey
     }
 
     fun getThumbnailFile(imageFileName: String?): File? {
         val clean = sanitizeFileName(imageFileName) ?: return null
-        val file = File(imageDirectory, "${clean}_thumb.jpg")
-        return file.takeIf { it.exists() && it.isFile }
+        val thumbFile = File(imageDirectory, "${clean}_thumb.jpg")
+        if (thumbFile.exists() && thumbFile.isFile) return thumbFile
+        val fullFile = File(imageDirectory, "${clean}_full.jpg")
+        if (fullFile.exists() && fullFile.isFile) return fullFile
+        for (ext in listOf("jpg", "jpeg", "png", "webp")) {
+            val f = File(imageDirectory, "$clean.$ext")
+            if (f.exists() && f.isFile) return f
+        }
+        return null
     }
 
     fun getFullImageFile(imageFileName: String?): File? {
         val clean = sanitizeFileName(imageFileName) ?: return null
-        val file = File(imageDirectory, "${clean}_full.jpg")
-        return file.takeIf { it.exists() && it.isFile }
+        val fullFile = File(imageDirectory, "${clean}_full.jpg")
+        if (fullFile.exists() && fullFile.isFile) return fullFile
+        val thumbFile = File(imageDirectory, "${clean}_thumb.jpg")
+        if (thumbFile.exists() && thumbFile.isFile) return thumbFile
+        for (ext in listOf("jpg", "jpeg", "png", "webp")) {
+            val f = File(imageDirectory, "$clean.$ext")
+            if (f.exists() && f.isFile) return f
+        }
+        return null
     }
 
     fun readThumbnailBytes(imageFileName: String?): ByteArray? {
@@ -102,6 +190,9 @@ class VeggieImageService(
             .removeSuffix("_thumb.jpg")
             .removeSuffix("_full.jpg")
             .removeSuffix(".jpg")
+            .removeSuffix(".jpeg")
+            .removeSuffix(".png")
+            .removeSuffix(".webp")
         if (trimmed.contains("..") || trimmed.contains("/") || trimmed.contains("\\")) {
             return null
         }
