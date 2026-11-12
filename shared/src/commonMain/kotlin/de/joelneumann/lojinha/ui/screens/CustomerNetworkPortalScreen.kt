@@ -58,6 +58,7 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.IsoWeekInfo
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.setBrowserBeforeUnloadWarning
 import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
@@ -523,17 +524,19 @@ private fun CustomerVeggieOrderTabContent(
     val isRoundOpen = round.status == VeggieRoundStatus.OPEN
     val decimalSep = if (currentLanguage == Language.EN) '.' else ','
 
-    val filteredProducts = remember(products, searchQuery, filterFavoritesOnly, favoriteProductIds) {
-        products.filter { product ->
-            val matchesFavorite = !filterFavoritesOnly || product.id in favoriteProductIds
-            if (!matchesFavorite) return@filter false
-
-            if (searchQuery.isBlank()) {
-                true
-            } else {
-                product.name.containsIgnoreAccents(searchQuery) ||
-                    (product.description?.containsIgnoreAccents(searchQuery) == true)
-            }
+    val filteredProducts = remember(products, searchQuery, filterFavoritesOnly, favoriteProductIds, unitTypesById) {
+        val base = if (filterFavoritesOnly) {
+            products.filter { it.id in favoriteProductIds }
+        } else {
+            products
+        }
+        if (searchQuery.isBlank()) {
+            base
+        } else {
+            base.filterAndRankVeggieProducts(
+                query = searchQuery,
+                unitTypesById = unitTypesById
+            )
         }
     }
 
@@ -555,7 +558,9 @@ private fun CustomerVeggieOrderTabContent(
     val cartListState = rememberLazyListState()
 
     var activeZone by remember { mutableStateOf(VeggieFocusZone.SEARCH) }
-    var highlightedProductIndex by remember { mutableStateOf(-1) }
+    var highlightedProductIndex by remember(filteredProducts, searchQuery) {
+        mutableStateOf(if (searchQuery.isNotBlank() && filteredProducts.isNotEmpty()) 0 else -1)
+    }
     var highlightedCartIndex by remember { mutableStateOf(-1) }
 
     fun navigateToProduct(index: Int) {
@@ -582,7 +587,7 @@ private fun CustomerVeggieOrderTabContent(
 
     fun navigateToSearch() {
         activeZone = VeggieFocusZone.SEARCH
-        highlightedProductIndex = -1
+        highlightedProductIndex = if (searchQuery.isNotBlank() && filteredProducts.isNotEmpty()) 0 else -1
         highlightedCartIndex = -1
         coroutineScope.launch {
             searchFocusRequester.safeRequestFocus()
@@ -592,6 +597,12 @@ private fun CustomerVeggieOrderTabContent(
     LaunchedEffect(filteredProducts) {
         if (highlightedProductIndex >= filteredProducts.size) {
             highlightedProductIndex = -1
+        }
+    }
+
+    LaunchedEffect(searchQuery) {
+        if (filteredProducts.isNotEmpty()) {
+            productListState.scrollToItem(0)
         }
     }
 
@@ -616,7 +627,8 @@ private fun CustomerVeggieOrderTabContent(
                     when (activeZone) {
                         VeggieFocusZone.SEARCH -> {
                             if (filteredProducts.isNotEmpty()) {
-                                navigateToProduct(0)
+                                val targetIdx = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
+                                navigateToProduct(targetIdx)
                                 true
                             } else if (cartProducts.isNotEmpty()) {
                                 navigateToCart(0)
@@ -684,7 +696,8 @@ private fun CustomerVeggieOrderTabContent(
                         when (activeZone) {
                             VeggieFocusZone.SEARCH -> {
                                 if (filteredProducts.isNotEmpty()) {
-                                    navigateToProduct(0)
+                                    val targetIdx = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
+                                    navigateToProduct(targetIdx)
                                     true
                                 } else if (cartProducts.isNotEmpty()) {
                                     navigateToCart(0)
@@ -729,7 +742,14 @@ private fun CustomerVeggieOrderTabContent(
                                 true
                             } else false
                         }
-                        VeggieFocusZone.PRODUCTS, VeggieFocusZone.SEARCH -> false
+                        VeggieFocusZone.SEARCH -> {
+                            if (searchQuery.isNotBlank() && isRoundOpen && filteredProducts.isNotEmpty()) {
+                                val targetIndex = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
+                                selectedProductForAmountDialog = filteredProducts[targetIndex]
+                                true
+                            } else false
+                        }
+                        VeggieFocusZone.PRODUCTS -> false
                     }
                 }
                 Key.Spacebar -> {
@@ -831,8 +851,9 @@ private fun CustomerVeggieOrderTabContent(
                         filterFavoritesOnly = filterFavoritesOnly,
                         productListState = productListState,
                         searchFocusRequester = searchFocusRequester,
-                        highlightedProductIndex = if (activeZone == VeggieFocusZone.PRODUCTS) highlightedProductIndex else -1,
+                        highlightedProductIndex = if (activeZone == VeggieFocusZone.PRODUCTS || searchQuery.isNotBlank()) highlightedProductIndex else -1,
                         isDialogActive = (selectedProductForAmountDialog != null),
+                        isProductZoneActive = (activeZone == VeggieFocusZone.PRODUCTS),
                         onKeyDown = handleNavigationKey,
                         onNavigateToProduct = { idx -> navigateToProduct(idx) },
                         onNavigateToCart = { idx -> navigateToCart(idx) },
@@ -847,9 +868,13 @@ private fun CustomerVeggieOrderTabContent(
                         onClearError = { veggieViewModel.clearError() },
                         onQueryChange = { query ->
                             activeZone = VeggieFocusZone.SEARCH
-                            highlightedProductIndex = -1
-                            highlightedCartIndex = -1
                             veggieViewModel.updateProductSearchQuery(query)
+                        },
+                        onSearchSubmitted = {
+                            if (searchQuery.isNotBlank() && isRoundOpen && filteredProducts.isNotEmpty()) {
+                                val targetIndex = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
+                                selectedProductForAmountDialog = filteredProducts[targetIndex]
+                            }
                         },
                         onOpenDetail = { veggieViewModel.openProductDetail(it) },
                         onSelectProduct = { selectedProductForAmountDialog = it },
@@ -914,8 +939,9 @@ private fun CustomerVeggieOrderTabContent(
                 filterFavoritesOnly = filterFavoritesOnly,
                 productListState = productListState,
                 searchFocusRequester = searchFocusRequester,
-                highlightedProductIndex = if (activeZone == VeggieFocusZone.PRODUCTS) highlightedProductIndex else -1,
+                highlightedProductIndex = if (activeZone == VeggieFocusZone.PRODUCTS || searchQuery.isNotBlank()) highlightedProductIndex else -1,
                 isDialogActive = (selectedProductForAmountDialog != null),
+                isProductZoneActive = (activeZone == VeggieFocusZone.PRODUCTS),
                 onKeyDown = handleNavigationKey,
                 onNavigateToProduct = { idx -> navigateToProduct(idx) },
                 onNavigateToCart = { idx -> navigateToCart(idx) },
@@ -930,9 +956,13 @@ private fun CustomerVeggieOrderTabContent(
                 onClearError = { veggieViewModel.clearError() },
                 onQueryChange = { query ->
                     activeZone = VeggieFocusZone.SEARCH
-                    highlightedProductIndex = -1
-                    highlightedCartIndex = -1
                     veggieViewModel.updateProductSearchQuery(query)
+                },
+                onSearchSubmitted = {
+                    if (searchQuery.isNotBlank() && isRoundOpen && filteredProducts.isNotEmpty()) {
+                        val targetIndex = if (highlightedProductIndex in filteredProducts.indices) highlightedProductIndex else 0
+                        selectedProductForAmountDialog = filteredProducts[targetIndex]
+                    }
                 },
                 onOpenDetail = { veggieViewModel.openProductDetail(it) },
                 onSelectProduct = { selectedProductForAmountDialog = it },
@@ -983,10 +1013,26 @@ private fun CustomerVeggieOrderTabContent(
             initialScaledQuantity = draftQuantitiesScaled[editingProduct.id] ?: 0L,
             decimalSeparator = decimalSep,
             previousScaledQuantity = previousRoundQuantitiesScaled[editingProduct.id] ?: 0L,
-            onDismiss = { selectedProductForAmountDialog = null },
+            onDismiss = {
+                val lastEditedId = editingProduct.id
+                selectedProductForAmountDialog = null
+                val idx = filteredProducts.indexOfFirst { it.id == lastEditedId }
+                if (idx >= 0) {
+                    activeZone = VeggieFocusZone.PRODUCTS
+                    highlightedProductIndex = idx
+                    coroutineScope.launch { productListState.animateScrollToItem(idx) }
+                }
+            },
             onSubmit = { newScaledQty ->
                 veggieViewModel.updateProductQuantity(editingProduct.id, newScaledQty)
+                val lastEditedId = editingProduct.id
                 selectedProductForAmountDialog = null
+                val idx = filteredProducts.indexOfFirst { it.id == lastEditedId }
+                if (idx >= 0) {
+                    activeZone = VeggieFocusZone.PRODUCTS
+                    highlightedProductIndex = idx
+                    coroutineScope.launch { productListState.animateScrollToItem(idx) }
+                }
             }
         )
     }
@@ -1013,6 +1059,7 @@ private fun VeggieCatalogPanel(
     searchFocusRequester: FocusRequester,
     highlightedProductIndex: Int,
     isDialogActive: Boolean = false,
+    isProductZoneActive: Boolean = false,
     onKeyDown: ((KeyEvent) -> Boolean)? = null,
     onNavigateToProduct: ((Int) -> Unit)? = null,
     onNavigateToCart: ((Int) -> Unit)? = null,
@@ -1022,6 +1069,7 @@ private fun VeggieCatalogPanel(
     onSearchFocused: (() -> Unit)? = null,
     onClearError: () -> Unit,
     onQueryChange: (String) -> Unit,
+    onSearchSubmitted: () -> Unit = {},
     onOpenDetail: (VeggieProduct) -> Unit,
     onSelectProduct: (VeggieProduct) -> Unit,
     onToggleFavorite: (String) -> Unit,
@@ -1139,6 +1187,7 @@ private fun VeggieCatalogPanel(
                 placeholder = strings.searchVeggieProductsPlaceholder,
                 focusRequester = searchFocusRequester,
                 onKeyDown = onKeyDown,
+                onSearchSubmitted = onSearchSubmitted,
                 onFocusChanged = { focusState ->
                     if (focusState.isFocused) {
                         onReturnToSearch?.invoke() ?: onSearchFocused?.invoke()
@@ -1266,6 +1315,7 @@ private fun VeggieCatalogPanel(
                         previousQuantityScaled = prevQtyScaled,
                         isFavorite = product.id in favoriteProductIds,
                         isHighlighted = (index == highlightedProductIndex),
+                        isFocused = (isProductZoneActive && index == highlightedProductIndex),
                         isDialogActive = isDialogActive,
                         isEditable = isRoundOpen,
                         decimalSeparator = decimalSep,
@@ -1720,6 +1770,7 @@ private fun CustomerVeggieProductCard(
     previousQuantityScaled: Long,
     isFavorite: Boolean,
     isHighlighted: Boolean = false,
+    isFocused: Boolean = false,
     isDialogActive: Boolean = false,
     isEditable: Boolean,
     decimalSeparator: Char,
@@ -1743,8 +1794,8 @@ private fun CustomerVeggieProductCard(
     val cardFocusRequester = remember { FocusRequester() }
     var isCardFocused by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isHighlighted, isDialogActive) {
-        if (isHighlighted && !isDialogActive && !isCardFocused) {
+    LaunchedEffect(isFocused, isDialogActive) {
+        if (isFocused && !isDialogActive) {
             cardFocusRequester.safeRequestFocus()
         }
     }

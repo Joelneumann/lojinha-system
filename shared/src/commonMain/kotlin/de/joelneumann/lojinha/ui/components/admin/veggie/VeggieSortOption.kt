@@ -42,19 +42,17 @@ enum class VeggieSortOption {
     }
 }
 
+fun VeggieSortOption.toComparator(): Comparator<VeggieProduct> = when (this) {
+    VeggieSortOption.NAME_ASC -> compareBy(ACCENT_INSENSITIVE_COMPARATOR) { it.name }
+    VeggieSortOption.NAME_DESC -> compareByDescending(ACCENT_INSENSITIVE_COMPARATOR) { it.name }
+    VeggieSortOption.PRICE_ASC -> compareBy<VeggieProduct> { it.estimatedPriceCents ?: Long.MAX_VALUE }
+        .thenBy(ACCENT_INSENSITIVE_COMPARATOR) { it.name }
+    VeggieSortOption.PRICE_DESC -> compareByDescending<VeggieProduct> { it.estimatedPriceCents ?: -1L }
+        .thenBy(ACCENT_INSENSITIVE_COMPARATOR) { it.name }
+}
+
 fun List<VeggieProduct>.sortWithOption(sortOption: VeggieSortOption): List<VeggieProduct> {
-    return when (sortOption) {
-        VeggieSortOption.NAME_ASC -> sortedByAccentInsensitive { it.name }
-        VeggieSortOption.NAME_DESC -> sortedWith(compareByDescending(ACCENT_INSENSITIVE_COMPARATOR) { it.name })
-        VeggieSortOption.PRICE_ASC -> sortedWith(
-            compareBy<VeggieProduct> { it.estimatedPriceCents ?: Long.MAX_VALUE }
-                .thenBy(ACCENT_INSENSITIVE_COMPARATOR) { it.name }
-        )
-        VeggieSortOption.PRICE_DESC -> sortedWith(
-            compareByDescending<VeggieProduct> { it.estimatedPriceCents ?: -1L }
-                .thenBy(ACCENT_INSENSITIVE_COMPARATOR) { it.name }
-        )
-    }
+    return sortedWith(sortOption.toComparator())
 }
 
 @Composable

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -32,6 +33,7 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
 import de.joelneumann.lojinha.ui.utils.generateUuid
 
 @Composable
@@ -58,34 +60,44 @@ fun AdminVeggieCatalogSection(
     var selectedSortOption by remember { mutableStateOf(VeggieSortOption.NAME_ASC) }
     var selectedUnitFilterId by remember { mutableStateOf<String?>(null) }
 
-    val nonDeleted = remember(products) { products.filter { !it.isDeleted } }
+    val listState = rememberLazyListState()
 
-    val filteredActiveProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption) {
-        var list = nonDeleted.filter { it.isActive }
-        if (selectedUnitFilterId != null) {
-            list = list.filter { it.unitTypeId == selectedUnitFilterId }
-        }
-        if (searchQuery.isNotBlank()) {
-            val q = searchQuery.trim()
-            list = list.filter {
-                it.name.containsIgnoreAccents(q) || (it.description?.containsIgnoreAccents(q) == true)
-            }
-        }
-        list.sortWithOption(selectedSortOption)
+    LaunchedEffect(searchQuery, selectedUnitFilterId, selectedSortOption) {
+        listState.scrollToItem(0)
     }
 
-    val filteredDisabledProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption) {
-        var list = nonDeleted.filter { !it.isActive }
+    val nonDeleted = remember(products) { products.filter { !it.isDeleted } }
+
+    val filteredActiveProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption, unitMap) {
+        var list = nonDeleted.filter { it.isActive }
         if (selectedUnitFilterId != null) {
-            list = list.filter { it.unitTypeId == selectedUnitFilterId }
+            list = list.filter { it.unitTypeId == selectedUnitFilterId || it.deliveryUnitTypeId == selectedUnitFilterId }
         }
         if (searchQuery.isNotBlank()) {
-            val q = searchQuery.trim()
-            list = list.filter {
-                it.name.containsIgnoreAccents(q) || (it.description?.containsIgnoreAccents(q) == true)
-            }
+            list.filterAndRankVeggieProducts(
+                query = searchQuery,
+                unitTypesById = unitMap,
+                secondaryComparator = selectedSortOption.toComparator()
+            )
+        } else {
+            list.sortWithOption(selectedSortOption)
         }
-        list.sortWithOption(selectedSortOption)
+    }
+
+    val filteredDisabledProducts = remember(nonDeleted, searchQuery, selectedUnitFilterId, selectedSortOption, unitMap) {
+        var list = nonDeleted.filter { !it.isActive }
+        if (selectedUnitFilterId != null) {
+            list = list.filter { it.unitTypeId == selectedUnitFilterId || it.deliveryUnitTypeId == selectedUnitFilterId }
+        }
+        if (searchQuery.isNotBlank()) {
+            list.filterAndRankVeggieProducts(
+                query = searchQuery,
+                unitTypesById = unitMap,
+                secondaryComparator = selectedSortOption.toComparator()
+            )
+        } else {
+            list.sortWithOption(selectedSortOption)
+        }
     }
 
     val totalActiveNonDeleted = remember(nonDeleted) { nonDeleted.count { it.isActive } }
@@ -114,6 +126,11 @@ fun AdminVeggieCatalogSection(
                         query = searchQuery,
                         onQueryChange = onSearchQueryChange,
                         placeholder = strings.searchVeggieProductsPlaceholder,
+                        onSearchSubmitted = {
+                            if (filteredActiveProducts.isNotEmpty()) {
+                                editingProduct = filteredActiveProducts.first()
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     )
 
@@ -186,6 +203,11 @@ fun AdminVeggieCatalogSection(
                             query = searchQuery,
                             onQueryChange = onSearchQueryChange,
                             placeholder = strings.searchVeggieProductsPlaceholder,
+                            onSearchSubmitted = {
+                                if (filteredActiveProducts.isNotEmpty()) {
+                                    editingProduct = filteredActiveProducts.first()
+                                }
+                            },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -249,6 +271,7 @@ fun AdminVeggieCatalogSection(
         }
 
         LazyColumn(
+            state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 24.dp)
