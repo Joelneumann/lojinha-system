@@ -65,9 +65,10 @@ private val COL_CUSTOMER_WIDTH = 80.dp
 private val COL_TOTAL_QTY_WIDTH = 90.dp
 private val COL_MARKET_PRICE_WIDTH = 115.dp
 private val COL_TOTAL_SPENT_WIDTH = 115.dp
-private val COL_EFFECTIVE_PRICE_WIDTH = 105.dp
+private val COL_EFFECTIVE_PRICE_WIDTH = 130.dp
 private val COL_DIVIDER_WIDTH = 26.dp
-private val OVERVIEW_TOTAL_WIDTH = COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH + COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH
+private val COL_SCROLLBAR_GUTTER = 14.dp
+private val OVERVIEW_TOTAL_WIDTH = COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH + COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER
 
 @Composable
 fun AdminVeggieSettlementMatrix(
@@ -130,16 +131,29 @@ fun AdminVeggieSettlementMatrix(
             .sortedByAccentInsensitive { it.second }
     }
 
-    val roundProductRows = remember(entries) {
+    val roundProductRows = remember(entries, products, unitTypes) {
+        val productsById = products.associateBy { it.id }
+        val unitTypesById = unitTypes.associateBy { it.id }
         entries
             .groupBy { it.veggieProductId }
             .map { (productId, prodEntries) ->
                 val sample = prodEntries.first()
+                val currentProduct = productsById[productId]
+                val currentUnit = currentProduct?.unitTypeId?.let { unitTypesById[it] }
+                val resolvedUnitName = currentUnit?.name?.takeIf { it.isNotBlank() }
+                    ?: sample.unitNameSnapshot.takeIf { it.isNotBlank() }
+                    ?: ""
+                val resolvedAllowDecimals = currentUnit?.allowDecimals
+                    ?: sample.allowDecimalsSnapshot
+                val resolvedProductName = currentProduct?.name?.takeIf { it.isNotBlank() }
+                    ?: sample.veggieNameSnapshot.takeIf { it.isNotBlank() }
+                    ?: productId
+
                 VeggieMatrixProductRowInfo(
                     productId = productId,
-                    productName = sample.veggieNameSnapshot,
-                    unitName = sample.unitNameSnapshot,
-                    allowDecimals = sample.allowDecimalsSnapshot,
+                    productName = resolvedProductName,
+                    unitName = resolvedUnitName,
+                    allowDecimals = resolvedAllowDecimals,
                     entriesByUserId = prodEntries.associateBy { it.userId }
                 )
             }
@@ -731,10 +745,11 @@ fun AdminVeggieSettlementMatrix(
                                     modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    MatrixHeaderCell(strings.colActualQty, COL_TOTAL_QTY_WIDTH, TextAlign.Center)
+                                    MatrixHeaderCell("${strings.colOrderedQty} /\n${strings.colActualQty}", COL_TOTAL_QTY_WIDTH, TextAlign.Center)
                                     MatrixHeaderCell(strings.colMarketUnitPrice, COL_MARKET_PRICE_WIDTH, TextAlign.Center)
                                     MatrixHeaderCell(strings.colTotalSpent, COL_TOTAL_SPENT_WIDTH, TextAlign.Center)
                                     MatrixHeaderCell(strings.colEffectivePrice, COL_EFFECTIVE_PRICE_WIDTH, TextAlign.End)
+                                    Spacer(modifier = Modifier.width(COL_SCROLLBAR_GUTTER))
                                 }
                             }
                         }
@@ -754,6 +769,11 @@ fun AdminVeggieSettlementMatrix(
                             roundProductRows.forEach { rowInfo ->
                                 key(rowInfo.productId) {
                             val productSettlement = previewProductSettlementMap[rowInfo.productId]
+                            val totalOrderedScaled = rowInfo.entriesByUserId.values.sumOf { it.orderedQuantityScaled }
+                            val formattedTotalOrdered = VeggieQuantityScaling.formatScaledQuantity(
+                                totalOrderedScaled,
+                                rowInfo.allowDecimals
+                            )
                             val totalDeliveredScaled = rowInfo.entriesByUserId.values.sumOf { entry ->
                                 previewEntryMap[entry.id]?.deliveredQuantityScaled ?: entry.deliveredQuantityScaled
                             }
@@ -885,91 +905,137 @@ fun AdminVeggieSettlementMatrix(
                                             .width(animatedOverviewWidth)
                                             .clipToBounds()
                                     ) {
-                                        Row(
+                                        Column(
                                             modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
-                                            // Total Delivered Qty
-                                            Box(
-                                                modifier = Modifier.width(COL_TOTAL_QTY_WIDTH).padding(horizontal = 4.dp),
-                                                contentAlignment = Alignment.Center
+                                            // Top row: Total Ordered Qty directly over Column 1
+                                            Row(
+                                                modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier.width(COL_TOTAL_QTY_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = "$formattedTotalOrdered ${rowInfo.unitName}",
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = TextSecondaryMuted,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(COL_MARKET_PRICE_WIDTH + COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER))
+                                            }
+
+                                            // Middle row: Delivered, Market Price input, Total Spent input, Effective Price
+                                            // All in ONE single 36.dp row, perfectly centered and in one line
+                                            Row(
+                                                modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH).height(36.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                // Delivered Qty
+                                                Box(
+                                                    modifier = Modifier.width(COL_TOTAL_QTY_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = "$formattedTotalDelivered ${rowInfo.unitName}",
+                                                        fontSize = 12.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = PrimaryNavy,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+
+                                                // Market Unit Price Input
+                                                Box(
+                                                    modifier = Modifier.width(COL_MARKET_PRICE_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    val pIdx = priceProductIds.indexOf(rowInfo.productId)
+                                                    val prevPriceReq = if (pIdx > 0) priceFocusRequesters[priceProductIds[pIdx - 1]] else null
+                                                    val nextPriceReq = if (pIdx in 0 until priceProductIds.size - 1) {
+                                                        priceFocusRequesters[priceProductIds[pIdx + 1]]
+                                                    } else {
+                                                        spentFocusRequesters[priceProductIds.firstOrNull()]
+                                                    }
+
+                                                    MatrixNumberInputField(
+                                                        value = draftMarketPrices[rowInfo.productId] ?: "",
+                                                        onValueChange = { onUpdateMarketUnitPrice(rowInfo.productId, it) },
+                                                        placeholder = "0,00",
+                                                        fontSize = 12.5.sp,
+                                                        focusRequester = priceFocusRequesters[rowInfo.productId],
+                                                        prevFocusRequester = prevPriceReq,
+                                                        nextFocusRequester = nextPriceReq,
+                                                        modifier = Modifier.fillMaxWidth().height(36.dp)
+                                                    )
+                                                }
+
+                                                // Total Spent Input (Authoritative)
+                                                Box(
+                                                    modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    val pIdx = priceProductIds.indexOf(rowInfo.productId)
+                                                    val prevSpentReq = if (pIdx > 0) {
+                                                        spentFocusRequesters[priceProductIds[pIdx - 1]]
+                                                    } else {
+                                                        priceFocusRequesters[priceProductIds.lastOrNull()]
+                                                    }
+                                                    val nextSpentReq = if (pIdx in 0 until priceProductIds.size - 1) {
+                                                        spentFocusRequesters[priceProductIds[pIdx + 1]]
+                                                    } else {
+                                                        null
+                                                    }
+
+                                                    MatrixNumberInputField(
+                                                        value = draftTotalSpent[rowInfo.productId] ?: "",
+                                                        onValueChange = { onUpdateTotalSpent(rowInfo.productId, it) },
+                                                        placeholder = "0,00",
+                                                        isBold = true,
+                                                        fontSize = 12.5.sp,
+                                                        focusRequester = spentFocusRequesters[rowInfo.productId],
+                                                        prevFocusRequester = prevSpentReq,
+                                                        nextFocusRequester = nextSpentReq,
+                                                        modifier = Modifier.fillMaxWidth().height(36.dp)
+                                                    )
+                                                }
+
+                                                // Effective Unit Price (Read-Only)
+                                                Box(
+                                                    modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.CenterEnd
+                                                ) {
+                                                    Text(
+                                                        text = if (effectiveUnitPrice > 0L) {
+                                                            "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.unitName}"
+                                                        } else "—",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (effectiveUnitPrice > 0L) ColorSuccessEmerald else TextSecondaryMuted,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.width(COL_SCROLLBAR_GUTTER))
+                                            }
+
+                                            // Bottom spacer matching customer cell's price line height
+                                            Row(
+                                                modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Text(
-                                                    text = "$formattedTotalDelivered ${rowInfo.unitName}",
-                                                    fontSize = 12.5.sp,
+                                                    text = " ",
+                                                    fontSize = 10.5.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = PrimaryNavy,
-                                                    maxLines = 1
-                                                )
-                                            }
-
-                                            // Market Unit Price Input
-                                            Box(
-                                                modifier = Modifier.width(COL_MARKET_PRICE_WIDTH).padding(horizontal = 4.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                val pIdx = priceProductIds.indexOf(rowInfo.productId)
-                                                val prevPriceReq = if (pIdx > 0) priceFocusRequesters[priceProductIds[pIdx - 1]] else null
-                                                val nextPriceReq = if (pIdx in 0 until priceProductIds.size - 1) {
-                                                    priceFocusRequesters[priceProductIds[pIdx + 1]]
-                                                } else {
-                                                    spentFocusRequesters[priceProductIds.firstOrNull()]
-                                                }
-
-                                                MatrixNumberInputField(
-                                                    value = draftMarketPrices[rowInfo.productId] ?: "",
-                                                    onValueChange = { onUpdateMarketUnitPrice(rowInfo.productId, it) },
-                                                    placeholder = "0,00",
-                                                    fontSize = 12.5.sp,
-                                                    focusRequester = priceFocusRequesters[rowInfo.productId],
-                                                    prevFocusRequester = prevPriceReq,
-                                                    nextFocusRequester = nextPriceReq,
-                                                    modifier = Modifier.fillMaxWidth().height(36.dp)
-                                                )
-                                            }
-
-                                            // Total Spent Input (Authoritative)
-                                            Box(
-                                                modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH).padding(horizontal = 4.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                val pIdx = priceProductIds.indexOf(rowInfo.productId)
-                                                val prevSpentReq = if (pIdx > 0) {
-                                                    spentFocusRequesters[priceProductIds[pIdx - 1]]
-                                                } else {
-                                                    priceFocusRequesters[priceProductIds.lastOrNull()]
-                                                }
-                                                val nextSpentReq = if (pIdx in 0 until priceProductIds.size - 1) {
-                                                    spentFocusRequesters[priceProductIds[pIdx + 1]]
-                                                } else {
-                                                    null
-                                                }
-
-                                                MatrixNumberInputField(
-                                                    value = draftTotalSpent[rowInfo.productId] ?: "",
-                                                    onValueChange = { onUpdateTotalSpent(rowInfo.productId, it) },
-                                                    placeholder = "0,00",
-                                                    isBold = true,
-                                                    fontSize = 12.5.sp,
-                                                    focusRequester = spentFocusRequesters[rowInfo.productId],
-                                                    prevFocusRequester = prevSpentReq,
-                                                    nextFocusRequester = nextSpentReq,
-                                                    modifier = Modifier.fillMaxWidth().height(36.dp)
-                                                )
-                                            }
-
-                                            // Effective Unit Price (Read-Only)
-                                            Box(
-                                                modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH).padding(horizontal = 4.dp),
-                                                contentAlignment = Alignment.CenterEnd
-                                            ) {
-                                                Text(
-                                                    text = if (effectiveUnitPrice > 0L) {
-                                                        "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.unitName}"
-                                                    } else "—",
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (effectiveUnitPrice > 0L) ColorSuccessEmerald else TextSecondaryMuted,
+                                                    color = androidx.compose.ui.graphics.Color.Transparent,
                                                     maxLines = 1
                                                 )
                                             }
@@ -985,7 +1051,7 @@ fun AdminVeggieSettlementMatrix(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .fillMaxHeight()
-                        .padding(vertical = 4.dp)
+                        .padding(end = 2.dp, top = 4.dp, bottom = 4.dp)
                 )
             }
 
@@ -1062,7 +1128,7 @@ fun AdminVeggieSettlementMatrix(
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH)
                                     )
-                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH))
+                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER))
                                 }
                             }
                         }
@@ -1140,7 +1206,7 @@ fun AdminVeggieSettlementMatrix(
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH)
                                     )
-                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH))
+                                    Spacer(modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER))
                                 }
                             }
                         }
