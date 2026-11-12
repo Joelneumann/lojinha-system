@@ -23,6 +23,7 @@ import de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl
 import de.joelneumann.lojinha.data.service.VeggieImageService
 import de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
+import de.joelneumann.lojinha.ui.utils.PdfFilenames
 import de.joelneumann.lojinha.util.AppLogger
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -365,8 +366,7 @@ class LojinhaAdminServer(
                                 toTimestamp = toTimestamp,
                                 language = language
                             )
-                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
-                            val filename = "Extrato_${cleanUserName}.pdf"
+                            val filename = PdfFilenames.transactionStatementFilename(user.name, language)
                             call.response.header(
                                 HttpHeaders.ContentDisposition,
                                 ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
@@ -602,7 +602,7 @@ class LojinhaAdminServer(
                                 val unitTypes = repo.getAllUnitTypes().associateBy { it.id }
                                 val pdfBytes = VeggieOrderPdfGenerator.generateCustomerOrderFormBytes(products, unitTypes, language)
                                 val dateStamp = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-                                val filename = "Veggie_Order_Form_$dateStamp.pdf"
+                                val filename = PdfFilenames.customerOrderFormFilename(dateStamp, language)
                                 call.response.header(
                                     HttpHeaders.ContentDisposition,
                                     ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
@@ -823,7 +823,7 @@ class LojinhaAdminServer(
                                 val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(round, entries, language)
                                 repo.markBuyerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
-                                val filename = "Buyer_Shopping_List_W${isoWeek.weekOfYear.toString().padStart(2, '0')}_${isoWeek.isoYear}.pdf"
+                                val filename = PdfFilenames.buyerShoppingListFilename(isoWeek.weekOfYear, isoWeek.isoYear, language)
                                 call.response.header(
                                     HttpHeaders.ContentDisposition,
                                     ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
@@ -853,7 +853,7 @@ class LojinhaAdminServer(
                                 val pdfBytes = VeggieOrderPdfGenerator.generateWorkerSortingMatrixBytes(round, entries, language)
                                 repo.markWorkerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
-                                val filename = "Worker_Sorting_Matrix_W${isoWeek.weekOfYear.toString().padStart(2, '0')}_${isoWeek.isoYear}.pdf"
+                                val filename = PdfFilenames.workerSortingMatrixFilename(isoWeek.weekOfYear, isoWeek.isoYear, language)
                                 call.response.header(
                                     HttpHeaders.ContentDisposition,
                                     ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
@@ -1077,8 +1077,7 @@ class LojinhaAdminServer(
                                 toTimestamp = toTimestamp,
                                 language = language
                             )
-                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
-                            val filename = "Extrato_${cleanUserName}.pdf"
+                            val filename = PdfFilenames.transactionStatementFilename(user.name, language)
                             call.response.header(
                                 HttpHeaders.ContentDisposition,
                                 ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()

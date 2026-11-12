@@ -39,6 +39,7 @@ import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.CustomerVeggieRoundHistoryItem
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
+import de.joelneumann.lojinha.ui.components.admin.users.UserTransactionsPdfExportDialog
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
 import de.joelneumann.lojinha.ui.components.general.LogoutButton
 import de.joelneumann.lojinha.ui.components.general.PaginationBar
@@ -83,7 +84,8 @@ fun CustomerNetworkPortalScreen(
     veggieViewModel: CustomerVeggieViewModel,
     historyViewModel: TransactionHistoryViewModel,
     onUserUpdated: (User) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onExecuteCustomerPdfExport: ((user: User, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null
 ) {
     val strings = I18n.current
     val currentLanguage = LanguageManager.currentLanguage
@@ -112,6 +114,9 @@ fun CustomerNetworkPortalScreen(
     }
 
     val showSettingsModal by historyViewModel.showSettingsModal.collectAsState()
+    val showExportPdfModal by historyViewModel.showExportPdfModal.collectAsState()
+    val exportPdfTransactions by historyViewModel.exportPdfTransactions.collectAsState()
+    val isExportingPdf by historyViewModel.isExportingPdf.collectAsState()
     val pinInput by historyViewModel.pinInput.collectAsState()
     val selectedLanguage by historyViewModel.selectedLanguage.collectAsState()
     val selectedSecondaryCurrency by historyViewModel.selectedSecondaryCurrency.collectAsState()
@@ -350,6 +355,20 @@ fun CustomerNetworkPortalScreen(
             product = detailProduct,
             unitType = unitTypesById[detailProduct.unitTypeId],
             onDismiss = { veggieViewModel.closeProductDetail() }
+        )
+    }
+
+    if (showExportPdfModal) {
+        UserTransactionsPdfExportDialog(
+            user = user,
+            userTransactions = exportPdfTransactions,
+            defaultSaveDirectory = "Downloads",
+            isExporting = isExportingPdf,
+            hideFolderPicker = true,
+            onExportPdf = { _, fromTimestamp, toTimestamp, language ->
+                onExecuteCustomerPdfExport?.invoke(user, fromTimestamp, toTimestamp, language)
+            },
+            onDismiss = { historyViewModel.closeExportPdfModal() }
         )
     }
 

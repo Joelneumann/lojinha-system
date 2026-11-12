@@ -17,6 +17,7 @@ import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
 import de.joelneumann.lojinha.ui.screens.admin.AdminScreen
 import de.joelneumann.lojinha.ui.theme.LojinhaTheme
 import de.joelneumann.lojinha.ui.theme.WEB_UI_SCALE_FACTOR
+import de.joelneumann.lojinha.ui.utils.PdfFilenames
 import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
@@ -196,6 +197,16 @@ fun main() {
                                             LanguageManager.resetToDefault()
                                             currentScreen = WebPortalScreen.USER_SELECTION
                                         }
+                                    },
+                                    onExecuteCustomerPdfExport = { customer, fromTimestamp, toTimestamp, language ->
+                                        historyViewModel.setIsExportingPdf(true)
+                                        val token = customerNetworkClient.authToken ?: ""
+                                        val fromQuery = if (fromTimestamp != null) "&from=$fromTimestamp" else ""
+                                        val toQuery = if (toTimestamp != null) "&to=$toTimestamp" else ""
+                                        val url = customerNetworkClient.resolveUrl("/api/customer/transactions-pdf?lang=${language.name}&token=$token$fromQuery$toQuery")
+                                        jsTriggerDownload(url)
+                                        historyViewModel.setIsExportingPdf(false)
+                                        historyViewModel.closeExportPdfModal()
                                     }
                                 )
                             }
@@ -262,7 +273,7 @@ fun main() {
                                     val url = adminNetworkClient.resolveUrl("/api/admin/users/${user.id}/transactions-pdf?lang=${language.name}&token=$token$fromQuery$toQuery")
                                     jsTriggerDownload(url)
                                     usersViewModel.setIsExportingPdf(false)
-                                    usersViewModel.setExportResultPath("Extrato_${user.name}.pdf")
+                                    usersViewModel.setExportResultPath(PdfFilenames.transactionStatementFilename(user.name, language))
                                 },
                                 onExportVeggieBuyerPdf = { roundId, language ->
                                     val token = adminNetworkClient.authToken ?: ""

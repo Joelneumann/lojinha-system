@@ -733,6 +733,10 @@ object GermanStrings : AppStrings {
     override val errInvalidDateRange = "Ungültiger Datumsbereich: Startdatum muss vor dem Enddatum liegen."
     override val errNoTransactionsToExport = "Keine Transaktionen im ausgewählten Zeitraum gefunden."
     override val errPdfExportFailed = "Fehler beim Exportieren des PDFs."
+    override val exportBuyerPdfQuestion = "Möchten Sie die Einkaufsliste als PDF exportieren?"
+    override val exportWorkerPdfQuestion = "Möchten Sie die Verteilmatrix als PDF exportieren?"
+    override val exportOrderFormPdfQuestion = "Möchten Sie das Bestellformular als PDF exportieren?"
+    override val exportStatementPdfQuestion = "Kontoauszug als PDF exportieren?"
 
     // Admin Notes & Suggestions
     override val tabNotes = "Notizen"

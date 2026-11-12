@@ -21,6 +21,7 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon
+import de.joelneumann.lojinha.ui.components.general.LanguageFlagSelector
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
@@ -50,6 +51,7 @@ fun UserTransactionsPdfExportDialog(
     isExporting: Boolean,
     exportResultPath: String? = null,
     errorMessage: String? = null,
+    hideFolderPicker: Boolean = false,
     onExportPdf: (destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null,
@@ -132,14 +134,14 @@ fun UserTransactionsPdfExportDialog(
                 validationError = strings.errInvalidDateRange
             } else if (fromTimestamp != null && toTimestamp != null && fromTimestamp > toTimestamp) {
                 validationError = strings.errInvalidDateRange
-            } else if (destinationFolder.isBlank()) {
+            } else if (!hideFolderPicker && destinationFolder.isBlank()) {
                 validationError = strings.selectDestinationFolder
             } else {
                 validationError = null
                 onExportPdf(destinationFolder.trim(), fromTimestamp, toTimestamp, selectedLanguage)
             }
         } else {
-            if (destinationFolder.isBlank()) {
+            if (!hideFolderPicker && destinationFolder.isBlank()) {
                 validationError = strings.selectDestinationFolder
             } else {
                 validationError = null
@@ -177,7 +179,7 @@ fun UserTransactionsPdfExportDialog(
                 )
                 Column {
                     Text(
-                        text = strings.exportTransactionsTitle,
+                        text = strings.exportStatementPdfQuestion,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         color = PrimaryNavy
@@ -294,37 +296,10 @@ fun UserTransactionsPdfExportDialog(
                             fontWeight = FontWeight.Bold,
                             color = PrimaryNavy
                         )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            val languages = listOf(
-                                Language.BR to "Português",
-                                Language.DE to "Deutsch",
-                                Language.EN to "English"
-                            )
-                            languages.forEach { (lang, label) ->
-                                val isSelected = selectedLanguage == lang
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { selectedLanguage = lang },
-                                    leadingIcon = {
-                                        LanguageFlagIcon(language = lang, width = 18.dp, height = 13.dp)
-                                    },
-                                    label = {
-                                        Text(
-                                            text = label,
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = AccentNavy,
-                                        selectedLabelColor = SurfaceWhite
-                                    )
-                                )
-                            }
-                        }
+                        LanguageFlagSelector(
+                            selectedLanguage = selectedLanguage,
+                            onLanguageSelected = { selectedLanguage = it }
+                        )
                     }
 
                     // 2. Period Presets
@@ -397,48 +372,50 @@ fun UserTransactionsPdfExportDialog(
                     }
 
                     // 3. Destination Folder Picker
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = strings.destinationFolder,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryNavy
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = destinationFolder,
-                                onValueChange = { destinationFolder = it },
-                                placeholder = { Text(strings.selectDestinationFolder) },
-                                singleLine = true,
-                                enabled = !isExporting,
-                                modifier = Modifier.weight(1f)
+                    if (!hideFolderPicker) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = strings.destinationFolder,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryNavy
                             )
-                            Button(
-                                onClick = {
-                                    pickFolder { path ->
-                                        destinationFolder = path
-                                    }
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                enabled = !isExporting,
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                                modifier = Modifier.padding(top = 4.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                OutlinedTextField(
+                                    value = destinationFolder,
+                                    onValueChange = { destinationFolder = it },
+                                    placeholder = { Text(strings.selectDestinationFolder) },
+                                    singleLine = true,
+                                    enabled = !isExporting,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Button(
+                                    onClick = {
+                                        pickFolder { path ->
+                                            destinationFolder = path
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    enabled = !isExporting,
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                                    modifier = Modifier.padding(top = 4.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.FolderOpen,
-                                        contentDescription = null,
-                                        tint = SurfaceWhite,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(strings.browseBtn)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FolderOpen,
+                                            contentDescription = null,
+                                            tint = SurfaceWhite,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(strings.browseBtn)
+                                    }
                                 }
                             }
                         }

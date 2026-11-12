@@ -31,6 +31,7 @@ import de.joelneumann.lojinha.ui.screens.ShoppingScreen
 import de.joelneumann.lojinha.ui.screens.TransactionHistoryScreen
 import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.PdfFilenames
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import androidx.compose.ui.input.pointer.pointerInput
@@ -563,13 +564,13 @@ fun App(
                                         adminUsersViewModel.setExportPdfError(null)
                                         try {
                                             val transactions = effectiveTransactionRepo.getTransactionsByUserId(user.id)
-                                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
                                             val dateSuffix = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
                                             val targetDir = java.io.File(destinationFolder)
                                             if (!targetDir.exists()) {
                                                 targetDir.mkdirs()
                                             }
-                                            val targetFile = java.io.File(targetDir, "Extrato_${cleanUserName}_$dateSuffix.pdf")
+                                            val targetFileName = PdfFilenames.transactionStatementFilename(user.name, language, dateSuffix)
+                                            val targetFile = java.io.File(targetDir, targetFileName)
                                             de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementPdf(
                                                 outputFile = targetFile,
                                                 user = user,
@@ -609,7 +610,7 @@ fun App(
                                         if (!targetDir.exists()) targetDir.mkdirs()
                                         val targetFile = java.io.File(
                                             targetDir,
-                                            "Veggie_Buyer_List_Week_${weekInfo.weekOfYear}_${weekInfo.isoYear}.pdf"
+                                            PdfFilenames.buyerShoppingListFilename(weekInfo.weekOfYear, weekInfo.isoYear, language)
                                         )
                                         var finalFile = targetFile
                                         try {
@@ -622,10 +623,11 @@ fun App(
                                         } catch (e: Exception) {
                                             AppLogger.warn("App", "Primary PDF export to ${targetFile.absolutePath} failed (${e.message}), trying fallback", e)
                                             val timeStamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+                                            val fallbackFilename = PdfFilenames.buyerShoppingListFilename(weekInfo.weekOfYear, weekInfo.isoYear, language, timeStamp)
                                             val fallbackFile = if (targetDir.canWrite()) {
-                                                java.io.File(targetDir, "Veggie_Buyer_List_Week_${weekInfo.weekOfYear}_${weekInfo.isoYear}_$timeStamp.pdf")
+                                                java.io.File(targetDir, fallbackFilename)
                                             } else {
-                                                java.io.File(System.getProperty("user.home"), "Veggie_Buyer_List_Week_${weekInfo.weekOfYear}_${weekInfo.isoYear}_$timeStamp.pdf")
+                                                java.io.File(System.getProperty("user.home"), fallbackFilename)
                                             }
                                             de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator.generateBuyerShoppingListPdf(
                                                 outputFile = fallbackFile,
@@ -658,7 +660,7 @@ fun App(
                                         if (!targetDir.exists()) targetDir.mkdirs()
                                         val targetFile = java.io.File(
                                             targetDir,
-                                            "Veggie_Worker_Matrix_Week_${weekInfo.weekOfYear}_${weekInfo.isoYear}.pdf"
+                                            PdfFilenames.workerSortingMatrixFilename(weekInfo.weekOfYear, weekInfo.isoYear, language)
                                         )
                                         var finalFile = targetFile
                                         try {
@@ -671,10 +673,11 @@ fun App(
                                         } catch (e: Exception) {
                                             AppLogger.warn("App", "Primary PDF export to ${targetFile.absolutePath} failed (${e.message}), trying fallback", e)
                                             val timeStamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+                                            val fallbackFilename = PdfFilenames.workerSortingMatrixFilename(weekInfo.weekOfYear, weekInfo.isoYear, language, timeStamp)
                                             val fallbackFile = if (targetDir.canWrite()) {
-                                                java.io.File(targetDir, "Veggie_Worker_Matrix_Week_${weekInfo.weekOfYear}_${weekInfo.isoYear}_$timeStamp.pdf")
+                                                java.io.File(targetDir, fallbackFilename)
                                             } else {
-                                                java.io.File(System.getProperty("user.home"), "Veggie_Worker_Matrix_Week_${weekInfo.weekOfYear}_${weekInfo.isoYear}_$timeStamp.pdf")
+                                                java.io.File(System.getProperty("user.home"), fallbackFilename)
                                             }
                                             de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator.generateWorkerSortingMatrixPdf(
                                                 outputFile = fallbackFile,
@@ -703,7 +706,7 @@ fun App(
                                         val dateStamp = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
                                         val targetFile = java.io.File(
                                             targetDir,
-                                            "Veggie_Order_Form_$dateStamp.pdf"
+                                            PdfFilenames.customerOrderFormFilename(dateStamp, language)
                                         )
                                         var finalFile = targetFile
                                         try {
@@ -716,10 +719,11 @@ fun App(
                                         } catch (e: Exception) {
                                             AppLogger.warn("App", "Primary PDF export to ${targetFile.absolutePath} failed (${e.message}), trying fallback", e)
                                             val timeStamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+                                            val fallbackFilename = PdfFilenames.customerOrderFormFilename(dateStamp, language, timeStamp)
                                             val fallbackFile = if (targetDir.canWrite()) {
-                                                java.io.File(targetDir, "Veggie_Order_Form_$timeStamp.pdf")
+                                                java.io.File(targetDir, fallbackFilename)
                                             } else {
-                                                java.io.File(System.getProperty("user.home"), "Veggie_Order_Form_$timeStamp.pdf")
+                                                java.io.File(System.getProperty("user.home"), fallbackFilename)
                                             }
                                             de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator.generateCustomerOrderFormPdf(
                                                 outputFile = fallbackFile,

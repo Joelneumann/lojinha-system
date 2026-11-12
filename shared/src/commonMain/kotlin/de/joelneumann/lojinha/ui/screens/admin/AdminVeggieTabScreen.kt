@@ -27,6 +27,7 @@ import de.joelneumann.lojinha.ui.components.admin.veggie.ExportedBadgePill
 import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.general.PaginationBar
+import de.joelneumann.lojinha.ui.components.general.PdfExportConfirmDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.theme.*
@@ -36,6 +37,12 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieSubTab
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel
 
 private data class PendingPdfExport(val roundId: String, val isBuyer: Boolean)
+
+private sealed interface VeggiePdfExportTarget {
+    data class Buyer(val roundId: String) : VeggiePdfExportTarget
+    data class Worker(val roundId: String) : VeggiePdfExportTarget
+    data object OrderForm : VeggiePdfExportTarget
+}
 
 @Composable
 fun AdminVeggieTabScreen(
@@ -83,6 +90,7 @@ fun AdminVeggieTabScreen(
     var pendingBackFromHistoryEdit by remember { mutableStateOf(false) }
     var showDiscardConfirmDialog by remember { mutableStateOf(false) }
     var pendingPdfExport by remember { mutableStateOf<PendingPdfExport?>(null) }
+    var pendingPdfConfirmation by remember { mutableStateOf<VeggiePdfExportTarget?>(null) }
 
     LaunchedEffect(hasUnsavedSettlementChanges) {
         onUnsavedStateChanged(hasUnsavedSettlementChanges)
@@ -168,7 +176,7 @@ fun AdminVeggieTabScreen(
                                         if (hasUnsavedSettlementChanges) {
                                             pendingPdfExport = PendingPdfExport(currentRound.id, isBuyer = true)
                                         } else {
-                                            onExportBuyerPdf(currentRound.id, currentLanguage)
+                                            pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(currentRound.id)
                                         }
                                     },
                                     enabled = !isSaving,
@@ -190,7 +198,7 @@ fun AdminVeggieTabScreen(
                                         if (hasUnsavedSettlementChanges) {
                                             pendingPdfExport = PendingPdfExport(currentRound.id, isBuyer = false)
                                         } else {
-                                            onExportWorkerPdf(currentRound.id, currentLanguage)
+                                            pendingPdfConfirmation = VeggiePdfExportTarget.Worker(currentRound.id)
                                         }
                                     },
                                     enabled = !isSaving,
@@ -212,7 +220,7 @@ fun AdminVeggieTabScreen(
                 AdminVeggieSubTab.CATALOG -> {
                     if (onExportOrderFormPdf != null) {
                         OutlinedButton(
-                            onClick = { onExportOrderFormPdf(currentLanguage) },
+                            onClick = { pendingPdfConfirmation = VeggiePdfExportTarget.OrderForm },
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
@@ -232,7 +240,7 @@ fun AdminVeggieTabScreen(
                                         if (hasUnsavedSettlementChanges) {
                                             pendingPdfExport = PendingPdfExport(pastRound.id, isBuyer = true)
                                         } else {
-                                            onExportBuyerPdf(pastRound.id, currentLanguage)
+                                            pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(pastRound.id)
                                         }
                                     },
                                     enabled = !isSaving,
@@ -254,7 +262,7 @@ fun AdminVeggieTabScreen(
                                         if (hasUnsavedSettlementChanges) {
                                             pendingPdfExport = PendingPdfExport(pastRound.id, isBuyer = false)
                                         } else {
-                                            onExportWorkerPdf(pastRound.id, currentLanguage)
+                                            pendingPdfConfirmation = VeggiePdfExportTarget.Worker(pastRound.id)
                                         }
                                     },
                                     enabled = !isSaving,
@@ -572,8 +580,8 @@ fun AdminVeggieTabScreen(
                                         isSelected = false,
                                         transporterName = users.find { it.id == round.transporterUserId }?.name,
                                         onOpenInMatrix = { viewModel.openPastRoundForEditing(round.id) },
-                                        onExportBuyerPdf = onExportBuyerPdf?.let { cb -> { cb(round.id, currentLanguage) } },
-                                        onExportWorkerPdf = onExportWorkerPdf?.let { cb -> { cb(round.id, currentLanguage) } }
+                                        onExportBuyerPdf = onExportBuyerPdf?.let { { pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(round.id) } },
+                                        onExportWorkerPdf = onExportWorkerPdf?.let { { pendingPdfConfirmation = VeggiePdfExportTarget.Worker(round.id) } }
                                     )
                                 }
                             }
@@ -648,15 +656,36 @@ fun AdminVeggieTabScreen(
                 pendingPdfExport = null
                 viewModel.saveDraftSettlement {
                     if (target.isBuyer) {
-                        onExportBuyerPdf?.invoke(target.roundId, currentLanguage)
+                        pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(target.roundId)
                     } else {
-                        onExportWorkerPdf?.invoke(target.roundId, currentLanguage)
+                        pendingPdfConfirmation = VeggiePdfExportTarget.Worker(target.roundId)
                     }
                 }
             },
             onDismiss = {
                 pendingPdfExport = null
             }
+        )
+    }
+
+    pendingPdfConfirmation?.let { target ->
+        val question = when (target) {
+            is VeggiePdfExportTarget.Buyer -> strings.exportBuyerPdfQuestion
+            is VeggiePdfExportTarget.Worker -> strings.exportWorkerPdfQuestion
+            is VeggiePdfExportTarget.OrderForm -> strings.exportOrderFormPdfQuestion
+        }
+        PdfExportConfirmDialog(
+            question = question,
+            initialLanguage = currentLanguage,
+            onConfirm = { lang ->
+                pendingPdfConfirmation = null
+                when (target) {
+                    is VeggiePdfExportTarget.Buyer -> onExportBuyerPdf?.invoke(target.roundId, lang)
+                    is VeggiePdfExportTarget.Worker -> onExportWorkerPdf?.invoke(target.roundId, lang)
+                    is VeggiePdfExportTarget.OrderForm -> onExportOrderFormPdf?.invoke(lang)
+                }
+            },
+            onDismiss = { pendingPdfConfirmation = null }
         )
     }
 

@@ -712,6 +712,10 @@ interface AppStrings {
     val errInvalidDateRange: String
     val errNoTransactionsToExport: String
     val errPdfExportFailed: String
+    val exportBuyerPdfQuestion: String
+    val exportWorkerPdfQuestion: String
+    val exportOrderFormPdfQuestion: String
+    val exportStatementPdfQuestion: String
 
     // Admin Notes & Suggestions
     val tabNotes: String
