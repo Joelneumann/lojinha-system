@@ -910,6 +910,11 @@ interface AppStrings {
     val addOrderModeAddToExisting: String
     fun addOrderCurrentQuantityLabel(quantity: String, unit: String): String
     fun addOrderNewTotalLabel(quantity: String, unit: String): String
+    val veggieProductDiscontinuedBadge: String
+    fun veggieAmountMaxExceededError(maxFormatted: String, unitName: String): String
+    fun confirmDeactivateWithOrdersMsg(productName: String, orderCount: Int): String
+    val deactivateStopNewOrdersOnly: String
+    val deactivateCancelExistingOrders: String
 }
 
 

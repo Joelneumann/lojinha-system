@@ -32,6 +32,9 @@ class CustomerVeggieViewModel(
     private val _products = MutableStateFlow<List<VeggieProduct>>(emptyList())
     val products: StateFlow<List<VeggieProduct>> = _products.asStateFlow()
 
+    private val _inactiveOrderedProducts = MutableStateFlow<List<VeggieProduct>>(emptyList())
+    val inactiveOrderedProducts: StateFlow<List<VeggieProduct>> = _inactiveOrderedProducts.asStateFlow()
+
     private val _activeRound = MutableStateFlow<VeggieOrderRound?>(null)
     val activeRound: StateFlow<VeggieOrderRound?> = _activeRound.asStateFlow()
 
@@ -95,15 +98,18 @@ class CustomerVeggieViewModel(
                 val state = onFetchVeggieState()
                 val history = onFetchHistory()
 
-                _unitTypes.value = state.unitTypes.filter { it.isActive }.sortedByAccentInsensitive { it.name }
-                _products.value = state.products.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
-                _activeRound.value = state.activeRound
-                _previousRoundQuantitiesScaled.value = state.previousRoundQuantities
-                _historyItems.value = history
-
                 val serverQuantities = state.currentEntries
                     .filter { it.orderedQuantityScaled > 0L }
                     .associate { it.veggieProductId to it.orderedQuantityScaled }
+
+                _unitTypes.value = state.unitTypes.filter { it.isActive }.sortedByAccentInsensitive { it.name }
+                _products.value = state.products.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
+                _inactiveOrderedProducts.value = state.products
+                    .filter { (!it.isActive || it.isDeleted) && it.id in serverQuantities }
+                    .sortedByAccentInsensitive { it.name }
+                _activeRound.value = state.activeRound
+                _previousRoundQuantitiesScaled.value = state.previousRoundQuantities
+                _historyItems.value = history
 
                 val currentRoundId = state.activeRound?.id
                 val sameRound = currentRoundId != null && currentRoundId == loadedRoundId
@@ -222,7 +228,7 @@ class CustomerVeggieViewModel(
     }
 
     fun calculateEstimatedItemsSubtotalCents(): Long {
-        val productsById = _products.value.associateBy { it.id }
+        val productsById = (_products.value + _inactiveOrderedProducts.value).associateBy { it.id }
         var total = 0L
         for ((productId, qtyScaled) in _draftQuantitiesScaled.value) {
             if (qtyScaled <= 0L) continue

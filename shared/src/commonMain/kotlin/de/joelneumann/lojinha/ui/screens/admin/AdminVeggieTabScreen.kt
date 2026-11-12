@@ -445,6 +445,16 @@ fun AdminVeggieTabScreen(
                     onDeleteProduct = viewModel::deleteVeggieProduct,
                     onSaveUnitType = viewModel::saveUnitType,
                     onDeleteUnitType = viewModel::deleteUnitType,
+                    openRoundOrderCountForProduct = { productId ->
+                        val openRound = activeRound?.takeIf { it.status == VeggieRoundStatus.OPEN }
+                        if (openRound != null && selectedRound?.id == openRound.id) {
+                            selectedRoundEntries.count {
+                                it.veggieProductId == productId && it.orderedQuantityScaled > 0L
+                            }
+                        } else {
+                            0
+                        }
+                    },
                     isSavingProduct = isSaving,
                     modifier = Modifier.weight(1f)
                 )

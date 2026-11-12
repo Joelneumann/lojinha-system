@@ -26,6 +26,7 @@ interface VeggieOrderRepository {
     suspend fun getVeggieProductById(id: String): VeggieProduct?
     suspend fun saveVeggieProduct(product: VeggieProduct)
     suspend fun deactivateVeggieProduct(id: String)
+    suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean = false
     suspend fun hardDeleteVeggieProduct(id: String)
 
     // 3. Order Rounds

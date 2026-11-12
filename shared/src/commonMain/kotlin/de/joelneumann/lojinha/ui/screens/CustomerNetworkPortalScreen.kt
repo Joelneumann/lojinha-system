@@ -61,6 +61,7 @@ import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.setBrowserBeforeUnloadWarning
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 import kotlinx.coroutines.launch
@@ -459,7 +460,9 @@ private fun CustomerVeggieOrderTabContent(
     val strings = I18n.current
     val activeRound by veggieViewModel.activeRound.collectAsState()
     val products by veggieViewModel.products.collectAsState()
+    val inactiveOrderedProducts by veggieViewModel.inactiveOrderedProducts.collectAsState()
     val draftQuantitiesScaled by veggieViewModel.draftQuantitiesScaled.collectAsState()
+    val savedQuantitiesScaled by veggieViewModel.savedQuantitiesScaled.collectAsState()
     val previousRoundQuantitiesScaled by veggieViewModel.previousRoundQuantitiesScaled.collectAsState()
     val searchQuery by veggieViewModel.productSearchQuery.collectAsState()
     val filterFavoritesOnly by veggieViewModel.filterFavoritesOnly.collectAsState()
@@ -540,15 +543,17 @@ private fun CustomerVeggieOrderTabContent(
         }
     }
 
-    val cartProducts = remember(draftQuantitiesScaled, products) {
-        products.filter { (draftQuantitiesScaled[it.id] ?: 0L) > 0L }
+    val cartProducts = remember(draftQuantitiesScaled, products, inactiveOrderedProducts) {
+        (products + inactiveOrderedProducts)
+            .filter { (draftQuantitiesScaled[it.id] ?: 0L) > 0L }
+            .sortedByAccentInsensitive { it.name }
     }
 
     val hasPreviousRoundItems = remember(previousRoundQuantitiesScaled) {
         previousRoundQuantitiesScaled.any { it.value > 0L }
     }
 
-    val estimatedSubtotalCents = remember(draftQuantitiesScaled, products) {
+    val estimatedSubtotalCents = remember(draftQuantitiesScaled, products, inactiveOrderedProducts) {
         veggieViewModel.calculateEstimatedItemsSubtotalCents()
     }
 
@@ -1007,12 +1012,18 @@ private fun CustomerVeggieOrderTabContent(
 
     val editingProduct = selectedProductForAmountDialog
     if (editingProduct != null) {
+        val maxAllowedForInactive = if (!editingProduct.isActive || editingProduct.isDeleted) {
+            savedQuantitiesScaled[editingProduct.id] ?: draftQuantitiesScaled[editingProduct.id]
+        } else {
+            null
+        }
         VeggieAmountInputDialog(
             product = editingProduct,
             unitType = unitTypesById[editingProduct.unitTypeId],
             initialScaledQuantity = draftQuantitiesScaled[editingProduct.id] ?: 0L,
             decimalSeparator = decimalSep,
             previousScaledQuantity = previousRoundQuantitiesScaled[editingProduct.id] ?: 0L,
+            maxAllowedScaledQuantity = maxAllowedForInactive,
             onDismiss = {
                 val lastEditedId = editingProduct.id
                 selectedProductForAmountDialog = null
@@ -1631,7 +1642,9 @@ private fun VeggieCartLineItemRow(
     onKeyDown: ((KeyEvent) -> Boolean)? = null,
     modifier: Modifier = Modifier
 ) {
+    val strings = I18n.current
     val allowDecimals = unitType?.allowDecimals ?: false
+    val isDiscontinued = !product.isActive || product.isDeleted
     val unitName = unitType?.name ?: "Unit"
     val qtyFormatted = VeggieQuantityScaling.formatScaledQuantity(quantityScaled, allowDecimals, decimalSeparator)
 
@@ -1674,14 +1687,26 @@ private fun VeggieCartLineItemRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                Text(
-                    text = product.name,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = product.name,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isDiscontinued) {
+                        AdminStatusBadge(
+                            text = strings.veggieProductDiscontinuedBadge,
+                            type = AdminBadgeType.WARNING
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = if (product.estimatedPriceCents != null) {

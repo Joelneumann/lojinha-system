@@ -86,6 +86,23 @@ class RoomVeggieOrderRepositoryImpl(
         onDataChanged?.invoke()
     }
 
+    override suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val round = roundEntity.toDomain()
+        if (round.status != VeggieRoundStatus.OPEN) return@withLock false
+
+        veggieOrderDao.deleteEntriesForProductInRound(roundId, productId)
+        veggieOrderDao.insertOrUpdateRound(
+            roundEntity.copy(
+                buyerPdfExportedAt = null,
+                workerPdfExportedAt = null,
+                updatedAt = currentTimeMillis()
+            )
+        )
+        onDataChanged?.invoke()
+        true
+    }
+
     override suspend fun hardDeleteVeggieProduct(id: String) {
         val entryCount = veggieOrderDao.getEntryCountForProduct(id)
         if (entryCount == 0) {
@@ -282,10 +299,16 @@ class RoomVeggieOrderRepositoryImpl(
             val deliveryUnit = product?.deliveryUnitTypeId?.let { allUnits[it] }
             val allowDecimals = unit?.allowDecimals ?: existing?.allowDecimalsSnapshot ?: false
             // Round to nearest whole unit if decimals are disallowed
-            val normalizedQty = if (allowDecimals) {
+            val roundedQty = if (allowDecimals) {
                 rawQty
             } else {
                 (rawQty / VEGGIE_QTY_SCALE) * VEGGIE_QTY_SCALE
+            }
+            val isProductInactive = product == null || !product.isActive || product.isDeleted
+            val normalizedQty = if (existing != null && isProductInactive) {
+                roundedQty.coerceAtMost(existing.orderedQuantityScaled)
+            } else {
+                roundedQty
             }
             if (normalizedQty <= 0L) {
                 if (existing != null) entryIdsToDelete.add(existing.id)

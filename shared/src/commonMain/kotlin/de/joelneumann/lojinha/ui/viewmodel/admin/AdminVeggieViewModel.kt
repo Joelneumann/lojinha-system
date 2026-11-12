@@ -843,11 +843,17 @@ class AdminVeggieViewModel(
         }
     }
 
-    fun toggleVeggieProductActive(product: VeggieProduct) {
+    fun toggleVeggieProductActive(product: VeggieProduct, cancelOpenRoundOrders: Boolean = false) {
         activeScope.launch {
             try {
                 if (product.isActive) {
                     veggieOrderRepository.deactivateVeggieProduct(product.id)
+                    if (cancelOpenRoundOrders) {
+                        val openRound = _activeRound.value
+                        if (openRound != null && openRound.status == VeggieRoundStatus.OPEN) {
+                            veggieOrderRepository.cancelProductEntriesInOpenRound(openRound.id, product.id)
+                        }
+                    }
                 } else {
                     veggieOrderRepository.saveVeggieProduct(
                         product.copy(isActive = true, updatedAt = currentTimeMillis())

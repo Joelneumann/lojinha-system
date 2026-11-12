@@ -606,4 +606,69 @@ class RoomVeggieOrderRepositoryTest {
         assertEquals(buyerExportTime, afterWorker.buyerPdfExportedAt)
         assertEquals(workerExportTime, afterWorker.workerPdfExportedAt)
     }
+
+    @Test
+    fun testSaveCustomerOrder_deactivatedProduct_clampsIncreaseAndAllowsReduceOrRemove() = runTest {
+        val unitKg = VeggieUnitType(id = "u-kg", name = "kg", allowDecimals = true, isActive = true)
+        veggieRepo.saveUnitType(unitKg)
+        val prodA = VeggieProduct(id = "vp-a", name = "Batata", unitTypeId = "u-kg", isActive = true)
+        val prodB = VeggieProduct(id = "vp-b", name = "Cenoura", unitTypeId = "u-kg", isActive = true)
+        veggieRepo.saveVeggieProduct(prodA)
+        veggieRepo.saveVeggieProduct(prodB)
+
+        val user = User(id = "u-1", name = "Alice", balance = 100_00L)
+        userRepo.saveUser(user)
+
+        val round = veggieRepo.openNewRound(0L, 0L, 1_776_700_000_000L)
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, user, mapOf("vp-a" to 2000L)))
+
+        // Admin deactivates prodA
+        veggieRepo.deactivateVeggieProduct("vp-a")
+
+        // Customer tries to increase prodA to 5000L and also add prodB (1000L)
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, user, mapOf("vp-a" to 5000L, "vp-b" to 1000L)))
+        val entriesAfterIncreaseAttempt = veggieRepo.getEntriesForUserInRound(round.id, user.id)
+            .associateBy { it.veggieProductId }
+        assertEquals(2000L, entriesAfterIncreaseAttempt["vp-a"]?.orderedQuantityScaled)
+        assertEquals(1000L, entriesAfterIncreaseAttempt["vp-b"]?.orderedQuantityScaled)
+
+        // Customer reduces prodA to 1500L -> allowed
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, user, mapOf("vp-a" to 1500L, "vp-b" to 1000L)))
+        val entriesAfterReduce = veggieRepo.getEntriesForUserInRound(round.id, user.id)
+            .associateBy { it.veggieProductId }
+        assertEquals(1500L, entriesAfterReduce["vp-a"]?.orderedQuantityScaled)
+
+        // Customer removes prodA -> allowed
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, user, mapOf("vp-b" to 1000L)))
+        val entriesAfterRemove = veggieRepo.getEntriesForUserInRound(round.id, user.id)
+            .associateBy { it.veggieProductId }
+        assertNull(entriesAfterRemove["vp-a"])
+        assertEquals(1000L, entriesAfterRemove["vp-b"]?.orderedQuantityScaled)
+    }
+
+    @Test
+    fun testCancelProductEntriesInOpenRound_removesProductEntriesOnlyInOpenRound() = runTest {
+        val unitKg = VeggieUnitType(id = "u-kg", name = "kg", allowDecimals = true, isActive = true)
+        veggieRepo.saveUnitType(unitKg)
+        val prodA = VeggieProduct(id = "vp-a", name = "Batata", unitTypeId = "u-kg", isActive = true)
+        val prodB = VeggieProduct(id = "vp-b", name = "Cenoura", unitTypeId = "u-kg", isActive = true)
+        veggieRepo.saveVeggieProduct(prodA)
+        veggieRepo.saveVeggieProduct(prodB)
+
+        val user = User(id = "u-1", name = "Alice", balance = 100_00L)
+        userRepo.saveUser(user)
+
+        val round = veggieRepo.openNewRound(0L, 0L, 1_776_700_000_000L)
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, user, mapOf("vp-a" to 2000L, "vp-b" to 1000L)))
+
+        assertTrue(veggieRepo.cancelProductEntriesInOpenRound(round.id, "vp-a"))
+        val remaining = veggieRepo.getEntriesForRound(round.id)
+        assertEquals(1, remaining.size)
+        assertEquals("vp-b", remaining[0].veggieProductId)
+
+        // Cannot cancel entries once round is closed
+        assertTrue(veggieRepo.closeRound(round.id, 1_776_705_000_000L))
+        assertFalse(veggieRepo.cancelProductEntriesInOpenRound(round.id, "vp-b"))
+        assertEquals(1, veggieRepo.getEntriesForRound(round.id).size)
+    }
 }

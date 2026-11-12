@@ -43,10 +43,11 @@ fun AdminVeggieCatalogSection(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onSaveProduct: (product: VeggieProduct, newImageBytes: ByteArray?, removeExistingImage: Boolean) -> Unit,
-    onToggleProductActive: (VeggieProduct) -> Unit,
+    onToggleProductActive: (VeggieProduct, Boolean) -> Unit,
     onDeleteProduct: (VeggieProduct) -> Unit,
     onSaveUnitType: (VeggieUnitType) -> Unit,
     onDeleteUnitType: (String) -> Unit,
+    openRoundOrderCountForProduct: (String) -> Int = { 0 },
     isSavingProduct: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -351,53 +352,116 @@ fun AdminVeggieCatalogSection(
     if (productToToggleActive != null) {
         val target = productToToggleActive!!
         val isCurrentlyActive = target.isActive
+        val openOrderCount = if (isCurrentlyActive) openRoundOrderCountForProduct(target.id) else 0
         val dismissDialog = { productToToggleActive = null }
-        val confirmToggle = {
-            onToggleProductActive(target)
-            productToToggleActive = null
-        }
 
-        AlertDialog(
-            onDismissRequest = dismissDialog,
-            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
-            modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmToggle),
-            title = {
-                Text(
-                    text = strings.confirmProductStatusChangeTitle,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                )
-            },
-            text = {
-                Text(
-                    text = strings.confirmProductStatusChangeMsg(isCurrentlyActive, target.name),
-                    color = PrimaryNavy
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = confirmToggle,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isCurrentlyActive) ColorWarningAmber else ColorSuccessEmerald
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
+        if (isCurrentlyActive && openOrderCount > 0) {
+            AlertDialog(
+                onDismissRequest = dismissDialog,
+                properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+                title = {
                     Text(
-                        text = if (isCurrentlyActive) strings.disable else strings.enable,
-                        color = SurfaceWhite,
-                        fontWeight = FontWeight.Bold
+                        text = strings.confirmProductStatusChangeTitle,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
                     )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = strings.confirmDeactivateWithOrdersMsg(target.name, openOrderCount),
+                            color = PrimaryNavy
+                        )
+                        Button(
+                            onClick = {
+                                onToggleProductActive(target, false)
+                                productToToggleActive = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ColorWarningAmber),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = strings.deactivateStopNewOrdersOnly,
+                                color = SurfaceWhite,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                onToggleProductActive(target, true)
+                                productToToggleActive = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ColorDangerCrimson),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = strings.deactivateCancelExistingOrders,
+                                color = SurfaceWhite,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = dismissDialog,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(strings.cancel)
+                    }
                 }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = dismissDialog,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(strings.cancel)
-                }
+            )
+        } else {
+            val confirmToggle = {
+                onToggleProductActive(target, false)
+                productToToggleActive = null
             }
-        )
+
+            AlertDialog(
+                onDismissRequest = dismissDialog,
+                properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+                modifier = Modifier.confirmationDialogKeys(onCancel = dismissDialog, onConfirm = confirmToggle),
+                title = {
+                    Text(
+                        text = strings.confirmProductStatusChangeTitle,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
+                    )
+                },
+                text = {
+                    Text(
+                        text = strings.confirmProductStatusChangeMsg(isCurrentlyActive, target.name),
+                        color = PrimaryNavy
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = confirmToggle,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isCurrentlyActive) ColorWarningAmber else ColorSuccessEmerald
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (isCurrentlyActive) strings.disable else strings.enable,
+                            color = SurfaceWhite,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = dismissDialog,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(strings.cancel)
+                    }
+                }
+            )
+        }
     }
 
     if (productToDelete != null) {

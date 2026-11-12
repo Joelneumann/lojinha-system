@@ -173,6 +173,9 @@ interface VeggieOrderDao {
     @Query("DELETE FROM veggie_order_entries WHERE roundId = :roundId AND userId = :userId AND veggieProductId = :veggieProductId")
     suspend fun deleteEntryByRoundUserProduct(roundId: String, userId: String, veggieProductId: String)
 
+    @Query("DELETE FROM veggie_order_entries WHERE roundId = :roundId AND veggieProductId = :productId")
+    suspend fun deleteEntriesForProductInRound(roundId: String, productId: String)
+
     @Query("SELECT COUNT(*) FROM veggie_order_entries WHERE userId = :userId")
     suspend fun getEntryCountForUser(userId: String): Int
 

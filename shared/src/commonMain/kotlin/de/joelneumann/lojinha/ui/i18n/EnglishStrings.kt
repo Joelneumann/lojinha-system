@@ -930,6 +930,13 @@ object EnglishStrings : AppStrings {
     override val addOrderModeAddToExisting = "Add to existing order"
     override fun addOrderCurrentQuantityLabel(quantity: String, unit: String) = "Current order: $quantity $unit"
     override fun addOrderNewTotalLabel(quantity: String, unit: String) = "New total: $quantity $unit"
+    override val veggieProductDiscontinuedBadge = "Discontinued"
+    override fun veggieAmountMaxExceededError(maxFormatted: String, unitName: String) =
+        "Product is discontinued. You can keep or reduce your ordered quantity (max $maxFormatted $unitName), or remove it."
+    override fun confirmDeactivateWithOrdersMsg(productName: String, orderCount: Int) =
+        "$productName has $orderCount existing order(s) in the current open round. Do you want to keep those existing orders or cancel them?"
+    override val deactivateStopNewOrdersOnly = "Stop new orders only"
+    override val deactivateCancelExistingOrders = "Cancel existing orders"
 }
 
 

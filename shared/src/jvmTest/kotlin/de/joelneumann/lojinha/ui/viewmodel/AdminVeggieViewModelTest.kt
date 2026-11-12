@@ -69,7 +69,16 @@ class AdminVeggieViewModelTest {
             val idx = products.indexOfFirst { it.id == product.id }
             if (idx >= 0) products[idx] = product else products.add(product)
         }
-        override suspend fun deactivateVeggieProduct(id: String) {}
+        override suspend fun deactivateVeggieProduct(id: String) {
+            val idx = products.indexOfFirst { it.id == id }
+            if (idx >= 0) products[idx] = products[idx].copy(isActive = false)
+        }
+        override suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean {
+            val round = rounds.find { it.id == roundId } ?: return false
+            if (round.status != VeggieRoundStatus.OPEN) return false
+            entries.removeAll { it.roundId == roundId && it.veggieProductId == productId }
+            return true
+        }
         override suspend fun hardDeleteVeggieProduct(id: String) {}
 
         override fun getRoundsFlow(): Flow<List<VeggieOrderRound>> = flowOf(rounds)
@@ -837,5 +846,33 @@ class AdminVeggieViewModelTest {
         assertEquals("kg", updatedEntry.effectiveDeliveryUnitName)
         assertEquals(1600L, updatedEntry.finalItemTotalCents) // Full spent attributed
         assertEquals(500L, updatedEntry.effectiveUnitPriceCents) // 16.00 / 3.2 = 5.00/kg
+    }
+
+    @Test
+    fun testToggleVeggieProductActive_stopNewOrdersOnly_vs_cancelExistingOrders() = runTest {
+        val (veggieRepo, userRepo) = setupTestFixture()
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        val product = veggieRepo.products.first()
+        assertTrue(product.isActive)
+        assertEquals(1, vm.selectedRoundEntries.value.size)
+
+        // 1. Stop new orders only -> product deactivated, existing entry preserved
+        vm.toggleVeggieProductActive(product, cancelOpenRoundOrders = false)
+        advanceUntilIdle()
+        assertFalse(veggieRepo.products.first().isActive)
+        assertEquals(1, vm.selectedRoundEntries.value.size)
+
+        // Reactivate
+        vm.toggleVeggieProductActive(veggieRepo.products.first())
+        advanceUntilIdle()
+        assertTrue(veggieRepo.products.first().isActive)
+
+        // 2. Cancel existing orders too -> product deactivated AND entry removed from open round
+        vm.toggleVeggieProductActive(veggieRepo.products.first(), cancelOpenRoundOrders = true)
+        advanceUntilIdle()
+        assertFalse(veggieRepo.products.first().isActive)
+        assertEquals(0, vm.selectedRoundEntries.value.size)
     }
 }

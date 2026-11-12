@@ -1134,12 +1134,18 @@ class LojinhaAdminServer(
                             return@get
                         }
                         val unitTypes = repo.getAllUnitTypes().filter { it.isActive }
-                        val products = repo.getAllVeggieProducts().filter { it.isActive && !it.isDeleted }
                         val activeRound = repo.getActiveOrLatestRound()
                         val currentEntries = if (activeRound != null) {
                             repo.getEntriesForUserInRound(activeRound.id, userId)
                         } else {
                             emptyList()
+                        }
+                        val orderedProductIds = currentEntries
+                            .filter { it.orderedQuantityScaled > 0L }
+                            .map { it.veggieProductId }
+                            .toSet()
+                        val products = repo.getAllVeggieProducts().filter {
+                            !it.isDeleted && (it.isActive || it.id in orderedProductIds)
                         }
                         val previousQuantities = if (activeRound != null) {
                             repo.getPreviousRoundQuantitiesForUser(activeRound.id, userId)

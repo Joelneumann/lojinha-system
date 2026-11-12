@@ -45,6 +45,7 @@ fun VeggieAmountInputDialog(
     initialScaledQuantity: Long,
     decimalSeparator: Char,
     previousScaledQuantity: Long = 0L,
+    maxAllowedScaledQuantity: Long? = null,
     onDismiss: () -> Unit,
     onSubmit: (Long) -> Unit,
     modifier: Modifier = Modifier
@@ -77,7 +78,8 @@ fun VeggieAmountInputDialog(
     val parsedQtyScaled = remember(textFieldValue.text, allowDecimals) {
         VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text.trim(), allowDecimals)
     }
-    val canSubmit = parsedQtyScaled != null && parsedQtyScaled > 0L
+    val exceedsMax = maxAllowedScaledQuantity != null && parsedQtyScaled != null && parsedQtyScaled > maxAllowedScaledQuantity
+    val canSubmit = parsedQtyScaled != null && parsedQtyScaled > 0L && !exceedsMax
 
     LaunchedEffect(Unit) {
         focusRequester.safeRequestFocus()
@@ -311,6 +313,22 @@ fun VeggieAmountInputDialog(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = TextSecondaryMuted
+                    )
+                }
+
+                if (exceedsMax) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    val maxFormatted = VeggieQuantityScaling.formatScaledQuantity(
+                        maxAllowedScaledQuantity!!,
+                        allowDecimals,
+                        decimalSeparator
+                    )
+                    Text(
+                        text = strings.veggieAmountMaxExceededError(maxFormatted, unitName),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = ColorDangerCrimson,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
                     )
                 }
 
