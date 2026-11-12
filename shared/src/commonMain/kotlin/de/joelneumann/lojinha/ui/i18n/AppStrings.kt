@@ -808,6 +808,8 @@ interface AppStrings {
     val allowDecimalsLabel: String
     val unitIntegerOnly: String
     val unitAllowDecimals: String
+    val settlementUnitLabel: String
+    val sameAsCustomerUnitOption: String
     val veggieProductPhotoLabel: String
     val uploadPhotoBtn: String
     val removePhotoBtn: String

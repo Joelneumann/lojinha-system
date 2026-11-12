@@ -784,4 +784,58 @@ class AdminVeggieViewModelTest {
         assertNotNull(updatedProduct)
         assertEquals("tomate_italiano", updatedProduct.imageFileName)
     }
+
+    @Test
+    fun testDualUnitProduct_preservesDecimalActualQuantityAndCalculatesSettlement() = runTest {
+        val (veggieRepo, userRepo, testUser) = setupTestFixture()
+        // Watermelon: Customer Unit = unit-piece (integers), Settlement Unit = unit-kg (decimals)
+        val unitKg = VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true)
+        val unitPiece = VeggieUnitType(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true)
+        veggieRepo.unitTypes.clear()
+        veggieRepo.unitTypes.addAll(listOf(unitKg, unitPiece))
+
+        val watermelon = VeggieProduct(
+            id = "prod-watermelon",
+            name = "Watermelon",
+            unitTypeId = "unit-piece",
+            deliveryUnitTypeId = "unit-kg",
+            isActive = true
+        )
+        veggieRepo.products.clear()
+        veggieRepo.products.add(watermelon)
+
+        val entry = VeggieOrderEntry(
+            id = "entry-wm",
+            roundId = "round-active",
+            userId = testUser.id,
+            userNameSnapshot = testUser.name,
+            veggieProductId = watermelon.id,
+            veggieNameSnapshot = watermelon.name,
+            unitNameSnapshot = "Unit",
+            allowDecimalsSnapshot = false,
+            deliveryUnitNameSnapshot = "kg",
+            deliveryAllowDecimalsSnapshot = true,
+            orderedQuantityScaled = 1000L, // 1 Unit
+            actualQuantityScaled = null
+        )
+        veggieRepo.entries.clear()
+        veggieRepo.entries.add(entry)
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Admin enters 3.2 kg delivered for the entry
+        vm.updateEntryActualQuantity(entryId = "entry-wm", input = "3.2")
+        vm.updateProductTotalSpent(productId = "prod-watermelon", input = "16,00")
+        advanceUntilIdle()
+
+        val preview = vm.liveSettlementPreview.value
+        assertNotNull(preview)
+        val updatedEntry = preview.updatedEntries.find { it.id == "entry-wm" }
+        assertNotNull(updatedEntry)
+        assertEquals(3200L, updatedEntry.actualQuantityScaled) // 3.2 kg preserved!
+        assertEquals("kg", updatedEntry.effectiveDeliveryUnitName)
+        assertEquals(1600L, updatedEntry.finalItemTotalCents) // Full spent attributed
+        assertEquals(500L, updatedEntry.effectiveUnitPriceCents) // 16.00 / 3.2 = 5.00/kg
+    }
 }

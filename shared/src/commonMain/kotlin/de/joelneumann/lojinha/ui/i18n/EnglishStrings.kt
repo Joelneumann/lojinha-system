@@ -829,6 +829,8 @@ object EnglishStrings : AppStrings {
     override val allowDecimalsLabel = "Quantity Input Mode"
     override val unitIntegerOnly = "Whole numbers only (1, 2, 3)"
     override val unitAllowDecimals = "Allow decimals (0.5 / 1.25)"
+    override val settlementUnitLabel = "Settlement Unit (Admin Table)"
+    override val sameAsCustomerUnitOption = "Same as customer unit"
     override val veggieProductPhotoLabel = "Product Photo"
     override val uploadPhotoBtn = "Choose Photo"
     override val removePhotoBtn = "Remove Photo"

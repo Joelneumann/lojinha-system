@@ -56,6 +56,11 @@ fun VeggieProductEditDialog(
                 ?: product.unitTypeId
         )
     }
+    var selectedDeliveryUnitId by remember(product.id, activeUnits) {
+        mutableStateOf(
+            product.deliveryUnitTypeId?.takeIf { id -> activeUnits.any { it.id == id } }
+        )
+    }
     var selectedImageBytes by remember(product.id) { mutableStateOf<ByteArray?>(null) }
     var removeExistingImage by remember(product.id) { mutableStateOf(false) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
@@ -72,6 +77,7 @@ fun VeggieProductEditDialog(
             description.trim() != (product.description ?: "") ||
             estimatedPriceInput.trim() != initialPriceInput ||
             selectedUnitId != product.unitTypeId ||
+            selectedDeliveryUnitId != product.deliveryUnitTypeId ||
             selectedImageBytes != null ||
             removeExistingImage
 
@@ -98,6 +104,7 @@ fun VeggieProductEditDialog(
                 description = description.trim().ifBlank { null },
                 estimatedPriceCents = if (estimatedPriceInput.isBlank()) null else parsedPriceCents,
                 unitTypeId = selectedUnitId,
+                deliveryUnitTypeId = selectedDeliveryUnitId,
                 imageFileName = if (removeExistingImage && selectedImageBytes == null) null else product.imageFileName,
                 updatedAt = currentTimeMillis()
             )
@@ -290,6 +297,58 @@ fun VeggieProductEditDialog(
                             val isSelected = selectedUnitId == unit.id
                             OutlinedButton(
                                 onClick = { selectedUnitId = unit.id },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (isSelected) AccentNavy else SurfaceWhite,
+                                    contentColor = if (isSelected) SurfaceWhite else PrimaryNavy
+                                ),
+                                border = BorderStroke(1.dp, if (isSelected) AccentNavy else DividerBorder)
+                            ) {
+                                Text(
+                                    text = unit.name,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Settlement Unit Selector (Admin Table)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = strings.settlementUnitLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy
+                    )
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val isSameSelected = selectedDeliveryUnitId == null
+                        OutlinedButton(
+                            onClick = { selectedDeliveryUnitId = null },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (isSameSelected) AccentNavy else SurfaceWhite,
+                                contentColor = if (isSameSelected) SurfaceWhite else PrimaryNavy
+                            ),
+                            border = BorderStroke(1.dp, if (isSameSelected) AccentNavy else DividerBorder)
+                        ) {
+                            Text(
+                                text = strings.sameAsCustomerUnitOption,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        activeUnits.forEach { unit ->
+                            val isSelected = selectedDeliveryUnitId == unit.id
+                            OutlinedButton(
+                                onClick = { selectedDeliveryUnitId = unit.id },
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     containerColor = if (isSelected) AccentNavy else SurfaceWhite,

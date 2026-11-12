@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -141,11 +142,21 @@ fun AdminVeggieSettlementMatrix(
                 val sample = prodEntries.first()
                 val currentProduct = productsById[productId]
                 val currentUnit = currentProduct?.unitTypeId?.let { unitTypesById[it] }
+                val currentDeliveryUnit = currentProduct?.deliveryUnitTypeId?.let { unitTypesById[it] }
+
                 val resolvedUnitName = currentUnit?.name?.takeIf { it.isNotBlank() }
                     ?: sample.unitNameSnapshot.takeIf { it.isNotBlank() }
                     ?: ""
                 val resolvedAllowDecimals = currentUnit?.allowDecimals
                     ?: sample.allowDecimalsSnapshot
+
+                val resolvedDeliveryUnitName = currentDeliveryUnit?.name?.takeIf { it.isNotBlank() }
+                    ?: sample.deliveryUnitNameSnapshot?.takeIf { it.isNotBlank() }
+                    ?: resolvedUnitName
+                val resolvedDeliveryAllowDecimals = currentDeliveryUnit?.allowDecimals
+                    ?: sample.deliveryAllowDecimalsSnapshot
+                    ?: resolvedAllowDecimals
+
                 val resolvedProductName = currentProduct?.name?.takeIf { it.isNotBlank() }
                     ?: sample.veggieNameSnapshot.takeIf { it.isNotBlank() }
                     ?: productId
@@ -155,6 +166,8 @@ fun AdminVeggieSettlementMatrix(
                     productName = resolvedProductName,
                     unitName = resolvedUnitName,
                     allowDecimals = resolvedAllowDecimals,
+                    deliveryUnitName = resolvedDeliveryUnitName,
+                    deliveryAllowDecimals = resolvedDeliveryAllowDecimals,
                     entriesByUserId = prodEntries.associateBy { it.userId }
                 )
             }
@@ -792,7 +805,7 @@ fun AdminVeggieSettlementMatrix(
                             }
                             val formattedTotalDelivered = VeggieQuantityScaling.formatScaledQuantity(
                                 totalDeliveredScaled,
-                                rowInfo.allowDecimals
+                                rowInfo.deliveryAllowDecimals
                             )
                             val effectiveUnitPrice = productSettlement?.marketUnitPriceCents?.let {
                                 val spent = productSettlement.totalSpentCents ?: 0L
@@ -824,8 +837,8 @@ fun AdminVeggieSettlementMatrix(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     AdminStatusBadge(
-                                        text = rowInfo.unitName,
-                                        type = if (rowInfo.allowDecimals) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
+                                        text = if (rowInfo.deliveryUnitName != rowInfo.unitName) "${rowInfo.unitName} ➔ ${rowInfo.deliveryUnitName}" else rowInfo.unitName,
+                                        type = if (rowInfo.deliveryAllowDecimals) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
                                     )
                                 }
 
@@ -851,7 +864,16 @@ fun AdminVeggieSettlementMatrix(
                                                         entry.orderedQuantityScaled,
                                                         entry.allowDecimalsSnapshot
                                                     )
-                                                    val draftQtyStr = draftActualQuantities[entry.id] ?: orderedFormatted
+                                                    val draftQtyStr = draftActualQuantities[entry.id] ?: run {
+                                                        if (entry.actualQuantityScaled != null) {
+                                                            VeggieQuantityScaling.formatScaledQuantity(
+                                                                entry.actualQuantityScaled,
+                                                                rowInfo.deliveryAllowDecimals
+                                                            )
+                                                        } else {
+                                                            orderedFormatted
+                                                        }
+                                                    }
                                                     val previewEntry = previewEntryMap[entry.id]
                                                     val shareCents = previewEntry?.finalItemTotalCents ?: 0L
 
@@ -873,6 +895,7 @@ fun AdminVeggieSettlementMatrix(
                                                         MatrixNumberInputField(
                                                             value = draftQtyStr,
                                                             onValueChange = { onUpdateActualQuantity(entry.id, it) },
+                                                            allowDecimals = rowInfo.deliveryAllowDecimals,
                                                             isBold = true,
                                                             fontSize = 12.5.sp,
                                                             focusRequester = matrixFocusRequesters[entry.id],
@@ -955,7 +978,7 @@ fun AdminVeggieSettlementMatrix(
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Text(
-                                                        text = "$formattedTotalDelivered ${rowInfo.unitName}",
+                                                        text = "$formattedTotalDelivered ${rowInfo.deliveryUnitName}",
                                                         fontSize = 12.5.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = PrimaryNavy,
@@ -1026,7 +1049,7 @@ fun AdminVeggieSettlementMatrix(
                                                 ) {
                                                     Text(
                                                         text = if (effectiveUnitPrice > 0L) {
-                                                            "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.unitName}"
+                                                            "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.deliveryUnitName}"
                                                         } else "—",
                                                         fontSize = 12.sp,
                                                         fontWeight = FontWeight.Bold,
@@ -1360,6 +1383,8 @@ private data class VeggieMatrixProductRowInfo(
     val productName: String,
     val unitName: String,
     val allowDecimals: Boolean,
+    val deliveryUnitName: String,
+    val deliveryAllowDecimals: Boolean,
     val entriesByUserId: Map<String, VeggieOrderEntry>
 )
 
@@ -1748,7 +1773,8 @@ private fun MatrixNumberInputField(
     textAlign: TextAlign = TextAlign.Center,
     focusRequester: FocusRequester? = null,
     nextFocusRequester: FocusRequester? = null,
-    prevFocusRequester: FocusRequester? = null
+    prevFocusRequester: FocusRequester? = null,
+    allowDecimals: Boolean = true
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var hadFocus by remember { mutableStateOf(false) }
@@ -1820,13 +1846,25 @@ private fun MatrixNumberInputField(
                             selection = TextRange(0, newValue.text.length)
                         )
                     } else {
-                        textFieldValue = newValue
-                        if (newValue.text != value) {
-                            onValueChange(newValue.text)
+                        val filteredText = filterVeggieAmountInput(newValue.text, allowDecimals)
+                        if (filteredText == newValue.text) {
+                            textFieldValue = newValue
+                        } else {
+                            textFieldValue = TextFieldValue(
+                                text = filteredText,
+                                selection = TextRange(filteredText.length)
+                            )
+                        }
+                        if (filteredText != value) {
+                            onValueChange(filteredText)
                         }
                     }
                 },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (allowDecimals) KeyboardType.Decimal else KeyboardType.Number,
+                    imeAction = ImeAction.Next
+                ),
                 textStyle = LocalTextStyle.current.copy(
                     fontSize = fontSize,
                     fontWeight = if (isBold) FontWeight.Bold else FontWeight.Medium,

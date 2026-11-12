@@ -2178,7 +2178,7 @@ private fun CustomerVeggieHistoryRoundCard(
                 val deliveredScaled = entry.actualQuantityScaled ?: entry.orderedQuantityScaled
                 val deliveredText = VeggieQuantityScaling.formatScaledQuantity(
                     deliveredScaled,
-                    entry.allowDecimalsSnapshot,
+                    entry.effectiveAllowDecimals,
                     decimalSeparator
                 )
                 val unitPriceCents = entry.effectiveUnitPriceCents
@@ -2204,12 +2204,12 @@ private fun CustomerVeggieHistoryRoundCard(
                             color = PrimaryNavy
                         )
                         val qtySummary = if (isSettled || entry.actualQuantityScaled != null) {
-                            "${strings.colOrderedQty}: $orderedText ${entry.unitNameSnapshot}  •  ${strings.colActualQty}: $deliveredText ${entry.unitNameSnapshot}"
+                            "${strings.colOrderedQty}: $orderedText ${entry.unitNameSnapshot}  •  ${strings.colActualQty}: $deliveredText ${entry.effectiveDeliveryUnitName}"
                         } else {
                             "${strings.colOrderedQty}: $orderedText ${entry.unitNameSnapshot}"
                         }
                         val priceSuffix = if (unitPriceCents != null && unitPriceCents > 0L) {
-                            "  •  ${if (!isSettled) "~ " else ""}${Formatting.formatBrl(unitPriceCents)} / ${entry.unitNameSnapshot}"
+                            "  •  ${if (!isSettled) "~ " else ""}${Formatting.formatBrl(unitPriceCents)} / ${if (isSettled) entry.effectiveDeliveryUnitName else entry.unitNameSnapshot}"
                         } else ""
                         Text(
                             text = qtySummary + priceSuffix,

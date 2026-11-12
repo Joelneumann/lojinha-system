@@ -427,12 +427,17 @@ class AdminVeggieViewModel(
         productId: String,
         quantitiesMap: Map<String, String>
     ): Long {
+        val product = _products.value.find { it.id == productId }
+        val deliveryUnit = product?.deliveryUnitTypeId?.let { did -> _unitTypes.value.find { it.id == did } }
         return _selectedRoundEntries.value
             .filter { it.veggieProductId == productId }
             .sumOf { entry ->
                 val raw = quantitiesMap[entry.id]
+                val allowDecimals = deliveryUnit?.allowDecimals
+                    ?: entry.deliveryAllowDecimalsSnapshot
+                    ?: entry.allowDecimalsSnapshot
                 if (raw != null) {
-                    VeggieQuantityScaling.parseQuantityScaled(raw, entry.allowDecimalsSnapshot) ?: entry.deliveredQuantityScaled
+                    VeggieQuantityScaling.parseQuantityScaled(raw, allowDecimals) ?: entry.deliveredQuantityScaled
                 } else {
                     entry.deliveredQuantityScaled
                 }
@@ -442,10 +447,18 @@ class AdminVeggieViewModel(
     private fun buildCurrentDraftPayload(): DraftSettlementPayload? {
         val round = _selectedRound.value ?: return null
         val entries = _selectedRoundEntries.value
+        val productsById = _products.value.associateBy { it.id }
+        val unitTypesById = _unitTypes.value.associateBy { it.id }
+
         val actualByEntryId = entries.associate { entry ->
             val raw = _draftActualQuantities.value[entry.id]
+            val product = productsById[entry.veggieProductId]
+            val deliveryUnit = product?.deliveryUnitTypeId?.let { unitTypesById[it] }
+            val allowDecimals = deliveryUnit?.allowDecimals
+                ?: entry.deliveryAllowDecimalsSnapshot
+                ?: entry.allowDecimalsSnapshot
             val parsed = if (raw != null) {
-                VeggieQuantityScaling.parseQuantityScaled(raw, entry.allowDecimalsSnapshot) ?: entry.deliveredQuantityScaled
+                VeggieQuantityScaling.parseQuantityScaled(raw, allowDecimals) ?: entry.deliveredQuantityScaled
             } else {
                 entry.deliveredQuantityScaled
             }
@@ -453,7 +466,13 @@ class AdminVeggieViewModel(
         }
 
         val entriesWithDraftQty = entries.map { entry ->
-            entry.copy(actualQuantityScaled = actualByEntryId[entry.id] ?: entry.deliveredQuantityScaled)
+            val product = productsById[entry.veggieProductId]
+            val deliveryUnit = product?.deliveryUnitTypeId?.let { unitTypesById[it] }
+            entry.copy(
+                deliveryUnitNameSnapshot = deliveryUnit?.name ?: entry.deliveryUnitNameSnapshot,
+                deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals ?: entry.deliveryAllowDecimalsSnapshot,
+                actualQuantityScaled = actualByEntryId[entry.id] ?: entry.deliveredQuantityScaled
+            )
         }
 
         val productIds = entries.map { it.veggieProductId }.distinct()
@@ -718,6 +737,7 @@ class AdminVeggieViewModel(
     ) {
         val round = _selectedRound.value ?: return
         val unit = _unitTypes.value.find { it.id == product.unitTypeId }
+        val deliveryUnit = product.deliveryUnitTypeId?.let { did -> _unitTypes.value.find { it.id == did } }
         val allowDecimals = unit?.allowDecimals ?: false
         val qtyScaled = VeggieQuantityScaling.parseQuantityScaled(quantityInput, allowDecimals) ?: return
         if (qtyScaled <= 0L) return
@@ -743,6 +763,8 @@ class AdminVeggieViewModel(
                 }
 
                 val entry = existing?.copy(
+                    deliveryUnitNameSnapshot = deliveryUnit?.name ?: existing.deliveryUnitNameSnapshot,
+                    deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals ?: existing.deliveryAllowDecimalsSnapshot,
                     orderedQuantityScaled = targetOrderedQty,
                     actualQuantityScaled = targetActualQty,
                     updatedAt = now
@@ -755,6 +777,8 @@ class AdminVeggieViewModel(
                     veggieNameSnapshot = product.name,
                     unitNameSnapshot = unit?.name ?: product.unitTypeId,
                     allowDecimalsSnapshot = allowDecimals,
+                    deliveryUnitNameSnapshot = deliveryUnit?.name,
+                    deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals,
                     orderedQuantityScaled = targetOrderedQty,
                     actualQuantityScaled = targetActualQty,
                     updatedAt = now

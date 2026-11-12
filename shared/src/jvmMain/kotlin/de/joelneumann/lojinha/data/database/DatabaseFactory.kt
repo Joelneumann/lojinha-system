@@ -240,6 +240,21 @@ object DatabaseFactory {
         }
     }
 
+    internal val MIGRATION_19_20 = object : Migration(19, 20) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v19 -> v20 (adding deliveryUnitTypeId and delivery snapshot fields)...")
+            try {
+                connection.execSQL("ALTER TABLE `veggie_products` ADD COLUMN `deliveryUnitTypeId` TEXT DEFAULT NULL")
+                connection.execSQL("ALTER TABLE `veggie_order_entries` ADD COLUMN `deliveryUnitNameSnapshot` TEXT DEFAULT NULL")
+                connection.execSQL("ALTER TABLE `veggie_order_entries` ADD COLUMN `deliveryAllowDecimalsSnapshot` INTEGER DEFAULT NULL")
+                AppLogger.info(TAG, "Database migration v19 -> v20 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v19 -> v20 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
     fun defaultVeggieUnitTypes(timestamp: Long = System.currentTimeMillis()): List<VeggieUnitTypeEntity> = listOf(
         VeggieUnitTypeEntity(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true, updatedAt = timestamp),
         VeggieUnitTypeEntity(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true, updatedAt = timestamp),
@@ -302,7 +317,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")

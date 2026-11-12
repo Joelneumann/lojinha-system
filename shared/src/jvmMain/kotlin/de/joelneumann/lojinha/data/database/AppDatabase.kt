@@ -23,7 +23,7 @@ import de.joelneumann.lojinha.data.entity.*
         VeggieRoundProductSettlementEntity::class,
         VeggieOrderEntryEntity::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

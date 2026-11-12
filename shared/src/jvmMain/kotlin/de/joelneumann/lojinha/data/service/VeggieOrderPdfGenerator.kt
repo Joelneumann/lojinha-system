@@ -275,9 +275,14 @@ object VeggieOrderPdfGenerator {
                     }
                 }
 
+                val unitDisplay = if (sample.deliveryUnitNameSnapshot != null && sample.deliveryUnitNameSnapshot != sample.unitNameSnapshot) {
+                    "${sample.unitNameSnapshot} (${sample.deliveryUnitNameSnapshot})"
+                } else {
+                    sample.unitNameSnapshot
+                }
                 table.addCell(buildDataCell(sample.veggieNameSnapshot, FONT_BODY_BOLD, Element.ALIGN_LEFT))
                 table.addCell(buildDataCell(formattedTotalQty, FONT_BODY_BOLD, Element.ALIGN_CENTER))
-                table.addCell(buildDataCell(sample.unitNameSnapshot, FONT_BODY, Element.ALIGN_CENTER))
+                table.addCell(buildDataCell(unitDisplay, FONT_BODY, Element.ALIGN_CENTER))
                 // Blank write-in cells for Actual Unit Price and Total Spent
                 table.addCell(buildDataCell("", FONT_BODY, Element.ALIGN_RIGHT, Color.WHITE))
                 table.addCell(buildDataCell("", FONT_BODY, Element.ALIGN_RIGHT, Color.WHITE))
@@ -505,7 +510,12 @@ object VeggieOrderPdfGenerator {
                     horizontalAlignment = Element.ALIGN_CENTER
                     verticalAlignment = Element.ALIGN_MIDDLE
                 }
-                val unitCell = PdfPCell(Phrase(sample.unitNameSnapshot, FONT_MUTED_SMALL)).apply {
+                val unitDisplay = if (sample.deliveryUnitNameSnapshot != null && sample.deliveryUnitNameSnapshot != sample.unitNameSnapshot) {
+                    "${sample.unitNameSnapshot} (${sample.deliveryUnitNameSnapshot})"
+                } else {
+                    sample.unitNameSnapshot
+                }
+                val unitCell = PdfPCell(Phrase(unitDisplay, FONT_MUTED_SMALL)).apply {
                     border = Rectangle.BOX
                     borderColor = COLOR_BORDER
                     borderWidth = 0.75f

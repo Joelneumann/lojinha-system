@@ -279,6 +279,7 @@ class RoomVeggieOrderRepositoryImpl(
                 continue
             }
             val unit = product?.let { allUnits[it.unitTypeId] }
+            val deliveryUnit = product?.deliveryUnitTypeId?.let { allUnits[it] }
             val allowDecimals = unit?.allowDecimals ?: existing?.allowDecimalsSnapshot ?: false
             // Round to nearest whole unit if decimals are disallowed
             val normalizedQty = if (allowDecimals) {
@@ -300,6 +301,8 @@ class RoomVeggieOrderRepositoryImpl(
                 veggieNameSnapshot = product?.name ?: existing?.veggieNameSnapshot ?: productId,
                 unitNameSnapshot = unit?.name ?: existing?.unitNameSnapshot ?: "",
                 allowDecimalsSnapshot = allowDecimals,
+                deliveryUnitNameSnapshot = deliveryUnit?.name ?: existing?.deliveryUnitNameSnapshot,
+                deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals ?: existing?.deliveryAllowDecimalsSnapshot,
                 orderedQuantityScaled = normalizedQty,
                 actualQuantityScaled = existing?.actualQuantityScaled,
                 effectiveUnitPriceCents = existing?.effectiveUnitPriceCents,

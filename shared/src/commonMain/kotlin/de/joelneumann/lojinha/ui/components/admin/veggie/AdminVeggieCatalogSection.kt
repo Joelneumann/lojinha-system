@@ -269,6 +269,7 @@ fun AdminVeggieCatalogSection(
                 VeggieCatalogProductRow(
                     product = product,
                     unitType = unitMap[product.unitTypeId],
+                    deliveryUnitType = product.deliveryUnitTypeId?.let { unitMap[it] },
                     onEdit = { editingProduct = product },
                     onToggleActive = { productToToggleActive = product },
                     onDelete = { productToDelete = product }
@@ -288,6 +289,7 @@ fun AdminVeggieCatalogSection(
                             VeggieCatalogProductRow(
                                 product = product,
                                 unitType = unitMap[product.unitTypeId],
+                                deliveryUnitType = product.deliveryUnitTypeId?.let { unitMap[it] },
                                 onEdit = { editingProduct = product },
                                 onToggleActive = { productToToggleActive = product },
                                 onDelete = { productToDelete = product }
@@ -395,12 +397,14 @@ fun AdminVeggieCatalogSection(
 private fun VeggieCatalogProductRow(
     product: VeggieProduct,
     unitType: VeggieUnitType?,
+    deliveryUnitType: VeggieUnitType? = null,
     onEdit: () -> Unit,
     onToggleActive: () -> Unit,
     onDelete: () -> Unit
 ) {
     val strings = I18n.current
     val unitName = unitType?.name ?: product.unitTypeId
+    val deliveryUnitName = deliveryUnitType?.name
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -438,10 +442,17 @@ private fun VeggieCatalogProductRow(
                         fontWeight = FontWeight.Bold,
                         color = if (product.isActive) PrimaryNavy else TextSecondaryMuted
                     )
-                    AdminStatusBadge(
-                        text = unitName,
-                        type = if (unitType?.allowDecimals == true) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
-                    )
+                    if (deliveryUnitName != null && deliveryUnitType.id != product.unitTypeId) {
+                        AdminStatusBadge(
+                            text = "$unitName ➔ $deliveryUnitName",
+                            type = AdminBadgeType.NAVY
+                        )
+                    } else {
+                        AdminStatusBadge(
+                            text = unitName,
+                            type = if (unitType?.allowDecimals == true) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
+                        )
+                    }
                     if (!product.isActive) {
                         AdminStatusBadge(
                             text = strings.disabled,
