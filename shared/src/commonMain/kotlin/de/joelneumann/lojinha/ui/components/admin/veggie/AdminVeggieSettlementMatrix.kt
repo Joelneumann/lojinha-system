@@ -92,7 +92,7 @@ fun AdminVeggieSettlementMatrix(
     onUpdateTransporterUser: (String?) -> Unit,
     onCloseRound: () -> Unit,
     onReopenRound: () -> Unit,
-    onSaveDraft: () -> Unit,
+    onSaveDraft: ((onSuccess: (() -> Unit)?) -> Unit),
     onExecuteSettlement: () -> Unit,
     onDeleteRound: (() -> Unit)? = null,
     onCompleteEmptyRound: (() -> Unit)? = null,
@@ -111,6 +111,7 @@ fun AdminVeggieSettlementMatrix(
     var showConfirmCloseRound by remember { mutableStateOf(false) }
     var showConfirmResetChanges by remember { mutableStateOf(false) }
     var showConfirmSettle by remember { mutableStateOf(false) }
+    var showUnsavedSettleDialog by remember { mutableStateOf(false) }
     var showConfirmCompleteEmpty by remember { mutableStateOf(false) }
     var showConfirmDeleteRound by remember { mutableStateOf(false) }
     var showAddEntryDialog by remember { mutableStateOf(false) }
@@ -316,7 +317,7 @@ fun AdminVeggieSettlementMatrix(
                                 }
 
                                 OutlinedButton(
-                                    onClick = onSaveDraft,
+                                    onClick = { onSaveDraft(null) },
                                     enabled = hasUnsavedChanges && !isSaving,
                                     shape = RoundedCornerShape(8.dp),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -418,7 +419,7 @@ fun AdminVeggieSettlementMatrix(
                                 }
 
                                 OutlinedButton(
-                                    onClick = onSaveDraft,
+                                    onClick = { onSaveDraft(null) },
                                     enabled = hasUnsavedChanges && !isSaving,
                                     shape = RoundedCornerShape(8.dp),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -485,7 +486,13 @@ fun AdminVeggieSettlementMatrix(
                                     }
                                 } else {
                                     Button(
-                                        onClick = { showConfirmSettle = true },
+                                        onClick = {
+                                            if (hasUnsavedChanges) {
+                                                showUnsavedSettleDialog = true
+                                            } else {
+                                                showConfirmSettle = true
+                                            }
+                                        },
                                         enabled = !isSaving,
                                         colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
                                         shape = RoundedCornerShape(8.dp)
@@ -530,7 +537,13 @@ fun AdminVeggieSettlementMatrix(
                                 }
 
                                 Button(
-                                    onClick = { showConfirmSettle = true },
+                                    onClick = {
+                                        if (hasUnsavedChanges) {
+                                            showUnsavedSettleDialog = true
+                                        } else {
+                                            showConfirmSettle = true
+                                        }
+                                    },
                                     enabled = !isSaving && entries.isNotEmpty(),
                                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                                     shape = RoundedCornerShape(8.dp)
@@ -1260,6 +1273,23 @@ fun AdminVeggieSettlementMatrix(
                 onResetChanges?.invoke()
             },
             onDismiss = { showConfirmResetChanges = false }
+        )
+    }
+
+    if (showUnsavedSettleDialog) {
+        ConfirmationDialog(
+            title = strings.unsavedSettleTitle,
+            message = strings.unsavedSettleMsg,
+            confirmText = strings.saveAndSettleBtn,
+            cancelText = strings.cancel,
+            confirmButtonColor = AccentNavy,
+            onConfirm = {
+                showUnsavedSettleDialog = false
+                onSaveDraft {
+                    showConfirmSettle = true
+                }
+            },
+            onDismiss = { showUnsavedSettleDialog = false }
         )
     }
 
