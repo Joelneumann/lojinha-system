@@ -896,11 +896,14 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
         }
     }
 
-    suspend fun uploadProductImage(productId: String, imageBytes: ByteArray): String? {
+    suspend fun uploadProductImage(productId: String, productName: String?, imageBytes: ByteArray): String? {
         return try {
             val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/products/$productId/image")) {
                 contentType(ContentType.Application.OctetStream)
                 client.run { appendAdminAuth() }
+                if (!productName.isNullOrBlank()) {
+                    parameter("name", productName)
+                }
                 setBody(imageBytes)
             }
             if (response.status.isSuccess()) {
@@ -914,6 +917,9 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
             null
         }
     }
+
+    suspend fun uploadProductImage(productId: String, imageBytes: ByteArray): String? =
+        uploadProductImage(productId, null, imageBytes)
 
     suspend fun deleteProductImage(productId: String): Boolean {
         return try {

@@ -222,8 +222,8 @@ fun main() {
                                 AdminVeggieViewModel(
                                     veggieOrderRepository = veggieOrderRepository,
                                     userRepository = userRepository,
-                                    onSaveProductImage = { productId, bytes, _ ->
-                                        veggieOrderRepository.uploadProductImage(productId, bytes)
+                                    onSaveProductImage = { productId, productName, bytes, _ ->
+                                        veggieOrderRepository.uploadProductImage(productId, productName, bytes)
                                     },
                                     onDeleteProductImage = { productId, _ ->
                                         veggieOrderRepository.deleteProductImage(productId)

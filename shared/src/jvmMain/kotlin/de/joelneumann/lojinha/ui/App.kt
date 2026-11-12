@@ -432,8 +432,17 @@ fun App(
                                 veggieOrderRepository = effectiveVeggieRepo,
                                 userRepository = effectiveUserRepo,
                                 settingsRepository = effectiveSettingsRepo,
-                                onSaveProductImage = { productId, bytes, previousFileName ->
-                                    veggieImageService.saveProductImage(productId, bytes, previousFileName)
+                                onSaveProductImage = { productId, productName, bytes, previousFileName ->
+                                    val otherKeys = effectiveVeggieRepo.getAllVeggieProducts()
+                                        .filter { it.id != productId }
+                                        .mapNotNull { it.imageFileName }
+                                    veggieImageService.saveProductImage(
+                                        productId = productId,
+                                        productName = productName,
+                                        rawImageBytes = bytes,
+                                        previousImageFileName = previousFileName,
+                                        existingImageKeys = otherKeys
+                                    )
                                 },
                                 onDeleteProductImage = { productId, previousFileName ->
                                     veggieImageService.deleteProductImages(previousFileName ?: productId)

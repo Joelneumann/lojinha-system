@@ -651,9 +651,20 @@ class LojinhaAdminServer(
                                 return@post
                             }
                             val existing = repo.getVeggieProductById(id)
+                            val productName = call.request.queryParameters["name"] ?: existing?.name
+                            val otherProductKeys = repo.getAllVeggieProducts()
+                                .filter { it.id != id }
+                                .mapNotNull { it.imageFileName }
                             val fileName = try {
-                                veggieImageService.saveProductImage(id, bytes, existing?.imageFileName)
+                                veggieImageService.saveProductImage(
+                                    productId = id,
+                                    productName = productName,
+                                    rawImageBytes = bytes,
+                                    previousImageFileName = existing?.imageFileName,
+                                    existingImageKeys = otherProductKeys
+                                )
                             } catch (e: Exception) {
+                                AppLogger.error("LojinhaAdminServer", "Failed to save product image for $id: ${e.message}", e)
                                 call.respond(HttpStatusCode.BadRequest, "Invalid or unsupported image data")
                                 return@post
                             }

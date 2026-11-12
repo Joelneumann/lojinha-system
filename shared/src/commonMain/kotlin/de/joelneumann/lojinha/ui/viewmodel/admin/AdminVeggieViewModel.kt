@@ -39,7 +39,7 @@ class AdminVeggieViewModel(
     private val veggieOrderRepository: VeggieOrderRepository,
     private val userRepository: UserRepository,
     private val settingsRepository: SettingsRepository? = null,
-    private val onSaveProductImage: (suspend (productId: String, bytes: ByteArray, previousFileName: String?) -> String?)? = null,
+    private val onSaveProductImage: (suspend (productId: String, productName: String, bytes: ByteArray, previousFileName: String?) -> String?)? = null,
     private val onDeleteProductImage: (suspend (productId: String, previousFileName: String?) -> Unit)? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
@@ -794,7 +794,12 @@ class AdminVeggieViewModel(
                 veggieOrderRepository.saveVeggieProduct(initialProduct)
 
                 if (newImageBytes != null && newImageBytes.isNotEmpty()) {
-                    val savedFileName = onSaveProductImage?.invoke(product.id, newImageBytes, product.imageFileName)
+                    val savedFileName = onSaveProductImage?.invoke(
+                        product.id,
+                        product.name,
+                        newImageBytes,
+                        product.imageFileName
+                    )
                     if (!savedFileName.isNullOrBlank()) {
                         veggieOrderRepository.saveVeggieProduct(
                             initialProduct.copy(

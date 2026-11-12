@@ -65,7 +65,10 @@ class AdminVeggieViewModelTest {
         override fun getVeggieProductsFlow(): Flow<List<VeggieProduct>> = flowOf(products)
         override suspend fun getAllVeggieProducts(): List<VeggieProduct> = products
         override suspend fun getVeggieProductById(id: String): VeggieProduct? = products.find { it.id == id }
-        override suspend fun saveVeggieProduct(product: VeggieProduct) {}
+        override suspend fun saveVeggieProduct(product: VeggieProduct) {
+            val idx = products.indexOfFirst { it.id == product.id }
+            if (idx >= 0) products[idx] = product else products.add(product)
+        }
         override suspend fun deactivateVeggieProduct(id: String) {}
         override suspend fun hardDeleteVeggieProduct(id: String) {}
 
@@ -750,5 +753,35 @@ class AdminVeggieViewModelTest {
         assertNotNull(reactivated)
         assertTrue(reactivated.isActive)
         assertTrue(reactivated.allowDecimals)
+    }
+
+    @Test
+    fun testSaveVeggieProduct_passesProductNameToImageSaverAndUpdatesFileName() = runTest {
+        val (veggieRepo, userRepo, _) = setupTestFixture()
+        var receivedProductName: String? = null
+        var receivedProductId: String? = null
+
+        val vm = AdminVeggieViewModel(
+            veggieOrderRepository = veggieRepo,
+            userRepository = userRepo,
+            onSaveProductImage = { prodId, prodName, bytes, prevFileName ->
+                receivedProductId = prodId
+                receivedProductName = prodName
+                "tomate_italiano"
+            },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        val product = veggieRepo.products.first().copy(name = "Tomate Italiano")
+        vm.saveVeggieProduct(product, newImageBytes = byteArrayOf(1, 2, 3), removeExistingImage = false)
+        advanceUntilIdle()
+
+        assertEquals(product.id, receivedProductId)
+        assertEquals("Tomate Italiano", receivedProductName)
+
+        val updatedProduct = veggieRepo.products.find { it.id == product.id }
+        assertNotNull(updatedProduct)
+        assertEquals("tomate_italiano", updatedProduct.imageFileName)
     }
 }

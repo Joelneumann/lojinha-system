@@ -44,35 +44,102 @@ class VeggieServicesJvmTest {
         // Create a synthetic 1200x900 PNG image in memory
         val rawPngBytes = createSyntheticPngBytes(width = 1200, height = 900, color = Color(34, 197, 94))
 
-        val key1 = imageService.saveProductImage("vp-tomato", rawPngBytes)
-        val thumbFile1 = imageService.getThumbnailFile(key1)
-        val fullFile1 = imageService.getFullImageFile(key1)
+        val oldUuidKey = "90e3251b-old-uuid"
+        // Pretend an old image file existed for previous key
+        val oldThumb = File(imageDir, "${oldUuidKey}_thumb.jpg").apply { writeText("old") }
+        val oldFull = File(imageDir, "${oldUuidKey}_full.jpg").apply { writeText("old") }
+        assertTrue(oldThumb.exists())
+        assertTrue(oldFull.exists())
+
+        // Save new image with product name "Tomato"
+        val key = imageService.saveProductImage(
+            productId = "vp-tomato",
+            productName = "Tomato",
+            rawImageBytes = rawPngBytes,
+            previousImageFileName = oldUuidKey
+        )
+        assertEquals("tomato", key)
+
+        val thumbFile1 = imageService.getThumbnailFile(key)
+        val fullFile1 = imageService.getFullImageFile(key)
         assertNotNull(thumbFile1)
         assertNotNull(fullFile1)
         assertTrue(thumbFile1.exists())
         assertTrue(fullFile1.exists())
 
-        val decodedThumb = ImageIO.read(ByteArrayInputStream(imageService.readThumbnailBytes(key1)!!))
+        // Old UUID files should have been cleaned up
+        assertFalse(oldThumb.exists())
+        assertFalse(oldFull.exists())
+
+        val decodedThumb = ImageIO.read(ByteArrayInputStream(imageService.readThumbnailBytes(key)!!))
         assertEquals(96, decodedThumb.width)
         assertEquals(96, decodedThumb.height)
 
-        val decodedFull = ImageIO.read(ByteArrayInputStream(imageService.readFullImageBytes(key1)!!))
+        val decodedFull = ImageIO.read(ByteArrayInputStream(imageService.readFullImageBytes(key)!!))
         assertEquals(800, decodedFull.width)
         assertEquals(600, decodedFull.height)
 
-        // Replace image and verify previous files are deleted
-        Thread.sleep(5)
-        val key2 = imageService.saveProductImage("vp-tomato", rawPngBytes, previousImageFileName = key1)
-        assertNotEquals(key1, key2)
-        assertNull(imageService.getThumbnailFile(key1))
-        assertNull(imageService.getFullImageFile(key1))
-        assertNotNull(imageService.getThumbnailFile(key2))
-        assertNotNull(imageService.getFullImageFile(key2))
-
         // Delete product images
-        imageService.deleteProductImages(key2)
-        assertNull(imageService.getThumbnailFile(key2))
-        assertNull(imageService.getFullImageFile(key2))
+        imageService.deleteProductImages(key)
+        assertNull(imageService.getThumbnailFile(key))
+        assertNull(imageService.getFullImageFile(key))
+    }
+
+    @Test
+    fun testVeggieImageService_usesProductName_andSuffixesDuplicates() {
+        val imageDir = File(tempDir, "veggie_images_naming")
+        val imageService = VeggieImageService(imageDir)
+        val rawPngBytes = createSyntheticPngBytes(width = 100, height = 100, color = Color.RED)
+
+        // 1. First product named "Tomate"
+        val key1 = imageService.saveProductImage(
+            productId = "prod-1",
+            productName = "Tomate",
+            rawImageBytes = rawPngBytes
+        )
+        assertEquals("tomate", key1)
+        assertTrue(File(imageDir, "tomate_thumb.jpg").exists())
+        assertTrue(File(imageDir, "tomate_full.jpg").exists())
+
+        // 2. Second product also named "Tomate" -> should get _2
+        val key2 = imageService.saveProductImage(
+            productId = "prod-2",
+            productName = "Tomate",
+            rawImageBytes = rawPngBytes,
+            existingImageKeys = listOf(key1)
+        )
+        assertEquals("tomate_2", key2)
+        assertTrue(File(imageDir, "tomate_2_thumb.jpg").exists())
+        assertTrue(File(imageDir, "tomate_2_full.jpg").exists())
+
+        // 3. Third product also named "Tomate" -> should get _3
+        val key3 = imageService.saveProductImage(
+            productId = "prod-3",
+            productName = "Tomate",
+            rawImageBytes = rawPngBytes,
+            existingImageKeys = listOf(key1, key2)
+        )
+        assertEquals("tomate_3", key3)
+        assertTrue(File(imageDir, "tomate_3_thumb.jpg").exists())
+        assertTrue(File(imageDir, "tomate_3_full.jpg").exists())
+
+        // 4. Updating product 1's image should maintain "tomate" (not increment to _4)
+        val key1Updated = imageService.saveProductImage(
+            productId = "prod-1",
+            productName = "Tomate",
+            rawImageBytes = rawPngBytes,
+            previousImageFileName = "tomate",
+            existingImageKeys = listOf(key2, key3)
+        )
+        assertEquals("tomate", key1Updated)
+
+        // 5. Special characters and accents normalization: "Açafrão & Maçã"
+        val keyAccents = imageService.saveProductImage(
+            productId = "prod-4",
+            productName = "Açafrão & Maçã (100g)",
+            rawImageBytes = rawPngBytes
+        )
+        assertEquals("acafrao_maca_100g", keyAccents)
     }
 
     @Test
