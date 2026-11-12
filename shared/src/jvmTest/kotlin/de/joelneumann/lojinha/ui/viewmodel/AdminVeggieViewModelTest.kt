@@ -57,7 +57,10 @@ class AdminVeggieViewModelTest {
     ) : VeggieOrderRepository {
         override fun getUnitTypesFlow(): Flow<List<VeggieUnitType>> = flowOf(unitTypes)
         override suspend fun getAllUnitTypes(): List<VeggieUnitType> = unitTypes
-        override suspend fun saveUnitType(unitType: VeggieUnitType) {}
+        override suspend fun saveUnitType(unitType: VeggieUnitType) {
+            val idx = unitTypes.indexOfFirst { it.id == unitType.id }
+            if (idx >= 0) unitTypes[idx] = unitType else unitTypes.add(unitType)
+        }
 
         override fun getVeggieProductsFlow(): Flow<List<VeggieProduct>> = flowOf(products)
         override suspend fun getAllVeggieProducts(): List<VeggieProduct> = products
@@ -700,5 +703,52 @@ class AdminVeggieViewModelTest {
         assertNotNull(updated)
         assertEquals(1000L, updated.orderedQuantityScaled)
         assertEquals(2500L, updated.actualQuantityScaled)
+    }
+
+    @Test
+    fun testSaveUnitType_editingExistingUnit_updatesExistingWithoutCreatingDuplicate() = runTest {
+        val (veggieRepo, userRepo, _) = setupTestFixture()
+        val existingUnit = VeggieUnitType(id = "unit-pack", name = "Pack", allowDecimals = false, isActive = true)
+        val inactiveUnit = VeggieUnitType(id = "unit-old-pacote", name = "Pacote", allowDecimals = false, isActive = false)
+        veggieRepo.unitTypes.add(existingUnit)
+        veggieRepo.unitTypes.add(inactiveUnit)
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Edit existing unit from "Pack" to "Pacote"
+        vm.saveUnitType(existingUnit.copy(name = "Pacote"))
+        advanceUntilIdle()
+
+        // Existing unit should have its name updated and keep its id
+        val updated = veggieRepo.unitTypes.find { it.id == "unit-pack" }
+        assertNotNull(updated)
+        assertEquals("Pacote", updated.name)
+
+        // Inactive unit should still exist unchanged and not have hijacked the edit
+        val inactive = veggieRepo.unitTypes.find { it.id == "unit-old-pacote" }
+        assertNotNull(inactive)
+        assertFalse(inactive.isActive)
+    }
+
+    @Test
+    fun testSaveUnitType_addingNewUnitWithSameNameAsInactive_reactivatesInactive() = runTest {
+        val (veggieRepo, userRepo, _) = setupTestFixture()
+        val inactiveUnit = VeggieUnitType(id = "unit-old-box", name = "Box", allowDecimals = false, isActive = false)
+        veggieRepo.unitTypes.add(inactiveUnit)
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Add brand new unit with name "Box" (id is generated or different)
+        val newUnit = VeggieUnitType(id = "new-temp-id", name = "Box", allowDecimals = true, isActive = true)
+        vm.saveUnitType(newUnit)
+        advanceUntilIdle()
+
+        // It should have reactivated the inactive unit with id "unit-old-box" rather than creating a duplicate
+        val reactivated = veggieRepo.unitTypes.find { it.id == "unit-old-box" }
+        assertNotNull(reactivated)
+        assertTrue(reactivated.isActive)
+        assertTrue(reactivated.allowDecimals)
     }
 }

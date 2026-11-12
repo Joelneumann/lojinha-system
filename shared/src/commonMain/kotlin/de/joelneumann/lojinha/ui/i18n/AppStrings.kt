@@ -796,6 +796,9 @@ interface AppStrings {
     val manageUnitTypesBtn: String
     val veggieUnitTypesDialogTitle: String
     val addUnitTypeBtn: String
+    val addUnitTypeSectionTitle: String
+    fun editUnitTypeSectionTitle(name: String): String
+    val editingBadge: String
     val unitTypeNameLabel: String
     val unitTypeNamePlaceholder: String
     val allUnitsFilter: String

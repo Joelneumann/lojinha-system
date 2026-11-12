@@ -847,18 +847,24 @@ class AdminVeggieViewModel(
     fun saveUnitType(unitType: VeggieUnitType) {
         activeScope.launch {
             try {
-                // If this is a new unit, check if there is an inactive unit with the same name and reactivate it
-                val existingInactive = _unitTypes.value.find {
-                    !it.isActive && it.name.equals(unitType.name.trim(), ignoreCase = true)
-                }
-                val toSave = if (existingInactive != null && existingInactive.id != unitType.id) {
-                    existingInactive.copy(
-                        name = unitType.name.trim(),
-                        allowDecimals = unitType.allowDecimals,
-                        isActive = true,
-                        updatedAt = currentTimeMillis()
-                    )
+                val isExisting = _unitTypes.value.any { it.id == unitType.id }
+                val toSave = if (!isExisting) {
+                    // Only for NEW units: reactivate matching inactive unit if one exists
+                    val existingInactive = _unitTypes.value.find {
+                        !it.isActive && it.name.equals(unitType.name.trim(), ignoreCase = true)
+                    }
+                    if (existingInactive != null) {
+                        existingInactive.copy(
+                            name = unitType.name.trim(),
+                            allowDecimals = unitType.allowDecimals,
+                            isActive = true,
+                            updatedAt = currentTimeMillis()
+                        )
+                    } else {
+                        unitType
+                    }
                 } else {
+                    // For EXISTING units: keep the unit's ID and update its properties directly
                     unitType
                 }
                 veggieOrderRepository.saveUnitType(toSave)

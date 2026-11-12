@@ -119,6 +119,41 @@ fun VeggieUnitTypesDialog(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (editingUnit != null) Icons.Default.Edit else Icons.Default.Add,
+                                    contentDescription = null,
+                                    tint = AccentNavy,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = if (editingUnit != null) strings.editUnitTypeSectionTitle(editingUnit!!.name) else strings.addUnitTypeSectionTitle,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryNavy
+                                )
+                            }
+                            if (editingUnit != null) {
+                                TextButton(
+                                    onClick = {
+                                        editingUnit = null
+                                        unitNameInput = ""
+                                        allowDecimalsInput = false
+                                    }
+                                ) {
+                                    Text(strings.cancel, fontSize = 12.sp, color = AccentNavy)
+                                }
+                            }
+                        }
+
                         AdminLabeledField(
                             label = strings.unitTypeNameLabel,
                             value = unitNameInput,
@@ -201,9 +236,11 @@ fun VeggieUnitTypesDialog(
                 ) {
                     items(activeUnits, key = { it.id }) { unit ->
                         val isUsed = unit.id in usedUnitIds
+                        val isCurrentlyEditing = editingUnit?.id == unit.id
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = SurfaceContainerLight,
+                            color = if (isCurrentlyEditing) SurfaceWhite else SurfaceContainerLight,
+                            border = if (isCurrentlyEditing) androidx.compose.foundation.BorderStroke(1.5.dp, AccentNavy) else null,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -227,6 +264,12 @@ fun VeggieUnitTypesDialog(
                                         text = if (unit.allowDecimals) strings.unitAllowDecimals else strings.unitIntegerOnly,
                                         type = if (unit.allowDecimals) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
                                     )
+                                    if (isCurrentlyEditing) {
+                                        AdminStatusBadge(
+                                            text = strings.editingBadge,
+                                            type = AdminBadgeType.WARNING
+                                        )
+                                    }
                                 }
 
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
