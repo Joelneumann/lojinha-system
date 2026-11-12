@@ -290,6 +290,33 @@ class DiagnosticsService(
         revealInFileExplorer(dir)
     }
 
+    fun openFolder(folder: File) {
+        if (!folder.exists()) {
+            folder.mkdirs()
+        }
+        try {
+            val os = System.getProperty("os.name").lowercase(Locale.US)
+            when {
+                os.contains("win") -> {
+                    ProcessBuilder("explorer.exe", folder.absolutePath).start()
+                }
+                os.contains("mac") -> {
+                    ProcessBuilder("open", folder.absolutePath).start()
+                }
+                else -> {
+                    ProcessBuilder("xdg-open", folder.absolutePath).start()
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.warn(TAG, "Failed to open folder: ${e.message}", e)
+            try {
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+                    Desktop.getDesktop().open(folder)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     fun openEmailDraft(recipientEmail: String, zipFile: File) {
         try {
             val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())

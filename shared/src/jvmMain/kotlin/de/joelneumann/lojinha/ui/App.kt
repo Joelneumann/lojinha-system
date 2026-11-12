@@ -504,6 +504,10 @@ fun App(
                                         de.joelneumann.lojinha.util.FileRollingLogger.getTotalLogSizeBytes()
                                     )
                                 },
+                                onOpenVeggieImagesFolder = {
+                                    diagnosticsService.openFolder(veggieImageService.getImageDirectory())
+                                },
+                                veggieImagesDirectoryPath = veggieImageService.getImageDirectory().absolutePath,
                                 serverUrls = candidateUrls,
                                 onExitApplication = onExitApplication
                             )

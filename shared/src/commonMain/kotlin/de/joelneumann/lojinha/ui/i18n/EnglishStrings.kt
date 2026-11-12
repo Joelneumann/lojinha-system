@@ -788,6 +788,7 @@ object EnglishStrings : AppStrings {
     override val veggieStandardBuyerFeeLabel = "Standard Buyer Operation Fee (R$)"
     override val veggieStandardTransportFeeLabel = "Standard Transportation Fee (R$)"
     override val importVeggieProductsCsvBtn = "Import Veggie Products (.CSV)"
+    override val openVeggieImagesFolderBtn = "Open Veggie Images Folder"
     override val selectVeggieProductsCsvFile = "Select Veggie Products CSV File"
     override val csvTypeVeggieProducts = "Veggie Products"
     override val weekdayMonday = "Monday"

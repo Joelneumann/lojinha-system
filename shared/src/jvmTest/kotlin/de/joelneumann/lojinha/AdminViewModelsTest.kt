@@ -1314,5 +1314,17 @@ class AdminViewModelsTest {
         assertNull(appViewModel.currentUser.value)
         assertEquals(de.joelneumann.lojinha.ui.viewmodel.AppScreen.MAIN_USER_SELECT, appViewModel.currentScreen.value)
     }
+
+    @Test
+    fun testAdminSettingsViewModel_openVeggieImagesFolder_triggersCallback() = runTest {
+        val settingsRepo = TestSettingsRepository(SystemSettings())
+        var folderOpened = false
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            onOpenVeggieImagesFolder = { folderOpened = true }
+        )
+        viewModel.openVeggieImagesFolder()
+        assertTrue(folderOpened)
+    }
 }
 

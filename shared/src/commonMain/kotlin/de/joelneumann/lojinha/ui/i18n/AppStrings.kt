@@ -767,6 +767,7 @@ interface AppStrings {
     val veggieStandardBuyerFeeLabel: String
     val veggieStandardTransportFeeLabel: String
     val importVeggieProductsCsvBtn: String
+    val openVeggieImagesFolderBtn: String
     val selectVeggieProductsCsvFile: String
     val csvTypeVeggieProducts: String
     val weekdayMonday: String
