@@ -22,6 +22,7 @@ import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminCountPill
 import de.joelneumann.lojinha.ui.components.admin.AdminExpandableSection
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.components.admin.DualUnitBadge
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.components.veggie.VeggieProductImage
@@ -443,9 +444,9 @@ private fun VeggieCatalogProductRow(
                         color = if (product.isActive) PrimaryNavy else TextSecondaryMuted
                     )
                     if (deliveryUnitName != null && deliveryUnitType.id != product.unitTypeId) {
-                        AdminStatusBadge(
-                            text = "$unitName ➔ $deliveryUnitName",
-                            type = AdminBadgeType.NAVY
+                        DualUnitBadge(
+                            orderUnitName = unitName,
+                            deliveryUnitName = deliveryUnitName
                         )
                     } else {
                         AdminStatusBadge(

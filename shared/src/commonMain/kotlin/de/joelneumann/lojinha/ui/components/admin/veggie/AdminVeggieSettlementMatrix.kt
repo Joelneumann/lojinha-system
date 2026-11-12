@@ -47,6 +47,7 @@ import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.components.admin.DualUnitBadge
 import de.joelneumann.lojinha.ui.components.general.AppHorizontalScrollbar
 import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
@@ -836,10 +837,17 @@ fun AdminVeggieSettlementMatrix(
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    AdminStatusBadge(
-                                        text = if (rowInfo.deliveryUnitName != rowInfo.unitName) "${rowInfo.unitName} ➔ ${rowInfo.deliveryUnitName}" else rowInfo.unitName,
-                                        type = if (rowInfo.deliveryAllowDecimals) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
-                                    )
+                                    if (rowInfo.deliveryUnitName != rowInfo.unitName) {
+                                        DualUnitBadge(
+                                            orderUnitName = rowInfo.unitName,
+                                            deliveryUnitName = rowInfo.deliveryUnitName
+                                        )
+                                    } else {
+                                        AdminStatusBadge(
+                                            text = rowInfo.unitName,
+                                            type = if (rowInfo.deliveryAllowDecimals) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
+                                        )
+                                    }
                                 }
 
                                 // 2. Customer Cells (Middle Horizontally Scrolled)
