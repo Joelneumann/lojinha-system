@@ -966,6 +966,7 @@ class BackupRestoreService(
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     // Clear tables in reverse dependency order (children first)
+                    db.veggieOrderDao().deleteAllFavorites()
                     db.veggieOrderDao().deleteAllEntries()
                     db.veggieOrderDao().deleteAllProductSettlements()
                     db.veggieOrderDao().deleteAllRounds()
@@ -1069,6 +1070,7 @@ class BackupRestoreService(
         withContext(NonCancellable) {
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
+                    db.veggieOrderDao().deleteAllFavorites()
                     db.veggieOrderDao().deleteAllEntries()
                     db.veggieOrderDao().deleteAllProductSettlements()
                     db.veggieOrderDao().deleteAllRounds()

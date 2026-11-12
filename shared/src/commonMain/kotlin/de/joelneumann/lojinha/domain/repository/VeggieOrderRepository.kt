@@ -76,4 +76,8 @@ interface VeggieOrderRepository {
         actualQuantitiesByEntryId: Map<String, Long>,
         settledAt: Long
     ): VeggieRoundSettlementResult?
+
+    // 6. Customer Favorites
+    suspend fun getFavoriteProductIdsForUser(userId: String): Set<String> = emptySet()
+    suspend fun setFavoriteProductIdsForUser(userId: String, productIds: Set<String>) {}
 }

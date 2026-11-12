@@ -255,6 +255,27 @@ object DatabaseFactory {
         }
     }
 
+    internal val MIGRATION_20_21 = object : Migration(20, 21) {
+        override fun migrate(connection: SQLiteConnection) {
+            AppLogger.info(TAG, "Starting database migration: v20 -> v21 (adding veggie_user_favorites table)...")
+            try {
+                connection.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `veggie_user_favorites` (`userId` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`userId`, `veggieProductId`))"
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_userId` ON `veggie_user_favorites` (`userId`)"
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_veggieProductId` ON `veggie_user_favorites` (`veggieProductId`)"
+                )
+                AppLogger.info(TAG, "Database migration v20 -> v21 completed successfully.")
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "Database migration v20 -> v21 failed: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
     fun defaultVeggieUnitTypes(timestamp: Long = System.currentTimeMillis()): List<VeggieUnitTypeEntity> = listOf(
         VeggieUnitTypeEntity(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true, updatedAt = timestamp),
         VeggieUnitTypeEntity(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true, updatedAt = timestamp),
@@ -317,7 +338,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")

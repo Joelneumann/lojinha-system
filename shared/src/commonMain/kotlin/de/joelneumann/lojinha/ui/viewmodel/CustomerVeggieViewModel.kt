@@ -21,6 +21,7 @@ class CustomerVeggieViewModel(
     private val onFetchHistory: suspend () -> List<CustomerVeggieRoundHistoryItem>,
     initialFavoriteProductIds: Set<String> = emptySet(),
     private val onFavoritesChanged: ((Set<String>) -> Unit)? = null,
+    private val onSaveFavorites: (suspend (Set<String>) -> Boolean)? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
 
@@ -109,6 +110,7 @@ class CustomerVeggieViewModel(
                     .sortedByAccentInsensitive { it.name }
                 _activeRound.value = state.activeRound
                 _previousRoundQuantitiesScaled.value = state.previousRoundQuantities
+                _favoriteProductIds.value = state.favoriteProductIds
                 _historyItems.value = history
 
                 val currentRoundId = state.activeRound?.id
@@ -141,6 +143,11 @@ class CustomerVeggieViewModel(
         }
         _favoriteProductIds.value = updated
         onFavoritesChanged?.invoke(updated)
+        onSaveFavorites?.let { save ->
+            activeScope.launch {
+                save(updated)
+            }
+        }
     }
 
     fun isFavorite(productId: String): Boolean {
@@ -158,6 +165,11 @@ class CustomerVeggieViewModel(
     fun setFavoriteProductIds(ids: Set<String>) {
         _favoriteProductIds.value = ids
         onFavoritesChanged?.invoke(ids)
+        onSaveFavorites?.let { save ->
+            activeScope.launch {
+                save(ids)
+            }
+        }
     }
 
     fun updateHistorySearchQuery(query: String) {

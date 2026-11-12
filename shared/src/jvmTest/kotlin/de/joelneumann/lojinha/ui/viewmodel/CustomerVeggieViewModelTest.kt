@@ -46,7 +46,8 @@ class CustomerVeggieViewModelTest {
                     unitTypes = listOf(fakeUnitType),
                     products = listOf(fakeProduct),
                     currentEntries = emptyList(),
-                    previousRoundQuantities = emptyMap()
+                    previousRoundQuantities = emptyMap(),
+                    favoriteProductIds = initialFavorites
                 )
             },
             onSaveOrder = { _, _ -> true },
@@ -213,5 +214,41 @@ class CustomerVeggieViewModelTest {
         // Copying previous round order still excludes inactive products
         vm.copyPreviousRoundOrder()
         assertEquals(mapOf("prod-active" to 1000L), vm.draftQuantitiesScaled.value)
+    }
+
+    @Test
+    fun testFavoritesSyncFromServerStateAndInvokeOnSaveFavorites() = runTest {
+        var serverFavorites = setOf("prod-1")
+        val savedBatches = mutableListOf<Set<String>>()
+
+        val vm = CustomerVeggieViewModel(
+            onFetchVeggieState = {
+                CustomerVeggieStateResponse(
+                    favoriteProductIds = serverFavorites
+                )
+            },
+            onSaveOrder = { _, _ -> true },
+            onFetchHistory = { emptyList() },
+            onSaveFavorites = { ids ->
+                savedBatches.add(ids)
+                serverFavorites = ids
+                true
+            },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        assertEquals(setOf("prod-1"), vm.favoriteProductIds.value)
+
+        vm.toggleFavorite("prod-2")
+        advanceUntilIdle()
+        assertEquals(setOf("prod-1", "prod-2"), vm.favoriteProductIds.value)
+        assertEquals(listOf(setOf("prod-1", "prod-2")), savedBatches)
+
+        // Simulate server-side update from another device
+        serverFavorites = setOf("prod-3")
+        vm.loadData()
+        advanceUntilIdle()
+        assertEquals(setOf("prod-3"), vm.favoriteProductIds.value)
     }
 }

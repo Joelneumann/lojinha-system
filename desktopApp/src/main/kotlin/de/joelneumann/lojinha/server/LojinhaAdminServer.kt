@@ -1152,15 +1152,30 @@ class LojinhaAdminServer(
                         } else {
                             emptyMap()
                         }
+                        val favoriteProductIds = repo.getFavoriteProductIdsForUser(userId)
                         call.respond(
                             CustomerVeggieStateResponse(
                                 unitTypes = unitTypes,
                                 products = products,
                                 activeRound = activeRound,
                                 currentEntries = currentEntries,
-                                previousRoundQuantities = previousQuantities
+                                previousRoundQuantities = previousQuantities,
+                                favoriteProductIds = favoriteProductIds
                             )
                         )
+                    }
+
+                    post("/veggie/favorites") {
+                        val userId = call.requireCustomerUserId() ?: return@post
+                        val user = userRepository.getUserById(userId)
+                        if (user == null || !user.isActive || user.isDeleted) {
+                            call.respond(HttpStatusCode.NotFound, "User not found")
+                            return@post
+                        }
+                        val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                        val req = call.receive<UpdateCustomerVeggieFavoritesRequest>()
+                        repo.setFavoriteProductIdsForUser(userId, req.productIds)
+                        call.respond(HttpStatusCode.OK)
                     }
 
                     post("/veggie/order") {

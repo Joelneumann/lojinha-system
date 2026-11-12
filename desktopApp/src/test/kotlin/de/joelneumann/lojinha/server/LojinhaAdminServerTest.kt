@@ -159,8 +159,15 @@ class LojinhaAdminServerTest {
     private val fakeVeggieRounds = mutableListOf<VeggieOrderRound>()
     private val fakeVeggieEntries = mutableListOf<VeggieOrderEntry>()
     private val fakeVeggieSettlements = mutableListOf<VeggieRoundProductSettlement>()
+    private val fakeVeggieFavorites = mutableMapOf<String, Set<String>>()
 
     private val fakeVeggieRepo = object : VeggieOrderRepository {
+        override suspend fun getFavoriteProductIdsForUser(userId: String): Set<String> =
+            fakeVeggieFavorites[userId] ?: emptySet()
+
+        override suspend fun setFavoriteProductIdsForUser(userId: String, productIds: Set<String>) {
+            fakeVeggieFavorites[userId] = productIds
+        }
         override fun getUnitTypesFlow(): Flow<List<VeggieUnitType>> = flowOf(fakeVeggieUnitTypes)
         override suspend fun getAllUnitTypes(): List<VeggieUnitType> = fakeVeggieUnitTypes.toList()
         override suspend fun saveUnitType(unitType: VeggieUnitType) {
@@ -848,6 +855,26 @@ class LojinhaAdminServerTest {
         val history = json.decodeFromString<List<CustomerVeggieRoundHistoryItem>>(historyRes.body())
         assertEquals(1, history.size)
         assertEquals(2000L, history.first().entries.first().orderedQuantityScaled)
+
+        // 8. Customer updates favorites via POST /api/customer/veggie/favorites and sees them in /api/customer/veggie/state
+        val saveFavReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/customer/veggie/favorites"))
+            .header("Authorization", "Bearer $customerToken")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(UpdateCustomerVeggieFavoritesRequest(setOf("vp-tomato")))))
+            .build()
+        val saveFavRes = client.send(saveFavReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, saveFavRes.statusCode())
+
+        val stateAfterFavReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/customer/veggie/state"))
+            .header("Authorization", "Bearer $customerToken")
+            .GET()
+            .build()
+        val stateAfterFavRes = client.send(stateAfterFavReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, stateAfterFavRes.statusCode())
+        val stateAfterFav = json.decodeFromString<CustomerVeggieStateResponse>(stateAfterFavRes.body())
+        assertEquals(setOf("vp-tomato"), stateAfterFav.favoriteProductIds)
     }
 
     @Test

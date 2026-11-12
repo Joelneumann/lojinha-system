@@ -104,6 +104,7 @@ class RoomVeggieOrderRepositoryImpl(
     }
 
     override suspend fun hardDeleteVeggieProduct(id: String) {
+        veggieOrderDao.deleteFavoritesForProduct(id)
         val entryCount = veggieOrderDao.getEntryCountForProduct(id)
         if (entryCount == 0) {
             veggieOrderDao.hardDeleteVeggieProduct(id)
@@ -680,5 +681,29 @@ class RoomVeggieOrderRepositoryImpl(
 
         onDataChanged?.invoke()
         calculationResult
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. Customer Favorites
+    // -------------------------------------------------------------------------
+    override suspend fun getFavoriteProductIdsForUser(userId: String): Set<String> {
+        return veggieOrderDao.getFavoriteProductIdsForUser(userId).toSet()
+    }
+
+    override suspend fun setFavoriteProductIdsForUser(userId: String, productIds: Set<String>) {
+        val now = currentTimeMillis()
+        val entities = productIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .map { productId ->
+                VeggieUserFavoriteEntity(
+                    userId = userId,
+                    veggieProductId = productId,
+                    createdAt = now
+                )
+            }
+        veggieOrderDao.replaceFavoritesForUser(userId, entities)
+        onDataChanged?.invoke()
     }
 }

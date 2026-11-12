@@ -234,3 +234,17 @@ data class VeggieOrderEntryEntity(
         )
     }
 }
+
+@Entity(
+    tableName = "veggie_user_favorites",
+    primaryKeys = ["userId", "veggieProductId"],
+    indices = [
+        Index(value = ["userId"]),
+        Index(value = ["veggieProductId"])
+    ]
+)
+data class VeggieUserFavoriteEntity(
+    val userId: String,
+    val veggieProductId: String,
+    val createdAt: Long
+)

@@ -62,7 +62,13 @@ data class CustomerVeggieStateResponse(
     val products: List<VeggieProduct> = emptyList(),
     val activeRound: VeggieOrderRound? = null,
     val currentEntries: List<VeggieOrderEntry> = emptyList(),
-    val previousRoundQuantities: Map<String, Long> = emptyMap()
+    val previousRoundQuantities: Map<String, Long> = emptyMap(),
+    val favoriteProductIds: Set<String> = emptySet()
+)
+
+@Serializable
+data class UpdateCustomerVeggieFavoritesRequest(
+    val productIds: Set<String> = emptySet()
 )
 
 @Serializable

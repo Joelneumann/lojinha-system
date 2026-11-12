@@ -671,4 +671,30 @@ class RoomVeggieOrderRepositoryTest {
         assertFalse(veggieRepo.cancelProductEntriesInOpenRound(round.id, "vp-b"))
         assertEquals(1, veggieRepo.getEntriesForRound(round.id).size)
     }
+
+    @Test
+    fun testCustomerVeggieFavorites_persistAndCleanupOnHardDelete() = runTest {
+        val unitKg = VeggieUnitType(id = "u-kg", name = "kg", allowDecimals = true, isActive = true)
+        veggieRepo.saveUnitType(unitKg)
+        veggieRepo.saveVeggieProduct(VeggieProduct(id = "vp-a", name = "Tomate", unitTypeId = "u-kg", isActive = true))
+        veggieRepo.saveVeggieProduct(VeggieProduct(id = "vp-b", name = "Alface", unitTypeId = "u-kg", isActive = true))
+
+        assertEquals(emptySet<String>(), veggieRepo.getFavoriteProductIdsForUser("u-alice"))
+
+        veggieRepo.setFavoriteProductIdsForUser("u-alice", setOf("vp-a", "vp-b"))
+        veggieRepo.setFavoriteProductIdsForUser("u-bob", setOf("vp-b"))
+
+        assertEquals(setOf("vp-a", "vp-b"), veggieRepo.getFavoriteProductIdsForUser("u-alice"))
+        assertEquals(setOf("vp-b"), veggieRepo.getFavoriteProductIdsForUser("u-bob"))
+
+        // Replacing favorites updates only that user
+        veggieRepo.setFavoriteProductIdsForUser("u-alice", setOf("vp-a"))
+        assertEquals(setOf("vp-a"), veggieRepo.getFavoriteProductIdsForUser("u-alice"))
+        assertEquals(setOf("vp-b"), veggieRepo.getFavoriteProductIdsForUser("u-bob"))
+
+        // Hard deleting a product removes its favorite references
+        veggieRepo.hardDeleteVeggieProduct("vp-a")
+        assertEquals(emptySet<String>(), veggieRepo.getFavoriteProductIdsForUser("u-alice"))
+        assertEquals(setOf("vp-b"), veggieRepo.getFavoriteProductIdsForUser("u-bob"))
+    }
 }

@@ -1405,6 +1405,20 @@ class CustomerNetworkClient(val baseUrl: String = "") {
         }
     }
 
+    suspend fun saveVeggieFavorites(productIds: Set<String>): Boolean {
+        return try {
+            val response = httpClient.post(resolveUrl("/api/customer/veggie/favorites")) {
+                contentType(ContentType.Application.Json)
+                appendCustomerAuth()
+                setBody(UpdateCustomerVeggieFavoritesRequest(productIds))
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("CustomerNetworkClient", "saveVeggieFavorites failed: ${e.message}", e)
+            false
+        }
+    }
+
     suspend fun getVeggieHistory(): List<CustomerVeggieRoundHistoryItem> {
         return try {
             httpClient.get(resolveUrl("/api/customer/veggie/history")) {
