@@ -53,6 +53,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
@@ -435,7 +436,10 @@ fun UserSettingsModalDialog(
                             }
                         },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = if (pinInput.isNotEmpty()) ImeAction.Next else ImeAction.Done),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = if (pinInput.isNotEmpty()) ImeAction.Next else ImeAction.Done
+                        ),
                         keyboardActions = KeyboardActions(onDone = { if (hasChanges && canSave) onSave(false) }),
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     )
@@ -459,7 +463,10 @@ fun UserSettingsModalDialog(
                                 visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 isError = confirmPinInput.isNotEmpty() && !isPinMatching,
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Password,
+                                    imeAction = ImeAction.Done
+                                ),
                                 keyboardActions = KeyboardActions(onDone = { if (hasChanges && canSave) onSave(false) }),
                                 modifier = Modifier.fillMaxWidth().height(56.dp)
                             )

@@ -1,5 +1,7 @@
 package de.joelneumann.lojinha.ui.components.userselection
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -13,8 +15,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,25 +39,29 @@ fun PasswordInputDialog(
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
     title: String? = null,
-    errorText: String? = null
+    errorText: String? = null,
+    isMobile: Boolean = false
 ) {
     val strings = I18n.current
     val inputFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val canSubmit = inputValue.isNotBlank()
 
     LaunchedEffect(Unit) {
         inputFocusRequester.safeRequestFocus()
+        if (isMobile) {
+            keyboardController?.show()
+        }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
-    ) {
+    val dialogSurface: @Composable (Modifier) -> Unit = { surfaceModifier ->
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
-            modifier = modifier
-                .width(360.dp)
+            shadowElevation = if (isMobile) 8.dp else 0.dp,
+            modifier = surfaceModifier
+                .fillMaxWidth()
+                .widthIn(max = 360.dp)
                 .wrapContentHeight()
                 .formModalKeys(
                     onCancel = onDismiss,
@@ -97,7 +105,10 @@ fun PasswordInputDialog(
                         .fillMaxWidth()
                         .height(56.dp)
                         .focusRequester(inputFocusRequester),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    ),
                     keyboardActions = KeyboardActions(onDone = {
                         if (canSubmit) onSubmit()
                     })
@@ -137,6 +148,44 @@ fun PasswordInputDialog(
                     }
                 }
             }
+        }
+    }
+
+    if (isMobile) {
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onDismiss
+                    )
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                dialogSurface(
+                    modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    )
+                )
+            }
+        }
+    } else {
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+        ) {
+            dialogSurface(modifier)
         }
     }
 }

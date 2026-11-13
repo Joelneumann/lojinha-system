@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
+import de.joelneumann.lojinha.ui.components.general.LocalHeaderCompact
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.ui.components.userselection.ProductScanFeedbackBanner
@@ -147,11 +148,12 @@ fun UserSelectionContent(
                 }
             },
             actions = {
+                val isCompactHeader = LocalHeaderCompact.current
                 Button(
                     onClick = onOpenAdminAuthDialog,
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = if (isCompactHeader) 12.dp else 16.dp, vertical = 8.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -159,22 +161,24 @@ fun UserSelectionContent(
                     ) {
                         Text(
                             text = strings.adminLoginBtn,
-                            fontSize = 13.sp,
+                            fontSize = if (isCompactHeader) 12.sp else 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = SurfaceWhite
                         )
-                        Text(
-                            text = "(F12)",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = SurfaceWhite.copy(alpha = 0.45f)
-                        )
+                        if (!isCompactHeader) {
+                            Text(
+                                text = "(F12)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = SurfaceWhite.copy(alpha = 0.45f)
+                            )
+                        }
                     }
                 }
             }
         )
 
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .background(SurfaceContainerLight)
@@ -186,9 +190,14 @@ fun UserSelectionContent(
                         focusRequester.safeRequestFocus()
                     }
                 }
-                .padding(ScreenPadding)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            val isMobile = maxWidth < 600.dp
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(if (isMobile) 10.dp else ScreenPadding)
+            ) {
                 SearchInputField(
                     query = searchQuery,
                     onQueryChange = onSearchQueryChange,
@@ -205,13 +214,14 @@ fun UserSelectionContent(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(if (isMobile) 10.dp else 16.dp))
 
                 UserGrid(
                     users = filteredUsers,
                     onUserClick = onUserClick,
                     emptyText = strings.noUsersFound,
                     isSearchActive = searchQuery.isNotBlank(),
+                    isMobile = isMobile,
                     onOpenAdminSetup = onOpenAdminAuthDialog
                 )
             }
@@ -225,7 +235,8 @@ fun UserSelectionContent(
                     onValueChange = onPinChange,
                     errorText = if (pinError != null) strings.pinIncorrect else null,
                     onDismiss = onPinDismiss,
-                    onSubmit = onPinSubmit
+                    onSubmit = onPinSubmit,
+                    isMobile = isMobile
                 )
             }
 
@@ -238,7 +249,8 @@ fun UserSelectionContent(
                     onValueChange = onAdminPasswordChange,
                     errorText = if (adminPasswordError != null) strings.adminPasswordIncorrect else null,
                     onDismiss = onAdminPasswordDismiss,
-                    onSubmit = onAdminPasswordSubmit
+                    onSubmit = onAdminPasswordSubmit,
+                    isMobile = isMobile
                 )
             }
 

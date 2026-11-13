@@ -158,11 +158,18 @@ class CustomerVeggieViewModel(
     }
 
     fun toggleFilterFavoritesOnly() {
-        _filterFavoritesOnly.value = !_filterFavoritesOnly.value
+        val next = !_filterFavoritesOnly.value
+        _filterFavoritesOnly.value = next
+        if (next) {
+            _filterInOrderOnly.value = false
+        }
     }
 
     fun setFilterFavoritesOnly(enabled: Boolean) {
         _filterFavoritesOnly.value = enabled
+        if (enabled) {
+            _filterInOrderOnly.value = false
+        }
     }
 
     fun setFavoriteProductIds(ids: Set<String>) {
@@ -177,10 +184,17 @@ class CustomerVeggieViewModel(
 
     fun setFilterInOrderOnly(enabled: Boolean) {
         _filterInOrderOnly.value = enabled
+        if (enabled) {
+            _filterFavoritesOnly.value = false
+        }
     }
 
     fun toggleFilterInOrderOnly() {
-        _filterInOrderOnly.value = !_filterInOrderOnly.value
+        val next = !_filterInOrderOnly.value
+        _filterInOrderOnly.value = next
+        if (next) {
+            _filterFavoritesOnly.value = false
+        }
     }
 
     fun updateHistorySearchQuery(query: String) {

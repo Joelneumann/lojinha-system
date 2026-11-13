@@ -29,6 +29,7 @@ fun UserGrid(
     modifier: Modifier = Modifier,
     emptyText: String = "No users found.",
     isSearchActive: Boolean = false,
+    isMobile: Boolean = false,
     onOpenAdminSetup: (() -> Unit)? = null
 ) {
     if (users.isEmpty()) {
@@ -118,16 +119,17 @@ fun UserGrid(
         }
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 160.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = ScreenPadding),
+            columns = GridCells.Adaptive(minSize = if (isMobile) 132.dp else 160.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isMobile) 10.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (isMobile) 10.dp else 16.dp),
+            contentPadding = PaddingValues(bottom = if (isMobile) 12.dp else ScreenPadding),
             modifier = modifier.fillMaxSize()
         ) {
             items(users, key = { it.id }) { user ->
                 UserCard(
                     user = user,
-                    onClick = { onUserClick(user) }
+                    onClick = { onUserClick(user) },
+                    isMobile = isMobile
                 )
             }
         }

@@ -93,7 +93,8 @@ fun VeggieAmountInputDialog(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
             modifier = modifier
-                .width(440.dp)
+                .fillMaxWidth()
+                .widthIn(max = 440.dp)
                 .wrapContentHeight()
                 .formModalKeys(
                     onCancel = onDismiss,

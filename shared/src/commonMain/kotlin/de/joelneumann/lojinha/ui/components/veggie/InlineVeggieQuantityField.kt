@@ -1,6 +1,8 @@
 package de.joelneumann.lojinha.ui.components.veggie
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -17,6 +19,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -43,14 +46,17 @@ fun InlineVeggieQuantityField(
     onReturnToSearch: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
+    isMobile: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var selectAllPending by remember { mutableStateOf(false) }
+    val effectiveFocusRequester = focusRequester ?: remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(selectAllPending) {
         if (selectAllPending) {
-            delay(250L)
+            delay(150L)
             selectAllPending = false
         }
     }
@@ -59,7 +65,7 @@ fun InlineVeggieQuantityField(
         return if (qty > 0L) {
             VeggieQuantityScaling.formatScaledQuantity(qty, allowDecimals, decimalSeparator)
         } else {
-            "0"
+            ""
         }
     }
 
@@ -133,6 +139,16 @@ fun InlineVeggieQuantityField(
         modifier = modifier
             .height(28.dp)
             .widthIn(min = 72.dp, max = 92.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = enabled
+            ) {
+                try {
+                    effectiveFocusRequester.requestFocus()
+                } catch (_: Exception) {}
+                keyboardController?.show()
+            }
     ) {
         Row(
             modifier = Modifier
@@ -163,7 +179,7 @@ fun InlineVeggieQuantityField(
                 enabled = enabled,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
-                    keyboardType = if (allowDecimals) KeyboardType.Decimal else KeyboardType.Number,
+                    keyboardType = KeyboardType.Decimal,
                     imeAction = ImeAction.Next
                 ),
                 keyboardActions = KeyboardActions(
@@ -185,9 +201,29 @@ fun InlineVeggieQuantityField(
                     textAlign = TextAlign.End
                 ),
                 cursorBrush = SolidColor(if (isOrdered) ColorSuccessEmerald else AccentNavy),
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        if (textFieldValue.text.isEmpty()) {
+                            Text(
+                                text = "-",
+                                style = LocalTextStyle.current.copy(
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextSecondaryMuted,
+                                    textAlign = TextAlign.End
+                                ),
+                                maxLines = 1
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
                 modifier = Modifier
                     .weight(1f)
-                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    .focusRequester(effectiveFocusRequester)
                     .onFocusChanged { focusState ->
                         val wasFocused = isFocused
                         isFocused = focusState.isFocused

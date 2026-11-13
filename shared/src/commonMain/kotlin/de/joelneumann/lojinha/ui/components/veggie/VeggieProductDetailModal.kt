@@ -6,6 +6,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,7 +30,9 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 fun VeggieProductDetailModal(
     product: VeggieProduct,
     unitType: VeggieUnitType?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null
 ) {
     val strings = I18n.current
     val unitName = unitType?.name ?: "Unit"
@@ -90,12 +94,26 @@ fun VeggieProductDetailModal(
                         }
                     }
 
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = strings.cancel,
-                            tint = PrimaryNavy
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (onToggleFavorite != null) {
+                            IconButton(onClick = onToggleFavorite) {
+                                Icon(
+                                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = if (isFavorite) strings.unmarkFavoriteTooltip else strings.markFavoriteTooltip,
+                                    tint = if (isFavorite) ColorStarYellow else TextSecondaryMuted
+                                )
+                            }
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = strings.cancel,
+                                tint = PrimaryNavy
+                            )
+                        }
                     }
                 }
 

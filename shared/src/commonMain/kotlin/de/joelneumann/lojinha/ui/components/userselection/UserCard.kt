@@ -22,30 +22,31 @@ import de.joelneumann.lojinha.ui.theme.*
 fun UserCard(
     user: User,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isMobile: Boolean = false
 ) {
     Card(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .height(145.dp),
+            .height(if (isMobile) 124.dp else 145.dp),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
         border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(DividerBorder)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(12.dp),
+            modifier = Modifier.fillMaxSize().padding(if (isMobile) 8.dp else 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             UserAvatar(
                 user = user,
-                modifier = Modifier.size(56.dp),
-                fontSize = 22.sp
+                modifier = Modifier.size(if (isMobile) 48.dp else 56.dp),
+                fontSize = if (isMobile) 19.sp else 22.sp
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(if (isMobile) 8.dp else 10.dp))
 
             Text(
                 text = user.name,
