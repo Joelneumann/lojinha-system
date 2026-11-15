@@ -97,7 +97,6 @@ fun AdminVeggieSettlementMatrix(
     onSaveDraft: ((onSuccess: (() -> Unit)?) -> Unit),
     onExecuteSettlement: () -> Unit,
     onDeleteRound: (() -> Unit)? = null,
-    onCompleteEmptyRound: (() -> Unit)? = null,
     onAddAdminEntry: (user: User, product: VeggieProduct, quantityInput: String, mode: AddOrderEntryMode) -> Unit,
     onExportBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onExportWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
@@ -114,7 +113,6 @@ fun AdminVeggieSettlementMatrix(
     var showConfirmResetChanges by remember { mutableStateOf(false) }
     var showConfirmSettle by remember { mutableStateOf(false) }
     var showUnsavedSettleDialog by remember { mutableStateOf(false) }
-    var showConfirmCompleteEmpty by remember { mutableStateOf(false) }
     var showConfirmDeleteRound by remember { mutableStateOf(false) }
     var showAddEntryDialog by remember { mutableStateOf(false) }
     var transporterDropdownExpanded by remember { mutableStateOf(false) }
@@ -299,80 +297,7 @@ fun AdminVeggieSettlementMatrix(
 
                         when (round.status) {
                             VeggieRoundStatus.OPEN -> {
-                                if (onResetChanges != null) {
-                                    OutlinedButton(
-                                        onClick = { showConfirmResetChanges = true },
-                                        enabled = hasUnsavedChanges && !isSaving,
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
-                                            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
-                                        ),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
-                                        )
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Restore,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            strings.resetChangesBtn,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
-                                        )
-                                    }
-                                }
-
-                                OutlinedButton(
-                                    onClick = { onSaveDraft(null) },
-                                    enabled = hasUnsavedChanges && !isSaving,
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
-                                        disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
-                                    ),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
-                                    )
-                                ) {
-                                    Icon(
-                                        Icons.Default.Save,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        strings.saveChangesBtn,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
-                                    )
-                                }
-
                                 if (entries.isEmpty()) {
-                                    if (onCompleteEmptyRound != null) {
-                                        Button(
-                                            onClick = { showConfirmCompleteEmpty = true },
-                                            enabled = !isSaving,
-                                            colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = SurfaceWhite)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(strings.completeRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
-                                        }
-                                    }
-
                                     if (onDeleteRound != null) {
                                         OutlinedButton(
                                             onClick = { showConfirmDeleteRound = true },
@@ -386,79 +311,141 @@ fun AdminVeggieSettlementMatrix(
                                             Text(strings.deleteRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ColorDangerCrimson)
                                         }
                                     }
-                                }
+                                } else {
+                                    if (onResetChanges != null) {
+                                        OutlinedButton(
+                                            onClick = { showConfirmResetChanges = true },
+                                            enabled = hasUnsavedChanges && !isSaving,
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
+                                                disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                            ),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                            )
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Restore,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                strings.resetChangesBtn,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                            )
+                                        }
+                                    }
 
-                                Button(
-                                    onClick = { showConfirmCloseRound = true },
-                                    enabled = !isSaving,
-                                    colors = ButtonDefaults.buttonColors(containerColor = ColorWarningAmber),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp), tint = SurfaceWhite)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(strings.closeRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
-                                }
-                            }
-
-                            VeggieRoundStatus.CLOSED -> {
-                                if (onResetChanges != null) {
                                     OutlinedButton(
-                                        onClick = { showConfirmResetChanges = true },
+                                        onClick = { onSaveDraft(null) },
                                         enabled = hasUnsavedChanges && !isSaving,
                                         shape = RoundedCornerShape(8.dp),
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                         colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
+                                            contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
                                             disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
                                         ),
                                         border = BorderStroke(
                                             1.dp,
-                                            if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                            if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
                                         )
                                     ) {
                                         Icon(
-                                            Icons.Default.Restore,
+                                            Icons.Default.Save,
                                             contentDescription = null,
                                             modifier = Modifier.size(16.dp),
-                                            tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                            tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                                         )
-                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            strings.resetChangesBtn,
+                                            strings.saveChangesBtn,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                            color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
                                         )
                                     }
-                                }
 
-                                OutlinedButton(
-                                    onClick = { onSaveDraft(null) },
-                                    enabled = hasUnsavedChanges && !isSaving,
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
-                                        disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
-                                    ),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
-                                    )
-                                ) {
-                                    Icon(
-                                        Icons.Default.Save,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        strings.saveDraftBtn,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
-                                    )
+                                    Button(
+                                        onClick = { showConfirmCloseRound = true },
+                                        enabled = !isSaving,
+                                        colors = ButtonDefaults.buttonColors(containerColor = ColorWarningAmber),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp), tint = SurfaceWhite)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(strings.closeRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                                    }
+                                }
+                            }
+
+                            VeggieRoundStatus.CLOSED -> {
+                                if (entries.isNotEmpty()) {
+                                    if (onResetChanges != null) {
+                                        OutlinedButton(
+                                            onClick = { showConfirmResetChanges = true },
+                                            enabled = hasUnsavedChanges && !isSaving,
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
+                                                disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                            ),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                            )
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Restore,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                strings.resetChangesBtn,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
+                                            )
+                                        }
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { onSaveDraft(null) },
+                                        enabled = hasUnsavedChanges && !isSaving,
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
+                                            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Save,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            strings.saveDraftBtn,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
+                                        )
+                                    }
                                 }
 
                                 OutlinedButton(
@@ -472,19 +459,6 @@ fun AdminVeggieSettlementMatrix(
                                 }
 
                                 if (entries.isEmpty()) {
-                                    if (onCompleteEmptyRound != null) {
-                                        Button(
-                                            onClick = { showConfirmCompleteEmpty = true },
-                                            enabled = !isSaving,
-                                            colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = SurfaceWhite)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(strings.completeRoundBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
-                                        }
-                                    }
-
                                     if (onDeleteRound != null) {
                                         OutlinedButton(
                                             onClick = { showConfirmDeleteRound = true },
@@ -1338,21 +1312,6 @@ fun AdminVeggieSettlementMatrix(
                 onExecuteSettlement()
             },
             onDismiss = { showConfirmSettle = false }
-        )
-    }
-
-    if (showConfirmCompleteEmpty) {
-        ConfirmationDialog(
-            title = strings.confirmCompleteEmptyRoundTitle,
-            message = strings.confirmCompleteEmptyRoundMsg,
-            confirmText = strings.confirm,
-            cancelText = strings.cancel,
-            confirmButtonColor = ColorSuccessEmerald,
-            onConfirm = {
-                showConfirmCompleteEmpty = false
-                onCompleteEmptyRound?.invoke()
-            },
-            onDismiss = { showConfirmCompleteEmpty = false }
         )
     }
 

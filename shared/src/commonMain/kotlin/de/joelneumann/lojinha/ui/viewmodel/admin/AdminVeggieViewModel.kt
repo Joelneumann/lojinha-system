@@ -545,6 +545,7 @@ class AdminVeggieViewModel(
 
     fun closeSelectedRound() {
         val round = _selectedRound.value ?: return
+        if (_selectedRoundEntries.value.isEmpty()) return
         if (_isSaving.value) return
         _isSaving.value = true
         clearMessages()
@@ -587,6 +588,7 @@ class AdminVeggieViewModel(
 
     fun saveDraftSettlement(onSuccess: (() -> Unit)? = null) {
         val payload = buildCurrentDraftPayload() ?: return
+        if (payload.entriesWithDraftQty.isEmpty()) return
         if (_isSaving.value) return
         _isSaving.value = true
         clearMessages()
@@ -647,38 +649,6 @@ class AdminVeggieViewModel(
         }
     }
 
-    fun completeEmptyRound() {
-        val round = _selectedRound.value ?: return
-        if (_isSaving.value) return
-        _isSaving.value = true
-        clearMessages()
-        activeScope.launch {
-            try {
-                val result = veggieOrderRepository.executeRoundSettlement(
-                    roundId = round.id,
-                    buyerOperationFeeCents = 0L,
-                    transportFeeCents = 0L,
-                    transporterUserId = null,
-                    productSettlements = emptyList(),
-                    actualQuantitiesByEntryId = emptyMap(),
-                    settledAt = currentTimeMillis()
-                )
-                if (result != null) {
-                    _editingPastRound.value = null
-                    _hasUnsavedSettlementChanges.value = false
-                    _statusMessage.value = I18n.get().saved
-                    loadData(preserveDraftEdits = false)
-                } else {
-                    _errorMessage.value = "Failed to complete empty round"
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Failed to complete empty round"
-            } finally {
-                _isSaving.value = false
-            }
-        }
-    }
-
     fun markPdfExported(roundId: String, isBuyer: Boolean) {
         activeScope.launch {
             try {
@@ -696,6 +666,7 @@ class AdminVeggieViewModel(
 
     fun executeSettlement() {
         val payload = buildCurrentDraftPayload() ?: return
+        if (payload.entriesWithDraftQty.isEmpty()) return
         if (_isSaving.value) return
         _isSaving.value = true
         clearMessages()

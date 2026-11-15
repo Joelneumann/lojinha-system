@@ -875,4 +875,36 @@ class AdminVeggieViewModelTest {
         assertFalse(veggieRepo.products.first().isActive)
         assertEquals(0, vm.selectedRoundEntries.value.size)
     }
+
+    @Test
+    fun testEmptyRoundCannotBeClosedSavedOrSettled_onlyDeleted() = runTest {
+        val (veggieRepo, userRepo) = setupTestFixture()
+        veggieRepo.entries.removeAll { it.roundId == "round-active" }
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        assertEquals(0, vm.selectedRoundEntries.value.size)
+        assertEquals(VeggieRoundStatus.OPEN, vm.activeRound.value?.status)
+
+        vm.closeSelectedRound()
+        advanceUntilIdle()
+        assertEquals(VeggieRoundStatus.OPEN, vm.activeRound.value?.status)
+
+        var saveCallbackCalled = false
+        vm.updateBuyerFeeInput("10,00")
+        vm.saveDraftSettlement(onSuccess = { saveCallbackCalled = true })
+        advanceUntilIdle()
+        assertFalse(saveCallbackCalled)
+        assertEquals(400L, veggieRepo.rounds.first { it.id == "round-active" }.buyerOperationFeeCents)
+
+        vm.executeSettlement()
+        advanceUntilIdle()
+        assertEquals(VeggieRoundStatus.OPEN, vm.activeRound.value?.status)
+
+        vm.deleteCurrentRound()
+        advanceUntilIdle()
+        assertNull(vm.activeRound.value)
+        assertFalse(veggieRepo.rounds.any { it.id == "round-active" })
+    }
 }
