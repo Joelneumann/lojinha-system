@@ -7,8 +7,11 @@ import de.joelneumann.lojinha.domain.repository.CustomerVeggieRoundHistoryItem
 import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -97,8 +100,11 @@ class CustomerVeggieViewModel(
         loadJob?.cancel()
         loadJob = activeScope.launch {
             try {
-                val state = onFetchVeggieState()
-                val history = onFetchHistory()
+                val (state, history) = coroutineScope {
+                    val stateDeferred = async { onFetchVeggieState() }
+                    val historyDeferred = async { onFetchHistory() }
+                    stateDeferred.await() to historyDeferred.await()
+                }
 
                 val serverQuantities = state.currentEntries
                     .filter { it.orderedQuantityScaled > 0L }
@@ -119,8 +125,9 @@ class CustomerVeggieViewModel(
                 loadedRoundId = currentRoundId
 
                 _savedQuantitiesScaled.value = serverQuantities
-                if (!preserveDraftIfSameRound || !sameRound || !_hasUnsavedOrderChanges.value) {
-                    val localDraft = if (currentRoundId != null && state.activeRound?.status == VeggieRoundStatus.OPEN) {
+                val isRoundOpen = state.activeRound?.status == VeggieRoundStatus.OPEN
+                if (!isRoundOpen || !preserveDraftIfSameRound || !sameRound || !_hasUnsavedOrderChanges.value) {
+                    val localDraft = if (currentRoundId != null && isRoundOpen) {
                         onLoadDraft?.invoke(currentRoundId)?.filterValues { it > 0L }
                     } else {
                         null
@@ -136,6 +143,7 @@ class CustomerVeggieViewModel(
                     recomputeUnsavedFlag()
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _errorMessage.value = e.message
             }
         }

@@ -1580,12 +1580,18 @@ class CustomerNetworkClient(val baseUrl: String = "") {
 
     suspend fun getVeggieHistory(): List<CustomerVeggieRoundHistoryItem> {
         return try {
-            httpClient.get(resolveUrl("/api/customer/veggie/history")) {
+            val response = httpClient.get(resolveUrl("/api/customer/veggie/history")) {
                 appendCustomerAuth()
-            }.body()
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("HTTP ${response.status.value}")
+            }
+            response.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             AppLogger.error("CustomerNetworkClient", "getVeggieHistory failed: ${e.message}", e)
-            emptyList()
+            KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+            throw e
         }
     }
 

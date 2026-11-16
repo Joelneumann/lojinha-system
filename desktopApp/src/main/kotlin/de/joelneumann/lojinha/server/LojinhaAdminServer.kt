@@ -135,8 +135,8 @@ class LojinhaAdminServer(
         }
     }
 
-    private fun resolveVeggieRepo(): VeggieOrderRepository? {
-        return veggieOrderRepository ?: database?.let { db ->
+    private val fallbackVeggieRepo: VeggieOrderRepository? by lazy {
+        database?.let { db ->
             RoomVeggieOrderRepositoryImpl(
                 veggieOrderDao = db.veggieOrderDao(),
                 userDao = db.userDao(),
@@ -149,6 +149,10 @@ class LojinhaAdminServer(
                 }
             )
         }
+    }
+
+    private fun resolveVeggieRepo(): VeggieOrderRepository? {
+        return veggieOrderRepository ?: fallbackVeggieRepo
     }
 
     private fun safeEquals(a: String, b: String): Boolean {
@@ -843,8 +847,9 @@ class LojinhaAdminServer(
                         post("/rounds/{id}/entries") {
                             if (!call.checkAdminAuth(settingsRepository)) return@post
                             val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
                             val entry = call.receive<VeggieOrderEntry>()
-                            val ok = repo.upsertAdminOrderEntry(entry)
+                            val ok = repo.upsertAdminOrderEntry(entry.copy(roundId = id))
                             if (ok) {
                                 call.respond(HttpStatusCode.OK)
                             } else {
@@ -1077,22 +1082,12 @@ class LojinhaAdminServer(
                     }
 
                     get("/me") {
-                        val userId = call.requireCustomerUserId() ?: return@get
-                        val user = userRepository.getUserById(userId)
-                        if (user == null || !user.isActive || user.isDeleted) {
-                            call.respond(HttpStatusCode.NotFound, "User not found")
-                            return@get
-                        }
+                        val user = call.requireActiveCustomer() ?: return@get
                         call.respond(user.copy(pin = if (user.pin.isNullOrBlank()) null else "PROTECTED"))
                     }
 
                     post("/me/settings") {
-                        val userId = call.requireCustomerUserId() ?: return@post
-                        val user = userRepository.getUserById(userId)
-                        if (user == null || !user.isActive || user.isDeleted) {
-                            call.respond(HttpStatusCode.NotFound, "User not found")
-                            return@post
-                        }
+                        val user = call.requireActiveCustomer() ?: return@post
                         val req = call.receive<CustomerSettingsUpdateRequest>()
                         val cleanNewPin = req.newPin?.trim()
                         val updatedPinHash = if (!cleanNewPin.isNullOrBlank()) {
@@ -1116,7 +1111,8 @@ class LojinhaAdminServer(
                     }
 
                     get("/transactions") {
-                        val userId = call.requireCustomerUserId() ?: return@get
+                        val user = call.requireActiveCustomer() ?: return@get
+                        val userId = user.id
                         val pageParam = call.request.queryParameters["page"]?.toIntOrNull()
                         val pageSizeParam = call.request.queryParameters["pageSize"]?.toIntOrNull()
                         val searchParam = call.request.queryParameters["search"]
@@ -1138,16 +1134,11 @@ class LojinhaAdminServer(
                     }
 
                     get("/transactions-pdf") {
-                        val userId = call.requireCustomerUserId() ?: return@get
+                        val user = call.requireActiveCustomer() ?: return@get
                         val fromTimestamp = call.request.queryParameters["from"]?.toLongOrNull()
                         val toTimestamp = call.request.queryParameters["to"]?.toLongOrNull()
                         val language = call.parseLanguageParam()
-                        val user = userRepository.getUserById(userId)
-                        if (user == null) {
-                            call.respond(HttpStatusCode.NotFound, "User not found")
-                            return@get
-                        }
-                        val txs = transactionRepository.getTransactionsByUserId(userId)
+                        val txs = transactionRepository.getTransactionsByUserId(user.id)
                         try {
                             val pdfBytes = de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementBytes(
                                 user = user,
@@ -1165,12 +1156,7 @@ class LojinhaAdminServer(
                     }
 
                     post("/notes") {
-                        val userId = call.requireCustomerUserId() ?: return@post
-                        val user = userRepository.getUserById(userId)
-                        if (user == null) {
-                            call.respond(HttpStatusCode.NotFound, "User not found")
-                            return@post
-                        }
+                        val user = call.requireActiveCustomer() ?: return@post
                         val note = call.receive<AdminNote>()
                         val cleanMessage = note.message.trim().take(1000)
                         if (cleanMessage.isBlank()) {
@@ -1191,7 +1177,8 @@ class LojinhaAdminServer(
                     }
 
                     get("/veggie/state") {
-                        val userId = call.requireCustomerUserId() ?: return@get
+                        val user = call.requireActiveCustomer() ?: return@get
+                        val userId = user.id
                         val repo = resolveVeggieRepo()
                         if (repo == null) {
                             call.respond(CustomerVeggieStateResponse())
@@ -1230,25 +1217,15 @@ class LojinhaAdminServer(
                     }
 
                     post("/veggie/favorites") {
-                        val userId = call.requireCustomerUserId() ?: return@post
-                        val user = userRepository.getUserById(userId)
-                        if (user == null || !user.isActive || user.isDeleted) {
-                            call.respond(HttpStatusCode.NotFound, "User not found")
-                            return@post
-                        }
+                        val user = call.requireActiveCustomer() ?: return@post
                         val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
                         val req = call.receive<UpdateCustomerVeggieFavoritesRequest>()
-                        repo.setFavoriteProductIdsForUser(userId, req.productIds)
+                        repo.setFavoriteProductIdsForUser(user.id, req.productIds)
                         call.respond(HttpStatusCode.OK)
                     }
 
                     post("/veggie/order") {
-                        val userId = call.requireCustomerUserId() ?: return@post
-                        val user = userRepository.getUserById(userId)
-                        if (user == null || !user.isActive || user.isDeleted) {
-                            call.respond(HttpStatusCode.NotFound, "User not found")
-                            return@post
-                        }
+                        val user = call.requireActiveCustomer() ?: return@post
                         val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
                         val req = call.receive<SaveCustomerVeggieOrderRequest>()
                         val saved = repo.saveCustomerOrder(
@@ -1264,20 +1241,18 @@ class LojinhaAdminServer(
                     }
 
                     get("/veggie/history") {
-                        val userId = call.requireCustomerUserId() ?: return@get
+                        val user = call.requireActiveCustomer() ?: return@get
                         val repo = resolveVeggieRepo()
                         if (repo == null) {
                             call.respond(emptyList<CustomerVeggieRoundHistoryItem>())
                             return@get
                         }
-                        call.respond(repo.getCustomerOrderHistory(userId))
+                        call.respond(repo.getCustomerOrderHistory(user.id))
                     }
 
                     get("/events") {
-                        val userId = call.requireCustomerUserId() ?: return@get
-                        if (userId.isNotBlank()) {
-                            call.streamDataChangeEvents()
-                        }
+                        call.requireActiveCustomer() ?: return@get
+                        call.streamDataChangeEvents()
                     }
                 }
 
@@ -1452,6 +1427,21 @@ class LojinhaAdminServer(
         }
         respond(HttpStatusCode.Unauthorized, "Unauthorized customer access")
         return null
+    }
+
+    private suspend fun ApplicationCall.requireActiveCustomer(): User? {
+        val userId = requireCustomerUserId() ?: return null
+        if (userId.isEmpty()) return null
+        val user = userRepository.getUserById(userId)
+        if (user == null || !user.isActive || user.isDeleted) {
+            val token = extractBearerToken() ?: request.queryParameters["token"]
+            if (token != null && activeCustomerTokens.remove(hashCustomerToken(token)) != null) {
+                savePersistedCustomerSessions()
+            }
+            respond(HttpStatusCode.Unauthorized, "Customer account is inactive or not found")
+            return null
+        }
+        return user
     }
 
     private suspend fun ApplicationCall.streamDataChangeEvents() {

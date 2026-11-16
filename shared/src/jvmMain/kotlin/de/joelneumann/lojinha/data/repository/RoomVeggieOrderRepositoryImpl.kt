@@ -207,9 +207,16 @@ class RoomVeggieOrderRepositoryImpl(
         val existingTxs = transactionDao.getTransactionsForRound(roundId)
         if (existingTxs.isNotEmpty()) return@withLock false
 
-        veggieOrderDao.deleteEntriesForRound(roundId)
-        veggieOrderDao.deleteProductSettlementsForRound(roundId)
-        veggieOrderDao.deleteRound(roundId)
+        val performDelete: suspend () -> Unit = {
+            veggieOrderDao.deleteEntriesForRound(roundId)
+            veggieOrderDao.deleteProductSettlementsForRound(roundId)
+            veggieOrderDao.deleteRound(roundId)
+        }
+        if (runInTransaction != null) {
+            runInTransaction.invoke(performDelete)
+        } else {
+            performDelete()
+        }
         onDataChanged?.invoke()
         true
     }
