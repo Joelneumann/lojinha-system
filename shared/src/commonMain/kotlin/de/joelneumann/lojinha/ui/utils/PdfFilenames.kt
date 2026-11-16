@@ -5,7 +5,10 @@ import de.joelneumann.lojinha.domain.model.Language
 object PdfFilenames {
 
     fun sanitizeName(name: String): String {
-        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
+        return name
+            .replace(Regex("[\\u0000-\\u001F\\u007F\\\\/:*?\"<>|]"), "_")
+            .trim()
+            .ifBlank { "User" }
     }
 
     /**

@@ -176,6 +176,10 @@ class AdminVeggieViewModel(
         _errorMessage.value = null
     }
 
+    fun setExportError(message: String?) {
+        _errorMessage.value = message
+    }
+
     fun loadData(preserveDraftEdits: Boolean = true) {
         loadJob?.cancel()
         loadJob = activeScope.launch {

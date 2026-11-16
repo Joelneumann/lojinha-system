@@ -48,6 +48,9 @@ class TransactionHistoryViewModel(
     private val _isExportingPdf = MutableStateFlow(false)
     val isExportingPdf: StateFlow<Boolean> = _isExportingPdf.asStateFlow()
 
+    private val _exportPdfError = MutableStateFlow<String?>(null)
+    val exportPdfError: StateFlow<String?> = _exportPdfError.asStateFlow()
+
     private val _pinInput = MutableStateFlow("")
     val pinInput: StateFlow<String> = _pinInput.asStateFlow()
 
@@ -170,6 +173,7 @@ class TransactionHistoryViewModel(
 
     fun openExportPdfModal(userId: String) {
         _showExportPdfModal.value = true
+        _exportPdfError.value = null
         activeScope.launch {
             try {
                 _exportPdfTransactions.value = transactionRepository.getTransactionsByUserId(userId)
@@ -184,10 +188,15 @@ class TransactionHistoryViewModel(
         _showExportPdfModal.value = false
         _exportPdfTransactions.value = emptyList()
         _isExportingPdf.value = false
+        _exportPdfError.value = null
     }
 
     fun setIsExportingPdf(loading: Boolean) {
         _isExportingPdf.value = loading
+    }
+
+    fun setExportPdfError(error: String?) {
+        _exportPdfError.value = error
     }
 
     fun updatePinInput(pin: String) {

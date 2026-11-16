@@ -121,6 +121,7 @@ fun CustomerNetworkPortalScreen(
     val showExportPdfModal by historyViewModel.showExportPdfModal.collectAsState()
     val exportPdfTransactions by historyViewModel.exportPdfTransactions.collectAsState()
     val isExportingPdf by historyViewModel.isExportingPdf.collectAsState()
+    val exportPdfError by historyViewModel.exportPdfError.collectAsState()
     val pinInput by historyViewModel.pinInput.collectAsState()
     val selectedLanguage by historyViewModel.selectedLanguage.collectAsState()
     val selectedSecondaryCurrency by historyViewModel.selectedSecondaryCurrency.collectAsState()
@@ -374,6 +375,7 @@ fun CustomerNetworkPortalScreen(
             userTransactions = exportPdfTransactions,
             defaultSaveDirectory = "Downloads",
             isExporting = isExportingPdf,
+            errorMessage = exportPdfError,
             hideFolderPicker = true,
             onExportPdf = { _, fromTimestamp, toTimestamp, language ->
                 onExecuteCustomerPdfExport?.invoke(user, fromTimestamp, toTimestamp, language)

@@ -13,6 +13,8 @@ class PdfFilenamesTest {
         assertEquals("Maria_Silva", PdfFilenames.sanitizeName("Maria/Silva"))
         assertEquals("John_Doe", PdfFilenames.sanitizeName("John:Doe"))
         assertEquals("A_B_C", PdfFilenames.sanitizeName("A?B*C"))
+        assertEquals("Line1_Line2", PdfFilenames.sanitizeName("Line1\r\nLine2".replace("\r\n", "\n")))
+        assertEquals("A_B", PdfFilenames.sanitizeName("A\rB"))
         assertEquals("Standard Name", PdfFilenames.sanitizeName("Standard Name"))
     }
 

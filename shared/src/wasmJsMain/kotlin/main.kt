@@ -290,13 +290,25 @@ fun main() {
                                     },
                                     onExecuteCustomerPdfExport = { customer, fromTimestamp, toTimestamp, language ->
                                         historyViewModel.setIsExportingPdf(true)
+                                        historyViewModel.setExportPdfError(null)
                                         val token = customerNetworkClient.authToken ?: ""
                                         val fromQuery = if (fromTimestamp != null) "&from=$fromTimestamp" else ""
                                         val toQuery = if (toTimestamp != null) "&to=$toTimestamp" else ""
-                                        val url = customerNetworkClient.resolveUrl("/api/customer/transactions-pdf?lang=${language.name}&token=$token$fromQuery$toQuery")
-                                        jsTriggerDownload(url)
-                                        historyViewModel.setIsExportingPdf(false)
-                                        historyViewModel.closeExportPdfModal()
+                                        val url = customerNetworkClient.resolveUrl("/api/customer/transactions-pdf?lang=${language.name}$fromQuery$toQuery")
+                                        val fallbackName = PdfFilenames.transactionStatementFilename(customer.name, language)
+                                        jsDownloadPdf(
+                                            url = url,
+                                            token = token,
+                                            fallbackFilename = fallbackName,
+                                            onSuccess = {
+                                                historyViewModel.setIsExportingPdf(false)
+                                                historyViewModel.closeExportPdfModal()
+                                            },
+                                            onError = { err ->
+                                                historyViewModel.setIsExportingPdf(false)
+                                                historyViewModel.setExportPdfError(err)
+                                            }
+                                        )
                                     }
                                 )
                             }
@@ -380,30 +392,58 @@ fun main() {
                                 defaultSaveDirectory = "Downloads",
                                 onExecutePdfExport = { user, _, fromTimestamp, toTimestamp, language ->
                                     usersViewModel.setIsExportingPdf(true)
+                                    usersViewModel.setExportPdfError(null)
                                     val token = adminNetworkClient.authToken ?: ""
                                     val fromQuery = if (fromTimestamp != null) "&from=$fromTimestamp" else ""
                                     val toQuery = if (toTimestamp != null) "&to=$toTimestamp" else ""
-                                    val url = adminNetworkClient.resolveUrl("/api/admin/users/${user.id}/transactions-pdf?lang=${language.name}&token=$token$fromQuery$toQuery")
-                                    jsTriggerDownload(url)
-                                    usersViewModel.setIsExportingPdf(false)
-                                    usersViewModel.setExportResultPath(PdfFilenames.transactionStatementFilename(user.name, language))
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/users/${user.id}/transactions-pdf?lang=${language.name}$fromQuery$toQuery")
+                                    val fallbackName = PdfFilenames.transactionStatementFilename(user.name, language)
+                                    jsDownloadPdf(
+                                        url = url,
+                                        token = token,
+                                        fallbackFilename = fallbackName,
+                                        onSuccess = {
+                                            usersViewModel.setIsExportingPdf(false)
+                                            usersViewModel.closeExportPdfModal()
+                                        },
+                                        onError = { err ->
+                                            usersViewModel.setIsExportingPdf(false)
+                                            usersViewModel.setExportPdfError(err)
+                                        }
+                                    )
                                 },
                                 onExportVeggieBuyerPdf = { roundId, language ->
                                     val token = adminNetworkClient.authToken ?: ""
-                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf?lang=${language.name}&token=$token")
-                                    jsTriggerDownload(url)
-                                    veggieViewModel.markPdfExported(roundId, isBuyer = true)
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf?lang=${language.name}")
+                                    jsDownloadPdf(
+                                        url = url,
+                                        token = token,
+                                        fallbackFilename = "buyer_shopping_list.pdf",
+                                        onSuccess = { veggieViewModel.loadData(preserveDraftEdits = true) },
+                                        onError = { err -> veggieViewModel.setExportError(err) }
+                                    )
                                 },
                                 onExportVeggieWorkerPdf = { roundId, language ->
                                     val token = adminNetworkClient.authToken ?: ""
-                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf?lang=${language.name}&token=$token")
-                                    jsTriggerDownload(url)
-                                    veggieViewModel.markPdfExported(roundId, isBuyer = false)
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf?lang=${language.name}")
+                                    jsDownloadPdf(
+                                        url = url,
+                                        token = token,
+                                        fallbackFilename = "worker_sorting_matrix.pdf",
+                                        onSuccess = { veggieViewModel.loadData(preserveDraftEdits = true) },
+                                        onError = { err -> veggieViewModel.setExportError(err) }
+                                    )
                                 },
                                 onExportVeggieOrderFormPdf = { language ->
                                     val token = adminNetworkClient.authToken ?: ""
-                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/order-form-pdf?lang=${language.name}&token=$token")
-                                    jsTriggerDownload(url)
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/veggie/order-form-pdf?lang=${language.name}")
+                                    jsDownloadPdf(
+                                        url = url,
+                                        token = token,
+                                        fallbackFilename = "customer_order_form.pdf",
+                                        onSuccess = {},
+                                        onError = { err -> veggieViewModel.setExportError(err) }
+                                    )
                                 },
                                 onExitAdmin = {
                                     scope.launch {
@@ -495,16 +535,42 @@ private fun KioskOfflineBlockingOverlay(onRetryClick: () -> Unit) {
 }
 
 @JsFun("""
-(url) => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+(url, token, fallbackFilename, onSuccess, onError) => {
+    fetch(url, {
+        method: 'GET',
+        headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+    }).then(async (res) => {
+        if (!res.ok) {
+            throw new Error('HTTP ' + res.status);
+        }
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+        const asciiMatch = disposition.match(/filename=["']?([^"';]+)["']?/i);
+        const filename = utf8Match
+            ? decodeURIComponent(utf8Match[1])
+            : (asciiMatch ? asciiMatch[1] : fallbackFilename);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        onSuccess();
+    }).catch((err) => {
+        onError(err && err.message ? err.message : 'Download failed');
+    });
 }
 """)
-private external fun jsTriggerDownload(url: String)
+private external fun jsDownloadPdf(
+    url: String,
+    token: String,
+    fallbackFilename: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+)
 
 @JsFun("""
 (key, value) => {

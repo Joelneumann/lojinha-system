@@ -301,6 +301,7 @@ fun AdminUsersTabScreen(
             isExporting = isExportingPdf,
             exportResultPath = exportResultPath,
             errorMessage = exportPdfError,
+            hideFolderPicker = onOpenExportedPdf == null,
             onExportPdf = { folder, from, to, lang ->
                 onExecutePdfExport?.invoke(targetUser, folder, from, to, lang)
             },

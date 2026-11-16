@@ -237,6 +237,7 @@ class LojinhaAdminServer(
                 allowHeader(HttpHeaders.ContentType)
                 allowHeader(HttpHeaders.Authorization)
                 allowHeader("X-Admin-Password")
+                exposeHeader(HttpHeaders.ContentDisposition)
                 allowMethod(HttpMethod.Options)
                 allowMethod(HttpMethod.Put)
                 allowMethod(HttpMethod.Post)
@@ -432,12 +433,7 @@ class LojinhaAdminServer(
                         val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
                         val fromTimestamp = call.request.queryParameters["from"]?.toLongOrNull()
                         val toTimestamp = call.request.queryParameters["to"]?.toLongOrNull()
-                        val langStr = call.request.queryParameters["lang"] ?: "BR"
-                        val language = try {
-                            Language.valueOf(langStr.uppercase())
-                        } catch (_: Exception) {
-                            Language.BR
-                        }
+                        val language = call.parseLanguageParam()
 
                         val user = userRepository.getUserById(id)
                         if (user == null) {
@@ -455,11 +451,7 @@ class LojinhaAdminServer(
                                 language = language
                             )
                             val filename = PdfFilenames.transactionStatementFilename(user.name, language)
-                            call.response.header(
-                                HttpHeaders.ContentDisposition,
-                                ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
-                            )
-                            call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                            call.respondPdf(pdfBytes, filename)
                         } catch (e: Exception) {
                             AppLogger.error("LojinhaAdminServer", "Failed to generate transactions PDF: ${e.message}", e)
                             call.respond(HttpStatusCode.InternalServerError, "Failed to generate transactions PDF")
@@ -683,19 +675,14 @@ class LojinhaAdminServer(
                         get("/order-form-pdf") {
                             if (!call.checkAdminAuth(settingsRepository)) return@get
                             val repo = resolveVeggieRepo() ?: return@get call.respond(HttpStatusCode.ServiceUnavailable)
-                            val langStr = call.request.queryParameters["lang"] ?: "BR"
-                            val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+                            val language = call.parseLanguageParam()
                             try {
                                 val products = repo.getAllVeggieProducts()
                                 val unitTypes = repo.getAllUnitTypes().associateBy { it.id }
                                 val pdfBytes = VeggieOrderPdfGenerator.generateCustomerOrderFormBytes(products, unitTypes, language)
                                 val dateStamp = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
                                 val filename = PdfFilenames.customerOrderFormFilename(dateStamp, language)
-                                call.response.header(
-                                    HttpHeaders.ContentDisposition,
-                                    ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
-                                )
-                                call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                                call.respondPdf(pdfBytes, filename)
                             } catch (e: Exception) {
                                 AppLogger.error("LojinhaAdminServer", "Failed to generate customer order form PDF: ${e.message}", e)
                                 call.respond(HttpStatusCode.InternalServerError, "Failed to generate customer order form PDF")
@@ -916,18 +903,13 @@ class LojinhaAdminServer(
                             val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
                             val round = repo.getRoundById(id) ?: return@get call.respond(HttpStatusCode.NotFound)
                             val entries = repo.getEntriesForRound(id)
-                            val langStr = call.request.queryParameters["lang"] ?: "BR"
-                            val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+                            val language = call.parseLanguageParam()
                             try {
                                 val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(round, entries, language)
                                 repo.markBuyerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
                                 val filename = PdfFilenames.buyerShoppingListFilename(isoWeek.weekOfYear, isoWeek.isoYear, language)
-                                call.response.header(
-                                    HttpHeaders.ContentDisposition,
-                                    ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
-                                )
-                                call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                                call.respondPdf(pdfBytes, filename)
                             } catch (e: Exception) {
                                 AppLogger.error("LojinhaAdminServer", "Failed to generate buyer PDF: ${e.message}", e)
                                 call.respond(HttpStatusCode.InternalServerError, "Failed to generate buyer PDF")
@@ -946,18 +928,13 @@ class LojinhaAdminServer(
                             val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
                             val round = repo.getRoundById(id) ?: return@get call.respond(HttpStatusCode.NotFound)
                             val entries = repo.getEntriesForRound(id)
-                            val langStr = call.request.queryParameters["lang"] ?: "BR"
-                            val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+                            val language = call.parseLanguageParam()
                             try {
                                 val pdfBytes = VeggieOrderPdfGenerator.generateWorkerSortingMatrixBytes(round, entries, language)
                                 repo.markWorkerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
                                 val filename = PdfFilenames.workerSortingMatrixFilename(isoWeek.weekOfYear, isoWeek.isoYear, language)
-                                call.response.header(
-                                    HttpHeaders.ContentDisposition,
-                                    ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
-                                )
-                                call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                                call.respondPdf(pdfBytes, filename)
                             } catch (e: Exception) {
                                 AppLogger.error("LojinhaAdminServer", "Failed to generate worker PDF: ${e.message}", e)
                                 call.respond(HttpStatusCode.InternalServerError, "Failed to generate worker PDF")
@@ -1164,8 +1141,7 @@ class LojinhaAdminServer(
                         val userId = call.requireCustomerUserId() ?: return@get
                         val fromTimestamp = call.request.queryParameters["from"]?.toLongOrNull()
                         val toTimestamp = call.request.queryParameters["to"]?.toLongOrNull()
-                        val langStr = call.request.queryParameters["lang"] ?: "BR"
-                        val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+                        val language = call.parseLanguageParam()
                         val user = userRepository.getUserById(userId)
                         if (user == null) {
                             call.respond(HttpStatusCode.NotFound, "User not found")
@@ -1181,11 +1157,7 @@ class LojinhaAdminServer(
                                 language = language
                             )
                             val filename = PdfFilenames.transactionStatementFilename(user.name, language)
-                            call.response.header(
-                                HttpHeaders.ContentDisposition,
-                                ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, filename).toString()
-                            )
-                            call.respondBytes(pdfBytes, ContentType.Application.Pdf)
+                            call.respondPdf(pdfBytes, filename)
                         } catch (e: Exception) {
                             AppLogger.error("LojinhaAdminServer", "Failed to generate customer statement PDF: ${e.message}", e)
                             call.respond(HttpStatusCode.InternalServerError, "Failed to generate transactions PDF")
@@ -1416,6 +1388,21 @@ class LojinhaAdminServer(
         }
         AppLogger.error("LojinhaAdminServer", "Could not bind admin server to port $port or ${port + 1}. Desktop kiosk will continue.")
         return false
+    }
+
+    private fun ApplicationCall.parseLanguageParam(): Language {
+        val langStr = request.queryParameters["lang"] ?: "BR"
+        return try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+    }
+
+    private suspend fun ApplicationCall.respondPdf(pdfBytes: ByteArray, filename: String) {
+        val asciiFallback = filename.replace(Regex("[^\\x20-\\x7E]"), "_").replace("\"", "_")
+        val encodedUtf8 = java.net.URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
+        response.header(
+            HttpHeaders.ContentDisposition,
+            "attachment; filename=\"$asciiFallback\"; filename*=UTF-8''$encodedUtf8"
+        )
+        respondBytes(pdfBytes, ContentType.Application.Pdf)
     }
 
     private suspend fun ApplicationCall.checkAdminAuth(settingsRepository: SettingsRepository): Boolean {
