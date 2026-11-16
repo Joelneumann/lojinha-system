@@ -738,6 +738,10 @@ class LojinhaAdminServer(
                             val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
                             val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
                             val bytes = call.receive<ByteArray>()
+                            if (bytes.size > 15 * 1024 * 1024) {
+                                call.respond(HttpStatusCode.PayloadTooLarge, "Image exceeds 15 MB limit")
+                                return@post
+                            }
                             if (bytes.isEmpty()) {
                                 call.respond(HttpStatusCode.BadRequest, "Image payload is empty")
                                 return@post

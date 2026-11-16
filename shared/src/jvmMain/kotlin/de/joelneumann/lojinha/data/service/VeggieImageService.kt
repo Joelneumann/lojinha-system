@@ -180,8 +180,9 @@ class VeggieImageService(
 
     fun deleteProductImages(imageFileName: String?) {
         val clean = sanitizeFileName(imageFileName) ?: return
-        File(imageDirectory, "${clean}_thumb.jpg").takeIf { it.exists() }?.delete()
-        File(imageDirectory, "${clean}_full.jpg").takeIf { it.exists() }?.delete()
+        listOf("_thumb.jpg", "_full.jpg", ".jpg", ".jpeg", ".png", ".webp").forEach { suffix ->
+            File(imageDirectory, "$clean$suffix").takeIf { it.exists() }?.delete()
+        }
     }
 
     private fun sanitizeFileName(imageFileName: String?): String? {

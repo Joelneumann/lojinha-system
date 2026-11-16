@@ -327,13 +327,20 @@ fun AdminVeggieCatalogSection(
     }
 
     if (editingProduct != null) {
+        var wasSaving by remember(editingProduct!!.id) { mutableStateOf(false) }
+        LaunchedEffect(isSavingProduct) {
+            if (isSavingProduct) {
+                wasSaving = true
+            } else if (wasSaving) {
+                editingProduct = null
+            }
+        }
         VeggieProductEditDialog(
             product = editingProduct!!,
             unitTypes = unitTypes,
             isSaving = isSavingProduct,
             onSave = { updated, newBytes, removeImg ->
                 onSaveProduct(updated, newBytes, removeImg)
-                editingProduct = null
             },
             onCancel = { editingProduct = null }
         )

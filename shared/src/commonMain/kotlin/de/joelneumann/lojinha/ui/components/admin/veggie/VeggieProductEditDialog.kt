@@ -228,7 +228,7 @@ fun VeggieProductEditDialog(
                                     OutlinedButton(
                                         onClick = {
                                             selectedImageBytes = null
-                                            removeExistingImage = true
+                                            removeExistingImage = !product.imageFileName.isNullOrBlank()
                                         },
                                         shape = RoundedCornerShape(8.dp),
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson)

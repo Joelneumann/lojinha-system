@@ -15,7 +15,7 @@ actual fun pickFile(title: String, extensionFilter: String?, onSelect: (Platform
 (onLoaded) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/jpeg,image/png,image/webp,image/gif';
+    input.accept = 'image/jpeg,image/png,image/gif';
     input.onchange = (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;

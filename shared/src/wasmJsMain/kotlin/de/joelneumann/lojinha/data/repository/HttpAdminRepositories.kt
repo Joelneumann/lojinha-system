@@ -1106,32 +1106,26 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
                 val res: Map<String, String> = response.body()
                 res["imageFileName"]
             } else {
-                null
+                throw IllegalStateException("uploadProductImage failed with status ${response.status}")
             }
         } catch (e: Exception) {
             AppLogger.error("HttpVeggieOrderRepository", "uploadProductImage failed: ${e.message}", e)
-            null
+            throw e
         }
     }
 
-    suspend fun uploadProductImage(productId: String, imageBytes: ByteArray): String? =
-        uploadProductImage(productId, null, imageBytes)
-
-    suspend fun deleteProductImage(productId: String): Boolean {
-        return try {
+    suspend fun deleteProductImage(productId: String) {
+        try {
             val response = client.httpClient.delete(client.resolveUrl("/api/admin/veggie/products/$productId/image")) {
                 client.run { appendAdminAuth() }
             }
-            response.status.isSuccess()
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("deleteProductImage failed with status ${response.status}")
+            }
         } catch (e: Exception) {
             AppLogger.error("HttpVeggieOrderRepository", "deleteProductImage failed: ${e.message}", e)
-            false
+            throw e
         }
-    }
-
-    fun resolveProductImageUrl(productId: String, isThumb: Boolean = true, updatedAt: Long = 0L): String {
-        val versionParam = if (updatedAt > 0L) "&v=$updatedAt" else ""
-        return client.resolveUrl("/api/veggie/images/$productId?thumb=$isThumb$versionParam")
     }
 
     override fun getRoundsFlow(): Flow<List<VeggieOrderRound>> = flow {

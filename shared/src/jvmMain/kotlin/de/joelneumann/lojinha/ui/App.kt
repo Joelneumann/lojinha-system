@@ -440,19 +440,23 @@ fun App(
                                 userRepository = effectiveUserRepo,
                                 settingsRepository = effectiveSettingsRepo,
                                 onSaveProductImage = { productId, productName, bytes, previousFileName ->
-                                    val otherKeys = effectiveVeggieRepo.getAllVeggieProducts()
-                                        .filter { it.id != productId }
-                                        .mapNotNull { it.imageFileName }
-                                    veggieImageService.saveProductImage(
-                                        productId = productId,
-                                        productName = productName,
-                                        rawImageBytes = bytes,
-                                        previousImageFileName = previousFileName,
-                                        existingImageKeys = otherKeys
-                                    )
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        val otherKeys = effectiveVeggieRepo.getAllVeggieProducts()
+                                            .filter { it.id != productId }
+                                            .mapNotNull { it.imageFileName }
+                                        veggieImageService.saveProductImage(
+                                            productId = productId,
+                                            productName = productName,
+                                            rawImageBytes = bytes,
+                                            previousImageFileName = previousFileName,
+                                            existingImageKeys = otherKeys
+                                        )
+                                    }
                                 },
                                 onDeleteProductImage = { productId, previousFileName ->
-                                    veggieImageService.deleteProductImages(previousFileName ?: productId)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        veggieImageService.deleteProductImages(previousFileName ?: productId)
+                                    }
                                 }
                             )
                         }

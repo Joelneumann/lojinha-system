@@ -1001,8 +1001,10 @@ class AdminVeggieViewModel(
         _isSaving.value = true
         activeScope.launch {
             try {
-                onDeleteProductImage?.invoke(product.id, product.imageFileName)
-                invalidateVeggieImageCache(product.id)
+                if (!product.imageFileName.isNullOrBlank()) {
+                    onDeleteProductImage?.invoke(product.id, product.imageFileName)
+                    invalidateVeggieImageCache(product.id)
+                }
                 veggieOrderRepository.hardDeleteVeggieProduct(product.id)
                 loadData()
             } catch (e: Exception) {

@@ -79,7 +79,7 @@ actual fun pickImageBytes(title: String, onSelect: (fileName: String, bytes: Byt
         val dialog = FileDialog(activeFrame, title, FileDialog.LOAD)
         dialog.setFilenameFilter { _, name ->
             val lower = name.lowercase()
-            lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp") || lower.endsWith(".gif")
+            lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".gif")
         }
         dialog.isVisible = true
         val dir = dialog.directory
