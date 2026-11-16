@@ -53,9 +53,12 @@ class LojinhaAdminServer(
 
     // Token Session Management
     private val activeTokens = ConcurrentHashMap<String, Long>() // token -> expiryTimestamp
+    // TODO(online-server): Tokens are stored in memory and cleared on server restart.
+    //  When moving to a standalone/restarting server, persist sessions in SQLite/DB (and consider HttpOnly cookies).
     private val activeCustomerTokens = ConcurrentHashMap<String, CustomerSession>() // token -> CustomerSession
     private val failedLoginAttempts = ConcurrentHashMap<String, Pair<Int, Long>>() // ip -> (count, firstAttemptTime)
     private val SESSION_DURATION_MS = 8 * 60 * 60 * 1000L // 8 hours
+    private val PERSISTENT_CUSTOMER_SESSION_DURATION_MS = 30L * 24 * 60 * 60 * 1000L // 30 days
     private val MAX_LOGIN_ATTEMPTS = 5
     private val RATE_LIMIT_WINDOW_MS = 60 * 1000L // 1 minute
 
@@ -979,7 +982,8 @@ class LojinhaAdminServer(
                         if (matches) {
                             failedLoginAttempts.remove(clientIp)
                             val token = UUID.randomUUID().toString()
-                            activeCustomerTokens[token] = CustomerSession(user.id, now + SESSION_DURATION_MS)
+                            val sessionTtl = if (req.keepLoggedIn) PERSISTENT_CUSTOMER_SESSION_DURATION_MS else SESSION_DURATION_MS
+                            activeCustomerTokens[token] = CustomerSession(user.id, now + sessionTtl)
                             call.respond(
                                 HttpStatusCode.OK,
                                 CustomerLoginResponse(
@@ -1425,6 +1429,7 @@ class LojinhaAdminServer(
         name.endsWith(".jpg") || name.endsWith(".jpeg") -> ContentType.Image.JPEG
         name.endsWith(".svg") -> ContentType.Image.SVG
         name.endsWith(".json") || name.endsWith(".map") -> ContentType.Application.Json
+        name.endsWith(".webmanifest") -> ContentType("application", "manifest+json")
         name.endsWith(".ico") -> ContentType("image", "x-icon")
         else -> ContentType.Application.OctetStream
     }

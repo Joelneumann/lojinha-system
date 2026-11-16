@@ -46,6 +46,8 @@ import de.joelneumann.lojinha.domain.service.VeggieRoundSettlementResult
 import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminLabeledField
+import de.joelneumann.lojinha.ui.utils.SelectAllOnFocusEffect
+import de.joelneumann.lojinha.ui.utils.rememberSelectAllOnFocusState
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.admin.DualUnitBadge
 import de.joelneumann.lojinha.ui.components.general.AppHorizontalScrollbar
@@ -1743,10 +1745,8 @@ private fun MatrixNumberInputField(
     prevFocusRequester: FocusRequester? = null,
     allowDecimals: Boolean = true
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    var hadFocus by remember { mutableStateOf(false) }
-    var focusGainedTime by remember { mutableStateOf(0L) }
-    var textOnFocusGain by remember { mutableStateOf("") }
+    val selectAllState = rememberSelectAllOnFocusState()
+    val isFocused = selectAllState.isFocused
 
     var textFieldValue by remember {
         mutableStateOf(
@@ -1766,16 +1766,11 @@ private fun MatrixNumberInputField(
         }
     }
 
-    LaunchedEffect(hadFocus) {
-        if (hadFocus) {
-            delay(60)
-            if (hadFocus && textFieldValue.text == textOnFocusGain && textFieldValue.selection != TextRange(0, textFieldValue.text.length)) {
-                textFieldValue = textFieldValue.copy(
-                    selection = TextRange(0, textFieldValue.text.length)
-                )
-            }
-        }
-    }
+    SelectAllOnFocusEffect(
+        state = selectAllState,
+        currentValue = { textFieldValue },
+        onUpdateValue = { textFieldValue = it }
+    )
 
     Surface(
         shape = RoundedCornerShape(6.dp),
@@ -1805,10 +1800,7 @@ private fun MatrixNumberInputField(
             BasicTextField(
                 value = textFieldValue,
                 onValueChange = { newValue ->
-                    val isInitialFocusEvent = hadFocus &&
-                            (currentTimeMillis() - focusGainedTime < 300L) &&
-                            (newValue.text == textFieldValue.text)
-                    if (isInitialFocusEvent) {
+                    if (selectAllState.shouldForceSelectAllOnChange(newValue.text, textFieldValue.text)) {
                         textFieldValue = newValue.copy(
                             selection = TextRange(0, newValue.text.length)
                         )
@@ -1843,20 +1835,16 @@ private fun MatrixNumberInputField(
                     .fillMaxWidth()
                     .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                     .onFocusChanged { focusState ->
-                        isFocused = focusState.isFocused
+                        val wasFocused = selectAllState.isFocused
                         if (focusState.isFocused) {
-                            if (!hadFocus) {
-                                hadFocus = true
-                                focusGainedTime = currentTimeMillis()
-                                textOnFocusGain = textFieldValue.text
+                            if (!wasFocused) {
+                                selectAllState.onFocusGained(textFieldValue.text)
                                 textFieldValue = textFieldValue.copy(
                                     selection = TextRange(0, textFieldValue.text.length)
                                 )
                             }
-                        } else {
-                            hadFocus = false
-                            focusGainedTime = 0L
-                            textOnFocusGain = ""
+                        } else if (wasFocused) {
+                            selectAllState.onFocusLost()
                             textFieldValue = textFieldValue.copy(
                                 selection = TextRange(textFieldValue.text.length)
                             )

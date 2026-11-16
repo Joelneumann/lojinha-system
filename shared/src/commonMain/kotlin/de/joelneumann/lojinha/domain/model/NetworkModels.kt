@@ -36,7 +36,8 @@ data class AtomicTransactionRequest(
 @Serializable
 data class CustomerLoginRequest(
     val userId: String,
-    val pin: String = ""
+    val pin: String = "",
+    val keepLoggedIn: Boolean = false
 )
 
 @Serializable

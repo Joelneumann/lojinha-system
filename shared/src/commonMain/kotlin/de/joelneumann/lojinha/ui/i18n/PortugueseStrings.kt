@@ -893,7 +893,7 @@ object PortugueseStrings : AppStrings {
     override val customerPortalTabOrder = "Pedido de Verduras"
     override val customerPortalTabVeggieHistory = "Histórico de Verduras"
     override val customerPortalTabStoreHistory = "Extrato da Lojinha"
-    override fun lastOrderBadge(qty: String, unit: String): String = "Último pedido: $qty $unit"
+    override fun lastOrderBadge(qty: String, unit: String): String = "Último: $qty $unit"
     override val saveVeggieOrderBtn = "Salvar Pedido"
     override val veggieOrderAllSavedBtn = "Tudo Salvo"
     override val veggieOrderSavedMsg = "Seu pedido de verduras foi salvo!"
@@ -939,6 +939,7 @@ object PortugueseStrings : AppStrings {
         "$productName possui $orderCount pedido(s) na rodada aberta atual. Deseja manter os pedidos existentes ou cancelá-los?"
     override val deactivateStopNewOrdersOnly = "Apenas bloquear novos pedidos"
     override val deactivateCancelExistingOrders = "Cancelar pedidos existentes"
+    override val keepLoggedInLabel = "Manter conectado"
 }
 
 

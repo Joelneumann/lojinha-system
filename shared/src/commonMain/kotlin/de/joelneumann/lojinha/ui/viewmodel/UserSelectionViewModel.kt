@@ -27,7 +27,7 @@ class UserSelectionViewModel(
     private val productRepository: ProductRepository? = null,
     coroutineScope: CoroutineScope? = null,
     val isNetworkPortal: Boolean = false,
-    private val onAuthenticateNetworkUser: (suspend (userId: String, pin: String) -> User?)? = null,
+    private val onAuthenticateNetworkUser: (suspend (userId: String, pin: String, keepLoggedIn: Boolean) -> User?)? = null,
     private val onAuthenticateNetworkAdmin: (suspend (password: String) -> Boolean)? = null
 ) : ViewModel() {
 
@@ -58,6 +58,11 @@ class UserSelectionViewModel(
 
     private val _pinInput = MutableStateFlow("")
     val pinInput: StateFlow<String> = _pinInput.asStateFlow()
+
+    val showKeepLoggedInOption: Boolean get() = isNetworkPortal
+
+    private val _keepLoggedIn = MutableStateFlow(true)
+    val keepLoggedIn: StateFlow<Boolean> = _keepLoggedIn.asStateFlow()
 
     private val _pinError = MutableStateFlow<String?>(null)
     val pinError: StateFlow<String?> = _pinError.asStateFlow()
@@ -219,6 +224,10 @@ class UserSelectionViewModel(
         _pinError.value = null
     }
 
+    fun updateKeepLoggedIn(keep: Boolean) {
+        _keepLoggedIn.value = keep
+    }
+
     fun submitPin(adminPassword: String = "", onLoginSuccess: (User) -> Unit) {
         if (isLoggingIn) return
         val user = _selectedUserForPin.value ?: return
@@ -227,7 +236,7 @@ class UserSelectionViewModel(
             isLoggingIn = true
             activeScope.launch {
                 val authedUser = try {
-                    onAuthenticateNetworkUser.invoke(user.id, trimmedInput)
+                    onAuthenticateNetworkUser.invoke(user.id, trimmedInput, _keepLoggedIn.value)
                 } catch (_: Exception) {
                     null
                 }

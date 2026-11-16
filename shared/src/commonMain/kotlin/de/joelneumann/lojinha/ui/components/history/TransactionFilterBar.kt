@@ -45,7 +45,7 @@ fun TransactionFilterBar(
     )
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val isMobile = maxWidth < 600.dp
+        val isMobile = maxWidth < MOBILE_BREAKPOINT
 
         if (isMobile) {
             Column(

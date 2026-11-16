@@ -88,8 +88,8 @@ fun main() {
                                     userRepository = customerUserRepository,
                                     productRepository = null,
                                     isNetworkPortal = true,
-                                    onAuthenticateNetworkUser = { userId, pin ->
-                                        when (val res = customerNetworkClient.loginCustomer(userId, pin)) {
+                                    onAuthenticateNetworkUser = { userId, pin, keepLoggedIn ->
+                                        when (val res = customerNetworkClient.loginCustomer(userId, pin, keepLoggedIn)) {
                                             is CustomerLoginResult.Success -> res.user
                                             else -> null
                                         }

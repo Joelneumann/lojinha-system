@@ -35,7 +35,9 @@ import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.SelectAllOnFocusEffect
 import de.joelneumann.lojinha.ui.utils.formModalKeys
+import de.joelneumann.lojinha.ui.utils.rememberSelectAllOnFocusState
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
@@ -72,8 +74,13 @@ fun VeggieAmountInputDialog(
     }
 
     val focusRequester = remember { FocusRequester() }
-    var hadFocus by remember { mutableStateOf(false) }
-    var justFocused by remember { mutableStateOf(false) }
+    val selectAllState = rememberSelectAllOnFocusState()
+
+    SelectAllOnFocusEffect(
+        state = selectAllState,
+        currentValue = { textFieldValue },
+        onUpdateValue = { textFieldValue = it }
+    )
 
     val parsedQtyScaled = remember(textFieldValue.text, allowDecimals) {
         VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text.trim(), allowDecimals)
@@ -193,22 +200,19 @@ fun VeggieAmountInputDialog(
                     OutlinedTextField(
                         value = textFieldValue,
                         onValueChange = { newValue ->
-                            if (justFocused && newValue.text == textFieldValue.text) {
+                            val filteredText = filterVeggieAmountInput(newValue.text, allowDecimals)
+                            if (selectAllState.shouldForceSelectAllOnChange(filteredText, textFieldValue.text)) {
                                 textFieldValue = newValue.copy(
-                                    selection = TextRange(0, newValue.text.length)
+                                    text = filteredText,
+                                    selection = TextRange(0, filteredText.length)
                                 )
-                                justFocused = false
+                            } else if (filteredText == newValue.text) {
+                                textFieldValue = newValue
                             } else {
-                                justFocused = false
-                                val filteredText = filterVeggieAmountInput(newValue.text, allowDecimals)
-                                if (filteredText == newValue.text) {
-                                    textFieldValue = newValue
-                                } else {
-                                    textFieldValue = TextFieldValue(
-                                        text = filteredText,
-                                        selection = TextRange(filteredText.length)
-                                    )
-                                }
+                                textFieldValue = TextFieldValue(
+                                    text = filteredText,
+                                    selection = TextRange(filteredText.length)
+                                )
                             }
                         },
                         textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
@@ -226,17 +230,16 @@ fun VeggieAmountInputDialog(
                             .height(56.dp)
                             .focusRequester(focusRequester)
                             .onFocusChanged { focusState ->
+                                val wasFocused = selectAllState.isFocused
                                 if (focusState.isFocused) {
-                                    if (!hadFocus) {
-                                        hadFocus = true
-                                        justFocused = true
+                                    if (!wasFocused) {
+                                        selectAllState.onFocusGained(textFieldValue.text)
                                         textFieldValue = textFieldValue.copy(
                                             selection = TextRange(0, textFieldValue.text.length)
                                         )
                                     }
-                                } else {
-                                    hadFocus = false
-                                    justFocused = false
+                                } else if (wasFocused) {
+                                    selectAllState.onFocusLost()
                                 }
                             }
                             .onKeyEvent { keyEvent ->

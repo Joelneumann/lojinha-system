@@ -137,7 +137,7 @@ fun CustomerNetworkPortalScreen(
             .fillMaxSize()
             .background(SurfaceContainerLight)
     ) {
-        val isMobile = maxWidth < 600.dp
+        val isMobile = maxWidth < MOBILE_BREAKPOINT
         val isKeyboardOpenMobile = isMobile && maxHeight < 480.dp
         val isNarrow = maxWidth < 750.dp
 
@@ -1841,17 +1841,17 @@ private fun CustomerVeggieProductCard(
                     shape = RoundedCornerShape(6.dp),
                     color = SurfaceContainerHighLight,
                     border = BorderStroke(1.dp, DividerBorder),
-                    modifier = Modifier.height(24.dp)
+                    modifier = Modifier.height(22.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
-                            .padding(horizontal = 6.dp),
+                            .padding(horizontal = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = strings.lastOrderBadge(formattedPrev, unitName),
-                            fontSize = 10.sp,
+                            fontSize = 9.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavy,
                             textAlign = TextAlign.Center,

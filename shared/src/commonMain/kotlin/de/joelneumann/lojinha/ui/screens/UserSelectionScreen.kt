@@ -48,6 +48,7 @@ fun UserSelectionScreen(
     val selectedUserForPin by viewModel.selectedUserForPin.collectAsState()
     val pinInput by viewModel.pinInput.collectAsState()
     val pinError by viewModel.pinError.collectAsState()
+    val keepLoggedIn by viewModel.keepLoggedIn.collectAsState()
     val showAdminAuthDialog by viewModel.showAdminAuthDialog.collectAsState()
     val adminPasswordInput by viewModel.adminPasswordInput.collectAsState()
     val adminPasswordError by viewModel.adminPasswordError.collectAsState()
@@ -78,7 +79,9 @@ fun UserSelectionScreen(
         onAdminPasswordSubmit = { viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin) },
         onAdminPasswordDismiss = viewModel::closeAdminAuthDialog,
         onDismissFeedback = viewModel::dismissFeedback,
-        onDismissPinRequiredNotice = viewModel::dismissPinRequiredNotice
+        onDismissPinRequiredNotice = viewModel::dismissPinRequiredNotice,
+        keepLoggedIn = keepLoggedIn,
+        onKeepLoggedInChange = if (viewModel.showKeepLoggedInOption) viewModel::updateKeepLoggedIn else null
     )
 }
 
@@ -106,7 +109,9 @@ fun UserSelectionContent(
     onAdminPasswordDismiss: () -> Unit,
     onDismissFeedback: () -> Unit = {},
     pinRequiredNoticeUser: User? = null,
-    onDismissPinRequiredNotice: () -> Unit = {}
+    onDismissPinRequiredNotice: () -> Unit = {},
+    keepLoggedIn: Boolean = false,
+    onKeepLoggedInChange: ((Boolean) -> Unit)? = null
 ) {
     val strings = I18n.current
     val focusRequester = remember { FocusRequester() }
@@ -191,7 +196,7 @@ fun UserSelectionContent(
                     }
                 }
         ) {
-            val isMobile = maxWidth < 600.dp
+            val isMobile = maxWidth < MOBILE_BREAKPOINT
 
             Column(
                 modifier = Modifier
@@ -236,7 +241,9 @@ fun UserSelectionContent(
                     errorText = if (pinError != null) strings.pinIncorrect else null,
                     onDismiss = onPinDismiss,
                     onSubmit = onPinSubmit,
-                    isMobile = isMobile
+                    isMobile = isMobile,
+                    keepLoggedIn = keepLoggedIn,
+                    onKeepLoggedInChange = onKeepLoggedInChange
                 )
             }
 

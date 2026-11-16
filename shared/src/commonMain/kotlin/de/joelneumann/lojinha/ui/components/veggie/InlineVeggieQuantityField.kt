@@ -31,7 +31,8 @@ import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.VEGGIE_QTY_SCALE
 import de.joelneumann.lojinha.domain.model.VeggieQuantityScaling
 import de.joelneumann.lojinha.ui.theme.*
-import kotlinx.coroutines.delay
+import de.joelneumann.lojinha.ui.utils.SelectAllOnFocusEffect
+import de.joelneumann.lojinha.ui.utils.rememberSelectAllOnFocusState
 
 @Composable
 fun InlineVeggieQuantityField(
@@ -49,17 +50,10 @@ fun InlineVeggieQuantityField(
     isMobile: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    var selectAllPending by remember { mutableStateOf(false) }
+    val selectAllState = rememberSelectAllOnFocusState()
+    val isFocused = selectAllState.isFocused
     val effectiveFocusRequester = focusRequester ?: remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(selectAllPending) {
-        if (selectAllPending) {
-            delay(150L)
-            selectAllPending = false
-        }
-    }
 
     fun formatCurrent(qty: Long): String {
         return if (qty > 0L) {
@@ -78,6 +72,12 @@ fun InlineVeggieQuantityField(
             )
         )
     }
+
+    SelectAllOnFocusEffect(
+        state = selectAllState,
+        currentValue = { textFieldValue },
+        onUpdateValue = { textFieldValue = it }
+    )
 
     LaunchedEffect(quantityScaled) {
         val currentParsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
@@ -161,14 +161,12 @@ fun InlineVeggieQuantityField(
                 value = textFieldValue,
                 onValueChange = { newValue ->
                     val filtered = filterVeggieAmountInput(newValue.text, allowDecimals)
-                    if (selectAllPending && filtered == textFieldValue.text) {
-                        selectAllPending = false
+                    if (selectAllState.shouldForceSelectAllOnChange(filtered, textFieldValue.text)) {
                         textFieldValue = newValue.copy(
                             text = filtered,
                             selection = TextRange(0, filtered.length)
                         )
                     } else {
-                        selectAllPending = false
                         textFieldValue = newValue.copy(text = filtered)
                     }
                     val parsed = VeggieQuantityScaling.parseQuantityScaled(filtered, allowDecimals) ?: 0L
@@ -225,20 +223,19 @@ fun InlineVeggieQuantityField(
                     .weight(1f)
                     .focusRequester(effectiveFocusRequester)
                     .onFocusChanged { focusState ->
-                        val wasFocused = isFocused
-                        isFocused = focusState.isFocused
+                        val wasFocused = selectAllState.isFocused
                         if (focusState.isFocused) {
                             if (!wasFocused) {
                                 onFocused?.invoke()
-                                selectAllPending = true
                                 val formatted = formatCurrent(quantityScaled)
+                                selectAllState.onFocusGained(formatted)
                                 textFieldValue = TextFieldValue(
                                     text = formatted,
                                     selection = TextRange(0, formatted.length)
                                 )
                             }
                         } else if (wasFocused) {
-                            selectAllPending = false
+                            selectAllState.onFocusLost()
                             val parsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
                             onQuantityChange(parsed)
                             val cleaned = formatCurrent(parsed)
@@ -251,7 +248,7 @@ fun InlineVeggieQuantityField(
                     .onPreviewKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
                             if (event.key == Key.DirectionLeft || event.key == Key.DirectionRight || event.key == Key.MoveHome || event.key == Key.MoveEnd) {
-                                selectAllPending = false
+                                selectAllState.onCursorNavigationKey()
                             }
                             when (event.key) {
                                 Key.Tab -> {

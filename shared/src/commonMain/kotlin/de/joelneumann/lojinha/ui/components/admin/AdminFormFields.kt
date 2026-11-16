@@ -20,8 +20,8 @@ import de.joelneumann.lojinha.ui.theme.DividerBorder
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
-import de.joelneumann.lojinha.ui.utils.currentTimeMillis
-import kotlinx.coroutines.delay
+import de.joelneumann.lojinha.ui.utils.SelectAllOnFocusEffect
+import de.joelneumann.lojinha.ui.utils.rememberSelectAllOnFocusState
 
 @Composable
 fun AdminLabeledField(
@@ -57,9 +57,7 @@ fun AdminLabeledField(
         var textFieldValue by remember {
             mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
         }
-        var hadFocus by remember { mutableStateOf(false) }
-        var focusGainedTime by remember { mutableStateOf(0L) }
-        var textOnFocusGain by remember { mutableStateOf("") }
+        val selectAllState = rememberSelectAllOnFocusState()
 
         LaunchedEffect(value) {
             if (value != textFieldValue.text) {
@@ -70,16 +68,11 @@ fun AdminLabeledField(
             }
         }
 
-        LaunchedEffect(hadFocus) {
-            if (hadFocus) {
-                delay(60)
-                if (hadFocus && textFieldValue.text == textOnFocusGain && textFieldValue.selection != TextRange(0, textFieldValue.text.length)) {
-                    textFieldValue = textFieldValue.copy(
-                        selection = TextRange(0, textFieldValue.text.length)
-                    )
-                }
-            }
-        }
+        SelectAllOnFocusEffect(
+            state = selectAllState,
+            currentValue = { textFieldValue },
+            onUpdateValue = { textFieldValue = it }
+        )
 
         Column(modifier = modifier) {
             Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy, maxLines = 1)
@@ -87,10 +80,7 @@ fun AdminLabeledField(
             OutlinedTextField(
                 value = textFieldValue,
                 onValueChange = { newValue ->
-                    val isInitialFocusEvent = hadFocus &&
-                            (currentTimeMillis() - focusGainedTime < 300L) &&
-                            (newValue.text == textFieldValue.text)
-                    if (isInitialFocusEvent) {
+                    if (selectAllState.shouldForceSelectAllOnChange(newValue.text, textFieldValue.text)) {
                         textFieldValue = newValue.copy(
                             selection = TextRange(0, newValue.text.length)
                         )
@@ -111,19 +101,16 @@ fun AdminLabeledField(
                     .fillMaxWidth()
                     .height(56.dp)
                     .onFocusChanged { focusState ->
+                        val wasFocused = selectAllState.isFocused
                         if (focusState.isFocused) {
-                            if (!hadFocus) {
-                                hadFocus = true
-                                focusGainedTime = currentTimeMillis()
-                                textOnFocusGain = textFieldValue.text
+                            if (!wasFocused) {
+                                selectAllState.onFocusGained(textFieldValue.text)
                                 textFieldValue = textFieldValue.copy(
                                     selection = TextRange(0, textFieldValue.text.length)
                                 )
                             }
-                        } else {
-                            hadFocus = false
-                            focusGainedTime = 0L
-                            textOnFocusGain = ""
+                        } else if (wasFocused) {
+                            selectAllState.onFocusLost()
                             textFieldValue = textFieldValue.copy(
                                 selection = TextRange(textFieldValue.text.length)
                             )

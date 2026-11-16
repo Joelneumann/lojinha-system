@@ -19,6 +19,7 @@ const val DEV_UI_SCALE_FACTOR: Float = 1.15f
 const val WEB_UI_SCALE_FACTOR: Float = 1.00f
 
 val ScreenPadding = 20.dp
+val MOBILE_BREAKPOINT = 800.dp
 
 val SurfaceWhite = Color(0xFFFFFFFF)
 val SurfaceContainerLight = Color(0xFFF8FAFC)

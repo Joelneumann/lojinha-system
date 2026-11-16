@@ -53,6 +53,43 @@ private external fun jsGetSessionItem(key: String): String?
 """)
 private external fun jsRemoveSessionItem(key: String)
 
+// TODO(online-server): For a public/internet-facing server, consider migrating persistent
+//  customer auth from localStorage Bearer tokens to HttpOnly; Secure; SameSite=Lax cookies
+//  to eliminate any XSS token-theft surface. (Safe for self-hosted/LAN HTTPS with Compose Canvas.)
+@JsFun("""
+(key, value) => {
+    try {
+        window.localStorage.setItem(key, value);
+    } catch (e) {
+        console.warn('Failed to set localStorage item:', e);
+    }
+}
+""")
+private external fun jsSetLocalItem(key: String, value: String)
+
+@JsFun("""
+(key) => {
+    try {
+        return window.localStorage.getItem(key);
+    } catch (e) {
+        console.warn('Failed to get localStorage item:', e);
+        return null;
+    }
+}
+""")
+private external fun jsGetLocalItem(key: String): String?
+
+@JsFun("""
+(key) => {
+    try {
+        window.localStorage.removeItem(key);
+    } catch (e) {
+        console.warn('Failed to remove localStorage item:', e);
+    }
+}
+""")
+private external fun jsRemoveLocalItem(key: String)
+
 @JsFun("""
 (baseUrl, token) => {
     if (window._lojinhaEventSource) {
@@ -1273,11 +1310,11 @@ class CustomerNetworkClient(val baseUrl: String = "") {
         }
     }
 
-    suspend fun loginCustomer(userId: String, pin: String): CustomerLoginResult {
+    suspend fun loginCustomer(userId: String, pin: String, keepLoggedIn: Boolean = false): CustomerLoginResult {
         return try {
             val response = httpClient.post(resolveUrl("/api/customer/login")) {
                 contentType(ContentType.Application.Json)
-                setBody(CustomerLoginRequest(userId = userId, pin = pin))
+                setBody(CustomerLoginRequest(userId = userId, pin = pin, keepLoggedIn = keepLoggedIn))
             }
             if (response.status == HttpStatusCode.TooManyRequests) {
                 val resp: CustomerLoginResponse? = try { response.body() } catch (_: Exception) { null }
@@ -1288,7 +1325,13 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                 if (loginResp.success && loginResp.user != null && !loginResp.token.isNullOrBlank()) {
                     authToken = loginResp.token
                     currentUser = loginResp.user
-                    try { jsSetSessionItem("lojinha_customer_token", loginResp.token) } catch (_: Exception) {}
+                    if (keepLoggedIn) {
+                        try { jsRemoveSessionItem("lojinha_customer_token") } catch (_: Exception) {}
+                        try { jsSetLocalItem("lojinha_customer_token", loginResp.token) } catch (_: Exception) {}
+                    } else {
+                        try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
+                        try { jsSetSessionItem("lojinha_customer_token", loginResp.token) } catch (_: Exception) {}
+                    }
                     CustomerLoginResult.Success(loginResp.user)
                 } else if (loginResp.message.contains("PIN required", ignoreCase = true)) {
                     CustomerLoginResult.PinRequired
@@ -1304,7 +1347,10 @@ class CustomerNetworkClient(val baseUrl: String = "") {
     }
 
     suspend fun tryRestoreCustomerSession(): User? {
-        val storedToken = try { jsGetSessionItem("lojinha_customer_token") } catch (_: Throwable) { null }
+        val storedToken = try {
+            jsGetSessionItem("lojinha_customer_token")?.takeIf { it.isNotBlank() }
+                ?: jsGetLocalItem("lojinha_customer_token")?.takeIf { it.isNotBlank() }
+        } catch (_: Throwable) { null }
         if (storedToken.isNullOrBlank()) return null
         authToken = storedToken
         return try {
@@ -1454,6 +1500,7 @@ class CustomerNetworkClient(val baseUrl: String = "") {
         authToken = null
         currentUser = null
         try { jsRemoveSessionItem("lojinha_customer_token") } catch (_: Exception) {}
+        try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
     }
 
     fun startRealtimeSync(scope: CoroutineScope) {

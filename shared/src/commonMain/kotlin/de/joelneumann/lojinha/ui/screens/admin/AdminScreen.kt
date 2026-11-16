@@ -211,7 +211,7 @@ fun AdminScreen(
                 } else false
             }
     ) {
-        val isMobile = maxWidth < 600.dp
+        val isMobile = maxWidth < MOBILE_BREAKPOINT
         val isNarrow = maxWidth < 750.dp
         val isCompact = maxWidth < 950.dp
 

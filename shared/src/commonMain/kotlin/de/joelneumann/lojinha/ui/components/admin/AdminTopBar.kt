@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.FocusRequester
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.theme.AccentNavy
+import de.joelneumann.lojinha.ui.theme.MOBILE_BREAKPOINT
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 
 @Composable
@@ -30,7 +31,7 @@ fun AdminTopBar(
     focusRequester: FocusRequester? = null
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val isMobile = maxWidth < 600.dp
+        val isMobile = maxWidth < MOBILE_BREAKPOINT
 
         if (isMobile) {
             Column(

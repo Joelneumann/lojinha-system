@@ -294,7 +294,7 @@ fun TransactionHistoryContent(
         }
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val isMobile = maxWidth < 600.dp
+            val isMobile = maxWidth < MOBILE_BREAKPOINT
 
             Column(
                 modifier = Modifier

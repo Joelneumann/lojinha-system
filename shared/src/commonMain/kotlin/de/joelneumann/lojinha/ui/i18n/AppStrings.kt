@@ -917,6 +917,7 @@ interface AppStrings {
     fun confirmDeactivateWithOrdersMsg(productName: String, orderCount: Int): String
     val deactivateStopNewOrdersOnly: String
     val deactivateCancelExistingOrders: String
+    val keepLoggedInLabel: String
 }
 
 

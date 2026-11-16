@@ -40,7 +40,9 @@ fun PasswordInputDialog(
     modifier: Modifier = Modifier,
     title: String? = null,
     errorText: String? = null,
-    isMobile: Boolean = false
+    isMobile: Boolean = false,
+    keepLoggedIn: Boolean = false,
+    onKeepLoggedInChange: ((Boolean) -> Unit)? = null
 ) {
     val strings = I18n.current
     val inputFocusRequester = remember { FocusRequester() }
@@ -123,7 +125,32 @@ fun PasswordInputDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                if (onKeepLoggedInChange != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onKeepLoggedInChange(!keepLoggedIn) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = keepLoggedIn,
+                            onCheckedChange = onKeepLoggedInChange,
+                            colors = CheckboxDefaults.colors(checkedColor = AccentNavy)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = strings.keepLoggedInLabel,
+                            fontSize = 13.sp,
+                            color = PrimaryNavy
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(if (onKeepLoggedInChange != null) 16.dp else 24.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
