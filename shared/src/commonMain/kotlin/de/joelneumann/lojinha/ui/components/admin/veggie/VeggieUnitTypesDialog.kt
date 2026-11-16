@@ -39,7 +39,9 @@ fun VeggieUnitTypesDialog(
 ) {
     val strings = I18n.current
     val activeUnits = remember(unitTypes) { unitTypes.filter { it.isActive }.sortedBy { it.name.lowercase() } }
-    val usedUnitIds = remember(products) { products.filter { !it.isDeleted }.map { it.unitTypeId }.toSet() }
+    val usedUnitIds = remember(products) {
+        products.filter { !it.isDeleted }.flatMap { listOfNotNull(it.unitTypeId, it.deliveryUnitTypeId) }.toSet()
+    }
 
     var editingUnit by remember { mutableStateOf<VeggieUnitType?>(null) }
     var unitNameInput by remember { mutableStateOf("") }

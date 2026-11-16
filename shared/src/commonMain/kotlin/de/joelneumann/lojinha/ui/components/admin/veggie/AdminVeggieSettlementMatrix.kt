@@ -120,7 +120,6 @@ fun AdminVeggieSettlementMatrix(
     var showConfirmCloseRound by remember { mutableStateOf(false) }
     var showConfirmResetChanges by remember { mutableStateOf(false) }
     var showConfirmSettle by remember { mutableStateOf(false) }
-    var showUnsavedSettleDialog by remember { mutableStateOf(false) }
     var showConfirmDeleteRound by remember { mutableStateOf(false) }
     var showAddEntryDialog by remember { mutableStateOf(false) }
     var transporterDropdownExpanded by remember { mutableStateOf(false) }
@@ -333,64 +332,22 @@ fun AdminVeggieSettlementMatrix(
                                     }
                                 } else {
                                     if (onResetChanges != null) {
-                                        OutlinedButton(
-                                            onClick = { showConfirmResetChanges = true },
+                                        MatrixDraftActionButton(
+                                            label = strings.resetChangesBtn,
+                                            icon = Icons.Default.Restore,
                                             enabled = hasUnsavedChanges && !isSaving,
-                                            shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
-                                                disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
-                                            ),
-                                            border = BorderStroke(
-                                                1.dp,
-                                                if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
-                                            )
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Restore,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                strings.resetChangesBtn,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
-                                            )
-                                        }
+                                            activeColor = ColorDangerCrimson,
+                                            onClick = { showConfirmResetChanges = true }
+                                        )
                                     }
 
-                                    OutlinedButton(
-                                        onClick = { onSaveDraft(null) },
+                                    MatrixDraftActionButton(
+                                        label = strings.saveChangesBtn,
+                                        icon = Icons.Default.Save,
                                         enabled = hasUnsavedChanges && !isSaving,
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
-                                            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
-                                        ),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
-                                        )
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Save,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            strings.saveChangesBtn,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
-                                        )
-                                    }
+                                        activeColor = AccentNavy,
+                                        onClick = { onSaveDraft(null) }
+                                    )
 
                                     Button(
                                         onClick = { showConfirmCloseRound = true },
@@ -408,64 +365,22 @@ fun AdminVeggieSettlementMatrix(
                             VeggieRoundStatus.CLOSED -> {
                                 if (entries.isNotEmpty()) {
                                     if (onResetChanges != null) {
-                                        OutlinedButton(
-                                            onClick = { showConfirmResetChanges = true },
+                                        MatrixDraftActionButton(
+                                            label = strings.resetChangesBtn,
+                                            icon = Icons.Default.Restore,
                                             enabled = hasUnsavedChanges && !isSaving,
-                                            shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
-                                                disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
-                                            ),
-                                            border = BorderStroke(
-                                                1.dp,
-                                                if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
-                                            )
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Restore,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                strings.resetChangesBtn,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
-                                            )
-                                        }
+                                            activeColor = ColorDangerCrimson,
+                                            onClick = { showConfirmResetChanges = true }
+                                        )
                                     }
 
-                                    OutlinedButton(
-                                        onClick = { onSaveDraft(null) },
+                                    MatrixDraftActionButton(
+                                        label = strings.saveDraftBtn,
+                                        icon = Icons.Default.Save,
                                         enabled = hasUnsavedChanges && !isSaving,
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted,
-                                            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
-                                        ),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (hasUnsavedChanges) AccentNavy.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
-                                        )
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Save,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            strings.saveDraftBtn,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (hasUnsavedChanges) AccentNavy else TextSecondaryMuted.copy(alpha = 0.4f)
-                                        )
-                                    }
+                                        activeColor = AccentNavy,
+                                        onClick = { onSaveDraft(null) }
+                                    )
                                 }
 
                                 OutlinedButton(
@@ -494,13 +409,7 @@ fun AdminVeggieSettlementMatrix(
                                     }
                                 } else {
                                     Button(
-                                        onClick = {
-                                            if (hasUnsavedChanges) {
-                                                showUnsavedSettleDialog = true
-                                            } else {
-                                                showConfirmSettle = true
-                                            }
-                                        },
+                                        onClick = { showConfirmSettle = true },
                                         enabled = !isSaving,
                                         colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
                                         shape = RoundedCornerShape(8.dp)
@@ -514,44 +423,17 @@ fun AdminVeggieSettlementMatrix(
 
                             VeggieRoundStatus.SETTLED -> {
                                 if (onResetChanges != null) {
-                                    OutlinedButton(
-                                        onClick = { showConfirmResetChanges = true },
+                                    MatrixDraftActionButton(
+                                        label = strings.resetChangesBtn,
+                                        icon = Icons.Default.Restore,
                                         enabled = hasUnsavedChanges && !isSaving,
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted,
-                                            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
-                                        ),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (hasUnsavedChanges) ColorDangerCrimson.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
-                                        )
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Restore,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            strings.resetChangesBtn,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (hasUnsavedChanges) ColorDangerCrimson else TextSecondaryMuted.copy(alpha = 0.4f)
-                                        )
-                                    }
+                                        activeColor = ColorDangerCrimson,
+                                        onClick = { showConfirmResetChanges = true }
+                                    )
                                 }
 
                                 Button(
-                                    onClick = {
-                                        if (hasUnsavedChanges) {
-                                            showUnsavedSettleDialog = true
-                                        } else {
-                                            showConfirmSettle = true
-                                        }
-                                    },
+                                    onClick = { showConfirmSettle = true },
                                     enabled = !isSaving && entries.isNotEmpty(),
                                     colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                                     shape = RoundedCornerShape(8.dp)
@@ -829,12 +711,9 @@ fun AdminVeggieSettlementMatrix(
                                 totalDeliveredScaled,
                                 rowInfo.deliveryAllowDecimals
                             )
-                            val effectiveUnitPrice = productSettlement?.marketUnitPriceCents?.let {
-                                val spent = productSettlement.totalSpentCents ?: 0L
-                                VeggieSettlementCalculator.calculateEffectiveUnitPrice(spent, totalDeliveredScaled)
-                            } ?: VeggieSettlementCalculator.calculateEffectiveUnitPrice(
-                                productSettlement?.totalSpentCents ?: 0L,
-                                totalDeliveredScaled
+                            val effectiveUnitPrice = VeggieSettlementCalculator.calculateEffectiveUnitPrice(
+                                totalSpentCents = productSettlement?.totalSpentCents ?: 0L,
+                                totalDeliveredQtyScaled = totalDeliveredScaled
                             )
 
                             Row(
@@ -1328,23 +1207,6 @@ fun AdminVeggieSettlementMatrix(
         )
     }
 
-    if (showUnsavedSettleDialog) {
-        ConfirmationDialog(
-            title = strings.unsavedSettleTitle,
-            message = strings.unsavedSettleMsg,
-            confirmText = strings.saveAndSettleBtn,
-            cancelText = strings.cancel,
-            confirmButtonColor = AccentNavy,
-            onConfirm = {
-                showUnsavedSettleDialog = false
-                onSaveDraft {
-                    showConfirmSettle = true
-                }
-            },
-            onDismiss = { showUnsavedSettleDialog = false }
-        )
-    }
-
     if (showConfirmSettle) {
         val totalAllCharged = (livePreview?.totalMarketProductsSpentCents ?: 0L) + (livePreview?.combinedFeeCents ?: 0L)
         val participantCount = livePreview?.customerSummaries?.size ?: 0
@@ -1401,6 +1263,45 @@ private data class VeggieMatrixProductRowInfo(
     val deliveryAllowDecimals: Boolean,
     val entriesByUserId: Map<String, VeggieOrderEntry>
 )
+
+@Composable
+private fun MatrixDraftActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    activeColor: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    val contentColor = if (enabled) activeColor else TextSecondaryMuted.copy(alpha = 0.4f)
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = if (enabled) activeColor else TextSecondaryMuted,
+            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.4f)
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (enabled) activeColor.copy(alpha = 0.5f) else DividerBorder.copy(alpha = 0.6f)
+        )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = contentColor
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = contentColor
+        )
+    }
+}
 
 @Composable
 private fun MatrixHeaderCell(

@@ -899,11 +899,13 @@ class LojinhaAdminServerTest {
             .build()
         val uploadImgRes = client.send(uploadImgReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(200, uploadImgRes.statusCode())
-        assertTrue(uploadImgRes.body().contains("vp-tomato"))
+        val uploadBody = json.decodeFromString<Map<String, String>>(uploadImgRes.body())
+        val imageKey = uploadBody["imageFileName"]
+        assertEquals("organic_tomato", imageKey)
 
-        // 2. Fetch thumbnail via /api/veggie/images/vp-tomato?thumb=true and verify ETag 304
+        // 2. Fetch thumbnail via /api/veggie/images/<imageKey>?thumb=true and verify ETag 304
         val getThumbReq = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:$testPort/api/veggie/images/vp-tomato?thumb=true"))
+            .uri(URI.create("http://localhost:$testPort/api/veggie/images/$imageKey?thumb=true"))
             .GET()
             .build()
         val getThumbRes = client.send(getThumbReq, HttpResponse.BodyHandlers.ofByteArray())
@@ -913,7 +915,7 @@ class LojinhaAdminServerTest {
         assertNotNull(imgEtag)
 
         val condThumbReq = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:$testPort/api/veggie/images/vp-tomato?thumb=true"))
+            .uri(URI.create("http://localhost:$testPort/api/veggie/images/$imageKey?thumb=true"))
             .header("If-None-Match", imgEtag)
             .GET()
             .build()

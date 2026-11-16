@@ -180,7 +180,9 @@ class AdminVeggieViewModel(
             try {
                 var allUnits = veggieOrderRepository.getAllUnitTypes()
                 val allProducts = veggieOrderRepository.getAllVeggieProducts()
-                val usedUnitIds = allProducts.filter { !it.isDeleted }.map { it.unitTypeId }.toSet()
+                val usedUnitIds = allProducts.filter { !it.isDeleted }
+                    .flatMap { listOfNotNull(it.unitTypeId, it.deliveryUnitTypeId) }
+                    .toSet()
                 val unitsToReactivate = allUnits.filter { it.id in usedUnitIds && !it.isActive }
                 if (unitsToReactivate.isNotEmpty()) {
                     unitsToReactivate.forEach { unit ->
@@ -258,6 +260,7 @@ class AdminVeggieViewModel(
     }
 
     fun closePastRoundEditor() {
+        _editingPastRound.value?.id?.let { onClearMatrixDraft?.invoke(it) }
         _editingPastRound.value = null
         _hasUnsavedSettlementChanges.value = false
         val active = _activeRound.value
@@ -307,6 +310,7 @@ class AdminVeggieViewModel(
     }
 
     fun discardDraft() {
+        _selectedRound.value?.id?.let { onClearMatrixDraft?.invoke(it) }
         _hasUnsavedSettlementChanges.value = false
         val editing = _editingPastRound.value
         if (editing != null) {
@@ -337,11 +341,16 @@ class AdminVeggieViewModel(
         _selectedRoundSettlements.value = settlements
 
         if (resetDraft) {
+            val productCatalogMap = _products.value.associateBy { it.id }
+            val unitTypesById = _unitTypes.value.associateBy { it.id }
             _draftActualQuantities.value = entries.associate { entry ->
-                entry.id to VeggieQuantityScaling.formatScaledQuantity(entry.deliveredQuantityScaled, entry.allowDecimalsSnapshot)
+                val deliveryAllowDecimals = productCatalogMap[entry.veggieProductId]
+                    ?.deliveryUnitTypeId
+                    ?.let { unitTypesById[it]?.allowDecimals }
+                    ?: entry.effectiveAllowDecimals
+                entry.id to VeggieQuantityScaling.formatScaledQuantity(entry.deliveredQuantityScaled, deliveryAllowDecimals)
             }
             val productIds = entries.map { it.veggieProductId }.distinct()
-            val productCatalogMap = _products.value.associateBy { it.id }
 
             _draftMarketPrices.value = productIds.associateWith { pid ->
                 val savedPrice = settlements[pid]?.marketUnitPriceCents ?: productCatalogMap[pid]?.estimatedPriceCents
@@ -446,6 +455,8 @@ class AdminVeggieViewModel(
             newSpentMap[productId] = formatCentsToInput(autoSpent)
             _draftTotalSpent.value = newSpentMap
             _manuallyEditedTotalSpentProductIds.value = _manuallyEditedTotalSpentProductIds.value - productId
+        } else if (input.isBlank() && productId !in _manuallyEditedTotalSpentProductIds.value) {
+            _draftTotalSpent.value = _draftTotalSpent.value - productId
         }
         recomputeLivePreview()
         persistCurrentMatrixDraft()
@@ -547,8 +558,12 @@ class AdminVeggieViewModel(
             )
         }
 
-        val buyerFeeCents = (parseBrlInputToCents(_draftBuyerFeeInput.value) ?: round.buyerOperationFeeCents).coerceAtLeast(0L)
-        val transportFeeCents = (parseBrlInputToCents(_draftTransportFeeInput.value) ?: round.transportFeeCents).coerceAtLeast(0L)
+        val buyerFeeCents = if (_draftBuyerFeeInput.value.isBlank()) 0L else {
+            (parseBrlInputToCents(_draftBuyerFeeInput.value) ?: round.buyerOperationFeeCents).coerceAtLeast(0L)
+        }
+        val transportFeeCents = if (_draftTransportFeeInput.value.isBlank()) 0L else {
+            (parseBrlInputToCents(_draftTransportFeeInput.value) ?: round.transportFeeCents).coerceAtLeast(0L)
+        }
 
         return DraftSettlementPayload(
             round = round,
@@ -773,6 +788,8 @@ class AdminVeggieViewModel(
         val allowDecimals = unit?.allowDecimals ?: false
         val qtyScaled = VeggieQuantityScaling.parseQuantityScaled(quantityInput, allowDecimals) ?: return
         if (qtyScaled <= 0L) return
+        if (_isSaving.value) return
+        _isSaving.value = true
 
         activeScope.launch {
             try {
@@ -824,6 +841,8 @@ class AdminVeggieViewModel(
                 loadData(preserveDraftEdits = true)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to add order entry"
+            } finally {
+                _isSaving.value = false
             }
         }
     }
@@ -845,11 +864,7 @@ class AdminVeggieViewModel(
                     onDeleteProductImage?.invoke(product.id, product.imageFileName)
                     invalidateVeggieImageCache(product.id)
                     finalImageFileName = null
-                }
-                val initialProduct = product.copy(imageFileName = finalImageFileName, updatedAt = currentTimeMillis())
-                veggieOrderRepository.saveVeggieProduct(initialProduct)
-
-                if (newImageBytes != null && newImageBytes.isNotEmpty()) {
+                } else if (newImageBytes != null && newImageBytes.isNotEmpty()) {
                     val savedFileName = onSaveProductImage?.invoke(
                         product.id,
                         product.name,
@@ -857,15 +872,13 @@ class AdminVeggieViewModel(
                         product.imageFileName
                     )
                     if (!savedFileName.isNullOrBlank()) {
-                        veggieOrderRepository.saveVeggieProduct(
-                            initialProduct.copy(
-                                imageFileName = savedFileName,
-                                updatedAt = currentTimeMillis()
-                            )
-                        )
+                        finalImageFileName = savedFileName
                     }
                     invalidateVeggieImageCache(product.id)
                 }
+                veggieOrderRepository.saveVeggieProduct(
+                    product.copy(imageFileName = finalImageFileName, updatedAt = currentTimeMillis())
+                )
                 loadData()
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: I18n.get().errFailedToSaveProduct
@@ -876,6 +889,8 @@ class AdminVeggieViewModel(
     }
 
     fun toggleVeggieProductActive(product: VeggieProduct, cancelOpenRoundOrders: Boolean = false) {
+        if (_isSaving.value) return
+        _isSaving.value = true
         activeScope.launch {
             try {
                 if (product.isActive) {
@@ -894,11 +909,15 @@ class AdminVeggieViewModel(
                 loadData()
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: I18n.get().errFailedToUpdateProductStatus
+            } finally {
+                _isSaving.value = false
             }
         }
     }
 
     fun deleteVeggieProduct(product: VeggieProduct) {
+        if (_isSaving.value) return
+        _isSaving.value = true
         activeScope.launch {
             try {
                 onDeleteProductImage?.invoke(product.id, product.imageFileName)
@@ -907,11 +926,15 @@ class AdminVeggieViewModel(
                 loadData()
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: I18n.get().errFailedToDeleteProduct
+            } finally {
+                _isSaving.value = false
             }
         }
     }
 
     fun saveUnitType(unitType: VeggieUnitType) {
+        if (_isSaving.value) return
+        _isSaving.value = true
         activeScope.launch {
             try {
                 val isExisting = _unitTypes.value.any { it.id == unitType.id }
@@ -938,11 +961,15 @@ class AdminVeggieViewModel(
                 loadData()
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to save unit type"
+            } finally {
+                _isSaving.value = false
             }
         }
     }
 
     fun deleteUnitType(unitTypeId: String) {
+        if (_isSaving.value) return
+        _isSaving.value = true
         activeScope.launch {
             try {
                 val existing = _unitTypes.value.find { it.id == unitTypeId } ?: return@launch
@@ -952,6 +979,8 @@ class AdminVeggieViewModel(
                 loadData()
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to delete unit type"
+            } finally {
+                _isSaving.value = false
             }
         }
     }

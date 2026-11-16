@@ -1,5 +1,7 @@
 package de.joelneumann.lojinha.server
 
+import androidx.room.immediateTransaction
+import androidx.room.useWriterConnection
 import de.joelneumann.lojinha.data.service.DataChangeNotifier
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.*
@@ -134,12 +136,18 @@ class LojinhaAdminServer(
     }
 
     private fun resolveVeggieRepo(): VeggieOrderRepository? {
-        return veggieOrderRepository ?: database?.let {
+        return veggieOrderRepository ?: database?.let { db ->
             RoomVeggieOrderRepositoryImpl(
-                it.veggieOrderDao(),
-                it.userDao(),
-                it.transactionDao()
-            ) { DataChangeNotifier.notifyDataChanged() }
+                veggieOrderDao = db.veggieOrderDao(),
+                userDao = db.userDao(),
+                transactionDao = db.transactionDao(),
+                onDataChanged = { DataChangeNotifier.notifyDataChanged() },
+                runInTransaction = { block ->
+                    db.useWriterConnection { transactor ->
+                        transactor.immediateTransaction { block() }
+                    }
+                }
+            )
         }
     }
 

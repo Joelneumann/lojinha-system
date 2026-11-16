@@ -12,6 +12,8 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.window.application
+import androidx.room.immediateTransaction
+import androidx.room.useWriterConnection
 import de.joelneumann.lojinha.data.database.DatabaseFactory
 import de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
@@ -60,10 +62,15 @@ fun main() {
         val settingsRepository = RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged)
         val adminNoteRepository = RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged)
         val veggieOrderRepository = RoomVeggieOrderRepositoryImpl(
-            database.veggieOrderDao(),
-            database.userDao(),
-            database.transactionDao(),
-            onDataChanged
+            veggieOrderDao = database.veggieOrderDao(),
+            userDao = database.userDao(),
+            transactionDao = database.transactionDao(),
+            onDataChanged = onDataChanged,
+            runInTransaction = { block ->
+                database.useWriterConnection { transactor ->
+                    transactor.immediateTransaction { block() }
+                }
+            }
         )
         val veggieImageService = VeggieImageService()
         val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

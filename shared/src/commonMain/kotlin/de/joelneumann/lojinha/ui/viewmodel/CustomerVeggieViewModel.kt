@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.CustomerVeggieRoundHistoryItem
+import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.CoroutineScope
@@ -13,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlin.math.roundToLong
 
 class CustomerVeggieViewModel(
     private val onFetchVeggieState: suspend () -> CustomerVeggieStateResponse,
@@ -285,7 +285,7 @@ class CustomerVeggieViewModel(
         for ((productId, qtyScaled) in _draftQuantitiesScaled.value) {
             if (qtyScaled <= 0L) continue
             val price = productsById[productId]?.estimatedPriceCents ?: continue
-            total += ((qtyScaled.toDouble() / VEGGIE_QTY_SCALE.toDouble()) * price.toDouble()).roundToLong()
+            total += VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(price, qtyScaled)
         }
         return total
     }
@@ -307,7 +307,7 @@ class CustomerVeggieViewModel(
                     _draftQuantitiesScaled.value = snapshotToSave
                     _hasUnsavedOrderChanges.value = false
                     onClearDraft?.invoke(round.id)
-                    loadData(preserveDraftIfSameRound = false)
+                    loadData(preserveDraftIfSameRound = true)
                     showSavedBanner()
                     onOrderSaved()
                 } else {

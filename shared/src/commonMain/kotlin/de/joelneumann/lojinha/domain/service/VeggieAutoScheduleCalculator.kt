@@ -54,6 +54,31 @@ object VeggieAutoScheduleCalculator {
         return hour to minute
     }
 
+    fun computeThisWeekSlotMillis(
+        settings: SystemSettings,
+        nowMillis: Long,
+        timeZone: TimeZone = TimeZone.currentSystemDefault()
+    ): Long {
+        val targetDayIso = settings.veggieAutoOpenDayOfWeek.coerceIn(1, 7)
+        val (targetHour, targetMinute) = parseTimeOfDay(settings.veggieAutoOpenTime)
+
+        val nowLocal = Instant.fromEpochMilliseconds(nowMillis).toLocalDateTime(timeZone)
+        val currentDayIso = nowLocal.date.dayOfWeek.isoDayNumber // 1..7
+
+        val mondayOfCurrentWeek = nowLocal.date.minus(DatePeriod(days = currentDayIso - 1))
+        val scheduledDateThisWeek = mondayOfCurrentWeek.plus(DatePeriod(days = targetDayIso - 1))
+        val scheduledDateTimeThisWeek = LocalDateTime(
+            year = scheduledDateThisWeek.year,
+            monthNumber = scheduledDateThisWeek.monthNumber,
+            dayOfMonth = scheduledDateThisWeek.dayOfMonth,
+            hour = targetHour,
+            minute = targetMinute,
+            second = 0,
+            nanosecond = 0
+        )
+        return scheduledDateTimeThisWeek.toInstant(timeZone).toEpochMilliseconds()
+    }
+
     /**
      * Calculates the next upcoming scheduled epoch timestamp and date/time for automatic round opening,
      * based on [settings.veggieAutoOpenEnabled], [settings.veggieAutoOpenDayOfWeek] (1=Monday..7=Sunday),
@@ -70,28 +95,13 @@ object VeggieAutoScheduleCalculator {
 
         val targetDayIso = settings.veggieAutoOpenDayOfWeek.coerceIn(1, 7)
         val (targetHour, targetMinute) = parseTimeOfDay(settings.veggieAutoOpenTime)
-
-        val nowInstant = Instant.fromEpochMilliseconds(nowMillis)
-        val nowLocal = nowInstant.toLocalDateTime(timeZone)
-        val currentDayIso = nowLocal.date.dayOfWeek.isoDayNumber // 1..7
-
-        val mondayOfCurrentWeek = nowLocal.date.minus(DatePeriod(days = currentDayIso - 1))
-        val scheduledDateThisWeek = mondayOfCurrentWeek.plus(DatePeriod(days = targetDayIso - 1))
-        val scheduledDateTimeThisWeek = LocalDateTime(
-            year = scheduledDateThisWeek.year,
-            monthNumber = scheduledDateThisWeek.monthNumber,
-            dayOfMonth = scheduledDateThisWeek.dayOfMonth,
-            hour = targetHour,
-            minute = targetMinute,
-            second = 0,
-            nanosecond = 0
-        )
-        val slotThisWeekMillis = scheduledDateTimeThisWeek.toInstant(timeZone).toEpochMilliseconds()
+        val slotThisWeekMillis = computeThisWeekSlotMillis(settings, nowMillis, timeZone)
+        val scheduledDateTimeThisWeek = Instant.fromEpochMilliseconds(slotThisWeekMillis).toLocalDateTime(timeZone)
 
         val nextSlotDateTime = if (nowMillis < slotThisWeekMillis) {
             scheduledDateTimeThisWeek
         } else {
-            val nextWeekDate = scheduledDateThisWeek.plus(DatePeriod(days = 7))
+            val nextWeekDate = scheduledDateTimeThisWeek.date.plus(DatePeriod(days = 7))
             LocalDateTime(
                 year = nextWeekDate.year,
                 monthNumber = nextWeekDate.monthNumber,

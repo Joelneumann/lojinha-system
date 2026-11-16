@@ -58,26 +58,8 @@ class VeggieRoundAutoScheduler(
             val settings = settingsRepository.getSettings()
             if (!settings.veggieAutoOpenEnabled) return@withLock false
 
-            val targetDayIso = settings.veggieAutoOpenDayOfWeek.coerceIn(1, 7)
-            val (targetHour, targetMinute) = parseTimeOfDay(settings.veggieAutoOpenTime)
-
-            val nowInstant = Instant.fromEpochMilliseconds(nowMillis)
-            val nowLocal = nowInstant.toLocalDateTime(timeZone)
-            val currentDayIso = nowLocal.date.dayOfWeek.isoDayNumber // 1 (Monday) .. 7 (Sunday)
-
-            // Compute the date of targetDayIso within the current ISO week (Monday..Sunday)
-            val mondayOfCurrentWeek = nowLocal.date.minus(DatePeriod(days = currentDayIso - 1))
-            val scheduledDateThisWeek = mondayOfCurrentWeek.plus(DatePeriod(days = targetDayIso - 1))
-            val scheduledDateTimeThisWeek = LocalDateTime(
-                year = scheduledDateThisWeek.year,
-                monthNumber = scheduledDateThisWeek.monthNumber,
-                dayOfMonth = scheduledDateThisWeek.dayOfMonth,
-                hour = targetHour,
-                minute = targetMinute,
-                second = 0,
-                nanosecond = 0
-            )
-            val scheduledSlotMillis = scheduledDateTimeThisWeek.toInstant(timeZone).toEpochMilliseconds()
+            val scheduledSlotMillis = de.joelneumann.lojinha.domain.service.VeggieAutoScheduleCalculator
+                .computeThisWeekSlotMillis(settings, nowMillis, timeZone)
 
             if (nowMillis < scheduledSlotMillis) {
                 return@withLock false
@@ -99,6 +81,7 @@ class VeggieRoundAutoScheduler(
                 transportFeeCents = settings.defaultVeggieTransportFeeCents,
                 openedAt = nowMillis
             )
+            val nowLocal = Instant.fromEpochMilliseconds(nowMillis).toLocalDateTime(timeZone)
             AppLogger.info(TAG, "Automatically opened weekly Veggie Order Round '${opened.id}' at $nowLocal")
             true
         } catch (e: Exception) {
@@ -106,7 +89,4 @@ class VeggieRoundAutoScheduler(
             false
         }
     }
-
-    private fun parseTimeOfDay(rawTime: String): Pair<Int, Int> =
-        de.joelneumann.lojinha.domain.service.VeggieAutoScheduleCalculator.parseTimeOfDay(rawTime)
 }

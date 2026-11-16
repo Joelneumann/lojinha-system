@@ -16,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.room.immediateTransaction
+import androidx.room.useWriterConnection
 import de.joelneumann.lojinha.data.database.DatabaseFactory
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.User
@@ -150,10 +152,15 @@ fun App(
     val effectiveAdminNoteRepo = adminNoteRepository ?: remember { RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged) }
     val effectiveVeggieRepo = veggieOrderRepository ?: remember {
         de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl(
-            database.veggieOrderDao(),
-            database.userDao(),
-            database.transactionDao(),
-            onDataChanged
+            veggieOrderDao = database.veggieOrderDao(),
+            userDao = database.userDao(),
+            transactionDao = database.transactionDao(),
+            onDataChanged = onDataChanged,
+            runInTransaction = { block ->
+                database.useWriterConnection { transactor ->
+                    transactor.immediateTransaction { block() }
+                }
+            }
         )
     }
     val veggieImageService = remember { de.joelneumann.lojinha.data.service.VeggieImageService() }

@@ -237,11 +237,7 @@ fun AdminVeggieTabScreen(
                             if (onExportBuyerPdf != null) {
                                 OutlinedButton(
                                     onClick = {
-                                        if (hasUnsavedSettlementChanges) {
-                                            pendingPdfExport = PendingPdfExport(pastRound.id, isBuyer = true)
-                                        } else {
-                                            pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(pastRound.id)
-                                        }
+                                        pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(pastRound.id)
                                     },
                                     enabled = !isSaving,
                                     shape = RoundedCornerShape(10.dp),
@@ -259,11 +255,7 @@ fun AdminVeggieTabScreen(
                             if (onExportWorkerPdf != null) {
                                 OutlinedButton(
                                     onClick = {
-                                        if (hasUnsavedSettlementChanges) {
-                                            pendingPdfExport = PendingPdfExport(pastRound.id, isBuyer = false)
-                                        } else {
-                                            pendingPdfConfirmation = VeggiePdfExportTarget.Worker(pastRound.id)
-                                        }
+                                        pendingPdfConfirmation = VeggiePdfExportTarget.Worker(pastRound.id)
                                     },
                                     enabled = !isSaving,
                                     shape = RoundedCornerShape(10.dp),

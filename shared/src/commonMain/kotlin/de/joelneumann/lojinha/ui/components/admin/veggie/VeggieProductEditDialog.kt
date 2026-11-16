@@ -155,6 +155,7 @@ fun VeggieProductEditDialog(
                                 description = product.description ?: ""
                                 estimatedPriceInput = initialPriceInput
                                 selectedUnitId = product.unitTypeId
+                                selectedDeliveryUnitId = product.deliveryUnitTypeId
                                 selectedImageBytes = null
                                 removeExistingImage = false
                             },

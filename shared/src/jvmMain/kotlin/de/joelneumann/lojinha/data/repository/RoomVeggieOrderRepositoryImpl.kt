@@ -22,7 +22,8 @@ class RoomVeggieOrderRepositoryImpl(
     private val veggieOrderDao: VeggieOrderDao,
     private val userDao: UserDao,
     private val transactionDao: TransactionDao,
-    private val onDataChanged: (() -> Unit)? = null
+    private val onDataChanged: (() -> Unit)? = null,
+    private val runInTransaction: (suspend (suspend () -> Unit) -> Unit)? = null
 ) : VeggieOrderRepository {
 
     private val mutationMutex = Mutex()
@@ -653,10 +654,6 @@ class RoomVeggieOrderRepositoryImpl(
             }
         }
 
-        if (batchTransactions.isNotEmpty()) {
-            transactionDao.executeBatchAtomicTransactions(batchTransactions)
-        }
-
         val updatedRound = previousRound.copy(
             status = VeggieRoundStatus.SETTLED,
             closedAt = previousRound.closedAt ?: now,
@@ -669,15 +666,35 @@ class RoomVeggieOrderRepositoryImpl(
             updatedAt = now
         )
 
-        veggieOrderDao.saveSettlementState(
-            round = VeggieOrderRoundEntity.fromDomain(updatedRound),
-            updatedEntries = calculationResult.updatedEntries.map { VeggieOrderEntryEntity.fromDomain(it) },
-            updatedProductSettlements = calculationResult.updatedProductSettlements.map {
-                VeggieRoundProductSettlementEntity.fromDomain(it)
-            },
-            catalogPriceUpdates = calculationResult.catalogPriceUpdates,
-            timestamp = now
-        )
+        // Only update catalog estimated prices on initial settlement so historical round corrections
+        // do not overwrite current catalog prices.
+        val catalogUpdates = if (previousRound.status != VeggieRoundStatus.SETTLED) {
+            calculationResult.catalogPriceUpdates
+        } else {
+            emptyMap()
+        }
+
+        val persistSettlement: suspend () -> Unit = {
+            if (batchTransactions.isNotEmpty()) {
+                transactionDao.executeBatchAtomicTransactions(batchTransactions)
+            }
+
+            veggieOrderDao.saveSettlementState(
+                round = VeggieOrderRoundEntity.fromDomain(updatedRound),
+                updatedEntries = calculationResult.updatedEntries.map { VeggieOrderEntryEntity.fromDomain(it) },
+                updatedProductSettlements = calculationResult.updatedProductSettlements.map {
+                    VeggieRoundProductSettlementEntity.fromDomain(it)
+                },
+                catalogPriceUpdates = catalogUpdates,
+                timestamp = now
+            )
+        }
+
+        if (runInTransaction != null) {
+            runInTransaction.invoke(persistSettlement)
+        } else {
+            persistSettlement()
+        }
 
         onDataChanged?.invoke()
         calculationResult
