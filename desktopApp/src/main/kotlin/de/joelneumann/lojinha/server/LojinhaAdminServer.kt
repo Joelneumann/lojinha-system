@@ -240,7 +240,6 @@ class LojinhaAdminServer(
                 anyHost()
                 allowHeader(HttpHeaders.ContentType)
                 allowHeader(HttpHeaders.Authorization)
-                allowHeader("X-Admin-Password")
                 exposeHeader(HttpHeaders.ContentDisposition)
                 allowMethod(HttpMethod.Options)
                 allowMethod(HttpMethod.Put)
@@ -308,6 +307,12 @@ class LojinhaAdminServer(
 
                 // 2. Protected Admin API Endpoints
                 route("/api/admin") {
+                    // Read-only non-sensitive display/business settings for Web Admin parity
+                    get("/ui-settings") {
+                        if (!call.checkAdminAuth(settingsRepository)) return@get
+                        call.respond(settingsRepository.getSettings().copy(adminPasswordHash = ""))
+                    }
+
                     // Products
                     get("/products") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
@@ -480,6 +485,8 @@ class LojinhaAdminServer(
                                 transactionRepository.getTransactionsPaged(pageParam, pageSizeParam, searchParam, typeParam)
                             }
                             call.respond(result)
+                        } else if (!userIdParam.isNullOrBlank()) {
+                            call.respond(transactionRepository.getTransactionsByUserId(userIdParam))
                         } else {
                             call.respond(transactionRepository.getAllTransactions())
                         }
@@ -1393,16 +1400,6 @@ class LojinhaAdminServer(
                 } else {
                     activeTokens.remove(token)
                 }
-            }
-        }
-
-        // 2. Fallback check for legacy X-Admin-Password header
-        val authPassword = request.headers["X-Admin-Password"]
-        if (authPassword != null) {
-            val settings = settingsRepository.getSettings()
-            val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
-            if (de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(authPassword, expectedPassword)) {
-                return true
             }
         }
 

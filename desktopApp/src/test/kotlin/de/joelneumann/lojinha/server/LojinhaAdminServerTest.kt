@@ -987,5 +987,39 @@ class LojinhaAdminServerTest {
         assertEquals(600L, settlementResult.combinedFeeCents)
         assertEquals("u-alice", settlementResult.transporterUserId)
     }
+
+    @Test
+    fun testUiSettingsAndHeaderAuthRemoval() {
+        val token = getValidToken()
+
+        // 1. Legacy X-Admin-Password header without Bearer token must be rejected
+        val legacyHeaderReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/ui-settings"))
+            .header("X-Admin-Password", "secretPass123")
+            .GET()
+            .build()
+        val legacyHeaderRes = client.send(legacyHeaderReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(401, legacyHeaderRes.statusCode())
+
+        // 2. GET /api/admin/ui-settings with Bearer token returns settings without adminPasswordHash
+        val uiSettingsReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/ui-settings"))
+            .header("Authorization", "Bearer $token")
+            .GET()
+            .build()
+        val uiSettingsRes = client.send(uiSettingsReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, uiSettingsRes.statusCode())
+        val settings = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString<SystemSettings>(uiSettingsRes.body())
+        assertEquals("", settings.adminPasswordHash)
+
+        // 3. GET /api/admin/transactions?userId=... succeeds
+        val userTxReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/transactions?userId=u-alice"))
+            .header("Authorization", "Bearer $token")
+            .GET()
+            .build()
+        val userTxRes = client.send(userTxReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, userTxRes.statusCode())
+    }
 }
 

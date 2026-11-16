@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.CanvasBasedWindow
+import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.data.repository.*
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
@@ -35,6 +36,7 @@ import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -62,6 +64,7 @@ fun main() {
         val billingListRepository = remember { HttpBillingListRepository(adminNetworkClient) }
         val adminNoteRepository = remember { HttpAdminNoteRepository(adminNetworkClient) }
         val veggieOrderRepository = remember { HttpVeggieOrderRepository(adminNetworkClient) }
+        val settingsRepository = remember { HttpSettingsRepository(adminNetworkClient) }
 
         val customerNetworkClient = remember { CustomerNetworkClient() }
         val customerUserRepository = remember { HttpCustomerUserRepository(customerNetworkClient) }
@@ -316,7 +319,7 @@ fun main() {
 
                         WebPortalScreen.ADMIN_PANEL -> {
                             val notesViewModel = remember { AdminNotesViewModel(adminNoteRepository) }
-                            val productsViewModel = remember { AdminProductsViewModel(productRepository) }
+                            val productsViewModel = remember { AdminProductsViewModel(productRepository, settingsRepository) }
                             val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository) }
                             val transactionsViewModel = remember { AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
                             val bulkBillingViewModel = remember { AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository) }
@@ -324,6 +327,7 @@ fun main() {
                                 AdminVeggieViewModel(
                                     veggieOrderRepository = veggieOrderRepository,
                                     userRepository = userRepository,
+                                    settingsRepository = settingsRepository,
                                     onSaveProductImage = { productId, productName, bytes, _ ->
                                         veggieOrderRepository.uploadProductImage(productId, productName, bytes)
                                     },
@@ -378,6 +382,12 @@ fun main() {
                             DisposableEffect(Unit) {
                                 onDispose {
                                     adminNetworkClient.stopRealtimeSync()
+                                    notesViewModel.viewModelScope.cancel()
+                                    productsViewModel.viewModelScope.cancel()
+                                    usersViewModel.viewModelScope.cancel()
+                                    transactionsViewModel.viewModelScope.cancel()
+                                    bulkBillingViewModel.viewModelScope.cancel()
+                                    veggieViewModel.viewModelScope.cancel()
                                 }
                             }
 

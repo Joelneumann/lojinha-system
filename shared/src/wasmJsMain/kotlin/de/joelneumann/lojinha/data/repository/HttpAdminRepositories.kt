@@ -132,8 +132,8 @@ private external fun jsStopEventSource()
 @JsFun("() => { const flag = window._lojinhaHasNewData === true; window._lojinhaHasNewData = false; return flag; }")
 private external fun jsCheckAndClearDataChanged(): Boolean
 
-@JsFun("() => window._lojinhaSyncError === true")
-private external fun jsHasAdminSyncError(): Boolean
+@JsFun("() => { const err = window._lojinhaSyncError === true; window._lojinhaSyncError = false; return err; }")
+private external fun jsCheckAndClearAdminSyncError(): Boolean
 
 object KioskConnectionMonitor {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -213,7 +213,6 @@ sealed class LoginResult {
 
 class AdminNetworkClient(val baseUrl: String = "") {
     var authToken: String? = null
-    var adminPassword: String = ""
 
     fun resolveUrl(path: String): String {
         val cleanBase = baseUrl.trimEnd('/')
@@ -231,7 +230,6 @@ class AdminNetworkClient(val baseUrl: String = "") {
         val hadToken = authToken != null
         stopRealtimeSync()
         authToken = null
-        adminPassword = ""
         try { jsRemoveSessionItem("lojinha_admin_token") } catch (e: Exception) {}
         if (hadToken) {
             _onUnauthorized.tryEmit(Unit)
@@ -271,7 +269,6 @@ class AdminNetworkClient(val baseUrl: String = "") {
                 val loginResponse: LoginResponse = response.body()
                 if (loginResponse.success) {
                     authToken = loginResponse.token
-                    adminPassword = password
                     authToken?.let { token ->
                         try { jsSetSessionItem("lojinha_admin_token", token) } catch (e: Exception) {}
                     }
@@ -323,7 +320,6 @@ class AdminNetworkClient(val baseUrl: String = "") {
             }
         } catch (e: Exception) {}
         authToken = null
-        adminPassword = ""
         try { jsRemoveSessionItem("lojinha_admin_token") } catch (e: Exception) {}
     }
 
@@ -344,10 +340,12 @@ class AdminNetworkClient(val baseUrl: String = "") {
                     if (jsCheckAndClearDataChanged()) {
                         _onDataChanged.tryEmit(Unit)
                     }
-                    if (jsHasAdminSyncError()) {
-                        KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+                    if (jsCheckAndClearAdminSyncError()) {
+                        KioskConnectionMonitor.checkHealthNow(baseUrl)
                     }
-                } catch (e: Exception) {}
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
             }
         }
     }
@@ -378,9 +376,30 @@ class AdminNetworkClient(val baseUrl: String = "") {
     fun HttpRequestBuilder.appendAdminAuth() {
         if (!authToken.isNullOrBlank()) {
             header(HttpHeaders.Authorization, "Bearer $authToken")
-        } else if (adminPassword.isNotBlank()) {
-            header("X-Admin-Password", adminPassword)
         }
+    }
+}
+
+class HttpSettingsRepository(private val client: AdminNetworkClient) : SettingsRepository {
+    override fun getSettingsFlow(): Flow<SystemSettings> = flow {
+        emit(getSettings())
+    }
+
+    override suspend fun getSettings(): SystemSettings {
+        return try {
+            client.httpClient.get(client.resolveUrl("/api/admin/ui-settings")) {
+                client.run { appendAdminAuth() }
+            }.body()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpSettingsRepository", "getSettings failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            SystemSettings()
+        }
+    }
+
+    override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {
+        // Settings are managed on Desktop only
     }
 }
 
@@ -396,6 +415,9 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
             }.body()
             list.sortedByAccentInsensitive { it.name }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -499,6 +521,9 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
             }.body()
             list.sortedByAccentInsensitive { it.name }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -618,12 +643,25 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 client.run { appendAdminAuth() }
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
 
     override suspend fun getTransactionsByUserId(userId: String): List<Transaction> {
-        return getAllTransactions().filter { it.userId == userId }
+        return try {
+            client.httpClient.get(client.resolveUrl("/api/admin/transactions")) {
+                client.run { appendAdminAuth() }
+                parameter("userId", userId)
+            }.body()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpTransactionRepository", "getTransactionsByUserId failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            emptyList()
+        }
     }
 
     override suspend fun getTransactionById(id: String): Transaction? {
@@ -665,6 +703,9 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 if (typeFilter != null) parameter("type", typeFilter.name)
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpTransactionRepository", "getTransactionsPaged failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             PagedResult(emptyList(), 0, page, pageSize, 1)
         }
     }
@@ -686,6 +727,9 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 if (typeFilter != null) parameter("type", typeFilter.name)
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpTransactionRepository", "getTransactionsByUserIdPaged failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             PagedResult(emptyList(), 0, page, pageSize, 1)
         }
     }
@@ -699,6 +743,9 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 setBody(referenceIds)
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -712,6 +759,9 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 setBody(ids)
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -805,6 +855,9 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
                 client.run { appendAdminAuth() }
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -964,8 +1017,8 @@ private external fun jsStopCustomerEventSource()
 @JsFun("() => { const flag = window._lojinhaCustomerHasNewData === true; window._lojinhaCustomerHasNewData = false; return flag; }")
 private external fun jsCheckAndClearCustomerDataChanged(): Boolean
 
-@JsFun("() => window._lojinhaCustomerSyncError === true")
-private external fun jsHasCustomerSyncError(): Boolean
+@JsFun("() => { const err = window._lojinhaCustomerSyncError === true; window._lojinhaCustomerSyncError = false; return err; }")
+private external fun jsCheckAndClearCustomerSyncError(): Boolean
 
 class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : VeggieOrderRepository {
     override fun getUnitTypesFlow(): Flow<List<VeggieUnitType>> = flow {
@@ -1639,10 +1692,12 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                     if (jsCheckAndClearCustomerDataChanged()) {
                         _onDataChanged.tryEmit(Unit)
                     }
-                    if (jsHasCustomerSyncError()) {
-                        KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+                    if (jsCheckAndClearCustomerSyncError()) {
+                        KioskConnectionMonitor.checkHealthNow(baseUrl)
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
             }
         }
     }
