@@ -91,49 +91,69 @@ private external fun jsGetLocalItem(key: String): String?
 private external fun jsRemoveLocalItem(key: String)
 
 @JsFun("""
-(baseUrl, token) => {
-    if (window._lojinhaEventSource) {
-        window._lojinhaEventSource.close();
+(key, path, baseUrl, token) => {
+    window._lojinhaSse = window._lojinhaSse || {};
+    const prev = window._lojinhaSse[key];
+    if (prev) {
+        if (prev.es) prev.es.close();
+        if (prev.visHandler) document.removeEventListener('visibilitychange', prev.visHandler);
     }
     const cleanBase = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
-    const url = cleanBase + '/api/admin/events' + (token ? '?token=' + encodeURIComponent(token) : '');
-    try {
-        window._lojinhaSyncError = false;
-        const es = new EventSource(url);
-        es.onopen = () => {
-            window._lojinhaSyncError = false;
-        };
-        es.addEventListener('data_changed', () => {
-            window._lojinhaSyncError = false;
-            window._lojinhaHasNewData = true;
-        });
-        es.onerror = (e) => {
-            window._lojinhaSyncError = true;
-        };
-        window._lojinhaEventSource = es;
-    } catch (err) {
-        console.warn('Failed to start EventSource:', err);
-    }
+    const url = cleanBase + path + (token ? '?token=' + encodeURIComponent(token) : '');
+    const state = { es: null, syncError: false, hasNewData: false, visHandler: null };
+    window._lojinhaSse[key] = state;
+
+    const connect = () => {
+        if (document.hidden || state.es) return;
+        try {
+            state.syncError = false;
+            const es = new EventSource(url);
+            es.onopen = () => { state.syncError = false; };
+            es.addEventListener('data_changed', () => {
+                state.syncError = false;
+                state.hasNewData = true;
+            });
+            es.onerror = () => { state.syncError = true; };
+            state.es = es;
+        } catch (err) {
+            console.warn('Failed to start EventSource:', err);
+        }
+    };
+
+    state.visHandler = () => {
+        if (document.hidden) {
+            if (state.es) {
+                state.es.close();
+                state.es = null;
+            }
+        } else {
+            state.hasNewData = true;
+            connect();
+        }
+    };
+    document.addEventListener('visibilitychange', state.visHandler);
+    connect();
 }
 """)
-private external fun jsStartEventSource(baseUrl: String, token: String)
+private external fun jsStartSse(key: String, path: String, baseUrl: String, token: String)
 
 @JsFun("""
-() => {
-    if (window._lojinhaEventSource) {
-        window._lojinhaEventSource.close();
-        window._lojinhaEventSource = null;
+(key) => {
+    const state = window._lojinhaSse && window._lojinhaSse[key];
+    if (state) {
+        if (state.es) { state.es.close(); state.es = null; }
+        if (state.visHandler) { document.removeEventListener('visibilitychange', state.visHandler); state.visHandler = null; }
+        state.syncError = false;
     }
-    window._lojinhaSyncError = false;
 }
 """)
-private external fun jsStopEventSource()
+private external fun jsStopSse(key: String)
 
-@JsFun("() => { const flag = window._lojinhaHasNewData === true; window._lojinhaHasNewData = false; return flag; }")
-private external fun jsCheckAndClearDataChanged(): Boolean
+@JsFun("(key) => { const s = window._lojinhaSse && window._lojinhaSse[key]; if (!s) return false; const f = s.hasNewData === true; s.hasNewData = false; return f; }")
+private external fun jsCheckAndClearSseDataChanged(key: String): Boolean
 
-@JsFun("() => { const err = window._lojinhaSyncError === true; window._lojinhaSyncError = false; return err; }")
-private external fun jsCheckAndClearAdminSyncError(): Boolean
+@JsFun("(key) => { const s = window._lojinhaSse && window._lojinhaSse[key]; if (!s) return false; const e = s.syncError === true; s.syncError = false; return e; }")
+private external fun jsCheckAndClearSseSyncError(key: String): Boolean
 
 object KioskConnectionMonitor {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -326,7 +346,7 @@ class AdminNetworkClient(val baseUrl: String = "") {
     fun startRealtimeSync(scope: CoroutineScope) {
         val token = authToken ?: ""
         try {
-            jsStartEventSource(baseUrl, token)
+            jsStartSse("admin", "/api/admin/events", baseUrl, token)
         } catch (e: Exception) {
             AppLogger.error("AdminNetworkClient", "Failed to initialize EventSource: ${e.message}", e)
         }
@@ -337,10 +357,10 @@ class AdminNetworkClient(val baseUrl: String = "") {
                 delay(1200)
                 if (authToken.isNullOrBlank()) break
                 try {
-                    if (jsCheckAndClearDataChanged()) {
+                    if (jsCheckAndClearSseDataChanged("admin")) {
                         _onDataChanged.tryEmit(Unit)
                     }
-                    if (jsCheckAndClearAdminSyncError()) {
+                    if (jsCheckAndClearSseSyncError("admin")) {
                         KioskConnectionMonitor.checkHealthNow(baseUrl)
                     }
                 } catch (e: Exception) {
@@ -369,7 +389,7 @@ class AdminNetworkClient(val baseUrl: String = "") {
         syncJob?.cancel()
         syncJob = null
         try {
-            jsStopEventSource()
+            jsStopSse("admin")
         } catch (e: Exception) {}
     }
 
@@ -975,51 +995,6 @@ class HttpAdminNoteRepository(private val client: AdminNetworkClient) : AdminNot
     }
 }
 
-@JsFun("""
-(baseUrl, token) => {
-    if (window._lojinhaCustomerEventSource) {
-        window._lojinhaCustomerEventSource.close();
-    }
-    const cleanBase = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
-    const url = cleanBase + '/api/customer/events' + (token ? '?token=' + encodeURIComponent(token) : '');
-    try {
-        window._lojinhaCustomerSyncError = false;
-        const es = new EventSource(url);
-        es.onopen = () => {
-            window._lojinhaCustomerSyncError = false;
-        };
-        es.addEventListener('data_changed', () => {
-            window._lojinhaCustomerSyncError = false;
-            window._lojinhaCustomerHasNewData = true;
-        });
-        es.onerror = (e) => {
-            window._lojinhaCustomerSyncError = true;
-        };
-        window._lojinhaCustomerEventSource = es;
-    } catch (err) {
-        console.warn('Failed to start Customer EventSource:', err);
-    }
-}
-""")
-private external fun jsStartCustomerEventSource(baseUrl: String, token: String)
-
-@JsFun("""
-() => {
-    if (window._lojinhaCustomerEventSource) {
-        window._lojinhaCustomerEventSource.close();
-        window._lojinhaCustomerEventSource = null;
-    }
-    window._lojinhaCustomerSyncError = false;
-}
-""")
-private external fun jsStopCustomerEventSource()
-
-@JsFun("() => { const flag = window._lojinhaCustomerHasNewData === true; window._lojinhaCustomerHasNewData = false; return flag; }")
-private external fun jsCheckAndClearCustomerDataChanged(): Boolean
-
-@JsFun("() => { const err = window._lojinhaCustomerSyncError === true; window._lojinhaCustomerSyncError = false; return err; }")
-private external fun jsCheckAndClearCustomerSyncError(): Boolean
-
 class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : VeggieOrderRepository {
     override fun getUnitTypesFlow(): Flow<List<VeggieUnitType>> = flow {
         emit(getAllUnitTypes())
@@ -1414,6 +1389,7 @@ sealed class CustomerLoginResult {
 class CustomerNetworkClient(val baseUrl: String = "") {
     var authToken: String? = null
     var currentUser: User? = null
+    private var isPersistentSession: Boolean = false
 
     fun resolveUrl(path: String): String {
         val cleanBase = baseUrl.trimEnd('/')
@@ -1434,11 +1410,15 @@ class CustomerNetworkClient(val baseUrl: String = "") {
 
     fun notifyUnauthorized() {
         val hadToken = authToken != null
+        val wasPersistent = isPersistentSession
         stopRealtimeSync()
         authToken = null
         currentUser = null
+        isPersistentSession = false
         try { jsRemoveSessionItem("lojinha_customer_token") } catch (_: Exception) {}
-        try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
+        if (wasPersistent) {
+            try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
+        }
         if (hadToken) {
             _onUnauthorized.tryEmit(Unit)
         }
@@ -1485,10 +1465,11 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                     authToken = loginResp.token
                     currentUser = loginResp.user
                     if (keepLoggedIn) {
+                        isPersistentSession = true
                         try { jsRemoveSessionItem("lojinha_customer_token") } catch (_: Exception) {}
                         try { jsSetLocalItem("lojinha_customer_token", loginResp.token) } catch (_: Exception) {}
                     } else {
-                        try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
+                        isPersistentSession = false
                         try { jsSetSessionItem("lojinha_customer_token", loginResp.token) } catch (_: Exception) {}
                     }
                     CustomerLoginResult.Success(loginResp.user)
@@ -1506,11 +1487,12 @@ class CustomerNetworkClient(val baseUrl: String = "") {
     }
 
     suspend fun tryRestoreCustomerSession(): User? {
-        val storedToken = try {
-            jsGetSessionItem("lojinha_customer_token")?.takeIf { it.isNotBlank() }
-                ?: jsGetLocalItem("lojinha_customer_token")?.takeIf { it.isNotBlank() }
-        } catch (_: Throwable) { null }
-        if (storedToken.isNullOrBlank()) return null
+        val sessionToken = try { jsGetSessionItem("lojinha_customer_token")?.takeIf { it.isNotBlank() } } catch (_: Throwable) { null }
+        val localToken = if (sessionToken == null) {
+            try { jsGetLocalItem("lojinha_customer_token")?.takeIf { it.isNotBlank() } } catch (_: Throwable) { null }
+        } else null
+        val storedToken = sessionToken ?: localToken ?: return null
+        isPersistentSession = (sessionToken == null)
         authToken = storedToken
         return try {
             val response = httpClient.get(resolveUrl("/api/customer/me")) {
@@ -1669,16 +1651,20 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                 appendCustomerAuth()
             }
         } catch (_: Exception) {}
+        val wasPersistent = isPersistentSession
         authToken = null
         currentUser = null
+        isPersistentSession = false
         try { jsRemoveSessionItem("lojinha_customer_token") } catch (_: Exception) {}
-        try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
+        if (wasPersistent) {
+            try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
+        }
     }
 
     fun startRealtimeSync(scope: CoroutineScope) {
         val token = authToken ?: ""
         try {
-            jsStartCustomerEventSource(baseUrl, token)
+            jsStartSse("customer", "/api/customer/events", baseUrl, token)
         } catch (e: Exception) {
             AppLogger.error("CustomerNetworkClient", "Failed to initialize Customer EventSource: ${e.message}", e)
         }
@@ -1689,10 +1675,10 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                 delay(1200)
                 if (authToken.isNullOrBlank()) break
                 try {
-                    if (jsCheckAndClearCustomerDataChanged()) {
+                    if (jsCheckAndClearSseDataChanged("customer")) {
                         _onDataChanged.tryEmit(Unit)
                     }
-                    if (jsCheckAndClearCustomerSyncError()) {
+                    if (jsCheckAndClearSseSyncError("customer")) {
                         KioskConnectionMonitor.checkHealthNow(baseUrl)
                     }
                 } catch (e: Exception) {
@@ -1706,7 +1692,7 @@ class CustomerNetworkClient(val baseUrl: String = "") {
         syncJob?.cancel()
         syncJob = null
         try {
-            jsStopCustomerEventSource()
+            jsStopSse("customer")
         } catch (_: Exception) {}
     }
 }

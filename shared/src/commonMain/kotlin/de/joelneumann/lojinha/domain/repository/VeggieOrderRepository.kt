@@ -25,6 +25,10 @@ interface VeggieOrderRepository {
     suspend fun getAllVeggieProducts(): List<VeggieProduct>
     suspend fun getVeggieProductById(id: String): VeggieProduct?
     suspend fun saveVeggieProduct(product: VeggieProduct)
+    suspend fun updateVeggieProductImage(productId: String, imageFileName: String?, updatedAt: Long) {
+        val existing = getVeggieProductById(productId) ?: return
+        saveVeggieProduct(existing.copy(imageFileName = imageFileName, updatedAt = updatedAt))
+    }
     suspend fun deactivateVeggieProduct(id: String)
     suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean = false
     suspend fun hardDeleteVeggieProduct(id: String)

@@ -43,12 +43,13 @@ class RoomUserRepositoryImpl(
         val existing = userDao.getUserById(sanitizedUser.id)
         if (existing != null) {
             val entity = UserEntity.fromDomain(sanitizedUser)
+            val resolvedPin = if (sanitizedUser.pin == "PROTECTED") existing.pin else entity.pin
             userDao.updateUserProfile(
                 id = entity.id,
                 name = entity.name,
                 language = entity.language,
                 secondaryCurrency = entity.secondaryCurrency,
-                pin = entity.pin,
+                pin = resolvedPin,
                 userBarcode = entity.userBarcode,
                 userBarcodeNumber = entity.userBarcodeNumber,
                 isActive = entity.isActive,
@@ -64,6 +65,28 @@ class RoomUserRepositoryImpl(
             userDao.insertOrUpdateUser(UserEntity.fromDomain(newUser))
         }
         onDataChanged?.invoke()
+    }
+
+    override suspend fun updateCustomerSettings(
+        userId: String,
+        language: de.joelneumann.lojinha.domain.model.Language,
+        secondaryCurrency: de.joelneumann.lojinha.domain.model.SecondaryCurrency,
+        avatar: de.joelneumann.lojinha.domain.model.UserAvatarConfig,
+        pinHash: String?,
+        requirePinOnKiosk: Boolean
+    ): User? {
+        userDao.updateCustomerSettings(
+            id = userId,
+            language = language.name,
+            secondaryCurrency = secondaryCurrency.name,
+            pin = pinHash,
+            avatarType = avatar.type.name,
+            avatarEmoji = avatar.emoji,
+            avatarColor = avatar.colorHex,
+            requirePinOnKiosk = requirePinOnKiosk
+        )
+        onDataChanged?.invoke()
+        return userDao.getUserById(userId)?.toDomain()
     }
 
     override suspend fun deactivateUser(id: String) {

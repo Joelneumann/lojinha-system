@@ -56,6 +56,9 @@ interface VeggieOrderDao {
     @Query("UPDATE veggie_products SET estimatedPriceCents = :estimatedPriceCents, updatedAt = :updatedAt WHERE id = :productId")
     suspend fun updateEstimatedPrice(productId: String, estimatedPriceCents: Long, updatedAt: Long)
 
+    @Query("UPDATE veggie_products SET imageFileName = :imageFileName, updatedAt = :updatedAt WHERE id = :productId")
+    suspend fun updateProductImage(productId: String, imageFileName: String?, updatedAt: Long)
+
     @Query("UPDATE veggie_products SET isActive = 0, updatedAt = :updatedAt WHERE id = :id")
     suspend fun deactivateVeggieProduct(id: String, updatedAt: Long)
 

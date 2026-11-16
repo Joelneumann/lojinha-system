@@ -126,10 +126,11 @@ class LojinhaAdminServer(
             file.parentFile?.mkdirs()
             val tmpFile = File(file.parentFile, "${file.name}.tmp")
             tmpFile.writeText(sessionJson.encodeToString(validEntries))
-            if (!tmpFile.renameTo(file)) {
-                file.writeText(tmpFile.readText())
-                tmpFile.delete()
-            }
+            java.nio.file.Files.move(
+                tmpFile.toPath(),
+                file.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+            )
         } catch (e: Exception) {
             AppLogger.warn("LojinhaAdminServer", "Failed to save customer sessions: ${e.message}")
         }
@@ -142,6 +143,9 @@ class LojinhaAdminServer(
                 userDao = db.userDao(),
                 transactionDao = db.transactionDao(),
                 onDataChanged = { DataChangeNotifier.notifyDataChanged() },
+                onUserScopedDataChanged = { userId ->
+                    DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(targetUserId = userId))
+                },
                 runInTransaction = { block ->
                     db.useWriterConnection { transactor ->
                         transactor.immediateTransaction { block() }
@@ -284,6 +288,8 @@ class LojinhaAdminServer(
                     AppLogger.info("LojinhaAdminServer", "Admin Login Attempt from $clientIp: success=$matches")
                     if (matches) {
                         failedLoginAttempts.remove(clientIp)
+                        activeTokens.entries.removeIf { now >= it.value }
+                        failedLoginAttempts.entries.removeIf { now - it.value.second >= RATE_LIMIT_WINDOW_MS }
                         val token = UUID.randomUUID().toString()
                         activeTokens[token] = now + SESSION_DURATION_MS
                         call.respond(HttpStatusCode.OK, LoginResponse(true, "Authenticated", token))
@@ -755,12 +761,7 @@ class LojinhaAdminServer(
                                 return@post
                             }
                             if (existing != null) {
-                                repo.saveVeggieProduct(
-                                    existing.copy(
-                                        imageFileName = fileName,
-                                        updatedAt = System.currentTimeMillis()
-                                    )
-                                )
+                                repo.updateVeggieProductImage(id, fileName, System.currentTimeMillis())
                             }
                             DataChangeNotifier.notifyDataChanged()
                             call.respond(HttpStatusCode.OK, mapOf("imageFileName" to fileName))
@@ -772,12 +773,7 @@ class LojinhaAdminServer(
                             val existing = repo.getVeggieProductById(id)
                             veggieImageService.deleteProductImages(existing?.imageFileName ?: id)
                             if (existing != null && existing.imageFileName != null) {
-                                repo.saveVeggieProduct(
-                                    existing.copy(
-                                        imageFileName = null,
-                                        updatedAt = System.currentTimeMillis()
-                                    )
-                                )
+                                repo.updateVeggieProductImage(id, null, System.currentTimeMillis())
                             }
                             DataChangeNotifier.notifyDataChanged()
                             call.respond(HttpStatusCode.OK)
@@ -1106,14 +1102,20 @@ class LojinhaAdminServer(
                         } else {
                             user.pin
                         }
-                        val updatedUser = user.copy(
+                        val updatedUser = userRepository.updateCustomerSettings(
+                            userId = user.id,
+                            language = req.language,
+                            secondaryCurrency = req.secondaryCurrency ?: user.secondaryCurrency,
+                            avatar = req.avatar ?: user.avatar,
+                            pinHash = updatedPinHash,
+                            requirePinOnKiosk = req.requirePinOnKiosk
+                        ) ?: user.copy(
                             language = req.language,
                             secondaryCurrency = req.secondaryCurrency ?: user.secondaryCurrency,
                             avatar = req.avatar ?: user.avatar,
                             pin = updatedPinHash,
                             requirePinOnKiosk = req.requirePinOnKiosk
                         )
-                        userRepository.saveUser(updatedUser)
                         call.respond(updatedUser.copy(pin = if (updatedUser.pin.isNullOrBlank()) null else "PROTECTED"))
                     }
 
@@ -1258,8 +1260,8 @@ class LojinhaAdminServer(
                     }
 
                     get("/events") {
-                        call.requireActiveCustomer() ?: return@get
-                        call.streamDataChangeEvents()
+                        val user = call.requireActiveCustomer() ?: return@get
+                        call.streamDataChangeEvents(targetUserId = user.id)
                     }
                 }
 
@@ -1441,15 +1443,21 @@ class LojinhaAdminServer(
         return user
     }
 
-    private suspend fun ApplicationCall.streamDataChangeEvents() {
+    private suspend fun ApplicationCall.streamDataChangeEvents(targetUserId: String? = null) {
         response.cacheControl(CacheControl.NoCache(null))
         respondTextWriter(contentType = ContentType.Text.EventStream) {
             val channel = Channel<Unit>(Channel.CONFLATED)
-            val listener = {
-                channel.trySend(Unit)
-                Unit
+            val listener: (DataChangeNotifier.ChangeScope) -> Unit = { scope ->
+                val shouldNotify = if (targetUserId == null) {
+                    true
+                } else {
+                    !scope.adminOnly && (scope.targetUserId == null || scope.targetUserId == targetUserId)
+                }
+                if (shouldNotify) {
+                    channel.trySend(Unit)
+                }
             }
-            DataChangeNotifier.addListener(listener)
+            DataChangeNotifier.addScopedListener(listener)
             try {
                 write("event: connected\ndata: {}\n\n")
                 flush()
@@ -1469,7 +1477,7 @@ class LojinhaAdminServer(
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
             } finally {
-                DataChangeNotifier.removeListener(listener)
+                DataChangeNotifier.removeScopedListener(listener)
                 channel.close()
             }
         }

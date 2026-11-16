@@ -63,6 +63,28 @@ interface UserDao {
         requirePinOnKiosk: Boolean = true
     )
 
+    @Query("""
+        UPDATE users
+        SET language = :language,
+            secondaryCurrency = :secondaryCurrency,
+            pin = :pin,
+            avatarType = :avatarType,
+            avatarEmoji = :avatarEmoji,
+            avatarColor = :avatarColor,
+            requirePinOnKiosk = :requirePinOnKiosk
+        WHERE id = :id
+    """)
+    suspend fun updateCustomerSettings(
+        id: String,
+        language: String,
+        secondaryCurrency: String,
+        pin: String?,
+        avatarType: String,
+        avatarEmoji: String,
+        avatarColor: String,
+        requirePinOnKiosk: Boolean
+    )
+
     @Query("DELETE FROM billing_list_users WHERE userId = :id")
     suspend fun removeUserFromAllBillingLists(id: String)
 

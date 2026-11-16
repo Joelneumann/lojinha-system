@@ -66,6 +66,9 @@ fun main() {
             userDao = database.userDao(),
             transactionDao = database.transactionDao(),
             onDataChanged = onDataChanged,
+            onUserScopedDataChanged = { userId ->
+                DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(targetUserId = userId))
+            },
             runInTransaction = { block ->
                 database.useWriterConnection { transactor ->
                     transactor.immediateTransaction { block() }

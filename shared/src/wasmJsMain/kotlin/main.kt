@@ -37,6 +37,8 @@ import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -47,7 +49,7 @@ private enum class WebPortalScreen {
     ADMIN_PANEL
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, FlowPreview::class)
 fun main() {
     CanvasBasedWindow("Lojinha Portal") {
         var currentScreen by remember { mutableStateOf(WebPortalScreen.USER_SELECTION) }
@@ -236,7 +238,7 @@ fun main() {
                                 LaunchedEffect(activeCustomer.id) {
                                     customerNetworkClient.startRealtimeSync(this)
                                     launch {
-                                        customerNetworkClient.onDataChanged.collect {
+                                        customerNetworkClient.onDataChanged.debounce(300).collect {
                                             customerNetworkClient.fetchCurrentUser()?.let { refreshed ->
                                                 loggedInCustomer = refreshed
                                             }
@@ -349,7 +351,7 @@ fun main() {
                             LaunchedEffect(Unit) {
                                 adminNetworkClient.startRealtimeSync(this)
                                 launch {
-                                    adminNetworkClient.onDataChanged.collect {
+                                    adminNetworkClient.onDataChanged.debounce(300).collect {
                                         notesViewModel.loadNotes()
                                         productsViewModel.loadData()
                                         usersViewModel.loadData()

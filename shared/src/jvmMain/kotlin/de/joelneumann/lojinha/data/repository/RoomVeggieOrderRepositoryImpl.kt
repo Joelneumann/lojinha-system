@@ -23,6 +23,7 @@ class RoomVeggieOrderRepositoryImpl(
     private val userDao: UserDao,
     private val transactionDao: TransactionDao,
     private val onDataChanged: (() -> Unit)? = null,
+    private val onUserScopedDataChanged: ((String) -> Unit)? = null,
     private val runInTransaction: (suspend (suspend () -> Unit) -> Unit)? = null
 ) : VeggieOrderRepository {
 
@@ -79,6 +80,11 @@ class RoomVeggieOrderRepositoryImpl(
             updatedAt = now
         )
         veggieOrderDao.insertOrUpdateVeggieProduct(VeggieProductEntity.fromDomain(sanitized))
+        onDataChanged?.invoke()
+    }
+
+    override suspend fun updateVeggieProductImage(productId: String, imageFileName: String?, updatedAt: Long) {
+        veggieOrderDao.updateProductImage(productId, imageFileName, updatedAt)
         onDataChanged?.invoke()
     }
 
@@ -350,7 +356,7 @@ class RoomVeggieOrderRepositoryImpl(
                 roundEntity.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null, updatedAt = now)
             )
         }
-        onDataChanged?.invoke()
+        onUserScopedDataChanged?.invoke(user.id) ?: onDataChanged?.invoke()
         true
     }
 
@@ -728,6 +734,6 @@ class RoomVeggieOrderRepositoryImpl(
                 )
             }
         veggieOrderDao.replaceFavoritesForUser(userId, entities)
-        onDataChanged?.invoke()
+        onUserScopedDataChanged?.invoke(userId) ?: onDataChanged?.invoke()
     }
 }
