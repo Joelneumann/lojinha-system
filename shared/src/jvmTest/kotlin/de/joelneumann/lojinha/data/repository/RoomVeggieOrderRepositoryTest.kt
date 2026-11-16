@@ -697,4 +697,57 @@ class RoomVeggieOrderRepositoryTest {
         assertEquals(emptySet<String>(), veggieRepo.getFavoriteProductIdsForUser("u-alice"))
         assertEquals(setOf("vp-b"), veggieRepo.getFavoriteProductIdsForUser("u-bob"))
     }
+
+    @Test
+    fun testPostSettlementCorrection_transporterReductionUsesAdminWithdrawalAndBlocksStorno() = runTest {
+        userRepo.saveUser(User(id = "u-alice", name = "Alice", balance = 100_00L))
+        userRepo.saveUser(User(id = "u-driver", name = "Driver", balance = 10_00L))
+        veggieRepo.saveUnitType(VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true))
+        veggieRepo.saveVeggieProduct(VeggieProduct(id = "vp-tom", name = "Tomato", unitTypeId = "unit-kg", isActive = true))
+
+        val round = veggieRepo.openNewRound(0L, 20_00L, 1_776_700_000_000L)
+        val alice = userRepo.getUserById("u-alice")!!
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, alice, mapOf("vp-tom" to 1000L)))
+        assertTrue(veggieRepo.closeRound(round.id, 1_776_701_000_000L))
+
+        val entries = veggieRepo.getEntriesForRound(round.id)
+        val settlements = listOf(VeggieRoundProductSettlement(round.id, "vp-tom", 10_00L, 10_00L))
+
+        // Initial settlement: Driver gets +20.00 ADMIN_DEPOSIT
+        assertNotNull(
+            veggieRepo.executeRoundSettlement(
+                roundId = round.id,
+                buyerOperationFeeCents = 0L,
+                transportFeeCents = 20_00L,
+                transporterUserId = "u-driver",
+                productSettlements = settlements,
+                actualQuantitiesByEntryId = mapOf(entries[0].id to 1000L),
+                settledAt = 1_776_702_000_000L
+            )
+        )
+        assertEquals(20_00L, userRepo.getUserById("u-driver")!!.balance)
+
+        val initialDriverTx = txRepo.getAllTransactions().first { it.userId == "u-driver" }
+        assertEquals(TransactionType.ADMIN_DEPOSIT, initialDriverTx.type)
+        // Stornoing a VEGGIE_TRANSPORT deposit from Transactions tab must be blocked
+        assertFalse(txRepo.stornoNonPurchase(initialDriverTx.id))
+
+        // Correction: reduce transport fee from 20.00 to 5.00 -> Driver should get -15.00 ADMIN_WITHDRAWAL
+        assertNotNull(
+            veggieRepo.executeRoundSettlement(
+                roundId = round.id,
+                buyerOperationFeeCents = 0L,
+                transportFeeCents = 5_00L,
+                transporterUserId = "u-driver",
+                productSettlements = settlements,
+                actualQuantitiesByEntryId = mapOf(entries[0].id to 1000L),
+                settledAt = 1_776_703_000_000L
+            )
+        )
+        assertEquals(5_00L, userRepo.getUserById("u-driver")!!.balance)
+        val driverTxs = txRepo.getAllTransactions().filter { it.userId == "u-driver" }.sortedBy { it.timestamp }
+        assertEquals(2, driverTxs.size)
+        assertEquals(TransactionType.ADMIN_WITHDRAWAL, driverTxs[1].type)
+        assertEquals(-15_00L, driverTxs[1].totalAmount)
+    }
 }

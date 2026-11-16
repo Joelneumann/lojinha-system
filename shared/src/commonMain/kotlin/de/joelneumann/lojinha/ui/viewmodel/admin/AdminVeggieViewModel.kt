@@ -134,6 +134,8 @@ class AdminVeggieViewModel(
     private val _hasUnsavedSettlementChanges = MutableStateFlow(false)
     val hasUnsavedSettlementChanges: StateFlow<Boolean> = _hasUnsavedSettlementChanges.asStateFlow()
 
+    private val _pendingAdminEntries = MutableStateFlow<List<VeggieOrderEntry>>(emptyList())
+
     private val _liveSettlementPreview = MutableStateFlow<VeggieRoundSettlementResult?>(null)
     val liveSettlementPreview: StateFlow<VeggieRoundSettlementResult?> = _liveSettlementPreview.asStateFlow()
 
@@ -249,6 +251,7 @@ class AdminVeggieViewModel(
         _draftBuyerFeeInput.value = "0"
         _draftTransportFeeInput.value = "0"
         _draftTransporterUserId.value = null
+        _pendingAdminEntries.value = emptyList()
     }
 
     fun openPastRoundForEditing(roundId: String) {
@@ -262,6 +265,7 @@ class AdminVeggieViewModel(
     fun closePastRoundEditor() {
         _editingPastRound.value?.id?.let { onClearMatrixDraft?.invoke(it) }
         _editingPastRound.value = null
+        _pendingAdminEntries.value = emptyList()
         _hasUnsavedSettlementChanges.value = false
         val active = _activeRound.value
         if (active != null) {
@@ -311,6 +315,7 @@ class AdminVeggieViewModel(
 
     fun discardDraft() {
         _selectedRound.value?.id?.let { onClearMatrixDraft?.invoke(it) }
+        _pendingAdminEntries.value = emptyList()
         _hasUnsavedSettlementChanges.value = false
         val editing = _editingPastRound.value
         if (editing != null) {
@@ -660,7 +665,32 @@ class AdminVeggieViewModel(
         }
     }
 
+    private fun hasInvalidDraftInputs(): Boolean {
+        val productsById = _products.value.associateBy { it.id }
+        val unitTypesById = _unitTypes.value.associateBy { it.id }
+        val invalidQty = _selectedRoundEntries.value.any { entry ->
+            val raw = _draftActualQuantities.value[entry.id] ?: return@any false
+            val allowDecimals = productsById[entry.veggieProductId]?.deliveryUnitTypeId
+                ?.let { unitTypesById[it]?.allowDecimals }
+                ?: entry.effectiveAllowDecimals
+            raw.isNotBlank() && VeggieQuantityScaling.parseQuantityScaled(raw, allowDecimals) == null
+        }
+        val invalidPriceOrSpent = _selectedRoundEntries.value.map { it.veggieProductId }.distinct().any { pid ->
+            val price = _draftMarketPrices.value[pid].orEmpty()
+            val spent = _draftTotalSpent.value[pid].orEmpty()
+            (price.isNotBlank() && parseBrlInputToCents(price) == null) ||
+                (spent.isNotBlank() && parseBrlInputToCents(spent) == null)
+        }
+        val invalidFee = (_draftBuyerFeeInput.value.isNotBlank() && parseBrlInputToCents(_draftBuyerFeeInput.value) == null) ||
+            (_draftTransportFeeInput.value.isNotBlank() && parseBrlInputToCents(_draftTransportFeeInput.value) == null)
+        return invalidQty || invalidPriceOrSpent || invalidFee
+    }
+
     fun saveDraftSettlement(onSuccess: (() -> Unit)? = null) {
+        if (hasInvalidDraftInputs()) {
+            _errorMessage.value = I18n.get().errInvalidVeggieInputs
+            return
+        }
         val payload = buildCurrentDraftPayload() ?: return
         if (payload.entriesWithDraftQty.isEmpty()) return
         if (_isSaving.value) return
@@ -740,6 +770,10 @@ class AdminVeggieViewModel(
     }
 
     fun executeSettlement() {
+        if (hasInvalidDraftInputs()) {
+            _errorMessage.value = I18n.get().errInvalidVeggieInputs
+            return
+        }
         val payload = buildCurrentDraftPayload() ?: return
         if (payload.entriesWithDraftQty.isEmpty()) return
         if (_isSaving.value) return
@@ -748,6 +782,14 @@ class AdminVeggieViewModel(
         activeScope.launch {
             try {
                 val isEditingPast = _editingPastRound.value != null
+                for (pending in _pendingAdminEntries.value) {
+                    val upserted = veggieOrderRepository.upsertAdminOrderEntry(pending)
+                    if (!upserted) {
+                        _errorMessage.value = "Failed to save staged order entry"
+                        return@launch
+                    }
+                }
+                _pendingAdminEntries.value = emptyList()
                 val result = veggieOrderRepository.executeRoundSettlement(
                     roundId = payload.round.id,
                     buyerOperationFeeCents = payload.buyerFeeCents,
@@ -832,6 +874,41 @@ class AdminVeggieViewModel(
                     actualQuantityScaled = targetActualQty,
                     updatedAt = now
                 )
+                if (round.status == VeggieRoundStatus.SETTLED) {
+                    _pendingAdminEntries.value = _pendingAdminEntries.value.filterNot {
+                        it.userId == user.id && it.veggieProductId == product.id
+                    } + entry
+                    _selectedRoundEntries.value = _selectedRoundEntries.value.filterNot {
+                        it.userId == user.id && it.veggieProductId == product.id
+                    } + entry
+
+                    val deliveryAllowDecimals = deliveryUnit?.allowDecimals ?: allowDecimals
+                    val newQuantities = _draftActualQuantities.value.toMutableMap()
+                    newQuantities[entry.id] = VeggieQuantityScaling.formatScaledQuantity(targetActualQty, deliveryAllowDecimals)
+                    _draftActualQuantities.value = newQuantities
+
+                    if (!_draftMarketPrices.value.containsKey(product.id)) {
+                        val estPrice = product.estimatedPriceCents
+                        _draftMarketPrices.value = _draftMarketPrices.value + (
+                            product.id to (estPrice?.let { formatCentsToInput(it) } ?: "")
+                        )
+                    }
+                    if (product.id !in _manuallyEditedTotalSpentProductIds.value) {
+                        val unitPriceCents = parseBrlInputToCents(_draftMarketPrices.value[product.id] ?: "")
+                        if (unitPriceCents != null && unitPriceCents > 0L) {
+                            val totalDelivered = calculateDraftTotalDeliveredForProduct(product.id, newQuantities)
+                            val autoSpent = VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(unitPriceCents, totalDelivered)
+                            _draftTotalSpent.value = _draftTotalSpent.value + (
+                                product.id to if (autoSpent > 0L) formatCentsToInput(autoSpent) else "0"
+                            )
+                        }
+                    }
+
+                    _hasUnsavedSettlementChanges.value = true
+                    recomputeLivePreview()
+                    return@launch
+                }
+
                 veggieOrderRepository.upsertAdminOrderEntry(entry)
 
                 if (existing != null && _draftActualQuantities.value.containsKey(existing.id)) {

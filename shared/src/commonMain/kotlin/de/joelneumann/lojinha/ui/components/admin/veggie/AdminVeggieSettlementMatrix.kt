@@ -1210,12 +1210,17 @@ fun AdminVeggieSettlementMatrix(
     if (showConfirmSettle) {
         val totalAllCharged = (livePreview?.totalMarketProductsSpentCents ?: 0L) + (livePreview?.combinedFeeCents ?: 0L)
         val participantCount = livePreview?.customerSummaries?.size ?: 0
+        val isSettledCorrection = round.status == VeggieRoundStatus.SETTLED
         ConfirmationDialog(
-            title = if (round.status == VeggieRoundStatus.SETTLED) strings.updateSettledRoundBtn else strings.settleAndChargeBtn,
-            message = strings.confirmExecuteChargesMsg(participantCount, Formatting.formatBrl(totalAllCharged)),
+            title = if (isSettledCorrection) strings.updateSettledRoundBtn else strings.settleAndChargeBtn,
+            message = if (isSettledCorrection) {
+                strings.confirmUpdateSettledRoundMsg(Formatting.formatBrl(totalAllCharged))
+            } else {
+                strings.confirmExecuteChargesMsg(participantCount, Formatting.formatBrl(totalAllCharged))
+            },
             confirmText = strings.confirm,
             cancelText = strings.cancel,
-            confirmButtonColor = ColorSuccessEmerald,
+            confirmButtonColor = if (isSettledCorrection) AccentNavy else ColorSuccessEmerald,
             onConfirm = {
                 showConfirmSettle = false
                 onExecuteSettlement()

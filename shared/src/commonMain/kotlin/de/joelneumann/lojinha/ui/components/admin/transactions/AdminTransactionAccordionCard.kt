@@ -263,7 +263,9 @@ fun AdminTransactionAccordionCard(
                         }
                     }
                 }
-            } else if (transaction.type == TransactionType.ADMIN_DEPOSIT || transaction.type == TransactionType.ADMIN_WITHDRAWAL) {
+            } else if ((transaction.type == TransactionType.ADMIN_DEPOSIT || transaction.type == TransactionType.ADMIN_WITHDRAWAL) &&
+                transaction.note?.startsWith("SYSNOTE|VEGGIE_TRANSPORT|") != true
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,

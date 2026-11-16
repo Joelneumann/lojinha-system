@@ -907,4 +907,131 @@ class AdminVeggieViewModelTest {
         assertNull(vm.activeRound.value)
         assertFalse(veggieRepo.rounds.any { it.id == "round-active" })
     }
+
+    @Test
+    fun settledRound_addOrderEntry_stagesUntilExecuteSettlementAndDiscardsCleanly() = runTest {
+        val userA = User(id = "u-a", name = "Alice", balance = 10000L)
+        val userB = User(id = "u-b", name = "Bob", balance = 10000L)
+        val unitKg = VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true)
+        val prodTomato = VeggieProduct(id = "prod-t", name = "Tomato", unitTypeId = "unit-kg", estimatedPriceCents = 1000L, isActive = true)
+        val settledRound = VeggieOrderRound(
+            id = "round-settled",
+            status = VeggieRoundStatus.SETTLED,
+            buyerOperationFeeCents = 0L,
+            transportFeeCents = 0L,
+            openedAt = 1000L,
+            closedAt = 2000L,
+            settledAt = 3000L
+        )
+        val entryA = VeggieOrderEntry(
+            id = "e-a",
+            roundId = "round-settled",
+            userId = "u-a",
+            userNameSnapshot = "Alice",
+            veggieProductId = "prod-t",
+            veggieNameSnapshot = "Tomato",
+            unitNameSnapshot = "kg",
+            allowDecimalsSnapshot = true,
+            orderedQuantityScaled = 1000L,
+            actualQuantityScaled = 1000L,
+            effectiveUnitPriceCents = 1000L,
+            finalItemTotalCents = 1000L
+        )
+
+        val veggieRepo = FakeVeggieRepository(
+            unitTypes = mutableListOf(unitKg),
+            products = mutableListOf(prodTomato),
+            rounds = mutableListOf(settledRound),
+            entries = mutableListOf(entryA),
+            settlements = mutableListOf(
+                VeggieRoundProductSettlement(
+                    roundId = "round-settled",
+                    veggieProductId = "prod-t",
+                    marketUnitPriceCents = 1000L,
+                    totalSpentCents = 1000L
+                )
+            )
+        )
+        val vm = AdminVeggieViewModel(
+            veggieOrderRepository = veggieRepo,
+            userRepository = FakeUserRepository(mutableListOf(userA, userB)),
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        vm.openPastRoundForEditing("round-settled")
+        advanceUntilIdle()
+
+        // Adding an entry on a settled round must NOT write to repository immediately
+        vm.addOrUpdateCustomerEntry(userB, prodTomato, "2", AddOrderEntryMode.OVERWRITE)
+        advanceUntilIdle()
+
+        assertTrue(vm.hasUnsavedSettlementChanges.value)
+        assertEquals(1, veggieRepo.entries.size)
+        assertEquals(2, vm.selectedRoundEntries.value.size)
+
+        // Discarding reverts the staged entry without touching the repository
+        vm.discardDraft()
+        advanceUntilIdle()
+        assertFalse(vm.hasUnsavedSettlementChanges.value)
+        assertEquals(1, veggieRepo.entries.size)
+        assertEquals(1, vm.selectedRoundEntries.value.size)
+
+        // Re-adding and executing settlement flushes the staged entry
+        vm.addOrUpdateCustomerEntry(userB, prodTomato, "2", AddOrderEntryMode.OVERWRITE)
+        advanceUntilIdle()
+        vm.executeSettlement()
+        advanceUntilIdle()
+
+        assertEquals(2, veggieRepo.entries.size)
+        assertTrue(veggieRepo.entries.any { it.userId == "u-b" && it.actualQuantityScaled == 2000L })
+    }
+
+    @Test
+    fun executeSettlement_rejectsMalformedDraftInputs() = runTest {
+        val userA = User(id = "u-a", name = "Alice", balance = 10000L)
+        val unitKg = VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true)
+        val prodTomato = VeggieProduct(id = "prod-t", name = "Tomato", unitTypeId = "unit-kg", estimatedPriceCents = 1000L, isActive = true)
+        val settledRound = VeggieOrderRound(
+            id = "round-settled",
+            status = VeggieRoundStatus.SETTLED,
+            openedAt = 1000L,
+            closedAt = 2000L,
+            settledAt = 3000L
+        )
+        val entryA = VeggieOrderEntry(
+            id = "e-a",
+            roundId = "round-settled",
+            userId = "u-a",
+            userNameSnapshot = "Alice",
+            veggieProductId = "prod-t",
+            veggieNameSnapshot = "Tomato",
+            unitNameSnapshot = "kg",
+            allowDecimalsSnapshot = true,
+            orderedQuantityScaled = 1000L,
+            actualQuantityScaled = 1000L
+        )
+        val veggieRepo = FakeVeggieRepository(
+            unitTypes = mutableListOf(unitKg),
+            products = mutableListOf(prodTomato),
+            rounds = mutableListOf(settledRound),
+            entries = mutableListOf(entryA)
+        )
+        val vm = AdminVeggieViewModel(
+            veggieOrderRepository = veggieRepo,
+            userRepository = FakeUserRepository(mutableListOf(userA)),
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        vm.openPastRoundForEditing("round-settled")
+        advanceUntilIdle()
+
+        vm.updateEntryActualQuantity("e-a", "1..5")
+        vm.executeSettlement()
+        advanceUntilIdle()
+
+        assertNotNull(vm.errorMessage.value)
+        assertEquals("round-settled", vm.editingPastRound.value?.id)
+    }
 }

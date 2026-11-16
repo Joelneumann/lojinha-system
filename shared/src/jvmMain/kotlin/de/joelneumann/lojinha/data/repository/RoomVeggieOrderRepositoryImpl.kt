@@ -589,17 +589,12 @@ class RoomVeggieOrderRepositoryImpl(
             val newTotalsByUser = calculationResult.customerSummaries.associate {
                 it.userId to it.grandTotalCents
             }
-            val allInvolvedUserIds = (previouslyChargedByUser.keys + newTotalsByUser.keys).toSet()
+            val customerDeltas = VeggieSettlementCalculator.calculateCustomerChargeCorrectionDeltas(
+                previousCustomerTotals = previouslyChargedByUser,
+                newCustomerTotals = newTotalsByUser
+            )
 
-            for (userId in allInvolvedUserIds) {
-                val prevCharged = previouslyChargedByUser[userId] ?: 0L
-                val newTotal = newTotalsByUser[userId] ?: 0L
-                // delta is: prevCharged - newTotal.
-                // If prevCharged > newTotal (e.g. fee share decreased): delta > 0 (refund)
-                // If prevCharged < newTotal (e.g. newly added user or more items): delta < 0 (additional charge)
-                val balanceDelta = prevCharged - newTotal
-                if (balanceDelta == 0L) continue
-
+            for ((userId, balanceDelta) in customerDeltas) {
                 val userEntity = userDao.getUserById(userId) ?: continue
                 val txEntity = TransactionEntity(
                     id = generateUuid(),
@@ -639,12 +634,17 @@ class RoomVeggieOrderRepositoryImpl(
                 if (tDelta == 0L) continue
 
                 val userEntity = userDao.getUserById(tUserId) ?: continue
+                val txType = if (tDelta >= 0L) {
+                    TransactionType.ADMIN_DEPOSIT.name
+                } else {
+                    TransactionType.ADMIN_WITHDRAWAL.name
+                }
                 val txEntity = TransactionEntity(
                     id = generateUuid(),
                     userId = userEntity.id,
                     userNameSnapshot = userEntity.name,
                     timestamp = now,
-                    type = TransactionType.ADMIN_DEPOSIT.name,
+                    type = txType,
                     referenceTransactionId = null,
                     note = "SYSNOTE|VEGGIE_TRANSPORT|${weekInfo.weekOfYear}|${weekInfo.isoYear}|$roundId",
                     totalAmount = tDelta,

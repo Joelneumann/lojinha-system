@@ -861,6 +861,8 @@ interface AppStrings {
     val showInFolderBtn: String
     val settleAndChargeBtn: String
     val updateSettledRoundBtn: String
+    fun confirmUpdateSettledRoundMsg(total: String): String
+    val errInvalidVeggieInputs: String
     val backToPastRounds: String
     fun editingPastRoundTitle(weekOfYear: Int, isoYear: Int): String
     val colOrderedQty: String

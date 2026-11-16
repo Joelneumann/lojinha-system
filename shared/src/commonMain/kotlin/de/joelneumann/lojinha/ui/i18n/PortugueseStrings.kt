@@ -881,6 +881,9 @@ object PortugueseStrings : AppStrings {
     override val showInFolderBtn = "Mostrar na pasta"
     override val settleAndChargeBtn = "Liquidar e Cobrar"
     override val updateSettledRoundBtn = "Atualizar Rodada Liquidada"
+    override fun confirmUpdateSettledRoundMsg(total: String): String =
+        "Aplicar correções a esta rodada liquidada? Apenas as diferenças em relação ao novo total ($total) serão cobradas ou estornadas."
+    override val errInvalidVeggieInputs = "Corrija os valores inválidos de quantidade ou taxa antes de salvar."
     override val backToPastRounds = "Voltar para Rodadas Anteriores"
     override fun editingPastRoundTitle(weekOfYear: Int, isoYear: Int): String = "Editando Rodada Liquidada — Semana $weekOfYear, $isoYear"
     override val colOrderedQty = "Pedido"

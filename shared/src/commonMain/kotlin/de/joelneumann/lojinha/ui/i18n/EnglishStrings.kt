@@ -881,6 +881,9 @@ object EnglishStrings : AppStrings {
     override val showInFolderBtn = "Show in Folder"
     override val settleAndChargeBtn = "Settle & Charge"
     override val updateSettledRoundBtn = "Update Settled Round"
+    override fun confirmUpdateSettledRoundMsg(total: String): String =
+        "Apply corrections to this settled round? Only balance differences relative to the new round total ($total) will be charged or refunded."
+    override val errInvalidVeggieInputs = "Please fix invalid quantity or fee values before saving."
     override val backToPastRounds = "Back to Past Rounds"
     override fun editingPastRoundTitle(weekOfYear: Int, isoYear: Int): String = "Editing Settled Round — Week $weekOfYear, $isoYear"
     override val colOrderedQty = "Ordered"

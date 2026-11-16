@@ -208,6 +208,7 @@ class RoomTransactionRepositoryImpl(
     override suspend fun stornoNonPurchase(transactionId: String): Boolean = mutationMutex.withLock {
         val tx = getTransactionById(transactionId) ?: return@withLock false
         if (tx.type != TransactionType.ADMIN_DEPOSIT && tx.type != TransactionType.ADMIN_WITHDRAWAL) return@withLock false
+        if (tx.note?.startsWith("SYSNOTE|VEGGIE_TRANSPORT|") == true) return@withLock false
         if (getCancellationCountForReference(tx.id) > 0) return@withLock false
 
         val refundAmount = -tx.totalAmount

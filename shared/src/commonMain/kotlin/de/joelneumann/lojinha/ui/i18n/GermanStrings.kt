@@ -881,6 +881,9 @@ object GermanStrings : AppStrings {
     override val showInFolderBtn = "Im Ordner anzeigen"
     override val settleAndChargeBtn = "Abrechnen & Abbuchen"
     override val updateSettledRoundBtn = "Abrechnung korrigieren"
+    override fun confirmUpdateSettledRoundMsg(total: String): String =
+        "Korrekturen für diese abgerechnete Runde anwenden? Nur die Differenzbeträge zur neuen Gesamtsumme ($total) werden nachbelastet oder erstattet."
+    override val errInvalidVeggieInputs = "Bitte korrigieren Sie ungültige Mengen- oder Gebührenangaben vor dem Speichern."
     override val backToPastRounds = "Zurück zu vergangenen Runden"
     override fun editingPastRoundTitle(weekOfYear: Int, isoYear: Int): String = "Abgerechnete Runde bearbeiten — KW $weekOfYear, $isoYear"
     override val colOrderedQty = "Bestellt"
