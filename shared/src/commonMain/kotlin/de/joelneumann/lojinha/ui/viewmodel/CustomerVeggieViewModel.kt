@@ -89,6 +89,9 @@ class CustomerVeggieViewModel(
     private val _hasUnsavedOrderChanges = MutableStateFlow(false)
     val hasUnsavedOrderChanges: StateFlow<Boolean> = _hasUnsavedOrderChanges.asStateFlow()
 
+    private val _displaySettings = MutableStateFlow<CustomerDisplaySettings?>(null)
+    val displaySettings: StateFlow<CustomerDisplaySettings?> = _displaySettings.asStateFlow()
+
     private var loadedRoundId: String? = null
     private var loadJob: Job? = null
 
@@ -118,6 +121,9 @@ class CustomerVeggieViewModel(
                 _activeRound.value = state.activeRound
                 _previousRoundQuantitiesScaled.value = state.previousRoundQuantities
                 _favoriteProductIds.value = state.favoriteProductIds
+                if (state.displaySettings != null) {
+                    _displaySettings.value = state.displaySettings
+                }
                 _historyItems.value = history
 
                 val currentRoundId = state.activeRound?.id
@@ -160,13 +166,7 @@ class CustomerVeggieViewModel(
         } else {
             current + productId
         }
-        _favoriteProductIds.value = updated
-        onFavoritesChanged?.invoke(updated)
-        onSaveFavorites?.let { save ->
-            activeScope.launch {
-                save(updated)
-            }
-        }
+        persistFavoritesUpdate(previous = current, updated = updated)
     }
 
     fun isFavorite(productId: String): Boolean {
@@ -189,11 +189,26 @@ class CustomerVeggieViewModel(
     }
 
     fun setFavoriteProductIds(ids: Set<String>) {
-        _favoriteProductIds.value = ids
-        onFavoritesChanged?.invoke(ids)
+        val current = _favoriteProductIds.value
+        persistFavoritesUpdate(previous = current, updated = ids)
+    }
+
+    private fun persistFavoritesUpdate(previous: Set<String>, updated: Set<String>) {
+        _favoriteProductIds.value = updated
+        onFavoritesChanged?.invoke(updated)
         onSaveFavorites?.let { save ->
             activeScope.launch {
-                save(ids)
+                val ok = try {
+                    save(updated)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    false
+                }
+                if (!ok && _favoriteProductIds.value == updated) {
+                    _favoriteProductIds.value = previous
+                    onFavoritesChanged?.invoke(previous)
+                    _errorMessage.value = "Failed to save favorites"
+                }
             }
         }
     }

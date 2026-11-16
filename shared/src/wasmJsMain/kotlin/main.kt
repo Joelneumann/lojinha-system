@@ -270,9 +270,14 @@ fun main() {
                                     }
                                 }
 
+                                val customerDisplaySettings by customerVeggieViewModel.displaySettings.collectAsState()
+                                val effectiveCustomerSettings = remember(customerDisplaySettings) {
+                                    customerDisplaySettings?.toSystemSettings() ?: defaultSettings
+                                }
+
                                 CustomerNetworkPortalScreen(
                                     user = activeCustomer,
-                                    settings = defaultSettings,
+                                    settings = effectiveCustomerSettings,
                                     veggieViewModel = customerVeggieViewModel,
                                     historyViewModel = historyViewModel,
                                     onUserUpdated = { updated ->

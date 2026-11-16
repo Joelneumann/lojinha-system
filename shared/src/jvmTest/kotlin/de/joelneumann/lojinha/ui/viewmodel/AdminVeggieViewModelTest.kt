@@ -1034,4 +1034,112 @@ class AdminVeggieViewModelTest {
         assertNotNull(vm.errorMessage.value)
         assertEquals("round-settled", vm.editingPastRound.value?.id)
     }
+
+    @Test
+    fun settledRound_stagedEntrySurvivesLoadDataRefreshWithPreserveDraft() = runTest {
+        val userA = User(id = "u-a", name = "Alice", balance = 10000L)
+        val userB = User(id = "u-b", name = "Bob", balance = 10000L)
+        val unitKg = VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true)
+        val prodTomato = VeggieProduct(id = "prod-t", name = "Tomato", unitTypeId = "unit-kg", estimatedPriceCents = 1000L, isActive = true)
+        val settledRound = VeggieOrderRound(
+            id = "round-settled",
+            status = VeggieRoundStatus.SETTLED,
+            openedAt = 1000L,
+            closedAt = 2000L,
+            settledAt = 3000L
+        )
+        val entryA = VeggieOrderEntry(
+            id = "e-a",
+            roundId = "round-settled",
+            userId = "u-a",
+            userNameSnapshot = "Alice",
+            veggieProductId = "prod-t",
+            veggieNameSnapshot = "Tomato",
+            unitNameSnapshot = "kg",
+            allowDecimalsSnapshot = true,
+            orderedQuantityScaled = 1000L,
+            actualQuantityScaled = 1000L
+        )
+        val veggieRepo = FakeVeggieRepository(
+            unitTypes = mutableListOf(unitKg),
+            products = mutableListOf(prodTomato),
+            rounds = mutableListOf(settledRound),
+            entries = mutableListOf(entryA)
+        )
+        val vm = AdminVeggieViewModel(
+            veggieOrderRepository = veggieRepo,
+            userRepository = FakeUserRepository(mutableListOf(userA, userB)),
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        vm.openPastRoundForEditing("round-settled")
+        advanceUntilIdle()
+
+        vm.addOrUpdateCustomerEntry(userB, prodTomato, "2", AddOrderEntryMode.OVERWRITE)
+        advanceUntilIdle()
+        assertEquals(2, vm.selectedRoundEntries.value.size)
+
+        // Simulate SSE refresh while editing past round with staged entries
+        vm.loadData(preserveDraftEdits = true)
+        advanceUntilIdle()
+
+        assertEquals(2, vm.selectedRoundEntries.value.size)
+        assertTrue(vm.selectedRoundEntries.value.any { it.userId == "u-b" })
+    }
+
+    @Test
+    fun closedRound_addDualUnitEntryAllowsDecimalDeliveryQuantity() = runTest {
+        val userA = User(id = "u-a", name = "Alice", balance = 10000L)
+        val unitPiece = VeggieUnitType(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true)
+        val unitKg = VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true)
+        val watermelon = VeggieProduct(
+            id = "prod-wm",
+            name = "Watermelon",
+            unitTypeId = "unit-piece",
+            deliveryUnitTypeId = "unit-kg",
+            isActive = true
+        )
+        val closedRound = VeggieOrderRound(
+            id = "round-closed",
+            status = VeggieRoundStatus.CLOSED,
+            openedAt = 1000L,
+            closedAt = 2000L
+        )
+        val veggieRepo = FakeVeggieRepository(
+            unitTypes = mutableListOf(unitPiece, unitKg),
+            products = mutableListOf(watermelon),
+            rounds = mutableListOf(closedRound)
+        )
+        val vm = AdminVeggieViewModel(
+            veggieOrderRepository = veggieRepo,
+            userRepository = FakeUserRepository(mutableListOf(userA)),
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        vm.addOrUpdateCustomerEntry(userA, watermelon, "2.5", AddOrderEntryMode.OVERWRITE)
+        advanceUntilIdle()
+
+        val savedEntry = veggieRepo.entries.single()
+        assertEquals(2500L, savedEntry.actualQuantityScaled)
+        assertEquals("kg", savedEntry.deliveryUnitNameSnapshot)
+        assertEquals(true, savedEntry.deliveryAllowDecimalsSnapshot)
+    }
+
+    @Test
+    fun toggleVeggieProductActive_setsErrorWhenCancelOpenRoundOrdersReturnsFalse() = runTest {
+        val (veggieRepo, userRepo) = setupTestFixture()
+        val failingRepo = object : VeggieOrderRepository by veggieRepo {
+            override suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean = false
+        }
+        val vm = AdminVeggieViewModel(veggieOrderRepository = failingRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        val product = veggieRepo.products.first()
+        vm.toggleVeggieProductActive(product, cancelOpenRoundOrders = true)
+        advanceUntilIdle()
+
+        assertNotNull(vm.errorMessage.value)
+    }
 }

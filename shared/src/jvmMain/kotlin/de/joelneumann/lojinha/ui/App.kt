@@ -16,8 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.room.immediateTransaction
-import androidx.room.useWriterConnection
 import de.joelneumann.lojinha.data.database.DatabaseFactory
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.User
@@ -156,10 +154,13 @@ fun App(
             userDao = database.userDao(),
             transactionDao = database.transactionDao(),
             onDataChanged = onDataChanged,
+            onAdminOnlyDataChanged = {
+                de.joelneumann.lojinha.data.service.DataChangeNotifier.notifyScopedDataChanged(
+                    de.joelneumann.lojinha.data.service.DataChangeNotifier.ChangeScope(adminOnly = true)
+                )
+            },
             runInTransaction = { block ->
-                database.useWriterConnection { transactor ->
-                    transactor.immediateTransaction { block() }
-                }
+                DatabaseFactory.runImmediateTransaction(database, block)
             }
         )
     }

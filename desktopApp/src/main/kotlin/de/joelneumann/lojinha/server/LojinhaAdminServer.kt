@@ -1,7 +1,6 @@
 package de.joelneumann.lojinha.server
 
-import androidx.room.immediateTransaction
-import androidx.room.useWriterConnection
+import de.joelneumann.lojinha.data.database.DatabaseFactory
 import de.joelneumann.lojinha.data.service.DataChangeNotifier
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.*
@@ -146,10 +145,11 @@ class LojinhaAdminServer(
                 onUserScopedDataChanged = { userId ->
                     DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(targetUserId = userId))
                 },
+                onAdminOnlyDataChanged = {
+                    DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(adminOnly = true))
+                },
                 runInTransaction = { block ->
-                    db.useWriterConnection { transactor ->
-                        transactor.immediateTransaction { block() }
-                    }
+                    DatabaseFactory.runImmediateTransaction(db, block)
                 }
             )
         }
@@ -724,6 +724,18 @@ class LojinhaAdminServer(
                             repo.deactivateVeggieProduct(id)
                             call.respond(HttpStatusCode.OK)
                         }
+                        post("/rounds/{roundId}/cancel-product/{productId}") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val roundId = call.parameters["roundId"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            val productId = call.parameters["productId"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            val ok = repo.cancelProductEntriesInOpenRound(roundId, productId)
+                            if (ok) {
+                                call.respond(HttpStatusCode.OK)
+                            } else {
+                                call.respond(HttpStatusCode.Conflict, "Order round is not open")
+                            }
+                        }
                         delete("/products/{id}") {
                             if (!call.checkAdminAuth(settingsRepository)) return@delete
                             val repo = resolveVeggieRepo() ?: return@delete call.respond(HttpStatusCode.ServiceUnavailable)
@@ -766,8 +778,9 @@ class LojinhaAdminServer(
                             }
                             if (existing != null) {
                                 repo.updateVeggieProductImage(id, fileName, System.currentTimeMillis())
+                            } else {
+                                DataChangeNotifier.notifyDataChanged()
                             }
-                            DataChangeNotifier.notifyDataChanged()
                             call.respond(HttpStatusCode.OK, mapOf("imageFileName" to fileName))
                         }
                         delete("/products/{id}/image") {
@@ -778,8 +791,9 @@ class LojinhaAdminServer(
                             veggieImageService.deleteProductImages(existing?.imageFileName ?: id)
                             if (existing != null && existing.imageFileName != null) {
                                 repo.updateVeggieProductImage(id, null, System.currentTimeMillis())
+                            } else {
+                                DataChangeNotifier.notifyDataChanged()
                             }
-                            DataChangeNotifier.notifyDataChanged()
                             call.respond(HttpStatusCode.OK)
                         }
 
@@ -1217,6 +1231,7 @@ class LojinhaAdminServer(
                             emptyMap()
                         }
                         val favoriteProductIds = repo.getFavoriteProductIdsForUser(userId)
+                        val settings = settingsRepository.getSettings()
                         call.respond(
                             CustomerVeggieStateResponse(
                                 unitTypes = unitTypes,
@@ -1224,7 +1239,13 @@ class LojinhaAdminServer(
                                 activeRound = activeRound,
                                 currentEntries = currentEntries,
                                 previousRoundQuantities = previousQuantities,
-                                favoriteProductIds = favoriteProductIds
+                                favoriteProductIds = favoriteProductIds,
+                                displaySettings = CustomerDisplaySettings(
+                                    usdExchangeRate = settings.usdExchangeRate,
+                                    eurExchangeRate = settings.eurExchangeRate,
+                                    yellowBalanceWarningThresholdCents = settings.yellowBalanceWarningThresholdCents,
+                                    redBalanceWarningThresholdCents = settings.redBalanceWarningThresholdCents
+                                )
                             )
                         )
                     }

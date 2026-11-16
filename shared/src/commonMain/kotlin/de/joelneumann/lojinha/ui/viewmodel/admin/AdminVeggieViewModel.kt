@@ -346,7 +346,16 @@ class AdminVeggieViewModel(
         _selectedRound.value = round
         val entries = veggieOrderRepository.getEntriesForRound(round.id)
         val settlements = veggieOrderRepository.getProductSettlementsForRound(round.id).associateBy { it.veggieProductId }
-        _selectedRoundEntries.value = entries
+        val pendingForRound = if (!resetDraft) {
+            _pendingAdminEntries.value.filter { it.roundId == round.id }
+        } else {
+            _pendingAdminEntries.value = emptyList()
+            emptyList()
+        }
+        val mergedEntries = pendingForRound.fold(entries) { acc, pending ->
+            acc.filterNot { it.userId == pending.userId && it.veggieProductId == pending.veggieProductId } + pending
+        }
+        _selectedRoundEntries.value = mergedEntries
         _selectedRoundSettlements.value = settlements
 
         if (resetDraft) {
@@ -786,12 +795,16 @@ class AdminVeggieViewModel(
         activeScope.launch {
             try {
                 val isEditingPast = _editingPastRound.value != null
-                for (pending in _pendingAdminEntries.value) {
+                val remainingPending = _pendingAdminEntries.value.toMutableList()
+                while (remainingPending.isNotEmpty()) {
+                    val pending = remainingPending.first()
                     val upserted = veggieOrderRepository.upsertAdminOrderEntry(pending)
                     if (!upserted) {
+                        _pendingAdminEntries.value = remainingPending
                         _errorMessage.value = "Failed to save staged order entry"
                         return@launch
                     }
+                    remainingPending.removeAt(0)
                 }
                 _pendingAdminEntries.value = emptyList()
                 val result = veggieOrderRepository.executeRoundSettlement(
@@ -831,8 +844,13 @@ class AdminVeggieViewModel(
         val round = _selectedRound.value ?: return
         val unit = _unitTypes.value.find { it.id == product.unitTypeId }
         val deliveryUnit = product.deliveryUnitTypeId?.let { did -> _unitTypes.value.find { it.id == did } }
-        val allowDecimals = unit?.allowDecimals ?: false
-        val qtyScaled = VeggieQuantityScaling.parseQuantityScaled(quantityInput, allowDecimals) ?: return
+        val inputAllowDecimals = if (round.status != VeggieRoundStatus.OPEN) {
+            deliveryUnit?.allowDecimals ?: unit?.allowDecimals ?: false
+        } else {
+            unit?.allowDecimals ?: false
+        }
+        val orderAllowDecimals = unit?.allowDecimals ?: false
+        val qtyScaled = VeggieQuantityScaling.parseQuantityScaled(quantityInput, inputAllowDecimals) ?: return
         if (qtyScaled <= 0L) return
         if (_isSaving.value) return
         _isSaving.value = true
@@ -871,7 +889,7 @@ class AdminVeggieViewModel(
                     veggieProductId = product.id,
                     veggieNameSnapshot = product.name,
                     unitNameSnapshot = unit?.name ?: product.unitTypeId,
-                    allowDecimalsSnapshot = allowDecimals,
+                    allowDecimalsSnapshot = orderAllowDecimals,
                     deliveryUnitNameSnapshot = deliveryUnit?.name,
                     deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals,
                     orderedQuantityScaled = targetOrderedQty,
@@ -886,7 +904,7 @@ class AdminVeggieViewModel(
                         it.userId == user.id && it.veggieProductId == product.id
                     } + entry
 
-                    val deliveryAllowDecimals = deliveryUnit?.allowDecimals ?: allowDecimals
+                    val deliveryAllowDecimals = deliveryUnit?.allowDecimals ?: orderAllowDecimals
                     val newQuantities = _draftActualQuantities.value.toMutableMap()
                     newQuantities[entry.id] = VeggieQuantityScaling.formatScaledQuantity(targetActualQty, deliveryAllowDecimals)
                     _draftActualQuantities.value = newQuantities
@@ -913,7 +931,11 @@ class AdminVeggieViewModel(
                     return@launch
                 }
 
-                veggieOrderRepository.upsertAdminOrderEntry(entry)
+                val upserted = veggieOrderRepository.upsertAdminOrderEntry(entry)
+                if (!upserted) {
+                    _errorMessage.value = "Failed to add order entry"
+                    return@launch
+                }
 
                 if (existing != null && _draftActualQuantities.value.containsKey(existing.id)) {
                     _draftActualQuantities.value = _draftActualQuantities.value - existing.id
@@ -979,7 +1001,9 @@ class AdminVeggieViewModel(
                     if (cancelOpenRoundOrders) {
                         val openRound = _activeRound.value
                         if (openRound != null && openRound.status == VeggieRoundStatus.OPEN) {
-                            veggieOrderRepository.cancelProductEntriesInOpenRound(openRound.id, product.id)
+                            if (!veggieOrderRepository.cancelProductEntriesInOpenRound(openRound.id, product.id)) {
+                                _errorMessage.value = I18n.get().errFailedToUpdateProductStatus
+                            }
                         }
                     }
                 } else {

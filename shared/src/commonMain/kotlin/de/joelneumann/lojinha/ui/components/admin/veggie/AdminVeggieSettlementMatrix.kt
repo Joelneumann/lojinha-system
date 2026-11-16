@@ -1246,6 +1246,7 @@ fun AdminVeggieSettlementMatrix(
 
     if (showAddEntryDialog) {
         AddAdminVeggieEntryDialog(
+            roundStatus = round.status,
             users = users,
             products = products.filter { !it.isDeleted && it.isActive },
             unitTypes = unitTypes,
@@ -1328,6 +1329,7 @@ private fun MatrixHeaderCell(
 
 @Composable
 private fun AddAdminVeggieEntryDialog(
+    roundStatus: VeggieRoundStatus,
     users: List<User>,
     products: List<VeggieProduct>,
     unitTypes: List<VeggieUnitType>,
@@ -1342,7 +1344,11 @@ private fun AddAdminVeggieEntryDialog(
     var productMenuExpanded by remember { mutableStateOf(false) }
 
     val unitTypesById = remember(unitTypes) { unitTypes.associateBy { it.id } }
-    val unitType = selectedProduct?.let { unitTypesById[it.unitTypeId] }
+    val unitType = if (roundStatus != VeggieRoundStatus.OPEN) {
+        selectedProduct?.deliveryUnitTypeId?.let { unitTypesById[it] } ?: selectedProduct?.let { unitTypesById[it.unitTypeId] }
+    } else {
+        selectedProduct?.let { unitTypesById[it.unitTypeId] }
+    }
     val allowDecimals = unitType?.allowDecimals ?: false
     val unitName = unitType?.name ?: "Unit"
 
@@ -1356,7 +1362,11 @@ private fun AddAdminVeggieEntryDialog(
         mutableStateOf(AddOrderEntryMode.OVERWRITE)
     }
 
-    val existingScaled = existingEntry?.actualQuantityScaled ?: existingEntry?.orderedQuantityScaled ?: 0L
+    val existingScaled = if (roundStatus == VeggieRoundStatus.OPEN) {
+        existingEntry?.orderedQuantityScaled ?: 0L
+    } else {
+        existingEntry?.actualQuantityScaled ?: existingEntry?.orderedQuantityScaled ?: 0L
+    }
 
     val initialText = remember(selectedUser?.id, selectedProduct?.id) {
         if (existingEntry != null) {

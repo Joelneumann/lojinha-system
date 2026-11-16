@@ -2,7 +2,9 @@ package de.joelneumann.lojinha.data.database
 
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.immediateTransaction
 import androidx.room.migration.Migration
+import androidx.room.useWriterConnection
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
@@ -181,6 +183,12 @@ object DatabaseFactory {
 
     fun getDatabaseFile(): File = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
 
+    suspend fun runImmediateTransaction(db: AppDatabase, block: suspend () -> Unit) {
+        db.useWriterConnection { transactor ->
+            transactor.immediateTransaction { block() }
+        }
+    }
+
     fun createDatabase(): AppDatabase {
         return instance ?: synchronized(this) {
             instance ?: buildDatabase().also {
@@ -333,7 +341,9 @@ object DatabaseFactory {
                 AppLogger.info(TAG, "Seeded default Veggie Unit Types (kg, Unit, Pack, Bunch).")
             }
             // Ensure any unit type in active use by catalog products is active
-            val usedUnitIds = veggieDao.getAllVeggieProducts(includeDeleted = false).map { it.unitTypeId }.toSet()
+            val usedUnitIds = veggieDao.getAllVeggieProducts(includeDeleted = false)
+                .flatMap { listOfNotNull(it.unitTypeId, it.deliveryUnitTypeId) }
+                .toSet()
             if (usedUnitIds.isNotEmpty()) {
                 val allUnits = veggieDao.getAllUnitTypes()
                 val unitsToReactivate = allUnits.filter { it.id in usedUnitIds && !it.isActive }

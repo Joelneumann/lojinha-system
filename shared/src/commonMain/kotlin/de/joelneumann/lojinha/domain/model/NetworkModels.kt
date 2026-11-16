@@ -58,13 +58,30 @@ data class CustomerSettingsUpdateRequest(
 )
 
 @Serializable
+data class CustomerDisplaySettings(
+    val usdExchangeRate: Double = 0.18,
+    val eurExchangeRate: Double = 0.16,
+    val yellowBalanceWarningThresholdCents: Long = 300_00L,
+    val redBalanceWarningThresholdCents: Long = 0L
+) {
+    fun toSystemSettings(): SystemSettings = SystemSettings(
+        adminPasswordHash = "",
+        usdExchangeRate = usdExchangeRate,
+        eurExchangeRate = eurExchangeRate,
+        yellowBalanceWarningThresholdCents = yellowBalanceWarningThresholdCents,
+        redBalanceWarningThresholdCents = redBalanceWarningThresholdCents
+    )
+}
+
+@Serializable
 data class CustomerVeggieStateResponse(
     val unitTypes: List<VeggieUnitType> = emptyList(),
     val products: List<VeggieProduct> = emptyList(),
     val activeRound: VeggieOrderRound? = null,
     val currentEntries: List<VeggieOrderEntry> = emptyList(),
     val previousRoundQuantities: Map<String, Long> = emptyMap(),
-    val favoriteProductIds: Set<String> = emptySet()
+    val favoriteProductIds: Set<String> = emptySet(),
+    val displaySettings: CustomerDisplaySettings? = null
 )
 
 @Serializable

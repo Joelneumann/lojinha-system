@@ -185,6 +185,12 @@ class LojinhaAdminServerTest {
             val idx = fakeVeggieProducts.indexOfFirst { it.id == id }
             if (idx >= 0) fakeVeggieProducts[idx] = fakeVeggieProducts[idx].copy(isActive = false)
         }
+        override suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean {
+            val round = getRoundById(roundId) ?: return false
+            if (round.status != VeggieRoundStatus.OPEN) return false
+            fakeVeggieEntries.removeIf { it.roundId == roundId && it.veggieProductId == productId }
+            return true
+        }
         override suspend fun hardDeleteVeggieProduct(id: String) {
             fakeVeggieProducts.removeIf { it.id == id }
         }
@@ -829,6 +835,7 @@ class LojinhaAdminServerTest {
         val veggieState = json.decodeFromString<CustomerVeggieStateResponse>(stateRes.body())
         assertEquals(openedRound.id, veggieState.activeRound?.id)
         assertEquals(1500L, veggieState.previousRoundQuantities["vp-tomato"])
+        assertNotNull(veggieState.displaySettings)
 
         // 6. Customer submits an order in the open round
         val saveOrderPayload = SaveCustomerVeggieOrderRequest(
@@ -986,6 +993,30 @@ class LojinhaAdminServerTest {
         val settlementResult = json.decodeFromString<VeggieRoundSettlementResult>(settleRes.body())
         assertEquals(600L, settlementResult.combinedFeeCents)
         assertEquals("u-alice", settlementResult.transporterUserId)
+
+        // 4. Cancel-product endpoint succeeds on OPEN round and returns 409 on SETTLED round
+        val cancelClosedReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/cancel-product/vp-tomato"))
+            .header("Authorization", "Bearer $adminToken")
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .build()
+        assertEquals(409, client.send(cancelClosedReq, HttpResponse.BodyHandlers.ofString()).statusCode())
+
+        val openRound2Req = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/open"))
+            .header("Authorization", "Bearer $adminToken")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(OpenVeggieRoundRequest(200L, 400L, 1731200000000L))))
+            .build()
+        val round2 = json.decodeFromString<VeggieOrderRound>(
+            client.send(openRound2Req, HttpResponse.BodyHandlers.ofString()).body()
+        )
+        val cancelOpenReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round2.id}/cancel-product/vp-tomato"))
+            .header("Authorization", "Bearer $adminToken")
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .build()
+        assertEquals(200, client.send(cancelOpenReq, HttpResponse.BodyHandlers.ofString()).statusCode())
     }
 
     @Test

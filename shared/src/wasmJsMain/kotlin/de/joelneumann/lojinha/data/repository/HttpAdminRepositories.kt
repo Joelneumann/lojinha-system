@@ -1078,6 +1078,18 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
         }
     }
 
+    override suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/cancel-product/$productId")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "cancelProductEntriesInOpenRound failed: ${e.message}", e)
+            false
+        }
+    }
+
     override suspend fun hardDeleteVeggieProduct(id: String) {
         try {
             val response = client.httpClient.delete(client.resolveUrl("/api/admin/veggie/products/$id")) {

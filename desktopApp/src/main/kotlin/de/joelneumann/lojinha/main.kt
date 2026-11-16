@@ -12,8 +12,6 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.window.application
-import androidx.room.immediateTransaction
-import androidx.room.useWriterConnection
 import de.joelneumann.lojinha.data.database.DatabaseFactory
 import de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomProductRepositoryImpl
@@ -69,10 +67,11 @@ fun main() {
             onUserScopedDataChanged = { userId ->
                 DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(targetUserId = userId))
             },
+            onAdminOnlyDataChanged = {
+                DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(adminOnly = true))
+            },
             runInTransaction = { block ->
-                database.useWriterConnection { transactor ->
-                    transactor.immediateTransaction { block() }
-                }
+                DatabaseFactory.runImmediateTransaction(database, block)
             }
         )
         val veggieImageService = VeggieImageService()

@@ -24,6 +24,7 @@ class RoomVeggieOrderRepositoryImpl(
     private val transactionDao: TransactionDao,
     private val onDataChanged: (() -> Unit)? = null,
     private val onUserScopedDataChanged: ((String) -> Unit)? = null,
+    private val onAdminOnlyDataChanged: (() -> Unit)? = null,
     private val runInTransaction: (suspend (suspend () -> Unit) -> Unit)? = null
 ) : VeggieOrderRepository {
 
@@ -232,7 +233,7 @@ class RoomVeggieOrderRepositoryImpl(
         val now = currentTimeMillis()
         val exportTime = if (timestamp > 0L) timestamp else now
         veggieOrderDao.markBuyerPdfExported(roundId, exportTime, now)
-        onDataChanged?.invoke()
+        onAdminOnlyDataChanged?.invoke() ?: onDataChanged?.invoke()
         true
     }
 
@@ -241,7 +242,7 @@ class RoomVeggieOrderRepositoryImpl(
         val now = currentTimeMillis()
         val exportTime = if (timestamp > 0L) timestamp else now
         veggieOrderDao.markWorkerPdfExported(roundId, exportTime, now)
-        onDataChanged?.invoke()
+        onAdminOnlyDataChanged?.invoke() ?: onDataChanged?.invoke()
         true
     }
 

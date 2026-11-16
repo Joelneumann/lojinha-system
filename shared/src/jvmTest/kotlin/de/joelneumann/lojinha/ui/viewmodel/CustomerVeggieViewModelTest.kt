@@ -368,4 +368,40 @@ class CustomerVeggieViewModelTest {
         assertFalse(vm.hasUnsavedOrderChanges.value)
         assertTrue(vm.draftQuantitiesScaled.value.isEmpty())
     }
+
+    @Test
+    fun testFavoritesRollbackOnServerFailureAndDisplaySettingsLoaded() = runTest {
+        val expectedSettings = CustomerDisplaySettings(
+            usdExchangeRate = 0.21,
+            eurExchangeRate = 0.19,
+            yellowBalanceWarningThresholdCents = 150_00L,
+            redBalanceWarningThresholdCents = -50_00L
+        )
+        var localStoredFavorites = setOf("prod-1")
+
+        val vm = CustomerVeggieViewModel(
+            onFetchVeggieState = {
+                CustomerVeggieStateResponse(
+                    favoriteProductIds = setOf("prod-1"),
+                    displaySettings = expectedSettings
+                )
+            },
+            onSaveOrder = { _, _ -> true },
+            onFetchHistory = { emptyList() },
+            initialFavoriteProductIds = setOf("prod-1"),
+            onFavoritesChanged = { localStoredFavorites = it },
+            onSaveFavorites = { false },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        assertEquals(expectedSettings, vm.displaySettings.value)
+
+        vm.toggleFavorite("prod-2")
+        advanceUntilIdle()
+
+        assertEquals(setOf("prod-1"), vm.favoriteProductIds.value)
+        assertEquals(setOf("prod-1"), localStoredFavorites)
+        assertEquals("Failed to save favorites", vm.errorMessage.value)
+    }
 }

@@ -41,7 +41,8 @@ class RoomVeggieOrderRepositoryTest {
         veggieRepo = RoomVeggieOrderRepositoryImpl(
             veggieOrderDao = db.veggieOrderDao(),
             userDao = db.userDao(),
-            transactionDao = db.transactionDao()
+            transactionDao = db.transactionDao(),
+            runInTransaction = { block -> DatabaseFactory.runImmediateTransaction(db, block) }
         )
         userRepo = RoomUserRepositoryImpl(
             userDao = db.userDao(),
