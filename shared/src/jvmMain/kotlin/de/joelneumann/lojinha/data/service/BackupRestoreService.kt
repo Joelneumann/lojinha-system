@@ -21,6 +21,7 @@ import de.joelneumann.lojinha.data.entity.VeggieOrderRoundEntity
 import de.joelneumann.lojinha.data.entity.VeggieProductEntity
 import de.joelneumann.lojinha.data.entity.VeggieRoundProductSettlementEntity
 import de.joelneumann.lojinha.data.entity.VeggieUnitTypeEntity
+import de.joelneumann.lojinha.data.entity.VeggieUserFavoriteEntity
 import de.joelneumann.lojinha.domain.model.Barcode
 import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.Language
@@ -65,14 +66,15 @@ class BackupRestoreService(
         }
         require(dbFile.exists()) { "Database file not found at ${dbFile.absolutePath}" }
 
-        // SQLite VACUUM INTO requires target file to not exist prior to command execution
-        if (targetFile.exists()) {
-            targetFile.delete()
-        }
         targetFile.parentFile?.mkdirs()
+        // Write snapshot to a temporary file first so an error never destroys an existing OVERWRITE_LATEST backup
+        val tempFile = File(targetFile.parentFile, "${targetFile.name}.${System.currentTimeMillis()}.tmp")
+        if (tempFile.exists()) {
+            tempFile.delete()
+        }
 
         // Use native VACUUM INTO for an atomic, crash-consistent live snapshot with full WAL integration
-        val escapedPath = targetFile.absolutePath.replace("'", "''")
+        val escapedPath = tempFile.absolutePath.replace("'", "''")
         val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
         try {
             val busyStmt = connection.prepare("PRAGMA busy_timeout = 5000")
@@ -91,8 +93,18 @@ class BackupRestoreService(
             connection.close()
         }
 
-        if (!targetFile.exists()) {
-            throw IllegalStateException("Failed to create database snapshot at ${targetFile.absolutePath}")
+        if (!tempFile.exists()) {
+            throw IllegalStateException("Failed to create database snapshot at ${tempFile.absolutePath}")
+        }
+        try {
+            java.nio.file.Files.move(
+                tempFile.toPath(),
+                targetFile.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+            )
+        } catch (e: Exception) {
+            tempFile.delete()
+            throw e
         }
         targetFile
     }
@@ -141,16 +153,21 @@ class BackupRestoreService(
         writeMode: de.joelneumann.lojinha.domain.model.BackupWriteMode = de.joelneumann.lojinha.domain.model.BackupWriteMode.CREATE_NEW_FILE
     ): File = withContext(Dispatchers.IO) {
         require(destinationDir.exists() && destinationDir.isDirectory) { "Destination directory does not exist: ${destinationDir.absolutePath}" }
-        val folderName = if (writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) {
+        val isOverwriteLatest = writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST
+        val folderName = if (isOverwriteLatest) {
             "lojinha_csv_export_latest"
         } else {
             "lojinha_csv_export_${getTimestampString()}"
         }
-        val exportFolder = File(destinationDir, folderName)
-        if (writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST && exportFolder.exists()) {
-            exportFolder.deleteRecursively()
+        val finalFolder = File(destinationDir, folderName)
+        val exportFolder = if (isOverwriteLatest) {
+            File(destinationDir, "${folderName}.${System.currentTimeMillis()}.tmp").apply {
+                if (exists()) deleteRecursively()
+                mkdirs()
+            }
+        } else {
+            finalFolder.apply { mkdirs() }
         }
-        exportFolder.mkdirs()
 
         val converters = Converters()
 
@@ -395,7 +412,29 @@ class BackupRestoreService(
         }
         writeCsvFile(veggieOrdersCsv, veggieOrderLines)
 
-        exportFolder
+        if (isOverwriteLatest) {
+            if (finalFolder.exists()) {
+                finalFolder.deleteRecursively()
+            }
+            if (!exportFolder.renameTo(finalFolder)) {
+                exportFolder.copyRecursively(finalFolder, overwrite = true)
+                exportFolder.deleteRecursively()
+            }
+        }
+        finalFolder
+    }
+
+    private fun getTableColumns(connection: androidx.sqlite.SQLiteConnection, tableName: String): Set<String> {
+        val cols = mutableSetOf<String>()
+        val stmt = connection.prepare("PRAGMA table_info($tableName)")
+        try {
+            while (stmt.step()) {
+                cols.add(stmt.getText(1).lowercase())
+            }
+        } finally {
+            stmt.close()
+        }
+        return cols
     }
 
     suspend fun restoreDbFromBackup(
@@ -420,10 +459,13 @@ class BackupRestoreService(
         val backupVeggieRounds = mutableListOf<VeggieOrderRoundEntity>()
         val backupVeggieSettlements = mutableListOf<VeggieRoundProductSettlementEntity>()
         val backupVeggieEntries = mutableListOf<VeggieOrderEntryEntity>()
+        val backupVeggieFavorites = mutableListOf<VeggieUserFavoriteEntity>()
         val tableNames = mutableSetOf<String>()
 
-        // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
-        val connection = BundledSQLiteDriver().open(backupFile.absolutePath)
+        // 1. Copy backupFile to a temp file before opening so read-only media/shares don't fail or get sidecar files
+        val tempBackupCopy = File.createTempFile("lojinha_restore_", ".db")
+        backupFile.copyTo(tempBackupCopy, overwrite = true)
+        val connection = BundledSQLiteDriver().open(tempBackupCopy.absolutePath)
         try {
             // Quick integrity check before processing
             val integrityStmt = connection.prepare("PRAGMA quick_check")
@@ -848,8 +890,12 @@ class BackupRestoreService(
 
             // Read veggie_products
             if (tableNames.contains("veggie_products")) {
+                val vpCols = getTableColumns(connection, "veggie_products")
+                val hasDeliveryUnit = vpCols.contains("deliveryunittypeid")
                 val stmt = connection.prepare(
-                    "SELECT id, name, description, estimatedPriceCents, unitTypeId, imageFileName, isActive, isDeleted, updatedAt FROM veggie_products"
+                    "SELECT id, name, description, estimatedPriceCents, unitTypeId, " +
+                        (if (hasDeliveryUnit) "deliveryUnitTypeId" else "NULL") +
+                        ", imageFileName, isActive, isDeleted, updatedAt FROM veggie_products"
                 )
                 try {
                     while (stmt.step()) {
@@ -860,10 +906,11 @@ class BackupRestoreService(
                                 description = if (stmt.isNull(2)) null else stmt.getText(2),
                                 estimatedPriceCents = if (stmt.isNull(3)) null else stmt.getLong(3),
                                 unitTypeId = stmt.getText(4),
-                                imageFileName = if (stmt.isNull(5)) null else stmt.getText(5),
-                                isActive = stmt.getLong(6) != 0L,
-                                isDeleted = stmt.getLong(7) != 0L,
-                                updatedAt = stmt.getLong(8)
+                                deliveryUnitTypeId = if (stmt.isNull(5)) null else stmt.getText(5),
+                                imageFileName = if (stmt.isNull(6)) null else stmt.getText(6),
+                                isActive = stmt.getLong(7) != 0L,
+                                isDeleted = stmt.getLong(8) != 0L,
+                                updatedAt = stmt.getLong(9)
                             )
                         )
                     }
@@ -874,8 +921,14 @@ class BackupRestoreService(
 
             // Read veggie_order_rounds
             if (tableNames.contains("veggie_order_rounds")) {
+                val roundCols = getTableColumns(connection, "veggie_order_rounds")
+                val hasBuyerPdf = roundCols.contains("buyerpdfexportedat")
+                val hasWorkerPdf = roundCols.contains("workerpdfexportedat")
                 val stmt = connection.prepare(
-                    "SELECT id, openedAt, closedAt, settledAt, status, buyerOperationFeeCents, transportFeeCents, transporterUserId, updatedAt FROM veggie_order_rounds"
+                    "SELECT id, openedAt, closedAt, settledAt, status, buyerOperationFeeCents, transportFeeCents, transporterUserId, " +
+                        (if (hasBuyerPdf) "buyerPdfExportedAt" else "NULL") + ", " +
+                        (if (hasWorkerPdf) "workerPdfExportedAt" else "NULL") +
+                        ", updatedAt FROM veggie_order_rounds"
                 )
                 try {
                     while (stmt.step()) {
@@ -889,7 +942,9 @@ class BackupRestoreService(
                                 buyerOperationFeeCents = stmt.getLong(5),
                                 transportFeeCents = stmt.getLong(6),
                                 transporterUserId = if (stmt.isNull(7)) null else stmt.getText(7),
-                                updatedAt = stmt.getLong(8)
+                                buyerPdfExportedAt = if (stmt.isNull(8)) null else stmt.getLong(8),
+                                workerPdfExportedAt = if (stmt.isNull(9)) null else stmt.getLong(9),
+                                updatedAt = stmt.getLong(10)
                             )
                         )
                     }
@@ -922,8 +977,14 @@ class BackupRestoreService(
 
             // Read veggie_order_entries
             if (tableNames.contains("veggie_order_entries")) {
+                val entryCols = getTableColumns(connection, "veggie_order_entries")
+                val hasDelivUnit = entryCols.contains("deliveryunitnamesnapshot")
+                val hasDelivDec = entryCols.contains("deliveryallowdecimalssnapshot")
                 val stmt = connection.prepare(
-                    "SELECT id, roundId, userId, userNameSnapshot, veggieProductId, veggieNameSnapshot, unitNameSnapshot, allowDecimalsSnapshot, orderedQuantityScaled, actualQuantityScaled, effectiveUnitPriceCents, finalItemTotalCents, updatedAt FROM veggie_order_entries"
+                    "SELECT id, roundId, userId, userNameSnapshot, veggieProductId, veggieNameSnapshot, unitNameSnapshot, allowDecimalsSnapshot, " +
+                        (if (hasDelivUnit) "deliveryUnitNameSnapshot" else "NULL") + ", " +
+                        (if (hasDelivDec) "deliveryAllowDecimalsSnapshot" else "NULL") +
+                        ", orderedQuantityScaled, actualQuantityScaled, effectiveUnitPriceCents, finalItemTotalCents, updatedAt FROM veggie_order_entries"
                 )
                 try {
                     while (stmt.step()) {
@@ -937,11 +998,31 @@ class BackupRestoreService(
                                 veggieNameSnapshot = stmt.getText(5),
                                 unitNameSnapshot = stmt.getText(6),
                                 allowDecimalsSnapshot = stmt.getLong(7) != 0L,
-                                orderedQuantityScaled = stmt.getLong(8),
-                                actualQuantityScaled = if (stmt.isNull(9)) null else stmt.getLong(9),
-                                effectiveUnitPriceCents = if (stmt.isNull(10)) null else stmt.getLong(10),
-                                finalItemTotalCents = if (stmt.isNull(11)) null else stmt.getLong(11),
-                                updatedAt = stmt.getLong(12)
+                                deliveryUnitNameSnapshot = if (stmt.isNull(8)) null else stmt.getText(8),
+                                deliveryAllowDecimalsSnapshot = if (stmt.isNull(9)) null else stmt.getLong(9) != 0L,
+                                orderedQuantityScaled = stmt.getLong(10),
+                                actualQuantityScaled = if (stmt.isNull(11)) null else stmt.getLong(11),
+                                effectiveUnitPriceCents = if (stmt.isNull(12)) null else stmt.getLong(12),
+                                finalItemTotalCents = if (stmt.isNull(13)) null else stmt.getLong(13),
+                                updatedAt = stmt.getLong(14)
+                            )
+                        )
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
+
+            // Read veggie_user_favorites
+            if (tableNames.contains("veggie_user_favorites")) {
+                val stmt = connection.prepare("SELECT userId, veggieProductId, createdAt FROM veggie_user_favorites")
+                try {
+                    while (stmt.step()) {
+                        backupVeggieFavorites.add(
+                            VeggieUserFavoriteEntity(
+                                userId = stmt.getText(0),
+                                veggieProductId = stmt.getText(1),
+                                createdAt = stmt.getLong(2)
                             )
                         )
                     }
@@ -951,6 +1032,9 @@ class BackupRestoreService(
             }
         } finally {
             connection.close()
+            tempBackupCopy.delete()
+            File("${tempBackupCopy.absolutePath}-wal").delete()
+            File("${tempBackupCopy.absolutePath}-shm").delete()
         }
 
         // 2. Create pre-restore safety snapshot before touching active database
@@ -1014,6 +1098,9 @@ class BackupRestoreService(
                     }
                     if (backupVeggieEntries.isNotEmpty()) {
                         db.veggieOrderDao().insertOrUpdateEntries(backupVeggieEntries)
+                    }
+                    if (backupVeggieFavorites.isNotEmpty()) {
+                        db.veggieOrderDao().insertFavorites(backupVeggieFavorites)
                     }
 
                     if (hasBackupRoutinesInBackup && !preserveExistingRoutines) {
@@ -1858,6 +1945,7 @@ class BackupRestoreService(
                 description = description,
                 estimatedPriceCents = estimatedPriceCents,
                 unitTypeId = resolvedUnit.id,
+                deliveryUnitTypeId = existing?.deliveryUnitTypeId,
                 imageFileName = imageFileName,
                 isActive = isActive,
                 isDeleted = isDeleted,

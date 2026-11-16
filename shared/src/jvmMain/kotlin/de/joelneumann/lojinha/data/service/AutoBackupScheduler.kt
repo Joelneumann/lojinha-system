@@ -183,11 +183,9 @@ class AutoBackupScheduler(
         try {
             var targetDir = File(routine.backupLocationPath)
             if (routine.type == BackupType.ONEDRIVE) {
-                if (routine.backupLocationPath.isBlank() || !targetDir.exists() || !targetDir.isDirectory) {
-                    targetDir = File(System.getProperty("java.io.tmpdir"), "lojinha_onedrive_temp_${System.currentTimeMillis()}").apply { mkdirs() }
-                    isTempFolder = true
-                    tempFolderToDelete = targetDir
-                }
+                targetDir = File(System.getProperty("java.io.tmpdir"), "lojinha_onedrive_temp_${System.currentTimeMillis()}").apply { mkdirs() }
+                isTempFolder = true
+                tempFolderToDelete = targetDir
             } else {
                 if (!targetDir.exists()) {
                     targetDir.mkdirs()
