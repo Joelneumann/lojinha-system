@@ -46,7 +46,8 @@ import java.util.Locale
 
 class BackupRestoreService(
     private val db: AppDatabase,
-    private val dbFile: File = de.joelneumann.lojinha.data.database.DatabaseFactory.getDatabaseFile()
+    private val dbFile: File = de.joelneumann.lojinha.data.database.DatabaseFactory.getDatabaseFile(),
+    private val veggieImageDir: File = File(System.getProperty("user.home"), ".lojinha/veggie_images")
 ) {
 
     private fun getTimestampString(): String {
@@ -321,7 +322,7 @@ class BackupRestoreService(
         val veggieProducts = db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true)
         val veggieProductsCsv = File(exportFolder, "veggie_products.csv")
         val veggieProductLines = mutableListOf(
-            "id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;isActive;isDeleted"
+            "id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;isActive;isDeleted;deliveryUnitTypeId"
         )
         veggieProducts.forEach { vp ->
             val unit = veggieUnitsById[vp.unitTypeId]
@@ -335,7 +336,8 @@ class BackupRestoreService(
                 (unit?.allowDecimals ?: false).toString(),
                 escapeCsv(vp.imageFileName ?: ""),
                 vp.isActive.toString(),
-                vp.isDeleted.toString()
+                vp.isDeleted.toString(),
+                escapeCsv(vp.deliveryUnitTypeId ?: "")
             ).joinToString(CSV_DELIMITER)
             veggieProductLines.add(line)
         }
@@ -345,7 +347,7 @@ class BackupRestoreService(
         val veggieRounds = db.veggieOrderDao().getAllRounds()
         val veggieOrdersCsv = File(exportFolder, "veggie_orders.csv")
         val veggieOrderLines = mutableListOf(
-            "roundId;isoYear;weekOfYear;openedAt;closedAt;settledAt;status;buyerOperationFee;transportFee;transporterUserId;entryId;userId;userName;veggieProductId;veggieName;unitName;allowDecimals;orderedQuantity;actualQuantity;marketUnitPrice;productTotalSpent;effectiveUnitPrice;finalItemTotal"
+            "roundId;isoYear;weekOfYear;openedAt;closedAt;settledAt;status;buyerOperationFee;transportFee;transporterUserId;entryId;userId;userName;veggieProductId;veggieName;unitName;allowDecimals;orderedQuantity;actualQuantity;marketUnitPrice;productTotalSpent;effectiveUnitPrice;finalItemTotal;deliveryUnitName;deliveryAllowDecimals"
         )
         veggieRounds.forEach { r ->
             val weekInfo = IsoWeekUtils.fromEpochMillis(r.openedAt)
@@ -366,7 +368,7 @@ class BackupRestoreService(
                     escapeCsv(buyerFeeStr),
                     escapeCsv(transportFeeStr),
                     escapeCsv(r.transporterUserId ?: ""),
-                    "", "", "", "", "", "", "", "", "", "", "", "", ""
+                    "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
                 ).joinToString(CSV_DELIMITER)
                 veggieOrderLines.add(emptyRoundLine)
             } else {
@@ -404,7 +406,9 @@ class BackupRestoreService(
                         escapeCsv(marketUnitStr),
                         escapeCsv(totalSpentStr),
                         escapeCsv(effectiveUnitStr),
-                        escapeCsv(finalItemTotalStr)
+                        escapeCsv(finalItemTotalStr),
+                        escapeCsv(e.deliveryUnitNameSnapshot ?: ""),
+                        e.deliveryAllowDecimalsSnapshot?.toString() ?: ""
                     ).joinToString(CSV_DELIMITER)
                     veggieOrderLines.add(entryLine)
                 }
@@ -497,15 +501,7 @@ class BackupRestoreService(
 
             // Read users
             if (tableNames.contains("users")) {
-                val userColumns = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(users)")
-                try {
-                    while (stmtCols.step()) {
-                        userColumns.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val userColumns = getTableColumns(connection, "users")
 
                 val hasIsDeleted = userColumns.contains("isdeleted")
                 val hasAvatarType = userColumns.contains("avatartype")
@@ -554,15 +550,7 @@ class BackupRestoreService(
 
             // Read products
             if (tableNames.contains("products")) {
-                val productCols = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(products)")
-                try {
-                    while (stmtCols.step()) {
-                        productCols.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val productCols = getTableColumns(connection, "products")
 
                 val hasMarkup = productCols.contains("custommarkuppercent")
                 val query = buildString {
@@ -596,15 +584,7 @@ class BackupRestoreService(
 
             // Read transactions
             if (tableNames.contains("transactions")) {
-                val txColumns = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(transactions)")
-                try {
-                    while (stmtCols.step()) {
-                        txColumns.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val txColumns = getTableColumns(connection, "transactions")
 
                 val hasSnapshots = txColumns.contains("userbalancebefore") && txColumns.contains("userbalanceafter")
                 val query = if (hasSnapshots) {
@@ -642,15 +622,7 @@ class BackupRestoreService(
 
             // Read settings
             if (tableNames.contains("settings")) {
-                val settingsColumns = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(settings)")
-                try {
-                    while (stmtCols.step()) {
-                        settingsColumns.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val settingsColumns = getTableColumns(connection, "settings")
 
                 val settingsQuery = buildString {
                     append("SELECT id, adminPasswordHash, globalMarkupPercent, usdExchangeRate, eurExchangeRate, inactivityTimeoutMinutes")
@@ -725,15 +697,7 @@ class BackupRestoreService(
 
             // Read backup_routines
             if (tableNames.contains("backup_routines")) {
-                val routineColumns = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(backup_routines)")
-                try {
-                    while (stmtCols.step()) {
-                        routineColumns.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val routineColumns = getTableColumns(connection, "backup_routines")
 
                 val hasWriteMode = routineColumns.contains("writemode")
                 val routineQuery = buildString {
@@ -768,15 +732,7 @@ class BackupRestoreService(
 
             // Read billing_lists
             if (tableNames.contains("billing_lists")) {
-                val listCols = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(billing_lists)")
-                try {
-                    while (stmtCols.step()) {
-                        listCols.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val listCols = getTableColumns(connection, "billing_lists")
 
                 val hasComment = listCols.contains("comment")
                 val hasIsDeleted = listCols.contains("isdeleted")
@@ -1203,6 +1159,13 @@ class BackupRestoreService(
                         supportEmail = existingSettings?.supportEmail
                     )
                     db.settingsDao().insertOrUpdateSettings(defaultSettings)
+                }
+            }
+            if (veggieImageDir.exists() && veggieImageDir.isDirectory) {
+                veggieImageDir.listFiles()?.forEach { file ->
+                    if (file.isFile) {
+                        file.delete()
+                    }
                 }
             }
         }
@@ -1778,6 +1741,7 @@ class BackupRestoreService(
         val descIdx = findHeaderIndex("description", "desc", "beschreibung")
         val priceIdx = findHeaderIndex("estimatedPrice", "price", "basePrice", "estimated_price", "estimatedPriceCents")
         val unitIdIdx = findHeaderIndex("unitTypeId", "unit_type_id")
+        val deliveryUnitIdIdx = findHeaderIndex("deliveryUnitTypeId", "delivery_unit_type_id")
         val unitNameIdx = findHeaderIndex("unitTypeName", "unitType", "unit", "type", "unit_type", "unit_name")
         val allowDecimalsIdx = findHeaderIndex("allowDecimals", "allow_decimals", "decimals")
         val imageIdx = findHeaderIndex("imageFileName", "image", "image_file_name")
@@ -1852,7 +1816,9 @@ class BackupRestoreService(
 
         val existingProductsList = db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true)
         val existingById = existingProductsList.associateBy { it.id }
-        val existingByNameLower = existingProductsList.associateBy { it.name.trim().lowercase() }
+        val existingByNameLower = existingProductsList
+            .sortedBy { !it.isDeleted } // Put active (!isDeleted) last so associateBy prefers active products
+            .associateBy { it.name.trim().lowercase() }
 
         var addedCount = 0
         var updatedCount = 0
@@ -1939,13 +1905,19 @@ class BackupRestoreService(
                 existing?.isDeleted ?: false
             }
 
+            val deliveryUnitTypeId = if (deliveryUnitIdIdx != -1 && deliveryUnitIdIdx < cols.size) {
+                cols[deliveryUnitIdIdx].trim().takeIf { it.isNotEmpty() && unitsById.containsKey(it) }
+            } else {
+                existing?.deliveryUnitTypeId
+            }
+
             val entity = VeggieProductEntity(
                 id = productId,
                 name = name,
                 description = description,
                 estimatedPriceCents = estimatedPriceCents,
                 unitTypeId = resolvedUnit.id,
-                deliveryUnitTypeId = existing?.deliveryUnitTypeId,
+                deliveryUnitTypeId = deliveryUnitTypeId,
                 imageFileName = imageFileName,
                 isActive = isActive,
                 isDeleted = isDeleted,

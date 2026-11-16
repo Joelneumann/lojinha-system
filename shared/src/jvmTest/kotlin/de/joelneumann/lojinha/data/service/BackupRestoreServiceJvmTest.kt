@@ -17,6 +17,7 @@ class BackupRestoreServiceJvmTest {
 
     private lateinit var tempDir: File
     private lateinit var dbFile: File
+    private lateinit var veggieImageDir: File
     private lateinit var db: AppDatabase
     private lateinit var service: BackupRestoreService
 
@@ -24,6 +25,7 @@ class BackupRestoreServiceJvmTest {
     fun setup() {
         tempDir = Files.createTempDirectory("backup_restore_test").toFile()
         dbFile = File(tempDir, "test_lojinha.db")
+        veggieImageDir = File(tempDir, "veggie_images").apply { mkdirs() }
 
         val builder = Room.databaseBuilder<AppDatabase>(
             name = dbFile.absolutePath,
@@ -33,7 +35,7 @@ class BackupRestoreServiceJvmTest {
         builder.setQueryCoroutineContext(Dispatchers.IO)
         db = builder.build()
 
-        service = BackupRestoreService(db, dbFile)
+        service = BackupRestoreService(db, dbFile, veggieImageDir)
     }
 
     @AfterTest
@@ -1654,6 +1656,74 @@ class BackupRestoreServiceJvmTest {
         val updated = db.veggieOrderDao().getVeggieProductById("vp-preserve")!!
         assertEquals("Onion Updated", updated.name)
         assertEquals("unit-pack", updated.deliveryUnitTypeId)
+    }
+
+    @Test
+    fun testWipeAllData_clearsVeggieImagesDirectory() = runTest {
+        val thumbFile = File(veggieImageDir, "tomato_thumb.jpg").apply { writeText("thumb") }
+        val fullFile = File(veggieImageDir, "tomato_full.jpg").apply { writeText("full") }
+        assertTrue(thumbFile.exists() && fullFile.exists())
+
+        service.wipeAllData()
+
+        assertFalse(thumbFile.exists(), "wipeAllData must delete veggie thumbnail images")
+        assertFalse(fullFile.exists(), "wipeAllData must delete veggie full images")
+    }
+
+    @Test
+    fun testVeggieCsvExportAndImport_includesDeliveryUnitAndPrefersActiveByName() = runTest {
+        db.veggieOrderDao().insertOrUpdateUnitTypes(DatabaseFactory.defaultVeggieUnitTypes(1000L))
+        db.veggieOrderDao().insertOrUpdateVeggieProducts(
+            listOf(
+                VeggieProductEntity(
+                    id = "vp-deleted",
+                    name = "Carrot",
+                    description = "Old",
+                    estimatedPriceCents = 300L,
+                    unitTypeId = "unit-kg",
+                    deliveryUnitTypeId = null,
+                    imageFileName = null,
+                    isActive = false,
+                    isDeleted = true,
+                    updatedAt = 1000L
+                ),
+                VeggieProductEntity(
+                    id = "vp-active",
+                    name = "Carrot",
+                    description = "Fresh",
+                    estimatedPriceCents = 500L,
+                    unitTypeId = "unit-kg",
+                    deliveryUnitTypeId = "unit-bunch",
+                    imageFileName = null,
+                    isActive = true,
+                    isDeleted = false,
+                    updatedAt = 2000L
+                )
+            )
+        )
+
+        val csvBackupDir = File(tempDir, "csv_delivery_test").apply { mkdirs() }
+        val exportFolder = service.performCsvBackup(csvBackupDir)
+        val vpRecords = service.parseCsvRecords(File(exportFolder, "veggie_products.csv").readText())
+        assertEquals("deliveryUnitTypeId", vpRecords[0].last())
+        val activeRow = vpRecords.first { it[0] == "vp-active" }
+        assertEquals("unit-bunch", activeRow.last())
+
+        val importCsv = File(tempDir, "import_carrot.csv")
+        importCsv.writeText(
+            """
+            name;estimatedPrice;unitTypeName;deliveryUnitTypeId
+            Carrot;6,50;kg;unit-pack
+            """.trimIndent()
+        )
+        val result = service.importVeggieProductsFromCsv(importCsv, dryRun = false)
+        assertEquals(1, result.updatedCount)
+
+        val updatedActive = db.veggieOrderDao().getVeggieProductById("vp-active")!!
+        val untouchedDeleted = db.veggieOrderDao().getVeggieProductById("vp-deleted")!!
+        assertEquals(650L, updatedActive.estimatedPriceCents)
+        assertEquals("unit-pack", updatedActive.deliveryUnitTypeId)
+        assertEquals(300L, untouchedDeleted.estimatedPriceCents)
     }
 }
 
