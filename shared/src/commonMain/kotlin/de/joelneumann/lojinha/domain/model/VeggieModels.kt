@@ -111,7 +111,7 @@ object VeggieQuantityScaling {
             (dbl * VEGGIE_QTY_SCALE).roundToLong()
         } else {
             val whole = clean.toLongOrNull() ?: return null
-            if (whole < 0L) return null
+            if (whole < 0L || whole > Long.MAX_VALUE / VEGGIE_QTY_SCALE) return null
             whole * VEGGIE_QTY_SCALE
         }
     }

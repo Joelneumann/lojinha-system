@@ -437,7 +437,7 @@ fun CustomerNetworkPortalScreen(
                     Button(
                         onClick = {
                             showUnsavedDialog = false
-                            veggieViewModel.loadData(preserveDraftIfSameRound = false)
+                            veggieViewModel.discardUnsavedChanges()
                             val nav = pendingNavigation
                             pendingNavigation = null
                             nav?.invoke()

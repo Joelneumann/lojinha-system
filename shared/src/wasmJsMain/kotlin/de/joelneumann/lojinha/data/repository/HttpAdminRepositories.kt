@@ -1534,12 +1534,18 @@ class CustomerNetworkClient(val baseUrl: String = "") {
 
     suspend fun getVeggieState(): CustomerVeggieStateResponse {
         return try {
-            httpClient.get(resolveUrl("/api/customer/veggie/state")) {
+            val response = httpClient.get(resolveUrl("/api/customer/veggie/state")) {
                 appendCustomerAuth()
-            }.body()
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("HTTP ${response.status.value}")
+            }
+            response.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             AppLogger.error("CustomerNetworkClient", "getVeggieState failed: ${e.message}", e)
-            CustomerVeggieStateResponse()
+            KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+            throw e
         }
     }
 

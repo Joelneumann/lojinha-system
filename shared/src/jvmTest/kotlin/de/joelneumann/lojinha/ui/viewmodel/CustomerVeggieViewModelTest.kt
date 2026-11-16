@@ -328,4 +328,44 @@ class CustomerVeggieViewModelTest {
         assertFalse(persistedDrafts.containsKey("round-draft-1"))
         assertFalse(vm2.hasUnsavedOrderChanges.value)
     }
+
+    @Test
+    fun testDiscardUnsavedChangesClearsPersistedDraft() = runTest {
+        val round = VeggieOrderRound(
+            id = "round-discard-1",
+            status = VeggieRoundStatus.OPEN,
+            openedAt = 1000L
+        )
+        val unit = VeggieUnitType(id = "u1", name = "kg", allowDecimals = true)
+        val prod = VeggieProduct(id = "p1", name = "Tomato", unitTypeId = "u1", estimatedPriceCents = 500L)
+        val persistedDrafts = mutableMapOf<String, Map<String, Long>>()
+
+        val vm = CustomerVeggieViewModel(
+            onFetchVeggieState = {
+                CustomerVeggieStateResponse(
+                    activeRound = round,
+                    unitTypes = listOf(unit),
+                    products = listOf(prod)
+                )
+            },
+            onSaveOrder = { _, _ -> true },
+            onFetchHistory = { emptyList() },
+            onLoadDraft = { rid -> persistedDrafts[rid] },
+            onSaveDraft = { rid, qty -> persistedDrafts[rid] = qty },
+            onClearDraft = { rid -> persistedDrafts.remove(rid) },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        vm.updateProductQuantity("p1", 3000L)
+        assertTrue(vm.hasUnsavedOrderChanges.value)
+        assertEquals(mapOf("p1" to 3000L), persistedDrafts["round-discard-1"])
+
+        vm.discardUnsavedChanges()
+        advanceUntilIdle()
+
+        assertFalse(persistedDrafts.containsKey("round-discard-1"))
+        assertFalse(vm.hasUnsavedOrderChanges.value)
+        assertTrue(vm.draftQuantitiesScaled.value.isEmpty())
+    }
 }

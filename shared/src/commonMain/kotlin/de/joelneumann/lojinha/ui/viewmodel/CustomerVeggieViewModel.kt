@@ -9,7 +9,6 @@ import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,9 +80,6 @@ class CustomerVeggieViewModel(
     private val _isSavingOrder = MutableStateFlow(false)
     val isSavingOrder: StateFlow<Boolean> = _isSavingOrder.asStateFlow()
 
-    private val _orderSavedSuccessBanner = MutableStateFlow(false)
-    val orderSavedSuccessBanner: StateFlow<Boolean> = _orderSavedSuccessBanner.asStateFlow()
-
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -92,7 +88,6 @@ class CustomerVeggieViewModel(
 
     private var loadedRoundId: String? = null
     private var loadJob: Job? = null
-    private var bannerJob: Job? = null
 
     init {
         loadData()
@@ -236,6 +231,13 @@ class CustomerVeggieViewModel(
         _errorMessage.value = null
     }
 
+    fun discardUnsavedChanges() {
+        loadedRoundId?.let { onClearDraft?.invoke(it) }
+        _draftQuantitiesScaled.value = _savedQuantitiesScaled.value
+        _hasUnsavedOrderChanges.value = false
+        loadData(preserveDraftIfSameRound = false)
+    }
+
     fun updateProductQuantity(productId: String, quantityScaled: Long) {
         val round = _activeRound.value ?: return
         if (round.status != VeggieRoundStatus.OPEN) return
@@ -265,18 +267,6 @@ class CustomerVeggieViewModel(
         _draftQuantitiesScaled.value = filteredPrev
         recomputeUnsavedFlag()
         persistDraftIfChanged(round.id)
-    }
-
-    fun incrementProductQuantity(product: VeggieProduct, unitType: VeggieUnitType?) {
-        val step = if (unitType?.allowDecimals == true) VEGGIE_QTY_SCALE / 2L else VEGGIE_QTY_SCALE
-        val current = _draftQuantitiesScaled.value[product.id] ?: 0L
-        updateProductQuantity(product.id, current + step)
-    }
-
-    fun decrementProductQuantity(product: VeggieProduct, unitType: VeggieUnitType?) {
-        val step = if (unitType?.allowDecimals == true) VEGGIE_QTY_SCALE / 2L else VEGGIE_QTY_SCALE
-        val current = _draftQuantitiesScaled.value[product.id] ?: 0L
-        updateProductQuantity(product.id, (current - step).coerceAtLeast(0L))
     }
 
     fun calculateEstimatedItemsSubtotalCents(): Long {
@@ -313,10 +303,10 @@ class CustomerVeggieViewModel(
                         recomputeUnsavedFlag()
                     }
                     loadData(preserveDraftIfSameRound = true)
-                    showSavedBanner()
                     onOrderSaved()
                 } else {
                     _errorMessage.value = "Failed to save veggie order"
+                    loadData(preserveDraftIfSameRound = true)
                 }
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to save veggie order"
@@ -365,15 +355,6 @@ class CustomerVeggieViewModel(
             onSaveDraft?.invoke(roundId, _draftQuantitiesScaled.value.filterValues { it > 0L })
         } else {
             onClearDraft?.invoke(roundId)
-        }
-    }
-
-    private fun showSavedBanner() {
-        bannerJob?.cancel()
-        _orderSavedSuccessBanner.value = true
-        bannerJob = activeScope.launch {
-            delay(3500)
-            _orderSavedSuccessBanner.value = false
         }
     }
 }
