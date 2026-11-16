@@ -41,6 +41,9 @@ class UserSelectionViewModel(
     private val _users = MutableStateFlow<List<User>>(emptyList())
     val users: StateFlow<List<User>> = _users.asStateFlow()
 
+    private val _isLoadingUsers = MutableStateFlow(true)
+    val isLoadingUsers: StateFlow<Boolean> = _isLoadingUsers.asStateFlow()
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -87,9 +90,15 @@ class UserSelectionViewModel(
 
     fun loadUsers() {
         loadUsersJob?.cancel()
+        _isLoadingUsers.value = true
         loadUsersJob = activeScope.launch {
-            userRepository.getUsersFlow().collect { list ->
-                _users.value = list.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
+            try {
+                userRepository.getUsersFlow().collect { list ->
+                    _users.value = list.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
+                    _isLoadingUsers.value = false
+                }
+            } finally {
+                _isLoadingUsers.value = false
             }
         }
     }

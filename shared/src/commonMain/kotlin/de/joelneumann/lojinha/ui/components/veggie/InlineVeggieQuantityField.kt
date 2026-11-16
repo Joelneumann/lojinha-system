@@ -59,7 +59,7 @@ fun InlineVeggieQuantityField(
         return if (qty > 0L) {
             VeggieQuantityScaling.formatScaledQuantity(qty, allowDecimals, decimalSeparator)
         } else {
-            ""
+            "0"
         }
     }
 
@@ -204,18 +204,6 @@ fun InlineVeggieQuantityField(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.CenterEnd
                     ) {
-                        if (textFieldValue.text.isEmpty()) {
-                            Text(
-                                text = "-",
-                                style = LocalTextStyle.current.copy(
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextSecondaryMuted,
-                                    textAlign = TextAlign.End
-                                ),
-                                maxLines = 1
-                            )
-                        }
                         innerTextField()
                     }
                 },

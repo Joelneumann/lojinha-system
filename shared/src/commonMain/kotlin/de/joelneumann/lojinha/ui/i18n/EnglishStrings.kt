@@ -890,6 +890,8 @@ object EnglishStrings : AppStrings {
     override val colEffectivePrice = "Eff. Price"
     override val hideBuyerOverviewBtn = "Hide Buyer Overview"
     override val showBuyerOverviewBtn = "Show Buyer Overview"
+    override val hideRoundSettingsBtn = "Hide Round Settings"
+    override val showRoundSettingsBtn = "Show Round Settings"
     override val customerPortalTabOrder = "Veggie Order"
     override val customerPortalTabVeggieHistory = "Veggie Order History"
     override val customerPortalTabStoreHistory = "Lojinha Store Transactions"
@@ -940,6 +942,7 @@ object EnglishStrings : AppStrings {
     override val deactivateStopNewOrdersOnly = "Stop new orders only"
     override val deactivateCancelExistingOrders = "Cancel existing orders"
     override val keepLoggedInLabel = "Keep me logged in"
+    override val loadingUsers = "Loading users..."
 }
 
 

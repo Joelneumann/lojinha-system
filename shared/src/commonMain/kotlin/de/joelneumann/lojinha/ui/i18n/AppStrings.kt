@@ -870,6 +870,8 @@ interface AppStrings {
     val colEffectivePrice: String
     val hideBuyerOverviewBtn: String
     val showBuyerOverviewBtn: String
+    val hideRoundSettingsBtn: String
+    val showRoundSettingsBtn: String
     val customerPortalTabOrder: String
     val customerPortalTabVeggieHistory: String
     val customerPortalTabStoreHistory: String
@@ -918,6 +920,7 @@ interface AppStrings {
     val deactivateStopNewOrdersOnly: String
     val deactivateCancelExistingOrders: String
     val keepLoggedInLabel: String
+    val loadingUsers: String
 }
 
 

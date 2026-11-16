@@ -16,6 +16,9 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import de.joelneumann.lojinha.AppVersion
 import de.joelneumann.lojinha.data.database.AppDatabase
@@ -42,7 +45,8 @@ class LojinhaAdminServer(
     private val veggieOrderRepository: VeggieOrderRepository? = null,
     private val veggieImageService: VeggieImageService = VeggieImageService(),
     private val database: AppDatabase? = null,
-    private val port: Int = 8080
+    private val port: Int = 8080,
+    private val sessionStoreFile: File? = File(System.getProperty("user.home"), ".lojinha/customer_sessions.json")
 ) {
     private var server: EmbeddedServer<*, *>? = null
 
@@ -51,16 +55,83 @@ class LojinhaAdminServer(
         val expiryTimestamp: Long
     )
 
+    @kotlinx.serialization.Serializable
+    private data class PersistedCustomerSession(
+        val tokenHash: String,
+        val userId: String,
+        val expiryTimestamp: Long
+    )
+
     // Token Session Management
     private val activeTokens = ConcurrentHashMap<String, Long>() // token -> expiryTimestamp
-    // TODO(online-server): Tokens are stored in memory and cleared on server restart.
-    //  When moving to a standalone/restarting server, persist sessions in SQLite/DB (and consider HttpOnly cookies).
-    private val activeCustomerTokens = ConcurrentHashMap<String, CustomerSession>() // token -> CustomerSession
+    // Customer sessions are keyed by SHA-256(token) and persisted to sessionStoreFile
+    // so "Keep me logged in" survives desktop app restarts without storing raw tokens on disk.
+    private val activeCustomerTokens = ConcurrentHashMap<String, CustomerSession>() // tokenHash -> CustomerSession
+    private val sessionStoreLock = Any()
+    private val sessionJson = Json { ignoreUnknownKeys = true }
     private val failedLoginAttempts = ConcurrentHashMap<String, Pair<Int, Long>>() // ip -> (count, firstAttemptTime)
     private val SESSION_DURATION_MS = 8 * 60 * 60 * 1000L // 8 hours
     private val PERSISTENT_CUSTOMER_SESSION_DURATION_MS = 30L * 24 * 60 * 60 * 1000L // 30 days
     private val MAX_LOGIN_ATTEMPTS = 5
     private val RATE_LIMIT_WINDOW_MS = 60 * 1000L // 1 minute
+
+    init {
+        loadPersistedCustomerSessions()
+    }
+
+    private fun hashCustomerToken(token: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun loadPersistedCustomerSessions() {
+        val file = sessionStoreFile ?: return
+        synchronized(sessionStoreLock) {
+            if (!file.exists()) return
+            try {
+                val now = System.currentTimeMillis()
+                val loaded = sessionJson.decodeFromString<List<PersistedCustomerSession>>(file.readText())
+                var pruned = false
+                loaded.forEach { entry ->
+                    if (now < entry.expiryTimestamp && entry.tokenHash.isNotBlank() && entry.userId.isNotBlank()) {
+                        activeCustomerTokens[entry.tokenHash] = CustomerSession(entry.userId, entry.expiryTimestamp)
+                    } else {
+                        pruned = true
+                    }
+                }
+                if (pruned) {
+                    savePersistedCustomerSessionsLocked(file)
+                }
+            } catch (e: Exception) {
+                AppLogger.warn("LojinhaAdminServer", "Failed to load persisted customer sessions: ${e.message}")
+            }
+        }
+    }
+
+    private fun savePersistedCustomerSessions() {
+        val file = sessionStoreFile ?: return
+        synchronized(sessionStoreLock) {
+            savePersistedCustomerSessionsLocked(file)
+        }
+    }
+
+    private fun savePersistedCustomerSessionsLocked(file: File) {
+        try {
+            val now = System.currentTimeMillis()
+            val validEntries = activeCustomerTokens.entries
+                .filter { now < it.value.expiryTimestamp }
+                .map { PersistedCustomerSession(it.key, it.value.userId, it.value.expiryTimestamp) }
+            file.parentFile?.mkdirs()
+            val tmpFile = File(file.parentFile, "${file.name}.tmp")
+            tmpFile.writeText(sessionJson.encodeToString(validEntries))
+            if (!tmpFile.renameTo(file)) {
+                file.writeText(tmpFile.readText())
+                tmpFile.delete()
+            }
+        } catch (e: Exception) {
+            AppLogger.warn("LojinhaAdminServer", "Failed to save customer sessions: ${e.message}")
+        }
+    }
 
     private fun resolveVeggieRepo(): VeggieOrderRepository? {
         return veggieOrderRepository ?: database?.let {
@@ -983,7 +1054,8 @@ class LojinhaAdminServer(
                             failedLoginAttempts.remove(clientIp)
                             val token = UUID.randomUUID().toString()
                             val sessionTtl = if (req.keepLoggedIn) PERSISTENT_CUSTOMER_SESSION_DURATION_MS else SESSION_DURATION_MS
-                            activeCustomerTokens[token] = CustomerSession(user.id, now + sessionTtl)
+                            activeCustomerTokens[hashCustomerToken(token)] = CustomerSession(user.id, now + sessionTtl)
+                            savePersistedCustomerSessions()
                             call.respond(
                                 HttpStatusCode.OK,
                                 CustomerLoginResponse(
@@ -1006,7 +1078,9 @@ class LojinhaAdminServer(
                     post("/logout") {
                         val token = call.extractBearerToken() ?: call.request.queryParameters["token"]
                         if (token != null) {
-                            activeCustomerTokens.remove(token)
+                            if (activeCustomerTokens.remove(hashCustomerToken(token)) != null) {
+                                savePersistedCustomerSessions()
+                            }
                         }
                         call.respond(HttpStatusCode.OK)
                     }
@@ -1364,12 +1438,14 @@ class LojinhaAdminServer(
         if (request.httpMethod == HttpMethod.Options) return ""
         val token = extractBearerToken() ?: request.queryParameters["token"]
         if (token != null) {
-            val session = activeCustomerTokens[token]
+            val tokenHash = hashCustomerToken(token)
+            val session = activeCustomerTokens[tokenHash]
             if (session != null) {
                 if (System.currentTimeMillis() < session.expiryTimestamp) {
                     return session.userId
                 } else {
-                    activeCustomerTokens.remove(token)
+                    activeCustomerTokens.remove(tokenHash)
+                    savePersistedCustomerSessions()
                 }
             }
         }

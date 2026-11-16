@@ -428,6 +428,7 @@ fun AdminVeggieTabScreen(
                         hasUnsavedChanges = hasUnsavedSettlementChanges,
                         onResetChanges = viewModel::discardDraft,
                         unitTypes = unitTypes,
+                        allowCollapseSettingsCard = true,
                         modifier = Modifier.weight(1f)
                     )
                 }

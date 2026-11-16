@@ -1,8 +1,13 @@
 package de.joelneumann.lojinha.ui.components.admin.veggie
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -105,6 +110,7 @@ fun AdminVeggieSettlementMatrix(
     hasUnsavedChanges: Boolean = false,
     onResetChanges: (() -> Unit)? = null,
     unitTypes: List<VeggieUnitType> = emptyList(),
+    allowCollapseSettingsCard: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -118,6 +124,7 @@ fun AdminVeggieSettlementMatrix(
     var showConfirmDeleteRound by remember { mutableStateOf(false) }
     var showAddEntryDialog by remember { mutableStateOf(false) }
     var transporterDropdownExpanded by remember { mutableStateOf(false) }
+    var showRoundSettings by remember { mutableStateOf(true) }
     var showBuyerOverview by remember { mutableStateOf(true) }
 
     val animatedOverviewWidth by animateDpAsState(
@@ -219,7 +226,18 @@ fun AdminVeggieSettlementMatrix(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Round Lifecycle & PDF Export Header Card
-        Surface(
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(if (allowCollapseSettingsCard && showRoundSettings) 6.dp else 0.dp)
+        ) {
+            AnimatedVisibility(
+                visible = !allowCollapseSettingsCard || showRoundSettings,
+                enter = expandVertically(animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)) +
+                    fadeIn(animationSpec = tween(durationMillis = 200)),
+                exit = shrinkVertically(animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)) +
+                    fadeOut(animationSpec = tween(durationMillis = 160))
+            ) {
+                Surface(
             shape = RoundedCornerShape(12.dp),
             color = SurfaceWhite,
             border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
@@ -639,6 +657,33 @@ fun AdminVeggieSettlementMatrix(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+            }
+            }
+
+            if (allowCollapseSettingsCard) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        onClick = { showRoundSettings = !showRoundSettings },
+                        shape = RoundedCornerShape(6.dp),
+                        color = SurfaceWhite,
+                        border = BorderStroke(1.dp, DividerBorder),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier.size(width = 48.dp, height = 20.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (showRoundSettings) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (showRoundSettings) strings.hideRoundSettingsBtn else strings.showRoundSettingsBtn,
+                                tint = PrimaryNavy,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }

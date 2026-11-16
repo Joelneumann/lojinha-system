@@ -29,6 +29,7 @@ fun UserGrid(
     modifier: Modifier = Modifier,
     emptyText: String = "No users found.",
     isSearchActive: Boolean = false,
+    isLoading: Boolean = false,
     isMobile: Boolean = false,
     onOpenAdminSetup: (() -> Unit)? = null
 ) {
@@ -37,7 +38,20 @@ fun UserGrid(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            if (!isSearchActive && onOpenAdminSetup != null) {
+            if (isLoading) {
+                val strings = I18n.current
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(color = AccentNavy)
+                    Text(
+                        text = strings.loadingUsers,
+                        fontSize = 15.sp,
+                        color = TextSecondaryMuted
+                    )
+                }
+            } else if (!isSearchActive && onOpenAdminSetup != null) {
                 val strings = I18n.current
                 Surface(
                     shape = RoundedCornerShape(16.dp),

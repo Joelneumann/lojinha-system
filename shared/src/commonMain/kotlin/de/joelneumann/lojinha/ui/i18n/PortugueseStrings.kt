@@ -890,6 +890,8 @@ object PortugueseStrings : AppStrings {
     override val colEffectivePrice = "Preço Efetivo"
     override val hideBuyerOverviewBtn = "Ocultar Visão do Comprador"
     override val showBuyerOverviewBtn = "Exibir Visão do Comprador"
+    override val hideRoundSettingsBtn = "Ocultar Configurações da Rodada"
+    override val showRoundSettingsBtn = "Exibir Configurações da Rodada"
     override val customerPortalTabOrder = "Pedido de Verduras"
     override val customerPortalTabVeggieHistory = "Histórico de Verduras"
     override val customerPortalTabStoreHistory = "Extrato da Lojinha"
@@ -940,6 +942,7 @@ object PortugueseStrings : AppStrings {
     override val deactivateStopNewOrdersOnly = "Apenas bloquear novos pedidos"
     override val deactivateCancelExistingOrders = "Cancelar pedidos existentes"
     override val keepLoggedInLabel = "Manter conectado"
+    override val loadingUsers = "Carregando usuários..."
 }
 
 

@@ -44,6 +44,7 @@ fun UserSelectionScreen(
     onNavigateToAdmin: () -> Unit
 ) {
     val users by viewModel.users.collectAsState()
+    val isLoadingUsers by viewModel.isLoadingUsers.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedUserForPin by viewModel.selectedUserForPin.collectAsState()
     val pinInput by viewModel.pinInput.collectAsState()
@@ -58,6 +59,7 @@ fun UserSelectionScreen(
 
     UserSelectionContent(
         users = users,
+        isLoadingUsers = isLoadingUsers,
         searchQuery = searchQuery,
         scannedProduct = scannedProduct,
         notFoundNotice = notFoundNotice,
@@ -88,6 +90,7 @@ fun UserSelectionScreen(
 @Composable
 fun UserSelectionContent(
     users: List<User>,
+    isLoadingUsers: Boolean = false,
     searchQuery: String,
     scannedProduct: ScannedProductInfo? = null,
     notFoundNotice: Boolean = false,
@@ -226,6 +229,7 @@ fun UserSelectionContent(
                     onUserClick = onUserClick,
                     emptyText = strings.noUsersFound,
                     isSearchActive = searchQuery.isNotBlank(),
+                    isLoading = isLoadingUsers,
                     isMobile = isMobile,
                     onOpenAdminSetup = onOpenAdminAuthDialog
                 )
