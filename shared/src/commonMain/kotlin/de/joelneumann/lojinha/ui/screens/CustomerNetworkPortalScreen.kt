@@ -139,7 +139,6 @@ fun CustomerNetworkPortalScreen(
     ) {
         val isMobile = maxWidth < MOBILE_BREAKPOINT
         val isKeyboardOpenMobile = isMobile && maxHeight < 480.dp
-        val isNarrow = maxWidth < 750.dp
 
         Column(modifier = Modifier.fillMaxSize()) {
             if (!isKeyboardOpenMobile) {
@@ -483,7 +482,6 @@ private fun CustomerVeggieOrderTabContent(
     val filterFavoritesOnly by veggieViewModel.filterFavoritesOnly.collectAsState()
     val favoriteProductIds by veggieViewModel.favoriteProductIds.collectAsState()
     val isSavingOrder by veggieViewModel.isSavingOrder.collectAsState()
-    val orderSavedSuccessBanner by veggieViewModel.orderSavedSuccessBanner.collectAsState()
     val errorMessage by veggieViewModel.errorMessage.collectAsState()
     val hasUnsavedChanges by veggieViewModel.hasUnsavedOrderChanges.collectAsState()
     val filterInOrderOnly by veggieViewModel.filterInOrderOnly.collectAsState()
@@ -625,11 +623,12 @@ private fun CustomerVeggieOrderTabContent(
             selectedProductForAmountDialog = product
             return
         }
+        val wasOnCatalog = !isMobile || mobileSubTab == MobileVeggieSubTab.CATALOG
         if (isMobile && mobileSubTab != MobileVeggieSubTab.CATALOG) {
             mobileSubTab = MobileVeggieSubTab.CATALOG
         }
         val currentIdx = filteredProducts.indexOfFirst { it.id == product.id }
-        if (currentIdx >= 0 && (!isMobile || mobileSubTab == MobileVeggieSubTab.CATALOG)) {
+        if (currentIdx >= 0 && wasOnCatalog) {
             navigateToProduct(currentIdx)
         } else {
             if (currentIdx < 0) {
@@ -910,6 +909,8 @@ private fun CustomerVeggieOrderTabContent(
                         hasUnsavedChanges = hasUnsavedChanges,
                         isSavingOrder = isSavingOrder,
                         hasPreviousRoundItems = hasPreviousRoundItems,
+                        errorMessage = errorMessage,
+                        onClearError = { veggieViewModel.clearError() },
                         isDesktop = false,
                         onFillFromLastWeek = { veggieViewModel.copyPreviousRoundOrder() },
                         onEditQuantity = { selectProductFromCart(it) },
@@ -1021,22 +1022,14 @@ private fun CustomerVeggieOrderTabContent(
                 val lastEditedId = editingProduct.id
                 selectedProductForAmountDialog = null
                 val idx = filteredProducts.indexOfFirst { it.id == lastEditedId }
-                if (idx >= 0) {
-                    activeZone = VeggieFocusZone.PRODUCTS
-                    highlightedProductIndex = idx
-                    coroutineScope.launch { productListState.animateScrollToItem(idx) }
-                }
+                if (idx >= 0) navigateToProduct(idx)
             },
             onSubmit = { newScaledQty ->
                 veggieViewModel.updateProductQuantity(editingProduct.id, newScaledQty)
                 val lastEditedId = editingProduct.id
                 selectedProductForAmountDialog = null
                 val idx = filteredProducts.indexOfFirst { it.id == lastEditedId }
-                if (idx >= 0) {
-                    activeZone = VeggieFocusZone.PRODUCTS
-                    highlightedProductIndex = idx
-                    coroutineScope.launch { productListState.animateScrollToItem(idx) }
-                }
+                if (idx >= 0) navigateToProduct(idx)
             }
         )
     }
@@ -1263,28 +1256,7 @@ private fun VeggieCatalogPanel(
         }
 
         if (errorMessage != null) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = ColorDangerCrimson.copy(alpha = 0.12f),
-                border = BorderStroke(1.dp, ColorDangerCrimson.copy(alpha = 0.4f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = errorMessage,
-                        fontSize = 13.sp,
-                        color = ColorDangerCrimson,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = onClearError, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = null, tint = ColorDangerCrimson, modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
+            VeggieErrorBanner(errorMessage = errorMessage, onClearError = onClearError)
         }
 
         if (!isKeyboardOpenMobile) {
@@ -1401,6 +1373,35 @@ private fun VeggieCatalogPanel(
 }
 
 @Composable
+private fun VeggieErrorBanner(
+    errorMessage: String,
+    onClearError: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = ColorDangerCrimson.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, ColorDangerCrimson.copy(alpha = 0.4f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = errorMessage,
+                fontSize = 13.sp,
+                color = ColorDangerCrimson,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onClearError, modifier = Modifier.size(24.dp)) {
+                Icon(Icons.Default.Close, contentDescription = null, tint = ColorDangerCrimson, modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
 private fun VeggieCartPanel(
     cartProducts: List<VeggieProduct>,
     unitTypesById: Map<String, VeggieUnitType>,
@@ -1417,6 +1418,8 @@ private fun VeggieCartPanel(
     onRemoveProduct: (VeggieProduct) -> Unit,
     onSaveOrder: () -> Unit,
     modifier: Modifier = Modifier,
+    errorMessage: String? = null,
+    onClearError: () -> Unit = {},
     isDesktop: Boolean = false
 ) {
     val strings = I18n.current
@@ -1491,6 +1494,10 @@ private fun VeggieCartPanel(
             }
 
             HorizontalDivider(color = DividerBorder)
+
+            if (errorMessage != null) {
+                VeggieErrorBanner(errorMessage = errorMessage, onClearError = onClearError)
+            }
 
             // Cart Items
             if (cartProducts.isEmpty()) {
@@ -2006,7 +2013,7 @@ private fun CustomerVeggieProductCard(
                                     onClick = { onQuantityChange(0L) },
                                     enabled = isEditable,
                                     modifier = Modifier
-                                        .size(22.dp)
+                                        .size(32.dp)
                                         .focusProperties { canFocus = false }
                                         .pointerHoverIcon(PointerIcon.Hand)
                                 ) {
@@ -2014,7 +2021,7 @@ private fun CustomerVeggieProductCard(
                                         imageVector = Icons.Default.Close,
                                         contentDescription = strings.veggieClearItemTooltip,
                                         tint = TextSecondaryMuted,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }

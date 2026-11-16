@@ -220,12 +220,6 @@ fun TransactionHistoryContent(
         listState.scrollToItem(0)
     }
 
-    LaunchedEffect(showSettingsModal) {
-        if (!showSettingsModal) {
-            searchFocusRequester.safeRequestFocus()
-        }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -295,6 +289,12 @@ fun TransactionHistoryContent(
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isMobile = maxWidth < MOBILE_BREAKPOINT
+
+            LaunchedEffect(showSettingsModal, isMobile) {
+                if (!isMobile && !showSettingsModal) {
+                    searchFocusRequester.safeRequestFocus()
+                }
+            }
 
             Column(
                 modifier = Modifier

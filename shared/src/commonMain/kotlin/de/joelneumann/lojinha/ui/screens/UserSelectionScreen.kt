@@ -120,12 +120,6 @@ fun UserSelectionContent(
     val focusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(selectedUserForPin, showAdminAuthDialog, LanguageManager.currentLanguage) {
-        if (selectedUserForPin == null && !showAdminAuthDialog) {
-            focusRequester.safeRequestFocus()
-        }
-    }
-
     val trimmedQuery = remember(searchQuery) { searchQuery.trim() }
     val filteredUsers = remember(users, trimmedQuery) {
         if (trimmedQuery.isBlank()) users
@@ -200,6 +194,12 @@ fun UserSelectionContent(
                 }
         ) {
             val isMobile = maxWidth < MOBILE_BREAKPOINT
+
+            LaunchedEffect(selectedUserForPin, showAdminAuthDialog, LanguageManager.currentLanguage, isMobile) {
+                if (!isMobile && selectedUserForPin == null && !showAdminAuthDialog) {
+                    focusRequester.safeRequestFocus()
+                }
+            }
 
             Column(
                 modifier = Modifier

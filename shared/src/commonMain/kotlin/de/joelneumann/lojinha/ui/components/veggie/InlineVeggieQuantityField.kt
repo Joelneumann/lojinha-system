@@ -137,8 +137,8 @@ fun InlineVeggieQuantityField(
         color = backgroundColor,
         border = BorderStroke(borderWidth, borderColor),
         modifier = modifier
-            .height(28.dp)
-            .widthIn(min = 72.dp, max = 92.dp)
+            .height(if (isMobile) 34.dp else 28.dp)
+            .widthIn(min = if (isMobile) 82.dp else 72.dp, max = if (isMobile) 104.dp else 92.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

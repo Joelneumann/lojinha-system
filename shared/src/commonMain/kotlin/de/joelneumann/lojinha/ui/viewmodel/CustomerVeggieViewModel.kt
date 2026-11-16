@@ -304,9 +304,14 @@ class CustomerVeggieViewModel(
                 val ok = onSaveOrder(round.id, snapshotToSave)
                 if (ok) {
                     _savedQuantitiesScaled.value = snapshotToSave
-                    _draftQuantitiesScaled.value = snapshotToSave
-                    _hasUnsavedOrderChanges.value = false
-                    onClearDraft?.invoke(round.id)
+                    val currentCleanDraft = _draftQuantitiesScaled.value.filterValues { it > 0L }
+                    if (currentCleanDraft == snapshotToSave) {
+                        _draftQuantitiesScaled.value = snapshotToSave
+                        _hasUnsavedOrderChanges.value = false
+                        onClearDraft?.invoke(round.id)
+                    } else {
+                        recomputeUnsavedFlag()
+                    }
                     loadData(preserveDraftIfSameRound = true)
                     showSavedBanner()
                     onOrderSaved()

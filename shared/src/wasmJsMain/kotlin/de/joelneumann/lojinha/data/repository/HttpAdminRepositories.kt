@@ -1385,6 +1385,7 @@ class CustomerNetworkClient(val baseUrl: String = "") {
         authToken = null
         currentUser = null
         try { jsRemoveSessionItem("lojinha_customer_token") } catch (_: Exception) {}
+        try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
         if (hadToken) {
             _onUnauthorized.tryEmit(Unit)
         }
