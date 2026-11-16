@@ -73,6 +73,13 @@
     </style>
     <script defer type="application/javascript" src="lojinha.js"></script>
     <script>
+        if ('serviceWorker' in navigator && window.isSecureContext) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch((err) => {
+                    console.warn('Service Worker registration failed:', err);
+                });
+            });
+        }
         if (window.visualViewport) {
             const syncViewport = () => {
                 const h = window.visualViewport.height;

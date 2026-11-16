@@ -1,16 +1,29 @@
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.CanvasBasedWindow
 import de.joelneumann.lojinha.data.repository.*
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.ui.screens.CustomerNetworkPortalScreen
 import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
@@ -23,6 +36,8 @@ import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 import de.joelneumann.lojinha.ui.viewmodel.UserSelectionViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 private enum class WebPortalScreen {
     USER_SELECTION,
@@ -36,6 +51,8 @@ fun main() {
         var currentScreen by remember { mutableStateOf(WebPortalScreen.USER_SELECTION) }
         var loggedInCustomer by remember { mutableStateOf<User?>(null) }
         var isCheckingSession by remember { mutableStateOf(true) }
+        var adminSessionRestartNotice by remember { mutableStateOf<String?>(null) }
+        val isServerReachable by KioskConnectionMonitor.isServerReachable.collectAsState()
         val scope = rememberCoroutineScope()
 
         val adminNetworkClient = remember { AdminNetworkClient() }
@@ -68,59 +85,111 @@ fun main() {
         }
 
         LojinhaTheme(scaleFactor = WEB_UI_SCALE_FACTOR) {
-            if (isCheckingSession) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                Crossfade(
-                    targetState = currentScreen,
-                    animationSpec = tween(durationMillis = 250),
-                    modifier = Modifier.fillMaxSize()
-                ) { targetScreen ->
-                    when (targetScreen) {
-                        WebPortalScreen.USER_SELECTION -> {
-                            val userSelectionViewModel = remember {
-                                UserSelectionViewModel(
-                                    userRepository = customerUserRepository,
-                                    productRepository = null,
-                                    isNetworkPortal = true,
-                                    onAuthenticateNetworkUser = { userId, pin, keepLoggedIn ->
-                                        when (val res = customerNetworkClient.loginCustomer(userId, pin, keepLoggedIn)) {
-                                            is CustomerLoginResult.Success -> res.user
-                                            else -> null
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (isCheckingSession) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    Crossfade(
+                        targetState = currentScreen,
+                        animationSpec = tween(durationMillis = 250),
+                        modifier = Modifier.fillMaxSize()
+                    ) { targetScreen ->
+                        when (targetScreen) {
+                            WebPortalScreen.USER_SELECTION -> {
+                                val userSelectionViewModel = remember {
+                                    UserSelectionViewModel(
+                                        userRepository = customerUserRepository,
+                                        productRepository = null,
+                                        isNetworkPortal = true,
+                                        onAuthenticateNetworkUser = { userId, pin, keepLoggedIn ->
+                                            when (val res = customerNetworkClient.loginCustomer(userId, pin, keepLoggedIn)) {
+                                                is CustomerLoginResult.Success -> res.user
+                                                else -> null
+                                            }
+                                        },
+                                        onAuthenticateNetworkAdmin = { password ->
+                                            when (adminNetworkClient.login(password)) {
+                                                is LoginResult.Success -> true
+                                                else -> false
+                                            }
                                         }
-                                    },
-                                    onAuthenticateNetworkAdmin = { password ->
-                                        when (adminNetworkClient.login(password)) {
-                                            is LoginResult.Success -> true
-                                            else -> false
+                                    )
+                                }
+
+                                LaunchedEffect(Unit) {
+                                    userSelectionViewModel.resetState()
+                                    userSelectionViewModel.loadUsers()
+                                    launch {
+                                        KioskConnectionMonitor.onReconnected.collect {
+                                            userSelectionViewModel.loadUsers()
                                         }
                                     }
-                                )
-                            }
-
-                            LaunchedEffect(Unit) {
-                                userSelectionViewModel.resetState()
-                                userSelectionViewModel.loadUsers()
-                            }
-
-                            UserSelectionScreen(
-                                viewModel = userSelectionViewModel,
-                                settings = defaultSettings,
-                                onUserLoggedIn = { user ->
-                                    loggedInCustomer = user
-                                    LanguageManager.setLanguage(user.language)
-                                    currentScreen = WebPortalScreen.CUSTOMER_PORTAL
-                                },
-                                onNavigateToAdmin = {
-                                    currentScreen = WebPortalScreen.ADMIN_PANEL
                                 }
-                            )
-                        }
+
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    UserSelectionScreen(
+                                        viewModel = userSelectionViewModel,
+                                        settings = defaultSettings,
+                                        onUserLoggedIn = { user ->
+                                            adminSessionRestartNotice = null
+                                            loggedInCustomer = user
+                                            LanguageManager.setLanguage(user.language)
+                                            currentScreen = WebPortalScreen.CUSTOMER_PORTAL
+                                        },
+                                        onNavigateToAdmin = {
+                                            adminSessionRestartNotice = null
+                                            currentScreen = WebPortalScreen.ADMIN_PANEL
+                                        }
+                                    )
+
+                                    adminSessionRestartNotice?.let { notice ->
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = Color(0xFFFEF3C7),
+                                            border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+                                            shadowElevation = 6.dp,
+                                            modifier = Modifier
+                                                .align(Alignment.TopCenter)
+                                                .padding(16.dp)
+                                                .widthIn(max = 560.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Info,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFB45309)
+                                                )
+                                                Text(
+                                                    text = notice,
+                                                    color = Color(0xFF78350F),
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                IconButton(
+                                                    onClick = { adminSessionRestartNotice = null },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Close,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF78350F)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                         WebPortalScreen.CUSTOMER_PORTAL -> {
                             val activeCustomer = loggedInCustomer
@@ -142,6 +211,15 @@ fun main() {
                                         },
                                         onSaveFavorites = { favorites ->
                                             customerNetworkClient.saveVeggieFavorites(favorites)
+                                        },
+                                        onLoadDraft = { roundId ->
+                                            loadCustomerVeggieDraft(activeCustomer.id, roundId)
+                                        },
+                                        onSaveDraft = { roundId, quantities ->
+                                            saveCustomerVeggieDraft(activeCustomer.id, roundId, quantities)
+                                        },
+                                        onClearDraft = { roundId ->
+                                            clearCustomerVeggieDraft(activeCustomer.id, roundId)
                                         }
                                     )
                                 }
@@ -168,6 +246,15 @@ fun main() {
                                             loggedInCustomer = null
                                             LanguageManager.resetToDefault()
                                             currentScreen = WebPortalScreen.USER_SELECTION
+                                        }
+                                    }
+                                    launch {
+                                        KioskConnectionMonitor.onReconnected.collect {
+                                            customerNetworkClient.fetchCurrentUser()?.let { refreshed ->
+                                                loggedInCustomer = refreshed
+                                            }
+                                            customerVeggieViewModel.loadData(preserveDraftIfSameRound = true)
+                                            historyViewModel.loadUserTransactions(activeCustomer.id, resetFilters = false)
                                         }
                                     }
                                 }
@@ -230,6 +317,15 @@ fun main() {
                                     },
                                     onDeleteProductImage = { productId, _ ->
                                         veggieOrderRepository.deleteProductImage(productId)
+                                    },
+                                    onLoadMatrixDraft = { roundId ->
+                                        loadAdminVeggieMatrixDraft(roundId)
+                                    },
+                                    onSaveMatrixDraft = { roundId, draft ->
+                                        saveAdminVeggieMatrixDraft(roundId, draft)
+                                    },
+                                    onClearMatrixDraft = { roundId ->
+                                        clearAdminVeggieMatrixDraft(roundId)
                                     }
                                 )
                             }
@@ -248,7 +344,21 @@ fun main() {
                                 }
                                 launch {
                                     adminNetworkClient.onUnauthorized.collect {
+                                        adminSessionRestartNotice = I18n.get().adminSessionRestartedNotice
                                         currentScreen = WebPortalScreen.USER_SELECTION
+                                    }
+                                }
+                                launch {
+                                    KioskConnectionMonitor.onReconnected.collect {
+                                        adminNetworkClient.verifySessionStillValid()
+                                        if (!adminNetworkClient.authToken.isNullOrBlank()) {
+                                            notesViewModel.loadNotes()
+                                            productsViewModel.loadData()
+                                            usersViewModel.loadData()
+                                            transactionsViewModel.loadData()
+                                            bulkBillingViewModel.loadData()
+                                            veggieViewModel.loadData()
+                                        }
                                     }
                                 }
                             }
@@ -306,6 +416,80 @@ fun main() {
                     }
                 }
             }
+
+                if (!isServerReachable) {
+                    KioskOfflineBlockingOverlay(
+                        onRetryClick = {
+                            scope.launch {
+                                KioskConnectionMonitor.checkHealthNow()
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KioskOfflineBlockingOverlay(onRetryClick: () -> Unit) {
+    val strings = I18n.current
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.55f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 12.dp,
+            modifier = Modifier
+                .padding(24.dp)
+                .widthIn(max = 440.dp)
+                .fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(44.dp),
+                    strokeWidth = 4.dp
+                )
+                Text(
+                    text = strings.kioskOfflineTitle,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = strings.kioskOfflineDescription,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+                Text(
+                    text = strings.kioskOfflineWaiting,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center
+                )
+                Button(
+                    onClick = onRetryClick,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(strings.kioskOfflineRetryButton)
+                }
+            }
         }
     }
 }
@@ -357,5 +541,66 @@ private fun loadUserFavorites(userId: String): Set<String> {
 private fun saveUserFavorites(userId: String, favorites: Set<String>) {
     try {
         jsSetLocalItem("lojinha_veggie_favorites_$userId", favorites.joinToString(","))
+    } catch (_: Exception) {}
+}
+
+@JsFun("""
+(key) => {
+    try {
+        window.localStorage.removeItem(key);
+    } catch (e) {
+        console.warn('Failed to remove localStorage item:', e);
+    }
+}
+""")
+private external fun jsRemoveLocalItem(key: String)
+
+private val draftJson = Json { ignoreUnknownKeys = true }
+
+private fun customerVeggieDraftKey(userId: String, roundId: String): String =
+    "lojinha_veggie_draft_${userId}_$roundId"
+
+private fun loadCustomerVeggieDraft(userId: String, roundId: String): Map<String, Long>? {
+    return try {
+        val raw = jsGetLocalItem(customerVeggieDraftKey(userId, roundId)) ?: return null
+        draftJson.decodeFromString<Map<String, Long>>(raw)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun saveCustomerVeggieDraft(userId: String, roundId: String, quantities: Map<String, Long>) {
+    try {
+        jsSetLocalItem(customerVeggieDraftKey(userId, roundId), draftJson.encodeToString(quantities))
+    } catch (_: Exception) {}
+}
+
+private fun clearCustomerVeggieDraft(userId: String, roundId: String) {
+    try {
+        jsRemoveLocalItem(customerVeggieDraftKey(userId, roundId))
+    } catch (_: Exception) {}
+}
+
+private fun adminMatrixDraftKey(roundId: String): String =
+    "lojinha_admin_veggie_matrix_draft_$roundId"
+
+private fun loadAdminVeggieMatrixDraft(roundId: String): AdminVeggieMatrixDraft? {
+    return try {
+        val raw = jsGetLocalItem(adminMatrixDraftKey(roundId)) ?: return null
+        draftJson.decodeFromString<AdminVeggieMatrixDraft>(raw)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun saveAdminVeggieMatrixDraft(roundId: String, draft: AdminVeggieMatrixDraft) {
+    try {
+        jsSetLocalItem(adminMatrixDraftKey(roundId), draftJson.encodeToString(draft))
+    } catch (_: Exception) {}
+}
+
+private fun clearAdminVeggieMatrixDraft(roundId: String) {
+    try {
+        jsRemoveLocalItem(adminMatrixDraftKey(roundId))
     } catch (_: Exception) {}
 }

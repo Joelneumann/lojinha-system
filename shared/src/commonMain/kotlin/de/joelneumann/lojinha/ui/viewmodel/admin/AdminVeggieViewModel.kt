@@ -23,6 +23,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class AdminVeggieMatrixDraft(
+    val actualQuantities: Map<String, String> = emptyMap(),
+    val marketPrices: Map<String, String> = emptyMap(),
+    val totalSpent: Map<String, String> = emptyMap(),
+    val manuallyEditedTotalSpentProductIds: Set<String> = emptySet(),
+    val buyerFeeInput: String = "0",
+    val transportFeeInput: String = "0",
+    val transporterUserId: String? = null
+)
 
 enum class AdminVeggieSubTab {
     ACTIVE_ROUND,
@@ -41,6 +53,9 @@ class AdminVeggieViewModel(
     private val settingsRepository: SettingsRepository? = null,
     private val onSaveProductImage: (suspend (productId: String, productName: String, bytes: ByteArray, previousFileName: String?) -> String?)? = null,
     private val onDeleteProductImage: (suspend (productId: String, previousFileName: String?) -> Unit)? = null,
+    private val onLoadMatrixDraft: ((roundId: String) -> AdminVeggieMatrixDraft?)? = null,
+    private val onSaveMatrixDraft: ((roundId: String, draft: AdminVeggieMatrixDraft) -> Unit)? = null,
+    private val onClearMatrixDraft: ((roundId: String) -> Unit)? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
 
@@ -351,9 +366,47 @@ class AdminVeggieViewModel(
             _draftBuyerFeeInput.value = formatCentsToInput(round.buyerOperationFeeCents)
             _draftTransportFeeInput.value = formatCentsToInput(round.transportFeeCents)
             _draftTransporterUserId.value = round.transporterUserId
-            _hasUnsavedSettlementChanges.value = false
+
+            val localDraft = onLoadMatrixDraft?.invoke(round.id)
+            if (localDraft != null) {
+                if (localDraft.actualQuantities.isNotEmpty()) {
+                    _draftActualQuantities.value = _draftActualQuantities.value + localDraft.actualQuantities
+                }
+                if (localDraft.marketPrices.isNotEmpty()) {
+                    _draftMarketPrices.value = _draftMarketPrices.value + localDraft.marketPrices
+                }
+                if (localDraft.totalSpent.isNotEmpty()) {
+                    _draftTotalSpent.value = _draftTotalSpent.value + localDraft.totalSpent
+                }
+                if (localDraft.manuallyEditedTotalSpentProductIds.isNotEmpty()) {
+                    _manuallyEditedTotalSpentProductIds.value =
+                        _manuallyEditedTotalSpentProductIds.value + localDraft.manuallyEditedTotalSpentProductIds
+                }
+                _draftBuyerFeeInput.value = localDraft.buyerFeeInput
+                _draftTransportFeeInput.value = localDraft.transportFeeInput
+                _draftTransporterUserId.value = localDraft.transporterUserId
+                _hasUnsavedSettlementChanges.value = true
+            } else {
+                _hasUnsavedSettlementChanges.value = false
+            }
         }
         recomputeLivePreview()
+    }
+
+    private fun persistCurrentMatrixDraft() {
+        val roundId = _selectedRound.value?.id ?: return
+        onSaveMatrixDraft?.invoke(
+            roundId,
+            AdminVeggieMatrixDraft(
+                actualQuantities = _draftActualQuantities.value,
+                marketPrices = _draftMarketPrices.value,
+                totalSpent = _draftTotalSpent.value,
+                manuallyEditedTotalSpentProductIds = _manuallyEditedTotalSpentProductIds.value,
+                buyerFeeInput = _draftBuyerFeeInput.value,
+                transportFeeInput = _draftTransportFeeInput.value,
+                transporterUserId = _draftTransporterUserId.value
+            )
+        )
     }
 
     fun updateEntryActualQuantity(entryId: String, input: String) {
@@ -376,6 +429,7 @@ class AdminVeggieViewModel(
             }
         }
         recomputeLivePreview()
+        persistCurrentMatrixDraft()
     }
 
     fun updateProductMarketUnitPrice(productId: String, input: String) {
@@ -394,6 +448,7 @@ class AdminVeggieViewModel(
             _manuallyEditedTotalSpentProductIds.value = _manuallyEditedTotalSpentProductIds.value - productId
         }
         recomputeLivePreview()
+        persistCurrentMatrixDraft()
     }
 
     fun updateProductTotalSpent(productId: String, input: String) {
@@ -403,24 +458,28 @@ class AdminVeggieViewModel(
         _manuallyEditedTotalSpentProductIds.value = _manuallyEditedTotalSpentProductIds.value + productId
         _hasUnsavedSettlementChanges.value = true
         recomputeLivePreview()
+        persistCurrentMatrixDraft()
     }
 
     fun updateBuyerFeeInput(input: String) {
         _draftBuyerFeeInput.value = input
         _hasUnsavedSettlementChanges.value = true
         recomputeLivePreview()
+        persistCurrentMatrixDraft()
     }
 
     fun updateTransportFeeInput(input: String) {
         _draftTransportFeeInput.value = input
         _hasUnsavedSettlementChanges.value = true
         recomputeLivePreview()
+        persistCurrentMatrixDraft()
     }
 
     fun updateTransporterUserId(userId: String?) {
         _draftTransporterUserId.value = userId
         _hasUnsavedSettlementChanges.value = true
         recomputeLivePreview()
+        persistCurrentMatrixDraft()
     }
 
     private fun calculateDraftTotalDeliveredForProduct(
@@ -604,6 +663,7 @@ class AdminVeggieViewModel(
                 )
                 if (ok) {
                     _hasUnsavedSettlementChanges.value = false
+                    onClearMatrixDraft?.invoke(payload.round.id)
                     _statusMessage.value = I18n.get().saved
                     loadData(preserveDraftEdits = false)
                     onSuccess?.invoke()
@@ -687,6 +747,7 @@ class AdminVeggieViewModel(
                         _editingPastRound.value = null
                     }
                     _hasUnsavedSettlementChanges.value = false
+                    onClearMatrixDraft?.invoke(payload.round.id)
                     _statusMessage.value = I18n.get().saved
                     loadData(preserveDraftEdits = false)
                 } else {

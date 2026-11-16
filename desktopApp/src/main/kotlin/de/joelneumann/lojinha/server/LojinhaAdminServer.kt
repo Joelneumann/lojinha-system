@@ -237,6 +237,12 @@ class LojinhaAdminServer(
             }
 
             routing {
+                // Lightweight unauthenticated health check for Service Worker & live reconnect polling
+                get("/api/health") {
+                    call.response.header(HttpHeaders.CacheControl, "no-store, no-cache, must-revalidate")
+                    call.respondText("""{"status":"ok"}""", ContentType.Application.Json, HttpStatusCode.OK)
+                }
+
                 // 1. Public Login & Logout Endpoints
                 post("/api/admin/login") {
                     val clientIp = call.request.local.remoteHost

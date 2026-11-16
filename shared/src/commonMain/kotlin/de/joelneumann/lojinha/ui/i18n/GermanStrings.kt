@@ -943,6 +943,12 @@ object GermanStrings : AppStrings {
     override val deactivateCancelExistingOrders = "Bestehende Bestellungen stornieren"
     override val keepLoggedInLabel = "Angemeldet bleiben"
     override val loadingUsers = "Benutzer werden geladen..."
+    override val kioskOfflineTitle = "Lojinha-Kiosk ist offline"
+    override val kioskOfflineDescription = "Das Lojinha Desktop-/Kiosk-System ist derzeit geschlossen oder startet neu. Ihre ungespeicherten Entwürfe bleiben lokal erhalten und diese Ansicht verbindet sich automatisch wieder, sobald Lojinha läuft."
+    override val kioskOfflineWaiting = "Warte auf Wiederverbindung zum Lojinha-System..."
+    override val kioskOfflineRetryButton = "Jetzt erneut prüfen"
+    override val adminSessionRestartedNotice = "Kiosk wurde neu gestartet — bitte erneut anmelden. Ungespeicherte Änderungen in der Gemüse-Matrix wurden lokal gesichert."
+    override val kioskOfflineSaveError = "Das Kiosk-System ist derzeit offline. Bitte warten Sie auf die Wiederverbindung und versuchen Sie es erneut."
 }
 
 

@@ -98,8 +98,13 @@ private external fun jsRemoveLocalItem(key: String)
     const cleanBase = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
     const url = cleanBase + '/api/admin/events' + (token ? '?token=' + encodeURIComponent(token) : '');
     try {
+        window._lojinhaSyncError = false;
         const es = new EventSource(url);
+        es.onopen = () => {
+            window._lojinhaSyncError = false;
+        };
         es.addEventListener('data_changed', () => {
+            window._lojinhaSyncError = false;
             window._lojinhaHasNewData = true;
         });
         es.onerror = (e) => {
@@ -119,12 +124,85 @@ private external fun jsStartEventSource(baseUrl: String, token: String)
         window._lojinhaEventSource.close();
         window._lojinhaEventSource = null;
     }
+    window._lojinhaSyncError = false;
 }
 """)
 private external fun jsStopEventSource()
 
 @JsFun("() => { const flag = window._lojinhaHasNewData === true; window._lojinhaHasNewData = false; return flag; }")
 private external fun jsCheckAndClearDataChanged(): Boolean
+
+@JsFun("() => window._lojinhaSyncError === true")
+private external fun jsHasAdminSyncError(): Boolean
+
+object KioskConnectionMonitor {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val _isServerReachable = MutableStateFlow(true)
+    val isServerReachable: StateFlow<Boolean> = _isServerReachable.asStateFlow()
+
+    private val _onReconnected = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val onReconnected: SharedFlow<Unit> = _onReconnected.asSharedFlow()
+
+    private var pollJob: Job? = null
+    private val healthClient = HttpClient()
+
+    fun reportNetworkFailure(baseUrl: String = "") {
+        if (_isServerReachable.value) {
+            _isServerReachable.value = false
+        }
+        startPolling(baseUrl)
+    }
+
+    fun reportServerReachable() {
+        pollJob?.cancel()
+        pollJob = null
+        if (!_isServerReachable.value) {
+            _isServerReachable.value = true
+            _onReconnected.tryEmit(Unit)
+        }
+    }
+
+    suspend fun checkHealthNow(baseUrl: String = ""): Boolean {
+        val cleanBase = baseUrl.trimEnd('/')
+        val url = if (cleanBase.isEmpty()) "/api/health" else "$cleanBase/api/health"
+        return try {
+            val response = healthClient.get(url)
+            if (response.status.isSuccess()) {
+                reportServerReachable()
+                true
+            } else {
+                reportNetworkFailure(baseUrl)
+                false
+            }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            reportNetworkFailure(baseUrl)
+            false
+        }
+    }
+
+    private fun startPolling(baseUrl: String) {
+        if (pollJob?.isActive == true) return
+        pollJob = scope.launch {
+            while (isActive && !_isServerReachable.value) {
+                delay(2500)
+                val cleanBase = baseUrl.trimEnd('/')
+                val url = if (cleanBase.isEmpty()) "/api/health" else "$cleanBase/api/health"
+                try {
+                    val response = healthClient.get(url)
+                    if (response.status.isSuccess()) {
+                        _isServerReachable.value = true
+                        _onReconnected.tryEmit(Unit)
+                        break
+                    }
+                } catch (e: Throwable) {
+                    if (e is CancellationException) throw e
+                }
+            }
+            pollJob = null
+        }
+    }
+}
 
 sealed class LoginResult {
     object Success : LoginResult()
@@ -266,8 +344,26 @@ class AdminNetworkClient(val baseUrl: String = "") {
                     if (jsCheckAndClearDataChanged()) {
                         _onDataChanged.tryEmit(Unit)
                     }
+                    if (jsHasAdminSyncError()) {
+                        KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+                    }
                 } catch (e: Exception) {}
             }
+        }
+    }
+
+    suspend fun verifySessionStillValid() {
+        if (authToken.isNullOrBlank()) return
+        try {
+            val response = httpClient.get(resolveUrl("/api/admin/products")) {
+                appendAdminAuth()
+            }
+            if (response.status.isSuccess()) {
+                KioskConnectionMonitor.reportServerReachable()
+            }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            KioskConnectionMonitor.reportNetworkFailure(baseUrl)
         }
     }
 
@@ -834,8 +930,13 @@ class HttpAdminNoteRepository(private val client: AdminNetworkClient) : AdminNot
     const cleanBase = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
     const url = cleanBase + '/api/customer/events' + (token ? '?token=' + encodeURIComponent(token) : '');
     try {
+        window._lojinhaCustomerSyncError = false;
         const es = new EventSource(url);
+        es.onopen = () => {
+            window._lojinhaCustomerSyncError = false;
+        };
         es.addEventListener('data_changed', () => {
+            window._lojinhaCustomerSyncError = false;
             window._lojinhaCustomerHasNewData = true;
         });
         es.onerror = (e) => {
@@ -855,12 +956,16 @@ private external fun jsStartCustomerEventSource(baseUrl: String, token: String)
         window._lojinhaCustomerEventSource.close();
         window._lojinhaCustomerEventSource = null;
     }
+    window._lojinhaCustomerSyncError = false;
 }
 """)
 private external fun jsStopCustomerEventSource()
 
 @JsFun("() => { const flag = window._lojinhaCustomerHasNewData === true; window._lojinhaCustomerHasNewData = false; return flag; }")
 private external fun jsCheckAndClearCustomerDataChanged(): Boolean
+
+@JsFun("() => window._lojinhaCustomerSyncError === true")
+private external fun jsHasCustomerSyncError(): Boolean
 
 class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : VeggieOrderRepository {
     override fun getUnitTypesFlow(): Flow<List<VeggieUnitType>> = flow {
@@ -1447,6 +1552,7 @@ class CustomerNetworkClient(val baseUrl: String = "") {
             response.status.isSuccess()
         } catch (e: Exception) {
             AppLogger.error("CustomerNetworkClient", "saveCustomerOrder failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(baseUrl)
             false
         }
     }
@@ -1519,6 +1625,9 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                 try {
                     if (jsCheckAndClearCustomerDataChanged()) {
                         _onDataChanged.tryEmit(Unit)
+                    }
+                    if (jsHasCustomerSyncError()) {
+                        KioskConnectionMonitor.reportNetworkFailure(baseUrl)
                     }
                 } catch (_: Exception) {}
             }

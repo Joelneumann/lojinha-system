@@ -921,6 +921,12 @@ interface AppStrings {
     val deactivateCancelExistingOrders: String
     val keepLoggedInLabel: String
     val loadingUsers: String
+    val kioskOfflineTitle: String
+    val kioskOfflineDescription: String
+    val kioskOfflineWaiting: String
+    val kioskOfflineRetryButton: String
+    val adminSessionRestartedNotice: String
+    val kioskOfflineSaveError: String
 }
 
 

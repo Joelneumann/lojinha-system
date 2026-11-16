@@ -268,4 +268,64 @@ class CustomerVeggieViewModelTest {
         advanceUntilIdle()
         assertEquals(setOf("prod-3"), vm.favoriteProductIds.value)
     }
+
+    @Test
+    fun testLocalDraftIsSavedRestoredAndClearedOnSave() = runTest {
+        val round = VeggieOrderRound(
+            id = "round-draft-1",
+            status = VeggieRoundStatus.OPEN,
+            openedAt = 1000L
+        )
+        val unit = VeggieUnitType(id = "u1", name = "kg", allowDecimals = true)
+        val prod = VeggieProduct(id = "p1", name = "Tomato", unitTypeId = "u1", estimatedPriceCents = 500L)
+        val persistedDrafts = mutableMapOf<String, Map<String, Long>>()
+
+        val vm1 = CustomerVeggieViewModel(
+            onFetchVeggieState = {
+                CustomerVeggieStateResponse(
+                    activeRound = round,
+                    unitTypes = listOf(unit),
+                    products = listOf(prod)
+                )
+            },
+            onSaveOrder = { _, _ -> false },
+            onFetchHistory = { emptyList() },
+            onLoadDraft = { rid -> persistedDrafts[rid] },
+            onSaveDraft = { rid, qty -> persistedDrafts[rid] = qty },
+            onClearDraft = { rid -> persistedDrafts.remove(rid) },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        vm1.updateProductQuantity("p1", 2500L)
+        assertEquals(mapOf("p1" to 2500L), persistedDrafts["round-draft-1"])
+        assertTrue(vm1.hasUnsavedOrderChanges.value)
+
+        // Simulate browser reload / new ViewModel instance after Kiosk reconnects
+        val vm2 = CustomerVeggieViewModel(
+            onFetchVeggieState = {
+                CustomerVeggieStateResponse(
+                    activeRound = round,
+                    unitTypes = listOf(unit),
+                    products = listOf(prod)
+                )
+            },
+            onSaveOrder = { _, _ -> true },
+            onFetchHistory = { emptyList() },
+            onLoadDraft = { rid -> persistedDrafts[rid] },
+            onSaveDraft = { rid, qty -> persistedDrafts[rid] = qty },
+            onClearDraft = { rid -> persistedDrafts.remove(rid) },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        assertEquals(mapOf("p1" to 2500L), vm2.draftQuantitiesScaled.value)
+        assertTrue(vm2.hasUnsavedOrderChanges.value)
+
+        vm2.saveOrder()
+        advanceUntilIdle()
+
+        assertFalse(persistedDrafts.containsKey("round-draft-1"))
+        assertFalse(vm2.hasUnsavedOrderChanges.value)
+    }
 }

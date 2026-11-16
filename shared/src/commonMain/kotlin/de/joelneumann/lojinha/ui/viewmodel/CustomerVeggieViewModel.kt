@@ -22,6 +22,9 @@ class CustomerVeggieViewModel(
     initialFavoriteProductIds: Set<String> = emptySet(),
     private val onFavoritesChanged: ((Set<String>) -> Unit)? = null,
     private val onSaveFavorites: (suspend (Set<String>) -> Boolean)? = null,
+    private val onLoadDraft: ((roundId: String) -> Map<String, Long>?)? = null,
+    private val onSaveDraft: ((roundId: String, quantitiesScaled: Map<String, Long>) -> Unit)? = null,
+    private val onClearDraft: ((roundId: String) -> Unit)? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
 
@@ -122,8 +125,18 @@ class CustomerVeggieViewModel(
 
                 _savedQuantitiesScaled.value = serverQuantities
                 if (!preserveDraftIfSameRound || !sameRound || !_hasUnsavedOrderChanges.value) {
-                    _draftQuantitiesScaled.value = serverQuantities
-                    _hasUnsavedOrderChanges.value = false
+                    val localDraft = if (currentRoundId != null && state.activeRound?.status == VeggieRoundStatus.OPEN) {
+                        onLoadDraft?.invoke(currentRoundId)?.filterValues { it > 0L }
+                    } else {
+                        null
+                    }
+                    if (localDraft != null && localDraft != serverQuantities) {
+                        _draftQuantitiesScaled.value = localDraft
+                        _hasUnsavedOrderChanges.value = true
+                    } else {
+                        _draftQuantitiesScaled.value = serverQuantities
+                        _hasUnsavedOrderChanges.value = false
+                    }
                 } else {
                     recomputeUnsavedFlag()
                 }
@@ -236,6 +249,7 @@ class CustomerVeggieViewModel(
         }
         _draftQuantitiesScaled.value = updated
         recomputeUnsavedFlag()
+        persistDraftIfChanged(round.id)
     }
 
     fun copyPreviousRoundOrder() {
@@ -250,6 +264,7 @@ class CustomerVeggieViewModel(
 
         _draftQuantitiesScaled.value = filteredPrev
         recomputeUnsavedFlag()
+        persistDraftIfChanged(round.id)
     }
 
     fun incrementProductQuantity(product: VeggieProduct, unitType: VeggieUnitType?) {
@@ -291,6 +306,7 @@ class CustomerVeggieViewModel(
                     _savedQuantitiesScaled.value = snapshotToSave
                     _draftQuantitiesScaled.value = snapshotToSave
                     _hasUnsavedOrderChanges.value = false
+                    onClearDraft?.invoke(round.id)
                     loadData(preserveDraftIfSameRound = false)
                     showSavedBanner()
                     onOrderSaved()
@@ -337,6 +353,14 @@ class CustomerVeggieViewModel(
         val cleanDraft = _draftQuantitiesScaled.value.filterValues { it > 0L }
         val cleanSaved = _savedQuantitiesScaled.value.filterValues { it > 0L }
         _hasUnsavedOrderChanges.value = cleanDraft != cleanSaved
+    }
+
+    private fun persistDraftIfChanged(roundId: String) {
+        if (_hasUnsavedOrderChanges.value) {
+            onSaveDraft?.invoke(roundId, _draftQuantitiesScaled.value.filterValues { it > 0L })
+        } else {
+            onClearDraft?.invoke(roundId)
+        }
     }
 
     private fun showSavedBanner() {
