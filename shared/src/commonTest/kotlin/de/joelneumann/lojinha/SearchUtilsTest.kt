@@ -7,6 +7,8 @@ import de.joelneumann.lojinha.ui.components.admin.veggie.toComparator
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
+import de.joelneumann.lojinha.ui.utils.isReservedAdminName
+import de.joelneumann.lojinha.ui.utils.normalizeUserName
 import de.joelneumann.lojinha.ui.utils.removeAccents
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -334,6 +336,15 @@ class SearchUtilsTest {
         // All 3 start with "Tomate" (Tier 1). Using PRICE_ASC comparator should sort Italiano (500), Débora (700), Cereja (1000).
         val ranked = list.filterAndRankVeggieProducts("Tomate", secondaryComparator = VeggieSortOption.PRICE_ASC.toComparator())
         assertEquals(listOf("Tomate Italiano", "Tomate Débora", "Tomate Cereja"), ranked.map { it.name })
+    }
+
+    @Test
+    fun testNormalizeUserNameAndReservedAdmin() {
+        assertEquals("joao silva", "  João   Silva ".normalizeUserName())
+        assertEquals("joao silva", "JOAO SILVA".normalizeUserName())
+        assertTrue("Admin".isReservedAdminName())
+        assertTrue("  ädmin  ".isReservedAdminName())
+        assertFalse("Alice".isReservedAdminName())
     }
 }
 

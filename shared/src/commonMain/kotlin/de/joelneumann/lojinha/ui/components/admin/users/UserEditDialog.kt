@@ -27,6 +27,8 @@ import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.formModalKeys
+import de.joelneumann.lojinha.ui.utils.isReservedAdminName
+import de.joelneumann.lojinha.ui.utils.normalizeUserName
 
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
@@ -97,6 +99,15 @@ fun UserEditDialog(
     val duplicateConflict = duplicateBarcodeUser?.let { trimmedBarcode to it }
         ?: duplicateNumberUser?.let { trimmedBarcodeNumber to it }
 
+    val normalizedName = remember(name) { name.normalizeUserName() }
+    val isReservedAdmin = remember(name) { name.isReservedAdminName() }
+    val duplicateNameUser = remember(normalizedName, allUsers, user.id) {
+        if (normalizedName.isEmpty()) null
+        else allUsers.firstOrNull { u ->
+            u.id != user.id && !u.isDeleted && u.name.normalizeUserName() == normalizedName
+        }
+    }
+
     val isBarcodeSymbolFilled = barcode.isNotBlank()
     val isBarcodeNumberFilled = barcodeNumber.isNotBlank()
     val isUserBarcodeIncomplete = (isBarcodeSymbolFilled && !isBarcodeNumberFilled) || (!isBarcodeSymbolFilled && isBarcodeNumberFilled)
@@ -131,7 +142,7 @@ fun UserEditDialog(
         }
     }
 
-    val canSave = !isSaving && name.isNotBlank() && duplicateConflict == null && !isUserBarcodeIncomplete && (isNewUser || hasDialogChanges)
+    val canSave = !isSaving && name.isNotBlank() && !isReservedAdmin && duplicateNameUser == null && duplicateConflict == null && !isUserBarcodeIncomplete && (isNewUser || hasDialogChanges)
 
     val handleSave = {
         if (canSave) {
@@ -530,6 +541,27 @@ fun UserEditDialog(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ColorWarningAmber
+                        )
+                    }
+                }
+
+                if (isReservedAdmin || duplicateNameUser != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = null,
+                            tint = ColorDangerCrimson,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (isReservedAdmin) strings.userNameReservedAdmin else strings.userNameAlreadyExists(duplicateNameUser!!.name),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorDangerCrimson
                         )
                     }
                 }

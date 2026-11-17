@@ -20,78 +20,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
 @JsFun("""
-(key, value) => {
-    try {
-        window.sessionStorage.setItem(key, value);
-    } catch (e) {
-        console.warn('Failed to set sessionStorage item:', e);
-    }
-}
-""")
-private external fun jsSetSessionItem(key: String, value: String)
-
-@JsFun("""
-(key) => {
-    try {
-        return window.sessionStorage.getItem(key);
-    } catch (e) {
-        console.warn('Failed to get sessionStorage item:', e);
-        return null;
-    }
-}
-""")
-private external fun jsGetSessionItem(key: String): String?
-
-@JsFun("""
-(key) => {
-    try {
-        window.sessionStorage.removeItem(key);
-    } catch (e) {
-        console.warn('Failed to remove sessionStorage item:', e);
-    }
-}
-""")
-private external fun jsRemoveSessionItem(key: String)
-
-// TODO(online-server): For a public/internet-facing server, consider migrating persistent
-//  customer auth from localStorage Bearer tokens to HttpOnly; Secure; SameSite=Lax cookies
-//  to eliminate any XSS token-theft surface. (Safe for self-hosted/LAN HTTPS with Compose Canvas.)
-@JsFun("""
-(key, value) => {
-    try {
-        window.localStorage.setItem(key, value);
-    } catch (e) {
-        console.warn('Failed to set localStorage item:', e);
-    }
-}
-""")
-private external fun jsSetLocalItem(key: String, value: String)
-
-@JsFun("""
-(key) => {
-    try {
-        return window.localStorage.getItem(key);
-    } catch (e) {
-        console.warn('Failed to get localStorage item:', e);
-        return null;
-    }
-}
-""")
-private external fun jsGetLocalItem(key: String): String?
-
-@JsFun("""
-(key) => {
-    try {
-        window.localStorage.removeItem(key);
-    } catch (e) {
-        console.warn('Failed to remove localStorage item:', e);
-    }
-}
-""")
-private external fun jsRemoveLocalItem(key: String)
-
-@JsFun("""
-(key, path, baseUrl, token) => {
+(key, path, baseUrl) => {
     window._lojinhaSse = window._lojinhaSse || {};
     const prev = window._lojinhaSse[key];
     if (prev) {
@@ -99,7 +28,7 @@ private external fun jsRemoveLocalItem(key: String)
         if (prev.visHandler) document.removeEventListener('visibilitychange', prev.visHandler);
     }
     const cleanBase = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
-    const url = cleanBase + path + (token ? '?token=' + encodeURIComponent(token) : '');
+    const url = cleanBase + path;
     const state = { es: null, syncError: false, hasNewData: false, visHandler: null };
     window._lojinhaSse[key] = state;
 
@@ -107,7 +36,7 @@ private external fun jsRemoveLocalItem(key: String)
         if (document.hidden || state.es) return;
         try {
             state.syncError = false;
-            const es = new EventSource(url);
+            const es = new EventSource(url, { withCredentials: true });
             es.onopen = () => { state.syncError = false; };
             es.addEventListener('data_changed', () => {
                 state.syncError = false;
@@ -135,7 +64,7 @@ private external fun jsRemoveLocalItem(key: String)
     connect();
 }
 """)
-private external fun jsStartSse(key: String, path: String, baseUrl: String, token: String)
+private external fun jsStartSse(key: String, path: String, baseUrl: String)
 
 @JsFun("""
 (key) => {
@@ -224,15 +153,9 @@ object KioskConnectionMonitor {
     }
 }
 
-sealed class LoginResult {
-    object Success : LoginResult()
-    data class RateLimited(val message: String) : LoginResult()
-    object InvalidCredentials : LoginResult()
-    data class NetworkError(val message: String) : LoginResult()
-}
-
 class AdminNetworkClient(val baseUrl: String = "") {
-    var authToken: String? = null
+    var isAuthenticated: Boolean = false
+        private set
 
     fun resolveUrl(path: String): String {
         val cleanBase = baseUrl.trimEnd('/')
@@ -247,11 +170,10 @@ class AdminNetworkClient(val baseUrl: String = "") {
     val onUnauthorized: SharedFlow<Unit> = _onUnauthorized.asSharedFlow()
 
     fun notifyUnauthorized() {
-        val hadToken = authToken != null
+        val wasAuthenticated = isAuthenticated
         stopRealtimeSync()
-        authToken = null
-        try { jsRemoveSessionItem("lojinha_admin_token") } catch (e: Exception) {}
-        if (hadToken) {
+        isAuthenticated = false
+        if (wasAuthenticated) {
             _onUnauthorized.tryEmit(Unit)
         }
     }
@@ -275,78 +197,49 @@ class AdminNetworkClient(val baseUrl: String = "") {
         }
     }
 
-    suspend fun login(password: String): LoginResult {
+    suspend fun fetchSessionRole(): String? {
         return try {
-            val response = httpClient.post(resolveUrl("/api/admin/login")) {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(password))
-            }
-            if (response.status == HttpStatusCode.TooManyRequests) {
-                val resp: LoginResponse? = try { response.body() } catch (e: Exception) { null }
-                val msg = resp?.message?.ifBlank { null } ?: "Too many failed attempts. Please wait a minute."
-                LoginResult.RateLimited(msg)
-            } else if (response.status.isSuccess()) {
-                val loginResponse: LoginResponse = response.body()
-                if (loginResponse.success) {
-                    authToken = loginResponse.token
-                    authToken?.let { token ->
-                        try { jsSetSessionItem("lojinha_admin_token", token) } catch (e: Exception) {}
-                    }
-                    LoginResult.Success
-                } else {
-                    LoginResult.InvalidCredentials
-                }
+            val response = httpClient.get(resolveUrl("/api/session"))
+            if (response.status.isSuccess()) {
+                val status: SessionStatusResponse = response.body()
+                status.role
             } else {
-                AppLogger.warn("AdminNetworkClient", "Client login failed with HTTP status: ${response.status}")
-                LoginResult.InvalidCredentials
+                null
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            LoginResult.NetworkError(e.message ?: "Network error")
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            null
         }
     }
 
     suspend fun tryRestoreSession(): Boolean {
-        val storedToken = try { jsGetSessionItem("lojinha_admin_token") } catch (e: Throwable) { null }
-        if (storedToken.isNullOrBlank()) return false
-        authToken = storedToken
         return try {
-            val response = httpClient.get(resolveUrl("/api/admin/products")) {
-                appendAdminAuth()
-            }
+            val response = httpClient.get(resolveUrl("/api/admin/ui-settings"))
             if (response.status.isSuccess()) {
+                isAuthenticated = true
                 true
-            } else if (response.status == HttpStatusCode.Unauthorized) {
-                logout()
-                false
             } else {
-                // Server error / unavailable - do not clear stored token so user can retry
-                authToken = null
+                isAuthenticated = false
                 false
             }
         } catch (e: Throwable) {
             if (e is CancellationException) throw e
-            // Transient network failure - keep stored token
-            authToken = null
+            isAuthenticated = false
             false
         }
     }
 
     suspend fun logout() {
         stopRealtimeSync()
+        isAuthenticated = false
         try {
-            httpClient.post(resolveUrl("/api/admin/logout")) {
-                appendAdminAuth()
-            }
-        } catch (e: Exception) {}
-        authToken = null
-        try { jsRemoveSessionItem("lojinha_admin_token") } catch (e: Exception) {}
+            httpClient.post(resolveUrl("/api/admin/logout"))
+        } catch (_: Exception) {}
     }
 
     fun startRealtimeSync(scope: CoroutineScope) {
-        val token = authToken ?: ""
         try {
-            jsStartSse("admin", "/api/admin/events", baseUrl, token)
+            jsStartSse("admin", "/api/admin/events", baseUrl)
         } catch (e: Exception) {
             AppLogger.error("AdminNetworkClient", "Failed to initialize EventSource: ${e.message}", e)
         }
@@ -355,7 +248,7 @@ class AdminNetworkClient(val baseUrl: String = "") {
         syncJob = scope.launch {
             while (isActive) {
                 delay(1200)
-                if (authToken.isNullOrBlank()) break
+                if (!isAuthenticated) break
                 try {
                     if (jsCheckAndClearSseDataChanged("admin")) {
                         _onDataChanged.tryEmit(Unit)
@@ -371,11 +264,9 @@ class AdminNetworkClient(val baseUrl: String = "") {
     }
 
     suspend fun verifySessionStillValid() {
-        if (authToken.isNullOrBlank()) return
+        if (!isAuthenticated) return
         try {
-            val response = httpClient.get(resolveUrl("/api/admin/products")) {
-                appendAdminAuth()
-            }
+            val response = httpClient.get(resolveUrl("/api/admin/products"))
             if (response.status.isSuccess()) {
                 KioskConnectionMonitor.reportServerReachable()
             }
@@ -393,11 +284,7 @@ class AdminNetworkClient(val baseUrl: String = "") {
         } catch (e: Exception) {}
     }
 
-    fun HttpRequestBuilder.appendAdminAuth() {
-        if (!authToken.isNullOrBlank()) {
-            header(HttpHeaders.Authorization, "Bearer $authToken")
-        }
-    }
+    fun HttpRequestBuilder.appendAdminAuth() {}
 }
 
 class HttpSettingsRepository(private val client: AdminNetworkClient) : SettingsRepository {
@@ -1384,18 +1271,10 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
     }
 }
 
-sealed class CustomerLoginResult {
-    data class Success(val user: User) : CustomerLoginResult()
-    data class RateLimited(val message: String) : CustomerLoginResult()
-    object PinRequired : CustomerLoginResult()
-    object InvalidPin : CustomerLoginResult()
-    data class NetworkError(val message: String) : CustomerLoginResult()
-}
-
 class CustomerNetworkClient(val baseUrl: String = "") {
-    var authToken: String? = null
+    var isAuthenticated: Boolean = false
+        private set
     var currentUser: User? = null
-    private var isPersistentSession: Boolean = false
 
     fun resolveUrl(path: String): String {
         val cleanBase = baseUrl.trimEnd('/')
@@ -1415,17 +1294,11 @@ class CustomerNetworkClient(val baseUrl: String = "") {
     val onUnauthorized: SharedFlow<Unit> = _onUnauthorized.asSharedFlow()
 
     fun notifyUnauthorized() {
-        val hadToken = authToken != null
-        val wasPersistent = isPersistentSession
+        val wasAuthenticated = isAuthenticated
         stopRealtimeSync()
-        authToken = null
+        isAuthenticated = false
         currentUser = null
-        isPersistentSession = false
-        try { jsRemoveSessionItem("lojinha_customer_token") } catch (_: Exception) {}
-        if (wasPersistent) {
-            try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
-        }
-        if (hadToken) {
+        if (wasAuthenticated) {
             _onUnauthorized.tryEmit(Unit)
         }
     }
@@ -1449,75 +1322,25 @@ class CustomerNetworkClient(val baseUrl: String = "") {
         }
     }
 
-    fun HttpRequestBuilder.appendCustomerAuth() {
-        if (!authToken.isNullOrBlank()) {
-            header(HttpHeaders.Authorization, "Bearer $authToken")
-        }
-    }
-
-    suspend fun loginCustomer(userId: String, pin: String, keepLoggedIn: Boolean = false): CustomerLoginResult {
-        return try {
-            val response = httpClient.post(resolveUrl("/api/customer/login")) {
-                contentType(ContentType.Application.Json)
-                setBody(CustomerLoginRequest(userId = userId, pin = pin, keepLoggedIn = keepLoggedIn))
-            }
-            if (response.status == HttpStatusCode.TooManyRequests) {
-                val resp: CustomerLoginResponse? = try { response.body() } catch (_: Exception) { null }
-                val msg = resp?.message?.ifBlank { null } ?: "Too many failed attempts. Please wait a minute."
-                CustomerLoginResult.RateLimited(msg)
-            } else if (response.status.isSuccess()) {
-                val loginResp: CustomerLoginResponse = response.body()
-                if (loginResp.success && loginResp.user != null && !loginResp.token.isNullOrBlank()) {
-                    authToken = loginResp.token
-                    currentUser = loginResp.user
-                    if (keepLoggedIn) {
-                        isPersistentSession = true
-                        try { jsRemoveSessionItem("lojinha_customer_token") } catch (_: Exception) {}
-                        try { jsSetLocalItem("lojinha_customer_token", loginResp.token) } catch (_: Exception) {}
-                    } else {
-                        isPersistentSession = false
-                        try { jsSetSessionItem("lojinha_customer_token", loginResp.token) } catch (_: Exception) {}
-                    }
-                    CustomerLoginResult.Success(loginResp.user)
-                } else if (loginResp.message.contains("PIN required", ignoreCase = true)) {
-                    CustomerLoginResult.PinRequired
-                } else {
-                    CustomerLoginResult.InvalidPin
-                }
-            } else {
-                CustomerLoginResult.InvalidPin
-            }
-        } catch (e: Exception) {
-            CustomerLoginResult.NetworkError(e.message ?: "Network error")
-        }
-    }
+    fun HttpRequestBuilder.appendCustomerAuth() {}
 
     suspend fun tryRestoreCustomerSession(): User? {
-        val sessionToken = try { jsGetSessionItem("lojinha_customer_token")?.takeIf { it.isNotBlank() } } catch (_: Throwable) { null }
-        val localToken = if (sessionToken == null) {
-            try { jsGetLocalItem("lojinha_customer_token")?.takeIf { it.isNotBlank() } } catch (_: Throwable) { null }
-        } else null
-        val storedToken = sessionToken ?: localToken ?: return null
-        isPersistentSession = (sessionToken == null)
-        authToken = storedToken
         return try {
-            val response = httpClient.get(resolveUrl("/api/customer/me")) {
-                appendCustomerAuth()
-            }
+            val response = httpClient.get(resolveUrl("/api/customer/me"))
             if (response.status.isSuccess()) {
                 val user: User = response.body()
                 currentUser = user
+                isAuthenticated = true
                 user
-            } else if (response.status == HttpStatusCode.Unauthorized) {
-                logout()
-                null
             } else {
-                authToken = null
+                isAuthenticated = false
+                currentUser = null
                 null
             }
         } catch (e: Throwable) {
             if (e is CancellationException) throw e
-            authToken = null
+            isAuthenticated = false
+            currentUser = null
             null
         }
     }
@@ -1652,25 +1475,16 @@ class CustomerNetworkClient(val baseUrl: String = "") {
 
     suspend fun logout() {
         stopRealtimeSync()
-        try {
-            httpClient.post(resolveUrl("/api/customer/logout")) {
-                appendCustomerAuth()
-            }
-        } catch (_: Exception) {}
-        val wasPersistent = isPersistentSession
-        authToken = null
+        isAuthenticated = false
         currentUser = null
-        isPersistentSession = false
-        try { jsRemoveSessionItem("lojinha_customer_token") } catch (_: Exception) {}
-        if (wasPersistent) {
-            try { jsRemoveLocalItem("lojinha_customer_token") } catch (_: Exception) {}
-        }
+        try {
+            httpClient.post(resolveUrl("/api/customer/logout"))
+        } catch (_: Exception) {}
     }
 
     fun startRealtimeSync(scope: CoroutineScope) {
-        val token = authToken ?: ""
         try {
-            jsStartSse("customer", "/api/customer/events", baseUrl, token)
+            jsStartSse("customer", "/api/customer/events", baseUrl)
         } catch (e: Exception) {
             AppLogger.error("CustomerNetworkClient", "Failed to initialize Customer EventSource: ${e.message}", e)
         }
@@ -1679,7 +1493,7 @@ class CustomerNetworkClient(val baseUrl: String = "") {
         syncJob = scope.launch {
             while (isActive) {
                 delay(1200)
-                if (authToken.isNullOrBlank()) break
+                if (!isAuthenticated) break
                 try {
                     if (jsCheckAndClearSseDataChanged("customer")) {
                         _onDataChanged.tryEmit(Unit)
@@ -1708,22 +1522,12 @@ class HttpCustomerUserRepository(private val client: CustomerNetworkClient) : Us
         emit(getAllUsers())
     }
 
-    override suspend fun getAllUsers(): List<User> {
-        return try {
-            val list: List<User> = client.httpClient.get(client.resolveUrl("/api/customer/users")).body()
-            list.sortedByAccentInsensitive { it.name }
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
+    override suspend fun getAllUsers(): List<User> = listOfNotNull(client.currentUser ?: client.fetchCurrentUser())
 
-    override suspend fun getUserById(id: String): User? {
-        return getAllUsers().find { it.id == id }
-    }
+    override suspend fun getUserById(id: String): User? =
+        (client.currentUser ?: client.fetchCurrentUser())?.takeIf { it.id == id }
 
-    override suspend fun getUserByBarcode(barcode: String): User? {
-        return getAllUsers().find { it.userBarcode == barcode || it.userBarcodeNumber == barcode }
-    }
+    override suspend fun getUserByBarcode(barcode: String): User? = null
 
     override suspend fun saveUser(user: User) {
         val newPin = if (user.pin != null && user.pin != "PROTECTED") user.pin else null

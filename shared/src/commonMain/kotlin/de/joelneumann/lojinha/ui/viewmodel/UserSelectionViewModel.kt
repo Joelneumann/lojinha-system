@@ -25,24 +25,18 @@ data class ScannedProductInfo(
 class UserSelectionViewModel(
     private val userRepository: UserRepository,
     private val productRepository: ProductRepository? = null,
-    coroutineScope: CoroutineScope? = null,
-    val isNetworkPortal: Boolean = false,
-    private val onAuthenticateNetworkUser: (suspend (userId: String, pin: String, keepLoggedIn: Boolean) -> User?)? = null,
-    private val onAuthenticateNetworkAdmin: (suspend (password: String) -> Boolean)? = null
+    coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
 
     constructor(
         userRepository: UserRepository,
         coroutineScope: CoroutineScope? = null
-    ) : this(userRepository, null, coroutineScope, false, null, null)
+    ) : this(userRepository, null, coroutineScope)
 
     private val activeScope = coroutineScope ?: viewModelScope
 
     private val _users = MutableStateFlow<List<User>>(emptyList())
     val users: StateFlow<List<User>> = _users.asStateFlow()
-
-    private val _isLoadingUsers = MutableStateFlow(true)
-    val isLoadingUsers: StateFlow<Boolean> = _isLoadingUsers.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -56,16 +50,8 @@ class UserSelectionViewModel(
     private val _selectedUserForPin = MutableStateFlow<User?>(null)
     val selectedUserForPin: StateFlow<User?> = _selectedUserForPin.asStateFlow()
 
-    private val _pinRequiredNoticeUser = MutableStateFlow<User?>(null)
-    val pinRequiredNoticeUser: StateFlow<User?> = _pinRequiredNoticeUser.asStateFlow()
-
     private val _pinInput = MutableStateFlow("")
     val pinInput: StateFlow<String> = _pinInput.asStateFlow()
-
-    val showKeepLoggedInOption: Boolean get() = isNetworkPortal
-
-    private val _keepLoggedIn = MutableStateFlow(true)
-    val keepLoggedIn: StateFlow<Boolean> = _keepLoggedIn.asStateFlow()
 
     private val _pinError = MutableStateFlow<String?>(null)
     val pinError: StateFlow<String?> = _pinError.asStateFlow()
@@ -90,15 +76,9 @@ class UserSelectionViewModel(
 
     fun loadUsers() {
         loadUsersJob?.cancel()
-        _isLoadingUsers.value = true
         loadUsersJob = activeScope.launch {
-            try {
-                userRepository.getUsersFlow().collect { list ->
-                    _users.value = list.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
-                    _isLoadingUsers.value = false
-                }
-            } finally {
-                _isLoadingUsers.value = false
+            userRepository.getUsersFlow().collect { list ->
+                _users.value = list.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
             }
         }
     }
@@ -110,16 +90,11 @@ class UserSelectionViewModel(
         dismissFeedback()
         _searchQuery.value = ""
         _selectedUserForPin.value = null
-        _pinRequiredNoticeUser.value = null
         _pinInput.value = ""
         _pinError.value = null
         _showAdminAuthDialog.value = false
         _adminPasswordInput.value = ""
         _adminPasswordError.value = null
-    }
-
-    fun dismissPinRequiredNotice() {
-        _pinRequiredNoticeUser.value = null
     }
 
     fun updateSearchQuery(query: String) {
@@ -206,25 +181,14 @@ class UserSelectionViewModel(
     fun onUserCardClicked(user: User, onLoginSuccess: (User) -> Unit) {
         if (isLoggingIn) return
         dismissFeedback()
-        _pinRequiredNoticeUser.value = null
-        if (isNetworkPortal) {
-            if (user.pin.isNullOrBlank()) {
-                _pinRequiredNoticeUser.value = user
-            } else {
-                _selectedUserForPin.value = user
-                _pinInput.value = ""
-                _pinError.value = null
-            }
+        if (user.pin.isNullOrBlank() || !user.requirePinOnKiosk) {
+            isLoggingIn = true
+            _searchQuery.value = ""
+            onLoginSuccess(user)
         } else {
-            if (user.pin.isNullOrBlank() || !user.requirePinOnKiosk) {
-                isLoggingIn = true
-                _searchQuery.value = ""
-                onLoginSuccess(user)
-            } else {
-                _selectedUserForPin.value = user
-                _pinInput.value = ""
-                _pinError.value = null
-            }
+            _selectedUserForPin.value = user
+            _pinInput.value = ""
+            _pinError.value = null
         }
     }
 
@@ -233,35 +197,10 @@ class UserSelectionViewModel(
         _pinError.value = null
     }
 
-    fun updateKeepLoggedIn(keep: Boolean) {
-        _keepLoggedIn.value = keep
-    }
-
     fun submitPin(adminPassword: String = "", onLoginSuccess: (User) -> Unit) {
         if (isLoggingIn) return
         val user = _selectedUserForPin.value ?: return
         val trimmedInput = _pinInput.value.trim()
-        if (onAuthenticateNetworkUser != null) {
-            isLoggingIn = true
-            activeScope.launch {
-                val authedUser = try {
-                    onAuthenticateNetworkUser.invoke(user.id, trimmedInput, _keepLoggedIn.value)
-                } catch (_: Exception) {
-                    null
-                }
-                if (authedUser != null) {
-                    _selectedUserForPin.value = null
-                    _pinInput.value = ""
-                    _searchQuery.value = ""
-                    onLoginSuccess(authedUser)
-                } else {
-                    isLoggingIn = false
-                    _pinError.value = "pin_incorrect"
-                    _pinInput.value = ""
-                }
-            }
-            return
-        }
         val trimmedAdmin = adminPassword.trim()
         if (verifyPinOrAdminBypass(user.pin, trimmedInput, trimmedAdmin)) {
             isLoggingIn = true
@@ -312,23 +251,6 @@ class UserSelectionViewModel(
 
     fun submitAdminPassword(expectedPassword: String, onAdminAuthSuccess: () -> Unit) {
         val trimmedInput = _adminPasswordInput.value.trim()
-        if (onAuthenticateNetworkAdmin != null) {
-            activeScope.launch {
-                val ok = try {
-                    onAuthenticateNetworkAdmin.invoke(trimmedInput)
-                } catch (_: Exception) {
-                    false
-                }
-                if (ok) {
-                    closeAdminAuthDialog()
-                    onAdminAuthSuccess()
-                } else {
-                    _adminPasswordError.value = "admin_password_incorrect"
-                    _adminPasswordInput.value = ""
-                }
-            }
-            return
-        }
         val trimmedExpected = expectedPassword.trim()
         if (de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(trimmedInput, trimmedExpected)) {
             closeAdminAuthDialog()

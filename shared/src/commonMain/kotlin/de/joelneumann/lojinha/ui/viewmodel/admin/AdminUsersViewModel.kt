@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.ui.utils.isReservedAdminName
+import de.joelneumann.lojinha.ui.utils.normalizeUserName
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlin.random.Random
 
@@ -147,7 +149,20 @@ class AdminUsersViewModel(
         viewModelScope.launch {
             _isSavingUser.value = true
             try {
-                userRepository.saveUser(user)
+                val trimmedUser = user.copy(name = user.name.trim())
+                if (trimmedUser.name.isReservedAdminName()) {
+                    _userErrorMessage.value = I18n.get().userNameReservedAdmin
+                    return@launch
+                }
+                val normalized = trimmedUser.name.normalizeUserName()
+                val existingConflict = userRepository.getAllUsers().firstOrNull { existing ->
+                    existing.id != trimmedUser.id && !existing.isDeleted && existing.name.normalizeUserName() == normalized
+                }
+                if (existingConflict != null) {
+                    _userErrorMessage.value = I18n.get().userNameAlreadyExists(existingConflict.name)
+                    return@launch
+                }
+                userRepository.saveUser(trimmedUser)
                 refreshUsers()
                 closeUserModal()
             } catch (e: Exception) {
@@ -186,6 +201,22 @@ class AdminUsersViewModel(
     fun restoreUser(userId: String) {
         viewModelScope.launch {
             try {
+                val allUsers = userRepository.getAllUsers()
+                val target = allUsers.find { it.id == userId }
+                if (target != null) {
+                    if (target.name.isReservedAdminName()) {
+                        _userErrorMessage.value = I18n.get().userNameReservedAdmin
+                        return@launch
+                    }
+                    val normalized = target.name.normalizeUserName()
+                    val conflict = allUsers.firstOrNull { existing ->
+                        existing.id != userId && !existing.isDeleted && existing.name.normalizeUserName() == normalized
+                    }
+                    if (conflict != null) {
+                        _userErrorMessage.value = I18n.get().userNameAlreadyExists(conflict.name)
+                        return@launch
+                    }
+                }
                 userRepository.restoreUser(userId)
                 refreshUsers()
             } catch (e: Exception) {

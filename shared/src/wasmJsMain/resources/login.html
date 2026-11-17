@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <meta name="theme-color" content="#1e3a8a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Lojinha">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="alternate icon" href="favicon.ico">
+    <title>Lojinha — Sign In</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            min-height: 100%;
+            width: 100%;
+            background-color: #f8fafc;
+            color: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .page-wrap {
+            width: 100%;
+            max-width: 420px;
+            padding: 20px 16px;
+        }
+        .card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 28px 24px 24px;
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+        }
+        .top-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .brand-logo {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background-color: #eff6ff;
+            border: 1px solid #bfdbfe;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .brand-logo img {
+            width: 24px;
+            height: 24px;
+            object-fit: contain;
+        }
+        .brand-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e3a8a;
+            letter-spacing: -0.01em;
+        }
+        .lang-switch {
+            display: inline-flex;
+            gap: 4px;
+            background: #f1f5f9;
+            padding: 3px;
+            border-radius: 8px;
+        }
+        .lang-btn {
+            border: none;
+            background: transparent;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .lang-btn.active {
+            background: #ffffff;
+            color: #1e3a8a;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+        }
+        h1 {
+            margin: 0 0 6px;
+            font-size: 21px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .subtitle {
+            margin: 0 0 22px;
+            font-size: 14px;
+            color: #64748b;
+            line-height: 1.45;
+        }
+        .field {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .input-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            height: 46px;
+            padding: 10px 14px;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 10px;
+            font-size: 16px;
+            color: #0f172a;
+            background-color: #ffffff;
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        input[type="password"].with-toggle,
+        input[type="text"].with-toggle {
+            padding-right: 48px;
+        }
+        input:focus {
+            border-color: #1e3a8a;
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.14);
+        }
+        .toggle-pw {
+            position: absolute;
+            right: 8px;
+            border: none;
+            background: transparent;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .toggle-pw:hover {
+            color: #1e3a8a;
+            background: #f1f5f9;
+        }
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin: 4px 0 20px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .checkbox-row input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #1e3a8a;
+            cursor: pointer;
+            margin: 0;
+        }
+        .checkbox-row span {
+            font-size: 14px;
+            color: #334155;
+        }
+        .error-box {
+            display: none;
+            margin-bottom: 16px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+        .error-box.visible {
+            display: block;
+        }
+        .notice-box {
+            display: none;
+            margin-bottom: 16px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background-color: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #78350f;
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+        .notice-box.visible {
+            display: block;
+        }
+        .submit-btn {
+            width: 100%;
+            height: 48px;
+            border: none;
+            border-radius: 10px;
+            background-color: #1e3a8a;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.15s ease, opacity 0.15s ease;
+        }
+        .submit-btn:hover:not(:disabled) {
+            background-color: #1e40af;
+        }
+        .submit-btn:active:not(:disabled) {
+            background-color: #172554;
+        }
+        .submit-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+    </style>
+    <script>
+        if ('serviceWorker' in navigator && window.isSecureContext) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+            });
+        }
+    </script>
+</head>
+<body>
+    <div class="page-wrap">
+        <div class="card">
+            <div class="top-row">
+                <div class="brand">
+                    <div class="brand-logo">
+                        <img src="favicon.png" alt="Lojinha">
+                    </div>
+                    <span class="brand-name">Lojinha</span>
+                </div>
+                <div class="lang-switch" role="group" aria-label="Language">
+                    <button type="button" class="lang-btn" data-lang="pt">PT</button>
+                    <button type="button" class="lang-btn" data-lang="en">EN</button>
+                    <button type="button" class="lang-btn" data-lang="de">DE</button>
+                </div>
+            </div>
+
+            <h1 id="title">Sign in</h1>
+            <p class="subtitle" id="subtitle">Enter your name and PIN to access your account.</p>
+
+            <div id="noticeBox" class="notice-box" role="status"></div>
+            <div id="errorBox" class="error-box" role="alert"></div>
+
+            <form id="loginForm" method="post" action="/api/login">
+                <div class="field">
+                    <label for="username" id="usernameLabel">Name</label>
+                    <div class="input-wrap">
+                        <input
+                            id="username"
+                            name="username"
+                            type="text"
+                            autocomplete="username"
+                            autocapitalize="none"
+                            autocorrect="off"
+                            spellcheck="false"
+                            required
+                            autofocus
+                        >
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="password" id="passwordLabel">PIN / Password</label>
+                    <div class="input-wrap">
+                        <input
+                            id="password"
+                            name="password"
+                            type="password"
+                            class="with-toggle"
+                            autocomplete="current-password"
+                            required
+                        >
+                        <button type="button" id="togglePwBtn" class="toggle-pw">Show</button>
+                    </div>
+                </div>
+
+                <label class="checkbox-row" for="keepLoggedIn">
+                    <input id="keepLoggedIn" name="keepLoggedIn" type="checkbox" checked>
+                    <span id="keepLabel">Keep me logged in</span>
+                </label>
+
+                <button type="submit" id="submitBtn" class="submit-btn">Sign In</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const I18N = {
+                pt: {
+                    docTitle: 'Lojinha — Entrar',
+                    title: 'Entrar',
+                    subtitle: 'Digite seu nome e PIN para acessar sua conta.',
+                    usernameLabel: 'Nome',
+                    usernamePlaceholder: 'Seu nome',
+                    passwordLabel: 'PIN / Senha',
+                    passwordPlaceholder: 'Digite seu PIN',
+                    keepLabel: 'Manter conectado',
+                    submit: 'Entrar',
+                    signingIn: 'Entrando…',
+                    show: 'Mostrar',
+                    hide: 'Ocultar',
+                    invalidCreds: 'Nome ou PIN inválido.',
+                    adminRestarted: 'O Kiosk foi reiniciado — faça login novamente. Suas edições não salvas na matriz de verduras foram preservadas localmente.',
+                    rateLimited: (mins) => mins > 1
+                        ? `Muitas tentativas inválidas. Aguarde ${mins} minutos e tente novamente.`
+                        : 'Muitas tentativas inválidas. Aguarde 1 minuto e tente novamente.',
+                    networkErr: 'Não foi possível conectar ao servidor Lojinha. Tente novamente.'
+                },
+                de: {
+                    docTitle: 'Lojinha — Anmelden',
+                    title: 'Anmelden',
+                    subtitle: 'Gib deinen Namen und deine PIN ein, um auf dein Konto zuzugreifen.',
+                    usernameLabel: 'Name',
+                    usernamePlaceholder: 'Dein Name',
+                    passwordLabel: 'PIN / Passwort',
+                    passwordPlaceholder: 'PIN eingeben',
+                    keepLabel: 'Angemeldet bleiben',
+                    submit: 'Anmelden',
+                    signingIn: 'Anmeldung…',
+                    show: 'Zeigen',
+                    hide: 'Verbergen',
+                    invalidCreds: 'Ungültiger Name oder PIN.',
+                    adminRestarted: 'Kiosk wurde neu gestartet — bitte erneut anmelden. Ungespeicherte Änderungen in der Gemüse-Matrix wurden lokal gesichert.',
+                    rateLimited: (mins) => mins > 1
+                        ? `Zu viele fehlgeschlagene Versuche. Bitte warte ${mins} Minuten.`
+                        : 'Zu viele fehlgeschlagene Versuche. Bitte warte 1 Minute.',
+                    networkErr: 'Verbindung zum Lojinha-Server fehlgeschlagen. Bitte erneut versuchen.'
+                },
+                en: {
+                    docTitle: 'Lojinha — Sign In',
+                    title: 'Sign in',
+                    subtitle: 'Enter your name and PIN to access your account.',
+                    usernameLabel: 'Name',
+                    usernamePlaceholder: 'Your name',
+                    passwordLabel: 'PIN / Password',
+                    passwordPlaceholder: 'Enter your PIN',
+                    keepLabel: 'Keep me logged in',
+                    submit: 'Sign In',
+                    signingIn: 'Signing in…',
+                    show: 'Show',
+                    hide: 'Hide',
+                    invalidCreds: 'Invalid username or PIN.',
+                    adminRestarted: 'Kiosk restarted — please log in again. Any unsaved veggie matrix edits were preserved locally.',
+                    rateLimited: (mins) => mins > 1
+                        ? `Too many failed attempts. Please wait ${mins} minutes before retrying.`
+                        : 'Too many failed attempts. Please wait 1 minute before retrying.',
+                    networkErr: 'Could not reach the Lojinha server. Please try again.'
+                }
+            };
+
+            function detectInitialLang() {
+                try {
+                    const saved = localStorage.getItem('lojinha_login_lang');
+                    if (saved && I18N[saved]) return saved;
+                } catch (_) {}
+                const nav = (navigator.language || 'en').toLowerCase();
+                if (nav.startsWith('pt')) return 'pt';
+                if (nav.startsWith('de')) return 'de';
+                return 'en';
+            }
+
+            let currentLang = detectInitialLang();
+            const titleEl = document.getElementById('title');
+            const subtitleEl = document.getElementById('subtitle');
+            const usernameLabelEl = document.getElementById('usernameLabel');
+            const usernameInput = document.getElementById('username');
+            const passwordLabelEl = document.getElementById('passwordLabel');
+            const passwordInput = document.getElementById('password');
+            const keepLabelEl = document.getElementById('keepLabel');
+            const keepCheckbox = document.getElementById('keepLoggedIn');
+            const submitBtn = document.getElementById('submitBtn');
+            const togglePwBtn = document.getElementById('togglePwBtn');
+            const noticeBox = document.getElementById('noticeBox');
+            const errorBox = document.getElementById('errorBox');
+            const form = document.getElementById('loginForm');
+            const langButtons = document.querySelectorAll('.lang-btn');
+
+            let hasRestartNotice = false;
+            try {
+                if (window.sessionStorage.getItem('lojinha_admin_restart_notice') === '1') {
+                    hasRestartNotice = true;
+                    window.sessionStorage.removeItem('lojinha_admin_restart_notice');
+                }
+            } catch (_) {}
+
+            let isSubmitting = false;
+
+            function applyLang(lang) {
+                currentLang = I18N[lang] ? lang : 'en';
+                const t = I18N[currentLang];
+                document.documentElement.lang = currentLang === 'pt' ? 'pt-BR' : currentLang;
+                document.title = t.docTitle;
+                titleEl.textContent = t.title;
+                subtitleEl.textContent = t.subtitle;
+                usernameLabelEl.textContent = t.usernameLabel;
+                usernameInput.placeholder = t.usernamePlaceholder;
+                passwordLabelEl.textContent = t.passwordLabel;
+                passwordInput.placeholder = t.passwordPlaceholder;
+                keepLabelEl.textContent = t.keepLabel;
+                submitBtn.textContent = isSubmitting ? t.signingIn : t.submit;
+                togglePwBtn.textContent = passwordInput.type === 'password' ? t.show : t.hide;
+                if (hasRestartNotice) {
+                    noticeBox.textContent = t.adminRestarted;
+                    noticeBox.classList.add('visible');
+                }
+
+                langButtons.forEach((btn) => {
+                    btn.classList.toggle('active', btn.dataset.lang === currentLang);
+                });
+                try {
+                    localStorage.setItem('lojinha_login_lang', currentLang);
+                } catch (_) {}
+            }
+
+            langButtons.forEach((btn) => {
+                btn.addEventListener('click', () => applyLang(btn.dataset.lang));
+            });
+
+            togglePwBtn.addEventListener('click', () => {
+                const isHidden = passwordInput.type === 'password';
+                passwordInput.type = isHidden ? 'text' : 'password';
+                togglePwBtn.textContent = isHidden ? I18N[currentLang].hide : I18N[currentLang].show;
+                passwordInput.focus();
+            });
+
+            function showError(msg) {
+                errorBox.textContent = msg;
+                errorBox.classList.add('visible');
+            }
+
+            function clearError() {
+                errorBox.textContent = '';
+                errorBox.classList.remove('visible');
+            }
+
+            usernameInput.addEventListener('input', clearError);
+            passwordInput.addEventListener('input', clearError);
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                if (isSubmitting) return;
+
+                const identifier = usernameInput.value.trim();
+                const password = passwordInput.value.trim();
+                if (!identifier || !password) {
+                    showError(I18N[currentLang].invalidCreds);
+                    return;
+                }
+
+                clearError();
+                isSubmitting = true;
+                submitBtn.disabled = true;
+                submitBtn.textContent = I18N[currentLang].signingIn;
+
+                try {
+                    const response = await fetch('/api/login', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            identifier: identifier,
+                            password: password,
+                            keepLoggedIn: keepCheckbox.checked
+                        })
+                    });
+
+                    if (response.status === 429) {
+                        const retryAfterSec = parseInt(response.headers.get('Retry-After') || '60', 10);
+                        const mins = Math.max(1, Math.ceil((isNaN(retryAfterSec) ? 60 : retryAfterSec) / 60));
+                        showError(I18N[currentLang].rateLimited(mins));
+                        return;
+                    }
+
+                    let data = null;
+                    try {
+                        data = await response.json();
+                    } catch (_) {}
+
+                    if (response.ok && data && data.success) {
+                        window.location.replace('/');
+                        return;
+                    }
+
+                    showError(I18N[currentLang].invalidCreds);
+                    passwordInput.value = '';
+                    passwordInput.focus();
+                } catch (_) {
+                    showError(I18N[currentLang].networkErr);
+                } finally {
+                    isSubmitting = false;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = I18N[currentLang].submit;
+                }
+            });
+
+            applyLang(currentLang);
+        })();
+    </script>
+</body>
+</html>

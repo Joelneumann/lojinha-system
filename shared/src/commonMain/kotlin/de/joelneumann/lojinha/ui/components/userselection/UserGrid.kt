@@ -29,8 +29,6 @@ fun UserGrid(
     modifier: Modifier = Modifier,
     emptyText: String = "No users found.",
     isSearchActive: Boolean = false,
-    isLoading: Boolean = false,
-    isMobile: Boolean = false,
     onOpenAdminSetup: (() -> Unit)? = null
 ) {
     if (users.isEmpty()) {
@@ -38,20 +36,7 @@ fun UserGrid(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            if (isLoading) {
-                val strings = I18n.current
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CircularProgressIndicator(color = AccentNavy)
-                    Text(
-                        text = strings.loadingUsers,
-                        fontSize = 15.sp,
-                        color = TextSecondaryMuted
-                    )
-                }
-            } else if (!isSearchActive && onOpenAdminSetup != null) {
+            if (!isSearchActive && onOpenAdminSetup != null) {
                 val strings = I18n.current
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -133,17 +118,16 @@ fun UserGrid(
         }
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = if (isMobile) 132.dp else 160.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (isMobile) 10.dp else 16.dp),
-            verticalArrangement = Arrangement.spacedBy(if (isMobile) 10.dp else 16.dp),
-            contentPadding = PaddingValues(bottom = if (isMobile) 12.dp else ScreenPadding),
+            columns = GridCells.Adaptive(minSize = 160.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = ScreenPadding),
             modifier = modifier.fillMaxSize()
         ) {
             items(users, key = { it.id }) { user ->
                 UserCard(
                     user = user,
-                    onClick = { onUserClick(user) },
-                    isMobile = isMobile
+                    onClick = { onUserClick(user) }
                 )
             }
         }

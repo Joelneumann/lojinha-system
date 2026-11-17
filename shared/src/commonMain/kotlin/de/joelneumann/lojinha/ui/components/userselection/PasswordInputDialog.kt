@@ -1,7 +1,5 @@
 package de.joelneumann.lojinha.ui.components.userselection
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -15,10 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,31 +35,25 @@ fun PasswordInputDialog(
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
     title: String? = null,
-    errorText: String? = null,
-    isMobile: Boolean = false,
-    keepLoggedIn: Boolean = false,
-    onKeepLoggedInChange: ((Boolean) -> Unit)? = null
+    errorText: String? = null
 ) {
     val strings = I18n.current
     val inputFocusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
     val canSubmit = inputValue.isNotBlank()
 
     LaunchedEffect(Unit) {
         inputFocusRequester.safeRequestFocus()
-        if (isMobile) {
-            keyboardController?.show()
-        }
     }
 
-    val dialogSurface: @Composable (Modifier) -> Unit = { surfaceModifier ->
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = SurfaceWhite,
-            shadowElevation = if (isMobile) 8.dp else 0.dp,
-            modifier = surfaceModifier
-                .fillMaxWidth()
-                .widthIn(max = 360.dp)
+            modifier = modifier
+                .width(360.dp)
                 .wrapContentHeight()
                 .formModalKeys(
                     onCancel = onDismiss,
@@ -107,10 +97,7 @@ fun PasswordInputDialog(
                         .fillMaxWidth()
                         .height(56.dp)
                         .focusRequester(inputFocusRequester),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done
-                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
                         if (canSubmit) onSubmit()
                     })
@@ -125,32 +112,7 @@ fun PasswordInputDialog(
                     )
                 }
 
-                if (onKeepLoggedInChange != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onKeepLoggedInChange(!keepLoggedIn) },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = keepLoggedIn,
-                            onCheckedChange = onKeepLoggedInChange,
-                            colors = CheckboxDefaults.colors(checkedColor = AccentNavy)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = strings.keepLoggedInLabel,
-                            fontSize = 13.sp,
-                            color = PrimaryNavy
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(if (onKeepLoggedInChange != null) 16.dp else 24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -175,44 +137,6 @@ fun PasswordInputDialog(
                     }
                 }
             }
-        }
-    }
-
-    if (isMobile) {
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-                usePlatformDefaultWidth = false
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onDismiss
-                    )
-                    .padding(horizontal = 16.dp, vertical = 24.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                dialogSurface(
-                    modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {}
-                    )
-                )
-            }
-        }
-    } else {
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
-        ) {
-            dialogSurface(modifier)
         }
     }
 }

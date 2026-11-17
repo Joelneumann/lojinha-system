@@ -3,13 +3,22 @@ package de.joelneumann.lojinha.domain.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class LoginRequest(val password: String = "")
+data class UnifiedLoginRequest(
+    val identifier: String = "",
+    val password: String = "",
+    val keepLoggedIn: Boolean = false
+)
 
 @Serializable
-data class LoginResponse(
+data class UnifiedLoginResponse(
     val success: Boolean,
-    val message: String = "",
-    val token: String? = null
+    val role: String? = null,
+    val message: String = ""
+)
+
+@Serializable
+data class SessionStatusResponse(
+    val role: String? = null
 )
 
 @Serializable
@@ -31,21 +40,6 @@ data class AtomicTransactionRequest(
     val transaction: Transaction,
     val balanceDelta: Long = 0L,
     val stockDeltas: Map<String, Long> = emptyMap()
-)
-
-@Serializable
-data class CustomerLoginRequest(
-    val userId: String,
-    val pin: String = "",
-    val keepLoggedIn: Boolean = false
-)
-
-@Serializable
-data class CustomerLoginResponse(
-    val success: Boolean,
-    val message: String = "",
-    val token: String? = null,
-    val user: User? = null
 )
 
 @Serializable

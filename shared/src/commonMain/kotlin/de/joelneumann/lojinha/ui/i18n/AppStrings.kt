@@ -755,8 +755,8 @@ interface AppStrings {
 
     val requirePinOnKioskLabel: String
     val requirePinOnKioskDesc: String
-    val networkPortalPinRequiredTitle: String
-    val networkPortalPinRequiredMsg: String
+    fun userNameAlreadyExists(existingName: String): String
+    val userNameReservedAdmin: String
 
     val veggieSettingsCardTitle: String
     val veggieSettingsCardSubtitle: String
@@ -921,13 +921,10 @@ interface AppStrings {
     fun confirmDeactivateWithOrdersMsg(productName: String, orderCount: Int): String
     val deactivateStopNewOrdersOnly: String
     val deactivateCancelExistingOrders: String
-    val keepLoggedInLabel: String
-    val loadingUsers: String
     val kioskOfflineTitle: String
     val kioskOfflineDescription: String
     val kioskOfflineWaiting: String
     val kioskOfflineRetryButton: String
-    val adminSessionRestartedNotice: String
     val kioskOfflineSaveError: String
     fun statementPdfPagePrefix(pageNum: Int): String
     fun supportEmailSubject(dateStr: String): String

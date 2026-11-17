@@ -10,7 +10,6 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -28,12 +27,15 @@ import de.joelneumann.lojinha.data.service.VeggieImageService
 import de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.ui.utils.PdfFilenames
+import de.joelneumann.lojinha.ui.utils.isReservedAdminName
+import de.joelneumann.lojinha.ui.utils.normalizeUserName
 import de.joelneumann.lojinha.util.AppLogger
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPOutputStream
 
 class LojinhaAdminServer(
@@ -53,34 +55,47 @@ class LojinhaAdminServer(
 
     private data class CustomerSession(
         val userId: String,
-        val expiryTimestamp: Long
+        val expiryTimestamp: Long,
+        val keepLoggedIn: Boolean = false
     )
 
     @kotlinx.serialization.Serializable
     private data class PersistedCustomerSession(
         val tokenHash: String,
         val userId: String,
-        val expiryTimestamp: Long
+        val expiryTimestamp: Long,
+        val keepLoggedIn: Boolean = true
     )
 
-    // Token Session Management
-    private val activeTokens = ConcurrentHashMap<String, Long>() // token -> expiryTimestamp
-    // Customer sessions are keyed by SHA-256(token) and persisted to sessionStoreFile
-    // so "Keep me logged in" survives desktop app restarts without storing raw tokens on disk.
+    private data class LoginAttemptState(
+        val failures: Int,
+        val lastFailureAt: Long,
+        val lockedUntil: Long = 0L
+    )
+
+    // Token Session Management (keyed by SHA-256(token) so raw tokens are never stored in memory or on disk)
+    private val activeTokens = ConcurrentHashMap<String, Long>() // tokenHash -> expiryTimestamp
     private val activeCustomerTokens = ConcurrentHashMap<String, CustomerSession>() // tokenHash -> CustomerSession
     private val sessionStoreLock = Any()
     private val sessionJson = Json { ignoreUnknownKeys = true }
-    private val failedLoginAttempts = ConcurrentHashMap<String, Pair<Int, Long>>() // ip -> (count, firstAttemptTime)
+    private val failedLoginAttempts = ConcurrentHashMap<String, LoginAttemptState>() // "ip:..." or "account:..." -> LoginAttemptState
+    private val ADMIN_COOKIE_NAME = "lojinha_admin_session"
+    private val CUSTOMER_COOKIE_NAME = "lojinha_customer_session"
     private val SESSION_DURATION_MS = 8 * 60 * 60 * 1000L // 8 hours
-    private val PERSISTENT_CUSTOMER_SESSION_DURATION_MS = 30L * 24 * 60 * 60 * 1000L // 30 days
-    private val MAX_LOGIN_ATTEMPTS = 5
-    private val RATE_LIMIT_WINDOW_MS = 60 * 1000L // 1 minute
+    private val PERSISTENT_CUSTOMER_SESSION_DURATION_MS = 90L * 24 * 60 * 60 * 1000L // 90 days
+    private val SLIDING_RENEWAL_PERSIST_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
+    private val MAX_LOGIN_ATTEMPTS_PER_TIER = 5
+    private val RATE_LIMIT_RESET_MS = 30 * 60 * 1000L // 30 minutes idle resets failure counter
+    private val MAX_RATE_LIMIT_ENTRIES = 10_000
+    private val MAX_SSE_CONNECTIONS = 100
+    private val MAX_IMAGE_UPLOAD_BYTES = 15L * 1024 * 1024
+    private val activeSseConnections = AtomicInteger(0)
 
     init {
         loadPersistedCustomerSessions()
     }
 
-    private fun hashCustomerToken(token: String): String {
+    private fun hashToken(token: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
     }
@@ -94,8 +109,12 @@ class LojinhaAdminServer(
                 val loaded = sessionJson.decodeFromString<List<PersistedCustomerSession>>(file.readText())
                 var pruned = false
                 loaded.forEach { entry ->
-                    if (now < entry.expiryTimestamp && entry.tokenHash.isNotBlank() && entry.userId.isNotBlank()) {
-                        activeCustomerTokens[entry.tokenHash] = CustomerSession(entry.userId, entry.expiryTimestamp)
+                    if (entry.keepLoggedIn && now < entry.expiryTimestamp && entry.tokenHash.isNotBlank() && entry.userId.isNotBlank()) {
+                        activeCustomerTokens[entry.tokenHash] = CustomerSession(
+                            userId = entry.userId,
+                            expiryTimestamp = entry.expiryTimestamp,
+                            keepLoggedIn = true
+                        )
                     } else {
                         pruned = true
                     }
@@ -120,8 +139,15 @@ class LojinhaAdminServer(
         try {
             val now = System.currentTimeMillis()
             val validEntries = activeCustomerTokens.entries
-                .filter { now < it.value.expiryTimestamp }
-                .map { PersistedCustomerSession(it.key, it.value.userId, it.value.expiryTimestamp) }
+                .filter { it.value.keepLoggedIn && now < it.value.expiryTimestamp }
+                .map {
+                    PersistedCustomerSession(
+                        tokenHash = it.key,
+                        userId = it.value.userId,
+                        expiryTimestamp = it.value.expiryTimestamp,
+                        keepLoggedIn = true
+                    )
+                }
             file.parentFile?.mkdirs()
             val tmpFile = File(file.parentFile, "${file.name}.tmp")
             tmpFile.writeText(sessionJson.encodeToString(validEntries))
@@ -132,6 +158,58 @@ class LojinhaAdminServer(
             )
         } catch (e: Exception) {
             AppLogger.warn("LojinhaAdminServer", "Failed to save customer sessions: ${e.message}")
+        }
+    }
+
+    private fun revokeCustomerSessions(userId: String) {
+        val removed = activeCustomerTokens.entries.removeIf { it.value.userId == userId }
+        if (removed) {
+            savePersistedCustomerSessions()
+        }
+    }
+
+    private fun checkLockoutRemainingMs(key: String, now: Long): Long? {
+        val state = failedLoginAttempts[key] ?: return null
+        if (now < state.lockedUntil) {
+            return state.lockedUntil - now
+        }
+        if (now - state.lastFailureAt >= RATE_LIMIT_RESET_MS) {
+            failedLoginAttempts.remove(key, state)
+        }
+        return null
+    }
+
+    private fun recordFailedLogin(key: String, now: Long) {
+        if (failedLoginAttempts.size >= MAX_RATE_LIMIT_ENTRIES) {
+            failedLoginAttempts.entries.removeIf { (_, state) ->
+                now >= state.lockedUntil && now - state.lastFailureAt >= RATE_LIMIT_RESET_MS
+            }
+            if (failedLoginAttempts.size >= MAX_RATE_LIMIT_ENTRIES) {
+                val overflow = failedLoginAttempts.size - MAX_RATE_LIMIT_ENTRIES + 1
+                failedLoginAttempts.entries
+                    .sortedBy { it.value.lastFailureAt }
+                    .take(overflow)
+                    .forEach { failedLoginAttempts.remove(it.key, it.value) }
+            }
+        }
+        failedLoginAttempts.compute(key) { _, current ->
+            val baseFailures = if (current == null || (now >= current.lockedUntil && now - current.lastFailureAt >= RATE_LIMIT_RESET_MS)) {
+                0
+            } else {
+                current.failures
+            }
+            val nextFailures = baseFailures + 1
+            val lockoutMs = when {
+                nextFailures >= MAX_LOGIN_ATTEMPTS_PER_TIER * 3 -> 15 * 60 * 1000L
+                nextFailures >= MAX_LOGIN_ATTEMPTS_PER_TIER * 2 && nextFailures % MAX_LOGIN_ATTEMPTS_PER_TIER == 0 -> 5 * 60 * 1000L
+                nextFailures >= MAX_LOGIN_ATTEMPTS_PER_TIER && nextFailures % MAX_LOGIN_ATTEMPTS_PER_TIER == 0 -> 1 * 60 * 1000L
+                else -> 0L
+            }
+            LoginAttemptState(
+                failures = nextFailures,
+                lastFailureAt = now,
+                lockedUntil = if (lockoutMs > 0L) now + lockoutMs else 0L
+            )
         }
     }
 
@@ -240,17 +318,28 @@ class LojinhaAdminServer(
                     ignoreUnknownKeys = true
                 })
             }
-            install(CORS) {
-                anyHost()
-                allowHeader(HttpHeaders.ContentType)
-                allowHeader(HttpHeaders.Authorization)
-                exposeHeader(HttpHeaders.ContentDisposition)
-                allowMethod(HttpMethod.Options)
-                allowMethod(HttpMethod.Put)
-                allowMethod(HttpMethod.Post)
-                allowMethod(HttpMethod.Delete)
-                allowMethod(HttpMethod.Get)
-            }
+            install(createApplicationPlugin("SecurityHeaders") {
+                onCallRespond { call, _ ->
+                    if (!call.response.headers.contains("X-Content-Type-Options")) {
+                        call.response.header("X-Content-Type-Options", "nosniff")
+                    }
+                    if (!call.response.headers.contains("X-Frame-Options")) {
+                        call.response.header("X-Frame-Options", "DENY")
+                    }
+                    if (!call.response.headers.contains("Referrer-Policy")) {
+                        call.response.header("Referrer-Policy", "no-referrer")
+                    }
+                    if (!call.response.headers.contains("Content-Security-Policy")) {
+                        call.response.header(
+                            "Content-Security-Policy",
+                            "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'"
+                        )
+                    }
+                    if (call.isHttpsRequest() && !call.response.headers.contains("Strict-Transport-Security")) {
+                        call.response.header("Strict-Transport-Security", "max-age=31536000")
+                    }
+                }
+            })
 
             routing {
                 // Lightweight unauthenticated health check for Service Worker & live reconnect polling
@@ -259,55 +348,122 @@ class LojinhaAdminServer(
                     call.respondText("""{"status":"ok"}""", ContentType.Application.Json, HttpStatusCode.OK)
                 }
 
-                // 1. Public Login & Logout Endpoints
-                post("/api/admin/login") {
-                    val clientIp = call.request.local.remoteHost
-                    val now = System.currentTimeMillis()
+                // Lightweight session role discovery so the Wasm app avoids probing protected routes on startup
+                get("/api/session") {
+                    call.response.header(HttpHeaders.CacheControl, "no-store, no-cache, must-revalidate")
+                    call.respond(SessionStatusResponse(role = call.resolveSessionRole()))
+                }
 
-                    // Rate Limiting Check
-                    val currentAttempt = failedLoginAttempts[clientIp]
-                    if (currentAttempt != null) {
-                        val (count, firstAttempt) = currentAttempt
-                        if (now - firstAttempt < RATE_LIMIT_WINDOW_MS && count >= MAX_LOGIN_ATTEMPTS) {
-                            AppLogger.warn("LojinhaAdminServer", "Rate limit exceeded for IP: $clientIp")
-                            call.respond(
-                                HttpStatusCode.TooManyRequests,
-                                LoginResponse(false, "Too many failed login attempts. Please wait a minute before retrying.")
-                            )
-                            return@post
-                        } else if (now - firstAttempt >= RATE_LIMIT_WINDOW_MS) {
-                            failedLoginAttempts.remove(clientIp)
-                        }
+                // 1. Unified Public Login & Admin Logout Endpoints
+                post("/api/login") {
+                    val clientIp = call.resolveClientIp()
+                    val now = System.currentTimeMillis()
+                    val req = try {
+                        call.receive<UnifiedLoginRequest>()
+                    } catch (_: Exception) {
+                        call.respond(HttpStatusCode.BadRequest, UnifiedLoginResponse(false, message = "Invalid request body"))
+                        return@post
+                    }
+                    val normalizedIdentifier = req.identifier.normalizeUserName()
+                    val ipKey = "ip:$clientIp"
+                    val accountKey = if (normalizedIdentifier.isNotBlank()) "account:$normalizedIdentifier" else null
+
+                    val ipLockMs = checkLockoutRemainingMs(ipKey, now)
+                    val accountLockMs = accountKey?.let { checkLockoutRemainingMs(it, now) }
+                    val remainingLockMs = listOfNotNull(ipLockMs, accountLockMs).maxOrNull()
+                    if (remainingLockMs != null && remainingLockMs > 0L) {
+                        val retryAfterSeconds = kotlin.math.max(1L, kotlin.math.ceil(remainingLockMs / 1000.0).toLong())
+                        AppLogger.warn("LojinhaAdminServer", "Login rate limit exceeded for IP=$clientIp, identifier='$normalizedIdentifier'")
+                        call.response.header(HttpHeaders.RetryAfter, retryAfterSeconds.toString())
+                        call.respond(
+                            HttpStatusCode.TooManyRequests,
+                            UnifiedLoginResponse(false, message = "Too many failed login attempts. Please wait before retrying.")
+                        )
+                        return@post
                     }
 
-                    val req = call.receive<LoginRequest>()
+                    val cleanPassword = req.password.trim()
                     val settings = settingsRepository.getSettings()
-                    val expectedPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
-                    val matches = de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(req.password, expectedPassword)
+                    val defaultAdminHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin")
+                    val hasCustomAdminHash = settings.adminPasswordHash.isNotBlank() &&
+                        !safeEquals(settings.adminPasswordHash.lowercase(), defaultAdminHash)
 
-                    AppLogger.info("LojinhaAdminServer", "Admin Login Attempt from $clientIp: success=$matches")
-                    if (matches) {
-                        failedLoginAttempts.remove(clientIp)
-                        activeTokens.entries.removeIf { now >= it.value }
-                        failedLoginAttempts.entries.removeIf { now - it.value.second >= RATE_LIMIT_WINDOW_MS }
-                        val token = UUID.randomUUID().toString()
-                        activeTokens[token] = now + SESSION_DURATION_MS
-                        call.respond(HttpStatusCode.OK, LoginResponse(true, "Authenticated", token))
-                    } else {
-                        failedLoginAttempts.compute(clientIp) { _, current ->
-                            val count = current?.first ?: 0
-                            val firstTime = current?.second ?: now
-                            Pair(count + 1, firstTime)
+                    if (normalizedIdentifier == "admin") {
+                        val matches = hasCustomAdminHash &&
+                            cleanPassword.isNotBlank() &&
+                            de.joelneumann.lojinha.security.PasswordHasher.verify(cleanPassword, settings.adminPasswordHash)
+
+                        if (!hasCustomAdminHash) {
+                            AppLogger.warn("LojinhaAdminServer", "Admin web login rejected: custom admin password is not configured.")
+                        } else {
+                            AppLogger.info("LojinhaAdminServer", "Admin Login Attempt from $clientIp: success=$matches")
                         }
-                        call.respond(HttpStatusCode.OK, LoginResponse(false, "Invalid admin password"))
+
+                        if (matches) {
+                            failedLoginAttempts.remove(ipKey)
+                            accountKey?.let { failedLoginAttempts.remove(it) }
+                            activeTokens.entries.removeIf { now >= it.value }
+                            val token = UUID.randomUUID().toString()
+                            activeTokens[hashToken(token)] = now + SESSION_DURATION_MS
+                            val cookieMaxAgeSec = if (req.keepLoggedIn) (SESSION_DURATION_MS / 1000L).toInt() else null
+                            call.setSessionCookie(ADMIN_COOKIE_NAME, token, cookieMaxAgeSec)
+                            call.respond(HttpStatusCode.OK, UnifiedLoginResponse(success = true, role = "ADMIN", message = "Authenticated"))
+                        } else {
+                            recordFailedLogin(ipKey, now)
+                            accountKey?.let { recordFailedLogin(it, now) }
+                            call.respond(HttpStatusCode.Unauthorized, UnifiedLoginResponse(success = false, message = "Invalid credentials"))
+                        }
+                        return@post
+                    }
+
+                    val matchingUsers = if (normalizedIdentifier.isBlank()) {
+                        emptyList()
+                    } else {
+                        userRepository.getAllUsers().filter {
+                            it.isActive && !it.isDeleted && it.name.normalizeUserName() == normalizedIdentifier
+                        }
+                    }
+                    val targetUser = if (matchingUsers.size == 1) matchingUsers.first() else null
+                    val userMatches = targetUser != null &&
+                        !targetUser.pin.isNullOrBlank() &&
+                        cleanPassword.isNotBlank() &&
+                        (
+                            de.joelneumann.lojinha.security.PasswordHasher.verify(cleanPassword, targetUser.pin) ||
+                                (hasCustomAdminHash &&
+                                    de.joelneumann.lojinha.security.PasswordHasher.verify(cleanPassword, settings.adminPasswordHash))
+                        )
+
+                    if (userMatches) {
+                        failedLoginAttempts.remove(ipKey)
+                        accountKey?.let { failedLoginAttempts.remove(it) }
+                        val token = UUID.randomUUID().toString()
+                        val sessionTtl = if (req.keepLoggedIn) PERSISTENT_CUSTOMER_SESSION_DURATION_MS else SESSION_DURATION_MS
+                        activeCustomerTokens[hashToken(token)] = CustomerSession(
+                            userId = targetUser.id,
+                            expiryTimestamp = now + sessionTtl,
+                            keepLoggedIn = req.keepLoggedIn
+                        )
+                        if (req.keepLoggedIn) {
+                            savePersistedCustomerSessions()
+                        }
+                        val cookieMaxAgeSec = if (req.keepLoggedIn) (PERSISTENT_CUSTOMER_SESSION_DURATION_MS / 1000L).toInt() else null
+                        call.setSessionCookie(CUSTOMER_COOKIE_NAME, token, cookieMaxAgeSec)
+                        AppLogger.info("LojinhaAdminServer", "Customer Login Attempt from $clientIp for '${targetUser.name}': success=true")
+                        call.respond(HttpStatusCode.OK, UnifiedLoginResponse(success = true, role = "CUSTOMER", message = "Authenticated"))
+                    } else {
+                        recordFailedLogin(ipKey, now)
+                        accountKey?.let { recordFailedLogin(it, now) }
+                        AppLogger.info("LojinhaAdminServer", "Customer Login Attempt from $clientIp: success=false")
+                        call.respond(HttpStatusCode.Unauthorized, UnifiedLoginResponse(success = false, message = "Invalid credentials"))
                     }
                 }
 
                 post("/api/admin/logout") {
-                    val token = call.extractBearerToken() ?: call.request.queryParameters["token"]
-                    if (token != null) {
-                        activeTokens.remove(token)
+                    val token = call.request.cookies[ADMIN_COOKIE_NAME]
+                    if (!token.isNullOrBlank()) {
+                        activeTokens.remove(hashToken(token))
                     }
+                    call.clearSessionCookie(ADMIN_COOKIE_NAME)
                     call.respond(HttpStatusCode.OK)
                 }
 
@@ -383,12 +539,30 @@ class LojinhaAdminServer(
                     }
                     post("/users") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
-                        val user = call.receive<User>()
-                        if (user.name.isBlank()) {
+                        val incoming = call.receive<User>()
+                        val trimmedUser = incoming.copy(name = incoming.name.trim())
+                        if (trimmedUser.name.isBlank()) {
                             call.respond(HttpStatusCode.BadRequest, "User name cannot be blank")
                             return@post
                         }
-                        userRepository.saveUser(user)
+                        if (trimmedUser.name.isReservedAdminName()) {
+                            call.respond(HttpStatusCode.BadRequest, "The name \"Admin\" is reserved for administrator login")
+                            return@post
+                        }
+                        val allUsers = userRepository.getAllUsers()
+                        val normalized = trimmedUser.name.normalizeUserName()
+                        val duplicate = allUsers.firstOrNull {
+                            it.id != trimmedUser.id && !it.isDeleted && it.name.normalizeUserName() == normalized
+                        }
+                        if (duplicate != null) {
+                            call.respond(HttpStatusCode.BadRequest, "A user named \"${duplicate.name}\" already exists")
+                            return@post
+                        }
+                        val previousUser = allUsers.find { it.id == trimmedUser.id }
+                        userRepository.saveUser(trimmedUser)
+                        if (previousUser != null && (previousUser.pin != trimmedUser.pin || !trimmedUser.isActive || trimmedUser.isDeleted)) {
+                            revokeCustomerSessions(trimmedUser.id)
+                        }
                         call.respond(HttpStatusCode.OK)
                     }
                     post("/users/balance") {
@@ -423,17 +597,35 @@ class LojinhaAdminServer(
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
                         userRepository.deactivateUser(id)
+                        revokeCustomerSessions(id)
                         call.respond(HttpStatusCode.OK)
                     }
                     post("/users/soft-delete/{id}") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
                         userRepository.softDeleteUser(id)
+                        revokeCustomerSessions(id)
                         call.respond(HttpStatusCode.OK)
                     }
                     post("/users/restore/{id}") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                        val allUsers = userRepository.getAllUsers()
+                        val target = allUsers.find { it.id == id }
+                        if (target != null) {
+                            if (target.name.isReservedAdminName()) {
+                                call.respond(HttpStatusCode.BadRequest, "The name \"Admin\" is reserved for administrator login")
+                                return@post
+                            }
+                            val normalized = target.name.normalizeUserName()
+                            val duplicate = allUsers.firstOrNull {
+                                it.id != id && !it.isDeleted && it.name.normalizeUserName() == normalized
+                            }
+                            if (duplicate != null) {
+                                call.respond(HttpStatusCode.BadRequest, "A user named \"${duplicate.name}\" already exists")
+                                return@post
+                            }
+                        }
                         userRepository.restoreUser(id)
                         call.respond(HttpStatusCode.OK)
                     }
@@ -441,6 +633,7 @@ class LojinhaAdminServer(
                         if (!call.checkAdminAuth(settingsRepository)) return@delete
                         val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
                         userRepository.hardDeleteUser(id)
+                        revokeCustomerSessions(id)
                         call.respond(HttpStatusCode.OK)
                     }
                     get("/users/can-delete/{id}") {
@@ -758,8 +951,13 @@ class LojinhaAdminServer(
                             if (!call.checkAdminAuth(settingsRepository)) return@post
                             val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
                             val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            val contentLength = call.request.contentLength()
+                            if (contentLength != null && contentLength > MAX_IMAGE_UPLOAD_BYTES) {
+                                call.respond(HttpStatusCode.PayloadTooLarge, "Image exceeds 15 MB limit")
+                                return@post
+                            }
                             val bytes = call.receive<ByteArray>()
-                            if (bytes.size > 15 * 1024 * 1024) {
+                            if (bytes.size > MAX_IMAGE_UPLOAD_BYTES) {
                                 call.respond(HttpStatusCode.PayloadTooLarge, "Image exceeds 15 MB limit")
                                 return@post
                             }
@@ -1002,6 +1200,10 @@ class LojinhaAdminServer(
                 // 2b. Public Veggie Product Image Endpoint
                 get("/api/veggie/images/{id}") {
                     val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                    if (id.isBlank() || id.contains("..") || id.contains("/") || id.contains("\\")) {
+                        call.respond(HttpStatusCode.BadRequest)
+                        return@get
+                    }
                     val isThumb = call.request.queryParameters["thumb"]?.lowercase() != "false"
                     val directFile = if (isThumb) veggieImageService.getThumbnailFile(id) else veggieImageService.getFullImageFile(id)
                     val imgFile: File? = directFile ?: run {
@@ -1032,85 +1234,14 @@ class LojinhaAdminServer(
 
                 // 2c. Customer Network Portal Endpoints (/api/customer)
                 route("/api/customer") {
-                    get("/users") {
-                        val activeUsers = userRepository.getAllUsers()
-                            .filter { it.isActive && !it.isDeleted }
-                            .map { u ->
-                                u.copy(
-                                    balance = 0L,
-                                    pin = if (u.pin.isNullOrBlank()) null else "PROTECTED"
-                                )
-                            }
-                        call.respond(activeUsers)
-                    }
-
-                    post("/login") {
-                        val clientIp = call.request.local.remoteHost
-                        val now = System.currentTimeMillis()
-
-                        val currentAttempt = failedLoginAttempts[clientIp]
-                        if (currentAttempt != null) {
-                            val (count, firstAttempt) = currentAttempt
-                            if (now - firstAttempt < RATE_LIMIT_WINDOW_MS && count >= MAX_LOGIN_ATTEMPTS) {
-                                call.respond(
-                                    HttpStatusCode.TooManyRequests,
-                                    CustomerLoginResponse(false, "Too many failed login attempts. Please wait a minute before retrying.")
-                                )
-                                return@post
-                            } else if (now - firstAttempt >= RATE_LIMIT_WINDOW_MS) {
-                                failedLoginAttempts.remove(clientIp)
-                            }
-                        }
-
-                        val req = call.receive<CustomerLoginRequest>()
-                        val user = userRepository.getUserById(req.userId)
-                        if (user == null || !user.isActive || user.isDeleted) {
-                            call.respond(HttpStatusCode.OK, CustomerLoginResponse(false, "User not found"))
-                            return@post
-                        }
-                        if (user.pin.isNullOrBlank()) {
-                            call.respond(HttpStatusCode.OK, CustomerLoginResponse(false, "PIN required on network portal"))
-                            return@post
-                        }
-
-                        val settings = settingsRepository.getSettings()
-                        val expectedAdminPassword = if (settings.adminPasswordHash.isNotBlank()) settings.adminPasswordHash else "admin"
-                        val cleanPin = req.pin.trim()
-                        val matches = de.joelneumann.lojinha.security.PasswordHasher.verify(cleanPin, user.pin) ||
-                            de.joelneumann.lojinha.security.PasswordHasher.verifyAdminBypass(cleanPin, expectedAdminPassword)
-
-                        if (matches) {
-                            failedLoginAttempts.remove(clientIp)
-                            val token = UUID.randomUUID().toString()
-                            val sessionTtl = if (req.keepLoggedIn) PERSISTENT_CUSTOMER_SESSION_DURATION_MS else SESSION_DURATION_MS
-                            activeCustomerTokens[hashCustomerToken(token)] = CustomerSession(user.id, now + sessionTtl)
-                            savePersistedCustomerSessions()
-                            call.respond(
-                                HttpStatusCode.OK,
-                                CustomerLoginResponse(
-                                    success = true,
-                                    message = "Authenticated",
-                                    token = token,
-                                    user = user.copy(pin = "PROTECTED")
-                                )
-                            )
-                        } else {
-                            failedLoginAttempts.compute(clientIp) { _, current ->
-                                val count = current?.first ?: 0
-                                val firstTime = current?.second ?: now
-                                Pair(count + 1, firstTime)
-                            }
-                            call.respond(HttpStatusCode.OK, CustomerLoginResponse(false, "Invalid PIN"))
-                        }
-                    }
-
                     post("/logout") {
-                        val token = call.extractBearerToken() ?: call.request.queryParameters["token"]
-                        if (token != null) {
-                            if (activeCustomerTokens.remove(hashCustomerToken(token)) != null) {
+                        val token = call.request.cookies[CUSTOMER_COOKIE_NAME]
+                        if (!token.isNullOrBlank()) {
+                            if (activeCustomerTokens.remove(hashToken(token)) != null) {
                                 savePersistedCustomerSessions()
                             }
                         }
+                        call.clearSessionCookie(CUSTOMER_COOKIE_NAME)
                         call.respond(HttpStatusCode.OK)
                     }
 
@@ -1146,6 +1277,15 @@ class LojinhaAdminServer(
                             pin = updatedPinHash,
                             requirePinOnKiosk = req.requirePinOnKiosk
                         )
+                        if (!cleanNewPin.isNullOrBlank()) {
+                            val currentTokenHash = call.request.cookies[CUSTOMER_COOKIE_NAME]?.let { hashToken(it) }
+                            val revokedOther = activeCustomerTokens.entries.removeIf {
+                                it.value.userId == user.id && it.key != currentTokenHash
+                            }
+                            if (revokedOther) {
+                                savePersistedCustomerSessions()
+                            }
+                        }
                         call.respond(updatedUser.copy(pin = if (updatedUser.pin.isNullOrBlank()) null else "PROTECTED"))
                     }
 
@@ -1355,13 +1495,36 @@ class LojinhaAdminServer(
                     }
                 }
 
+                suspend fun io.ktor.server.application.ApplicationCall.respondEntryHtml() {
+                    val assetName = if (hasValidSessionCookie()) "index.html" else "login.html"
+                    val asset = getOrLoadAsset(assetName)
+                    if (asset == null) {
+                        respond(HttpStatusCode.NotFound, "Web interface assets not found.")
+                        return
+                    }
+                    response.header(HttpHeaders.CacheControl, "no-store, no-cache, must-revalidate")
+                    response.header(HttpHeaders.Vary, "${HttpHeaders.AcceptEncoding}, ${HttpHeaders.Cookie}")
+                    val acceptEncoding = request.headers[HttpHeaders.AcceptEncoding] ?: ""
+                    if (acceptEncoding.contains("gzip", ignoreCase = true) && asset.gzippedBytes != null) {
+                        response.header(HttpHeaders.ContentEncoding, "gzip")
+                        respondBytes(asset.gzippedBytes, ContentType.Text.Html)
+                    } else {
+                        respondBytes(asset.rawBytes, ContentType.Text.Html)
+                    }
+                }
+
                 get("/") {
-                    call.respondWasmAsset("index.html")
+                    call.respondEntryHtml()
                 }
 
                 get("/{filename...}") {
                     val rawFilename = call.parameters.getAll("filename")?.joinToString("/")?.trim('/')
-                    val filename = if (rawFilename.isNullOrBlank()) "index.html" else rawFilename
+                    val filename = if (rawFilename.isNullOrBlank()) {
+                        call.respondEntryHtml()
+                        return@get
+                    } else {
+                        rawFilename
+                    }
 
                     // Do not handle unknown API requests as static assets
                     if (filename.startsWith("api/") || filename == "api") {
@@ -1375,14 +1538,19 @@ class LojinhaAdminServer(
                         return@get
                     }
 
+                    if (filename == "login.html") {
+                        call.respondEntryHtml()
+                        return@get
+                    }
+
                     val asset = getOrLoadAsset(filename)
                     if (asset != null) {
                         call.respondWasmAsset(filename, asset)
                     } else {
-                        // Only fallback to index.html for root or clean single-segment SPA routes
+                        // Only fallback to entry HTML for clean single-segment SPA routes
                         val isSpaRoute = !filename.contains(".")
                         if (isSpaRoute) {
-                            call.respondWasmAsset("index.html")
+                            call.respondEntryHtml()
                         } else {
                             call.respond(HttpStatusCode.NotFound)
                         }
@@ -1426,18 +1594,112 @@ class LojinhaAdminServer(
         respondBytes(pdfBytes, ContentType.Application.Pdf)
     }
 
-    private suspend fun ApplicationCall.checkAdminAuth(settingsRepository: SettingsRepository): Boolean {
-        if (request.httpMethod == HttpMethod.Options) return true
+    private fun ApplicationCall.resolveClientIp(): String {
+        val remote = request.local.remoteHost
+        val isLoopback = remote == "127.0.0.1" || remote == "::1" || remote == "0:0:0:0:0:0:0:1" || remote == "localhost"
+        if (isLoopback) {
+            val cfIp = request.header("CF-Connecting-IP")?.trim()?.takeIf { it.isNotBlank() }
+            if (cfIp != null) return cfIp
+        }
+        return remote
+    }
 
-        // 1. Check Bearer Token or Query Param
-        val token = extractBearerToken() ?: request.queryParameters["token"]
-        if (token != null) {
-            val expiry = activeTokens[token]
+    private fun ApplicationCall.isHttpsRequest(): Boolean {
+        val forwardedProto = request.header("X-Forwarded-Proto")
+        return forwardedProto.equals("https", ignoreCase = true) || request.local.scheme.equals("https", ignoreCase = true)
+    }
+
+    private fun ApplicationCall.setSessionCookie(name: String, rawToken: String, maxAgeSeconds: Int?) {
+        response.cookies.append(
+            Cookie(
+                name = name,
+                value = rawToken,
+                maxAge = maxAgeSeconds,
+                path = "/",
+                httpOnly = true,
+                secure = isHttpsRequest(),
+                extensions = mapOf("SameSite" to "Lax")
+            )
+        )
+    }
+
+    private fun ApplicationCall.clearSessionCookie(name: String) {
+        response.cookies.append(
+            Cookie(
+                name = name,
+                value = "",
+                maxAge = 0,
+                path = "/",
+                httpOnly = true,
+                secure = isHttpsRequest(),
+                extensions = mapOf("SameSite" to "Lax")
+            )
+        )
+    }
+
+    private fun ApplicationCall.hasValidSessionCookie(): Boolean {
+        val now = System.currentTimeMillis()
+        val adminToken = request.cookies[ADMIN_COOKIE_NAME]
+        if (!adminToken.isNullOrBlank()) {
+            val adminHash = hashToken(adminToken)
+            val expiry = activeTokens[adminHash]
+            if (expiry != null) {
+                if (now < expiry) return true
+                activeTokens.remove(adminHash)
+            }
+        }
+        val customerToken = request.cookies[CUSTOMER_COOKIE_NAME]
+        if (!customerToken.isNullOrBlank()) {
+            val customerHash = hashToken(customerToken)
+            val session = activeCustomerTokens[customerHash]
+            if (session != null) {
+                if (now < session.expiryTimestamp) return true
+                activeCustomerTokens.remove(customerHash)
+                savePersistedCustomerSessions()
+            }
+        }
+        return false
+    }
+
+    private suspend fun ApplicationCall.resolveSessionRole(): String? {
+        val now = System.currentTimeMillis()
+        val adminToken = request.cookies[ADMIN_COOKIE_NAME]
+        if (!adminToken.isNullOrBlank()) {
+            val adminHash = hashToken(adminToken)
+            val expiry = activeTokens[adminHash]
+            if (expiry != null) {
+                if (now < expiry) return "ADMIN"
+                activeTokens.remove(adminHash)
+            }
+        }
+        val customerToken = request.cookies[CUSTOMER_COOKIE_NAME]
+        if (!customerToken.isNullOrBlank()) {
+            val customerHash = hashToken(customerToken)
+            val session = activeCustomerTokens[customerHash]
+            if (session != null) {
+                if (now < session.expiryTimestamp) {
+                    val user = userRepository.getUserById(session.userId)
+                    if (user != null && user.isActive && !user.isDeleted) {
+                        return "CUSTOMER"
+                    }
+                }
+                activeCustomerTokens.remove(customerHash)
+                savePersistedCustomerSessions()
+            }
+        }
+        return null
+    }
+
+    private suspend fun ApplicationCall.checkAdminAuth(settingsRepository: SettingsRepository): Boolean {
+        val token = request.cookies[ADMIN_COOKIE_NAME]
+        if (!token.isNullOrBlank()) {
+            val tokenHash = hashToken(token)
+            val expiry = activeTokens[tokenHash]
             if (expiry != null) {
                 if (System.currentTimeMillis() < expiry) {
                     return true
                 } else {
-                    activeTokens.remove(token)
+                    activeTokens.remove(tokenHash)
                 }
             }
         }
@@ -1447,13 +1709,25 @@ class LojinhaAdminServer(
     }
 
     private suspend fun ApplicationCall.requireCustomerUserId(): String? {
-        if (request.httpMethod == HttpMethod.Options) return ""
-        val token = extractBearerToken() ?: request.queryParameters["token"]
-        if (token != null) {
-            val tokenHash = hashCustomerToken(token)
+        val token = request.cookies[CUSTOMER_COOKIE_NAME]
+        if (!token.isNullOrBlank()) {
+            val tokenHash = hashToken(token)
             val session = activeCustomerTokens[tokenHash]
             if (session != null) {
-                if (System.currentTimeMillis() < session.expiryTimestamp) {
+                val now = System.currentTimeMillis()
+                if (now < session.expiryTimestamp) {
+                    if (session.keepLoggedIn) {
+                        val newExpiry = now + PERSISTENT_CUSTOMER_SESSION_DURATION_MS
+                        if (newExpiry - session.expiryTimestamp >= SLIDING_RENEWAL_PERSIST_INTERVAL_MS) {
+                            activeCustomerTokens[tokenHash] = session.copy(expiryTimestamp = newExpiry)
+                            setSessionCookie(
+                                CUSTOMER_COOKIE_NAME,
+                                token,
+                                (PERSISTENT_CUSTOMER_SESSION_DURATION_MS / 1000L).toInt()
+                            )
+                            savePersistedCustomerSessions()
+                        }
+                    }
                     return session.userId
                 } else {
                     activeCustomerTokens.remove(tokenHash)
@@ -1470,10 +1744,11 @@ class LojinhaAdminServer(
         if (userId.isEmpty()) return null
         val user = userRepository.getUserById(userId)
         if (user == null || !user.isActive || user.isDeleted) {
-            val token = extractBearerToken() ?: request.queryParameters["token"]
-            if (token != null && activeCustomerTokens.remove(hashCustomerToken(token)) != null) {
+            val token = request.cookies[CUSTOMER_COOKIE_NAME]
+            if (!token.isNullOrBlank() && activeCustomerTokens.remove(hashToken(token)) != null) {
                 savePersistedCustomerSessions()
             }
+            clearSessionCookie(CUSTOMER_COOKIE_NAME)
             respond(HttpStatusCode.Unauthorized, "Customer account is inactive or not found")
             return null
         }
@@ -1481,51 +1756,51 @@ class LojinhaAdminServer(
     }
 
     private suspend fun ApplicationCall.streamDataChangeEvents(targetUserId: String? = null) {
-        response.cacheControl(CacheControl.NoCache(null))
-        respondTextWriter(contentType = ContentType.Text.EventStream) {
-            val channel = Channel<Unit>(Channel.CONFLATED)
-            val listener: (DataChangeNotifier.ChangeScope) -> Unit = { scope ->
-                val shouldNotify = if (targetUserId == null) {
-                    true
-                } else {
-                    !scope.adminOnly && (scope.targetUserId == null || scope.targetUserId == targetUserId)
-                }
-                if (shouldNotify) {
-                    channel.trySend(Unit)
-                }
-            }
-            DataChangeNotifier.addScopedListener(listener)
-            try {
-                write("event: connected\ndata: {}\n\n")
-                flush()
-                while (true) {
-                    val received = withTimeoutOrNull(25_000L) {
-                        channel.receive()
-                    }
-                    if (received != null) {
-                        write("event: data_changed\ndata: {}\n\n")
-                        flush()
-                    } else {
-                        // Keep-alive heartbeat comment ping every 25s
-                        write(": ping\n\n")
-                        flush()
-                    }
-                }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-            } finally {
-                DataChangeNotifier.removeScopedListener(listener)
-                channel.close()
-            }
+        if (activeSseConnections.incrementAndGet() > MAX_SSE_CONNECTIONS) {
+            activeSseConnections.decrementAndGet()
+            respond(HttpStatusCode.ServiceUnavailable, "Too many active event streams")
+            return
         }
-    }
-
-    private fun ApplicationCall.extractBearerToken(): String? {
-        val authHeader = request.headers[HttpHeaders.Authorization] ?: return null
-        return if (authHeader.startsWith("Bearer ", ignoreCase = true)) {
-            authHeader.substring(7).trim()
-        } else {
-            null
+        try {
+            response.cacheControl(CacheControl.NoCache(null))
+            respondTextWriter(contentType = ContentType.Text.EventStream) {
+                val channel = Channel<Unit>(Channel.CONFLATED)
+                val listener: (DataChangeNotifier.ChangeScope) -> Unit = { scope ->
+                    val shouldNotify = if (targetUserId == null) {
+                        true
+                    } else {
+                        !scope.adminOnly && (scope.targetUserId == null || scope.targetUserId == targetUserId)
+                    }
+                    if (shouldNotify) {
+                        channel.trySend(Unit)
+                    }
+                }
+                DataChangeNotifier.addScopedListener(listener)
+                try {
+                    write("event: connected\ndata: {}\n\n")
+                    flush()
+                    while (true) {
+                        val received = withTimeoutOrNull(25_000L) {
+                            channel.receive()
+                        }
+                        if (received != null) {
+                            write("event: data_changed\ndata: {}\n\n")
+                            flush()
+                        } else {
+                            // Keep-alive heartbeat comment ping every 25s
+                            write(": ping\n\n")
+                            flush()
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                } finally {
+                    DataChangeNotifier.removeScopedListener(listener)
+                    channel.close()
+                }
+            }
+        } finally {
+            activeSseConnections.decrementAndGet()
         }
     }
 

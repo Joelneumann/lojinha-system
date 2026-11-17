@@ -26,6 +26,7 @@ class LojinhaAdminServerTest {
     private lateinit var server: LojinhaAdminServer
     private val testPort = 18085
     private val client = HttpClient.newHttpClient()
+    private val testJson = Json { ignoreUnknownKeys = true }
 
     private val dummySettings = SystemSettings(
         adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("secretPass123")
@@ -364,47 +365,48 @@ class LojinhaAdminServerTest {
         val unauthRes = client.send(unauthReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(401, unauthRes.statusCode())
 
-        // 2. Login with wrong password
+        // 2. Login with wrong password -> 401 generic Invalid credentials
         val wrongLoginReq = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:$testPort/api/admin/login"))
+            .uri(URI.create("http://localhost:$testPort/api/login"))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString("""{"password":"wrongPassword"}"""))
+            .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"Admin","password":"wrongPassword"}"""))
             .build()
         val wrongLoginRes = client.send(wrongLoginReq, HttpResponse.BodyHandlers.ofString())
-        assertEquals(200, wrongLoginRes.statusCode())
-        assertTrue(wrongLoginRes.body().contains("\"success\":false") || wrongLoginRes.body().contains("\"success\": false"))
+        assertEquals(401, wrongLoginRes.statusCode())
+        assertTrue(wrongLoginRes.body().contains("Invalid credentials"))
 
-        // 3. Login with correct password
+        // 3. Login with correct Admin password -> 200 OK + HttpOnly cookie
         val okLoginReq = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:$testPort/api/admin/login"))
+            .uri(URI.create("http://localhost:$testPort/api/login"))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString("""{"password":"secretPass123"}"""))
+            .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"Admin","password":"secretPass123"}"""))
             .build()
         val okLoginRes = client.send(okLoginReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(200, okLoginRes.statusCode())
         assertTrue(okLoginRes.body().contains("\"success\":true") || okLoginRes.body().contains("\"success\": true"))
+        assertTrue(okLoginRes.body().contains("ADMIN"))
 
-        // Extract token from response json
-        val body = okLoginRes.body()
-        val tokenRegex = "\"token\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-        val matchResult = tokenRegex.find(body)
-        assertNotNull(matchResult, "Token should be present in login response")
-        val token = matchResult.groupValues[1]
-        assertTrue(token.isNotBlank())
+        val setCookieHeader = okLoginRes.headers().allValues("Set-Cookie")
+            .firstOrNull { it.startsWith("lojinha_admin_session=") }
+        assertNotNull(setCookieHeader, "Admin session cookie must be set")
+        assertTrue(setCookieHeader.contains("HttpOnly", ignoreCase = true))
+        assertTrue(setCookieHeader.contains("SameSite=Lax", ignoreCase = true))
+        assertFalse(setCookieHeader.contains("Secure", ignoreCase = true), "Plain HTTP should not set Secure flag")
+        val adminCookie = setCookieHeader.substringBefore(";")
 
-        // 4. Authenticated request with Bearer token should succeed (200 OK)
+        // 4. Authenticated request with Cookie should succeed (200 OK)
         val authReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/users"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val authRes = client.send(authReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(200, authRes.statusCode())
 
-        // 5. Authenticated request to bulk billing lists with Bearer token
+        // 5. Authenticated request to bulk billing lists with Cookie
         val billingReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/billing-lists"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val billingRes = client.send(billingReq, HttpResponse.BodyHandlers.ofString())
@@ -413,16 +415,16 @@ class LojinhaAdminServerTest {
         // 6. Logout
         val logoutReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/logout"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .POST(HttpRequest.BodyPublishers.noBody())
             .build()
         val logoutRes = client.send(logoutReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(200, logoutRes.statusCode())
 
-        // 7. Former token is now invalid -> 401
+        // 7. Former cookie is now invalid -> 401
         val revokedReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/users"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val revokedRes = client.send(revokedReq, HttpResponse.BodyHandlers.ofString())
@@ -431,20 +433,12 @@ class LojinhaAdminServerTest {
 
     @Test
     fun testSettingsEndpointsAreRemoved() {
-        // Log in to obtain valid token
-        val loginReq = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:$testPort/api/admin/login"))
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString("""{"password":"secretPass123"}"""))
-            .build()
-        val loginRes = client.send(loginReq, HttpResponse.BodyHandlers.ofString())
-        val tokenRegex = "\"token\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-        val token = tokenRegex.find(loginRes.body())!!.groupValues[1]
+        val adminCookie = getValidAdminCookie()
 
         // GET /api/admin/settings should return 404 (endpoint removed)
         val getSettingsReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/settings"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val getSettingsRes = client.send(getSettingsReq, HttpResponse.BodyHandlers.ofString())
@@ -453,7 +447,7 @@ class LojinhaAdminServerTest {
         // POST /api/admin/settings should return 404
         val postSettingsReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/settings"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString("{}"))
             .build()
@@ -474,43 +468,78 @@ class LojinhaAdminServerTest {
     }
 
     @Test
-    fun testRateLimitingOnRepeatedFailedLogins() {
-        val wrongLoginReq = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:$testPort/api/admin/login"))
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString("""{"password":"wrongPassword"}"""))
-            .build()
+    fun testRateLimitingWithCfConnectingIpAndAccountBackoff() {
+        val wrongLoginPayload = """{"identifier":"Admin","password":"wrongPassword"}"""
 
-        // Send 5 failed attempts
+        // 5 failed attempts from CF-Connecting-IP 1.2.3.4
         repeat(5) {
-            val res = client.send(wrongLoginReq, HttpResponse.BodyHandlers.ofString())
-            assertEquals(200, res.statusCode())
-            assertTrue(res.body().contains("\"success\":false") || res.body().contains("\"success\": false"))
+            val req = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/login"))
+                .header("Content-Type", "application/json")
+                .header("CF-Connecting-IP", "1.2.3.4")
+                .POST(HttpRequest.BodyPublishers.ofString(wrongLoginPayload))
+                .build()
+            val res = client.send(req, HttpResponse.BodyHandlers.ofString())
+            assertEquals(401, res.statusCode())
         }
 
-        // 6th attempt should be blocked with 429 Too Many Requests
-        val rateLimitedRes = client.send(wrongLoginReq, HttpResponse.BodyHandlers.ofString())
+        // 6th attempt from 1.2.3.4 must be blocked with 429 Too Many Requests + Retry-After
+        val rateLimitedReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/login"))
+            .header("Content-Type", "application/json")
+            .header("CF-Connecting-IP", "1.2.3.4")
+            .POST(HttpRequest.BodyPublishers.ofString(wrongLoginPayload))
+            .build()
+        val rateLimitedRes = client.send(rateLimitedReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(429, rateLimitedRes.statusCode())
+        assertNotNull(rateLimitedRes.headers().firstValue("Retry-After").orElse(null))
         assertTrue(rateLimitedRes.body().contains("Too many failed login attempts"))
+
+        // A different client IP trying a DIFFERENT account (Alice) must NOT be locked out!
+        val aliceFromOtherIpReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/login"))
+            .header("Content-Type", "application/json")
+            .header("CF-Connecting-IP", "5.6.7.8")
+            .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"Alice","password":"1234"}"""))
+            .build()
+        val aliceOtherIpRes = client.send(aliceFromOtherIpReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, aliceOtherIpRes.statusCode())
+
+        // Rotating IPs against the SAME account ("Admin") must still trigger per-account lockout!
+        val adminFromOtherIpReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/login"))
+            .header("Content-Type", "application/json")
+            .header("CF-Connecting-IP", "9.9.9.9")
+            .POST(HttpRequest.BodyPublishers.ofString(wrongLoginPayload))
+            .build()
+        val adminLockedRes = client.send(adminFromOtherIpReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(429, adminLockedRes.statusCode())
     }
 
-    private fun getValidToken(): String {
+    private fun extractCookie(res: HttpResponse<*>, cookieName: String): String {
+        val setCookie = res.headers().allValues("Set-Cookie")
+            .firstOrNull { it.startsWith("$cookieName=") }
+            ?: error("Cookie $cookieName not found in Set-Cookie headers: ${res.headers().allValues("Set-Cookie")}")
+        return setCookie.substringBefore(";")
+    }
+
+    private fun getValidAdminCookie(): String {
         val loginReq = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:$testPort/api/admin/login"))
+            .uri(URI.create("http://localhost:$testPort/api/login"))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString("""{"password":"secretPass123"}"""))
+            .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"Admin","password":"secretPass123"}"""))
             .build()
         val loginRes = client.send(loginReq, HttpResponse.BodyHandlers.ofString())
-        val tokenRegex = "\"token\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-        return tokenRegex.find(loginRes.body())!!.groupValues[1]
+        assertEquals(200, loginRes.statusCode())
+        return extractCookie(loginRes, "lojinha_admin_session")
     }
 
     @Test
     fun testCanDeleteUserEndpoint() {
-        val token = getValidToken()
+        val adminCookie = getValidAdminCookie()
         val req = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/users/can-delete/user123"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val res = client.send(req, HttpResponse.BodyHandlers.ofString())
@@ -520,7 +549,7 @@ class LojinhaAdminServerTest {
 
     @Test
     fun testBatchTransactionsEndpoint() {
-        val token = getValidToken()
+        val adminCookie = getValidAdminCookie()
         val reqObj = listOf(
             AtomicTransactionRequest(
                 transaction = Transaction(
@@ -547,7 +576,7 @@ class LojinhaAdminServerTest {
 
         val req = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/transactions/batch"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(payload))
             .build()
@@ -556,24 +585,40 @@ class LojinhaAdminServerTest {
     }
 
     @Test
-    fun testRootRouteServesHtmlNotDirectoryListing() {
-        val req = HttpRequest.newBuilder()
+    fun testRootRouteServesLoginWhenUnauthenticatedAndAppWhenAuthenticated() {
+        // 1. Unauthenticated GET / serves login.html with security headers and no-store cache
+        val unauthReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/"))
             .GET()
             .build()
-        val res = client.send(req, HttpResponse.BodyHandlers.ofString())
-        assertEquals(200, res.statusCode())
-        val contentType = res.headers().firstValue("Content-Type").orElse("")
+        val unauthRes = client.send(unauthReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, unauthRes.statusCode())
+        val contentType = unauthRes.headers().firstValue("Content-Type").orElse("")
         assertTrue(contentType.contains("text/html"), "Content-Type must be text/html, was: $contentType")
-        assertTrue(res.body().contains("<html") || res.body().contains("<!DOCTYPE html>"), "Body must contain HTML")
-        assertFalse(res.body().contains("037f170986f544477491.wasm\n"), "Body must not be a directory listing")
+        assertTrue(unauthRes.body().contains("id=\"loginForm\""), "Unauthenticated GET / must serve login.html")
+        assertTrue(unauthRes.headers().firstValue("Cache-Control").orElse("").contains("no-store"))
+        assertEquals("nosniff", unauthRes.headers().firstValue("X-Content-Type-Options").orElse(null))
+        assertEquals("DENY", unauthRes.headers().firstValue("X-Frame-Options").orElse(null))
+        assertEquals("no-referrer", unauthRes.headers().firstValue("Referrer-Policy").orElse(null))
+
+        // 2. Authenticated GET / serves index.html (ComposeTarget)
+        val adminCookie = getValidAdminCookie()
+        val authReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/"))
+            .header("Cookie", adminCookie)
+            .GET()
+            .build()
+        val authRes = client.send(authReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, authRes.statusCode())
+        assertTrue(authRes.body().contains("id=\"ComposeTarget\""), "Authenticated GET / must serve index.html")
+        assertFalse(authRes.body().contains("037f170986f544477491.wasm\n"), "Body must not be a directory listing")
     }
 
     @Test
     fun testAdminNotesEndpoints() {
-        val token = getValidToken()
+        val adminCookie = getValidAdminCookie()
 
-        // 1. GET /api/admin/notes without token -> 401
+        // 1. GET /api/admin/notes without cookie -> 401
         val unauthReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
             .GET()
@@ -581,17 +626,17 @@ class LojinhaAdminServerTest {
         val unauthRes = client.send(unauthReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(401, unauthRes.statusCode())
 
-        // 2. GET /api/admin/notes with token -> 200 and returns note list
+        // 2. GET /api/admin/notes with cookie -> 200 and returns note list
         val getReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val getRes = client.send(getReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(200, getRes.statusCode())
         assertTrue(getRes.body().contains("Need more sugar"))
 
-        // 3a. POST /api/admin/notes without token -> 401
+        // 3a. POST /api/admin/notes without cookie -> 401
         val postPayload = """{"message":"Ice tea ran out","userId":"u2","userNameSnapshot":"Bob"}"""
         val unauthPostReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
@@ -605,7 +650,7 @@ class LojinhaAdminServerTest {
         val blankPayload = """{"message":"   ","userId":"u2","userNameSnapshot":"Bob"}"""
         val blankPostReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(blankPayload))
             .build()
@@ -615,7 +660,7 @@ class LojinhaAdminServerTest {
         // 3c. POST /api/admin/notes with valid payload -> 201 Created
         val postReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/notes"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(postPayload))
             .build()
@@ -626,7 +671,7 @@ class LojinhaAdminServerTest {
         // 4. DELETE /api/admin/notes/{id} -> 200
         val delReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/notes/note-init"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .DELETE()
             .build()
         val delRes = client.send(delReq, HttpResponse.BodyHandlers.ofString())
@@ -772,51 +817,72 @@ class LojinhaAdminServerTest {
     fun testCustomerPortalLoginAndVeggieOrderFlow() {
         val json = Json { ignoreUnknownKeys = true }
 
-        // 1. GET /api/customer/users sanitizes balance and PIN hash
+        // 1. GET /api/customer/users must be removed (404) so user names are never leaked
         val usersReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/customer/users"))
             .GET()
             .build()
         val usersRes = client.send(usersReq, HttpResponse.BodyHandlers.ofString())
-        assertEquals(200, usersRes.statusCode())
-        val publicUsers = json.decodeFromString<List<User>>(usersRes.body())
-        val alicePublic = publicUsers.first { it.id == "u-alice" }
-        val bobPublic = publicUsers.first { it.id == "u-nopin" }
-        assertEquals(0L, alicePublic.balance, "Public user list must zero out balance")
-        assertEquals("PROTECTED", alicePublic.pin, "Public user list must mask PIN hash")
-        assertNull(bobPublic.pin, "User without PIN must have null pin on public list")
+        assertEquals(404, usersRes.statusCode())
 
-        // 2. Customer without PIN cannot log in on network portal
+        // 2. Customer without PIN & unknown user both return uniform 401 "Invalid credentials"
         val noPinLoginReq = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:$testPort/api/customer/login"))
+            .uri(URI.create("http://localhost:$testPort/api/login"))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(CustomerLoginRequest("u-nopin", "1234"))))
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(UnifiedLoginRequest("Bob NoPin", "1234"))))
             .build()
         val noPinLoginRes = client.send(noPinLoginReq, HttpResponse.BodyHandlers.ofString())
-        assertEquals(200, noPinLoginRes.statusCode())
-        val noPinBody = json.decodeFromString<CustomerLoginResponse>(noPinLoginRes.body())
+        assertEquals(401, noPinLoginRes.statusCode())
+        val noPinBody = json.decodeFromString<UnifiedLoginResponse>(noPinLoginRes.body())
         assertFalse(noPinBody.success)
-        assertTrue(noPinBody.message.contains("PIN required"))
+        assertEquals("Invalid credentials", noPinBody.message)
 
-        // 3. Customer with valid PIN logs in and receives scoped token + actual balance
-        val aliceLoginReq = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:$testPort/api/customer/login"))
+        val unknownUserReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/login"))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(CustomerLoginRequest("u-alice", "1234"))))
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(UnifiedLoginRequest("NonExistent", "1234"))))
+            .build()
+        val unknownUserRes = client.send(unknownUserReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(401, unknownUserRes.statusCode())
+        assertEquals(noPinLoginRes.body(), unknownUserRes.body())
+
+        // 3. Customer with valid PIN logs in case-insensitively and receives HttpOnly cookie (Secure when X-Forwarded-Proto: https)
+        val aliceLoginReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/login"))
+            .header("Content-Type", "application/json")
+            .header("X-Forwarded-Proto", "https")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(UnifiedLoginRequest("  alice ", "1234", keepLoggedIn = true))))
             .build()
         val aliceLoginRes = client.send(aliceLoginReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(200, aliceLoginRes.statusCode())
-        val aliceLoginBody = json.decodeFromString<CustomerLoginResponse>(aliceLoginRes.body())
+        val aliceLoginBody = json.decodeFromString<UnifiedLoginResponse>(aliceLoginRes.body())
         assertTrue(aliceLoginBody.success)
-        assertNotNull(aliceLoginBody.token)
-        assertEquals(2500L, aliceLoginBody.user?.balance)
-        val customerToken = aliceLoginBody.token!!
+        assertEquals("CUSTOMER", aliceLoginBody.role)
+        val customerSetCookie = aliceLoginRes.headers().allValues("Set-Cookie")
+            .firstOrNull { it.startsWith("lojinha_customer_session=") }
+        assertNotNull(customerSetCookie)
+        assertTrue(customerSetCookie.contains("HttpOnly", ignoreCase = true))
+        assertTrue(customerSetCookie.contains("Secure", ignoreCase = true))
+        assertTrue(customerSetCookie.contains("Max-Age=7776000", ignoreCase = true), "Expected 90-day Max-Age on persistent session")
+        val customerCookie = customerSetCookie.substringBefore(";")
+
+        // Verify /api/customer/me returns Alice's actual balance and masked PIN
+        val meReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/customer/me"))
+            .header("Cookie", customerCookie)
+            .GET()
+            .build()
+        val meRes = client.send(meReq, HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, meRes.statusCode())
+        val meUser = json.decodeFromString<User>(meRes.body())
+        assertEquals(2500L, meUser.balance)
+        assertEquals("PROTECTED", meUser.pin)
 
         // 4. Open a veggie round as Admin first
-        val adminToken = getValidToken()
+        val adminCookie = getValidAdminCookie()
         val openRoundReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/open"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(OpenVeggieRoundRequest(300L, 600L, 1731150000000L))))
             .build()
@@ -827,7 +893,7 @@ class LojinhaAdminServerTest {
         // 5. Customer fetches /api/customer/veggie/state
         val stateReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/customer/veggie/state"))
-            .header("Authorization", "Bearer $customerToken")
+            .header("Cookie", customerCookie)
             .GET()
             .build()
         val stateRes = client.send(stateReq, HttpResponse.BodyHandlers.ofString())
@@ -844,7 +910,7 @@ class LojinhaAdminServerTest {
         )
         val saveOrderReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/customer/veggie/order"))
-            .header("Authorization", "Bearer $customerToken")
+            .header("Cookie", customerCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(saveOrderPayload)))
             .build()
@@ -854,7 +920,7 @@ class LojinhaAdminServerTest {
         // 7. Customer fetches /api/customer/veggie/history
         val historyReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/customer/veggie/history"))
-            .header("Authorization", "Bearer $customerToken")
+            .header("Cookie", customerCookie)
             .GET()
             .build()
         val historyRes = client.send(historyReq, HttpResponse.BodyHandlers.ofString())
@@ -866,7 +932,7 @@ class LojinhaAdminServerTest {
         // 8. Customer updates favorites via POST /api/customer/veggie/favorites and sees them in /api/customer/veggie/state
         val saveFavReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/customer/veggie/favorites"))
-            .header("Authorization", "Bearer $customerToken")
+            .header("Cookie", customerCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(UpdateCustomerVeggieFavoritesRequest(setOf("vp-tomato")))))
             .build()
@@ -875,7 +941,7 @@ class LojinhaAdminServerTest {
 
         val stateAfterFavReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/customer/veggie/state"))
-            .header("Authorization", "Bearer $customerToken")
+            .header("Cookie", customerCookie)
             .GET()
             .build()
         val stateAfterFavRes = client.send(stateAfterFavReq, HttpResponse.BodyHandlers.ofString())
@@ -887,7 +953,7 @@ class LojinhaAdminServerTest {
     @Test
     fun testAdminVeggieEndpointsImagesAndPdfs() {
         val json = Json { ignoreUnknownKeys = true }
-        val adminToken = getValidToken()
+        val adminCookie = getValidAdminCookie()
 
         // 1. Upload image for vp-tomato
         val sampleImg = BufferedImage(400, 300, BufferedImage.TYPE_INT_RGB).apply {
@@ -900,7 +966,7 @@ class LojinhaAdminServerTest {
 
         val uploadImgReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/products/vp-tomato/image"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/octet-stream")
             .POST(HttpRequest.BodyPublishers.ofByteArray(imgBytes))
             .build()
@@ -932,7 +998,7 @@ class LojinhaAdminServerTest {
         // 3. Open round, add entry, close round, download Buyer & Worker PDFs, and settle
         val openRoundReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/open"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(OpenVeggieRoundRequest(200L, 400L, 1731150000000L))))
             .build()
@@ -942,7 +1008,7 @@ class LojinhaAdminServerTest {
 
         val buyerPdfReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/buyer-pdf?lang=EN"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val buyerPdfRes = client.send(buyerPdfReq, HttpResponse.BodyHandlers.ofByteArray())
@@ -951,7 +1017,7 @@ class LojinhaAdminServerTest {
 
         val workerPdfReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/worker-pdf?lang=DE"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val workerPdfRes = client.send(workerPdfReq, HttpResponse.BodyHandlers.ofByteArray())
@@ -961,7 +1027,7 @@ class LojinhaAdminServerTest {
         // Close and settle round
         val closeReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/close"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(CloseVeggieRoundRequest(1731155000000L))))
             .build()
@@ -984,7 +1050,7 @@ class LojinhaAdminServerTest {
         )
         val settleReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/settle"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(settlePayload)))
             .build()
@@ -997,14 +1063,14 @@ class LojinhaAdminServerTest {
         // 4. Cancel-product endpoint succeeds on OPEN round and returns 409 on SETTLED round
         val cancelClosedReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round.id}/cancel-product/vp-tomato"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .POST(HttpRequest.BodyPublishers.noBody())
             .build()
         assertEquals(409, client.send(cancelClosedReq, HttpResponse.BodyHandlers.ofString()).statusCode())
 
         val openRound2Req = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/open"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(OpenVeggieRoundRequest(200L, 400L, 1731200000000L))))
             .build()
@@ -1013,7 +1079,7 @@ class LojinhaAdminServerTest {
         )
         val cancelOpenReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/veggie/rounds/${round2.id}/cancel-product/vp-tomato"))
-            .header("Authorization", "Bearer $adminToken")
+            .header("Cookie", adminCookie)
             .POST(HttpRequest.BodyPublishers.noBody())
             .build()
         assertEquals(200, client.send(cancelOpenReq, HttpResponse.BodyHandlers.ofString()).statusCode())
@@ -1021,9 +1087,9 @@ class LojinhaAdminServerTest {
 
     @Test
     fun testUiSettingsAndHeaderAuthRemoval() {
-        val token = getValidToken()
+        val adminCookie = getValidAdminCookie()
 
-        // 1. Legacy X-Admin-Password header without Bearer token must be rejected
+        // 1. Legacy X-Admin-Password header without session cookie must be rejected
         val legacyHeaderReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/ui-settings"))
             .header("X-Admin-Password", "secretPass123")
@@ -1032,25 +1098,293 @@ class LojinhaAdminServerTest {
         val legacyHeaderRes = client.send(legacyHeaderReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(401, legacyHeaderRes.statusCode())
 
-        // 2. GET /api/admin/ui-settings with Bearer token returns settings without adminPasswordHash
+        // 2. GET /api/admin/ui-settings with cookie returns settings without adminPasswordHash
         val uiSettingsReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/ui-settings"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val uiSettingsRes = client.send(uiSettingsReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(200, uiSettingsRes.statusCode())
-        val settings = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString<SystemSettings>(uiSettingsRes.body())
+        val settings = testJson.decodeFromString<SystemSettings>(uiSettingsRes.body())
         assertEquals("", settings.adminPasswordHash)
 
         // 3. GET /api/admin/transactions?userId=... succeeds
         val userTxReq = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:$testPort/api/admin/transactions?userId=u-alice"))
-            .header("Authorization", "Bearer $token")
+            .header("Cookie", adminCookie)
             .GET()
             .build()
         val userTxRes = client.send(userTxReq, HttpResponse.BodyHandlers.ofString())
         assertEquals(200, userTxRes.statusCode())
+    }
+
+    @Test
+    fun testUniqueCustomerNamesAccentInsensitiveLoginAndSessionRevocation() {
+        val json = Json { ignoreUnknownKeys = true }
+        val adminCookie = getValidAdminCookie()
+
+        // 1. Admin creates user "João" with PIN "9876"
+        val joao = User(
+            id = "u-joao",
+            name = "João",
+            pin = de.joelneumann.lojinha.security.PasswordHasher.hash("9876"),
+            language = Language.BR
+        )
+        val createJoaoReq = HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:$testPort/api/admin/users"))
+            .header("Cookie", adminCookie)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(joao)))
+            .build()
+        assertEquals(200, client.send(createJoaoReq, HttpResponse.BodyHandlers.ofString()).statusCode())
+
+        // 2. Duplicate normalized name ("joao") and reserved name ("Admin") must be rejected with 400
+        val dupJoao = joao.copy(id = "u-joao-dup", name = "joao")
+        val dupRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/users"))
+                .header("Cookie", adminCookie)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(dupJoao)))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(400, dupRes.statusCode())
+
+        val reservedAdminUser = joao.copy(id = "u-admin-dup", name = " admin ")
+        val reservedRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/users"))
+                .header("Cookie", adminCookie)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(reservedAdminUser)))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(400, reservedRes.statusCode())
+
+        // 3. Customer logs in with accent-stripped "joao"
+        val joaoLoginRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/login"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json.encodeToString(UnifiedLoginRequest("joao", "9876"))))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(200, joaoLoginRes.statusCode())
+        val joaoCookie = extractCookie(joaoLoginRes, "lojinha_customer_session")
+
+        // Verify /api/customer/me succeeds
+        assertEquals(
+            200,
+            client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$testPort/api/customer/me"))
+                    .header("Cookie", joaoCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            ).statusCode()
+        )
+
+        // 4. Admin deactivates João -> existing customer session is immediately revoked (401)
+        assertEquals(
+            200,
+            client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$testPort/api/admin/users/deactivate/u-joao"))
+                    .header("Cookie", adminCookie)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            ).statusCode()
+        )
+        assertEquals(
+            401,
+            client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$testPort/api/customer/me"))
+                    .header("Cookie", joaoCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            ).statusCode()
+        )
+    }
+
+    @Test
+    fun testBlankAdminPasswordFallbackIsDisabledOnWebLogin() {
+        val noPassSettings = SystemSettings(adminPasswordHash = "")
+        val noPassSettingsRepo = object : SettingsRepository {
+            override suspend fun getSettings(): SystemSettings = noPassSettings
+            override fun getSettingsFlow(): Flow<SystemSettings> = flowOf(noPassSettings)
+            override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {}
+        }
+        val isolatedPort = 18086
+        val isolatedServer = LojinhaAdminServer(
+            productRepository = fakeProductRepo,
+            userRepository = fakeUserRepo,
+            transactionRepository = fakeTransactionRepo,
+            billingListRepository = fakeBillingListRepo,
+            settingsRepository = noPassSettingsRepo,
+            port = isolatedPort
+        )
+        isolatedServer.start()
+        Thread.sleep(300)
+        try {
+            val res = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"Admin","password":"admin"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(401, res.statusCode())
+        } finally {
+            isolatedServer.stop()
+            Thread.sleep(200)
+        }
+    }
+
+    @Test
+    fun testDefaultAdminPasswordHashIsRejectedOnWebLogin() {
+        val defaultAdminSettings = SystemSettings(
+            adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin")
+        )
+        val defaultSettingsRepo = object : SettingsRepository {
+            override suspend fun getSettings(): SystemSettings = defaultAdminSettings
+            override fun getSettingsFlow(): Flow<SystemSettings> = flowOf(defaultAdminSettings)
+            override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {}
+        }
+        val isolatedPort = 18087
+        val isolatedServer = LojinhaAdminServer(
+            productRepository = fakeProductRepo,
+            userRepository = fakeUserRepo,
+            transactionRepository = fakeTransactionRepo,
+            billingListRepository = fakeBillingListRepo,
+            settingsRepository = defaultSettingsRepo,
+            port = isolatedPort
+        )
+        isolatedServer.start()
+        Thread.sleep(300)
+        try {
+            // Admin login with default "admin" password must be rejected
+            val adminRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"Admin","password":"admin"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(401, adminRes.statusCode())
+
+            // Customer admin-bypass with default "admin" password must also be rejected
+            val customerBypassRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"Alice","password":"admin"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(401, customerBypassRes.statusCode())
+        } finally {
+            isolatedServer.stop()
+            Thread.sleep(200)
+        }
+    }
+
+    @Test
+    fun testSecurityHeadersCspHstsOptionsAndSessionDiscovery() {
+        // 1. Plain HTTP has CSP, but NO HSTS
+        val httpRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/session"))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(200, httpRes.statusCode())
+        assertTrue(httpRes.headers().firstValue("Content-Security-Policy").orElse("").contains("'wasm-unsafe-eval'"))
+        assertFalse(httpRes.headers().firstValue("Strict-Transport-Security").isPresent)
+        assertNull(testJson.decodeFromString<SessionStatusResponse>(httpRes.body()).role)
+
+        // 2. HTTPS proxy header adds HSTS
+        val httpsRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/health"))
+                .header("X-Forwarded-Proto", "https")
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(200, httpsRes.statusCode())
+        assertEquals("max-age=31536000", httpsRes.headers().firstValue("Strict-Transport-Security").orElse(null))
+
+        // 3. OPTIONS requests are rejected (405 Method Not Allowed) without CORS
+        val adminOptionsRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/users"))
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(405, adminOptionsRes.statusCode())
+
+        val customerOptionsRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/customer/me"))
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(405, customerOptionsRes.statusCode())
+
+        // 4. Malformed JSON on POST /api/login returns 400 Bad Request
+        val badJsonRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/login"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{bad"))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(400, badJsonRes.statusCode())
+
+        // 5. /api/session reports ADMIN and CUSTOMER roles accurately
+        val adminCookie = getValidAdminCookie()
+        val adminSessionRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/session"))
+                .header("Cookie", adminCookie)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals("ADMIN", testJson.decodeFromString<SessionStatusResponse>(adminSessionRes.body()).role)
+
+        val aliceLoginRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/login"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"Alice","password":"1234"}"""))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        val customerCookie = extractCookie(aliceLoginRes, "lojinha_customer_session")
+        val customerSessionRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/session"))
+                .header("Cookie", customerCookie)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals("CUSTOMER", testJson.decodeFromString<SessionStatusResponse>(customerSessionRes.body()).role)
     }
 }
 

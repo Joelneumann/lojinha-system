@@ -517,7 +517,7 @@ class UserSelectionViewModelTest {
             requirePinOnKiosk = false
         )
         val repo = FakeUserRepository(listOf(userWithPinKioskDisabled))
-        val vm = UserSelectionViewModel(repo, null, backgroundScope, isNetworkPortal = false)
+        val vm = UserSelectionViewModel(repo, null, backgroundScope)
         delay(50)
 
         var loggedInUser: User? = null
@@ -525,48 +525,5 @@ class UserSelectionViewModelTest {
 
         assertEquals(userWithPinKioskDisabled, loggedInUser)
         assertNull(vm.selectedUserForPin.value)
-        assertNull(vm.pinRequiredNoticeUser.value)
-    }
-
-    @Test
-    fun testNetworkPortal_alwaysRequiresPinEvenWhenRequirePinOnKioskIsFalse() = runTest {
-        val userWithPinKioskDisabled = User(
-            id = "u_portal_pin",
-            name = "Portal User",
-            pin = de.joelneumann.lojinha.security.PasswordHasher.hash("1234"),
-            requirePinOnKiosk = false
-        )
-        val repo = FakeUserRepository(listOf(userWithPinKioskDisabled))
-        val vm = UserSelectionViewModel(repo, null, backgroundScope, isNetworkPortal = true)
-        delay(50)
-
-        var loggedInUser: User? = null
-        vm.onUserCardClicked(userWithPinKioskDisabled) { loggedInUser = it }
-
-        // Must prompt for PIN on network portal!
-        assertNull(loggedInUser)
-        assertEquals(userWithPinKioskDisabled, vm.selectedUserForPin.value)
-        assertNull(vm.pinRequiredNoticeUser.value)
-
-        vm.updatePinInput("1234")
-        vm.submitPin("admin") { loggedInUser = it }
-        assertEquals(userWithPinKioskDisabled, loggedInUser)
-    }
-
-    @Test
-    fun testNetworkPortal_blocksUserWithoutPinAndShowsPinRequiredNotice() = runTest {
-        val repo = FakeUserRepository(listOf(userAlice)) // userAlice has pin = null
-        val vm = UserSelectionViewModel(repo, null, backgroundScope, isNetworkPortal = true)
-        delay(50)
-
-        var loggedInUser: User? = null
-        vm.onUserCardClicked(userAlice) { loggedInUser = it }
-
-        assertNull(loggedInUser)
-        assertNull(vm.selectedUserForPin.value)
-        assertEquals(userAlice, vm.pinRequiredNoticeUser.value)
-
-        vm.dismissPinRequiredNotice()
-        assertNull(vm.pinRequiredNoticeUser.value)
     }
 }

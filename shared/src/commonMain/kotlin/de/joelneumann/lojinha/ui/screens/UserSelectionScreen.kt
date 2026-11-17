@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
-import de.joelneumann.lojinha.ui.components.general.LocalHeaderCompact
 import de.joelneumann.lojinha.ui.components.general.SearchInputField
 import de.joelneumann.lojinha.ui.components.userselection.PasswordInputDialog
 import de.joelneumann.lojinha.ui.components.userselection.ProductScanFeedbackBanner
@@ -44,22 +43,18 @@ fun UserSelectionScreen(
     onNavigateToAdmin: () -> Unit
 ) {
     val users by viewModel.users.collectAsState()
-    val isLoadingUsers by viewModel.isLoadingUsers.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedUserForPin by viewModel.selectedUserForPin.collectAsState()
     val pinInput by viewModel.pinInput.collectAsState()
     val pinError by viewModel.pinError.collectAsState()
-    val keepLoggedIn by viewModel.keepLoggedIn.collectAsState()
     val showAdminAuthDialog by viewModel.showAdminAuthDialog.collectAsState()
     val adminPasswordInput by viewModel.adminPasswordInput.collectAsState()
     val adminPasswordError by viewModel.adminPasswordError.collectAsState()
     val scannedProduct by viewModel.scannedProduct.collectAsState()
     val notFoundNotice by viewModel.notFoundNotice.collectAsState()
-    val pinRequiredNoticeUser by viewModel.pinRequiredNoticeUser.collectAsState()
 
     UserSelectionContent(
         users = users,
-        isLoadingUsers = isLoadingUsers,
         searchQuery = searchQuery,
         scannedProduct = scannedProduct,
         notFoundNotice = notFoundNotice,
@@ -69,7 +64,6 @@ fun UserSelectionScreen(
         showAdminAuthDialog = showAdminAuthDialog,
         adminPasswordInput = adminPasswordInput,
         adminPasswordError = adminPasswordError,
-        pinRequiredNoticeUser = pinRequiredNoticeUser,
         onOpenAdminAuthDialog = viewModel::openAdminAuthDialog,
         onSearchQueryChange = viewModel::updateSearchQuery,
         onSearchSubmitted = { viewModel.onSearchSubmitted(settings.globalMarkupPercent, onUserLoggedIn) },
@@ -80,17 +74,13 @@ fun UserSelectionScreen(
         onAdminPasswordChange = viewModel::updateAdminPassword,
         onAdminPasswordSubmit = { viewModel.submitAdminPassword(settings.adminPasswordHash, onNavigateToAdmin) },
         onAdminPasswordDismiss = viewModel::closeAdminAuthDialog,
-        onDismissFeedback = viewModel::dismissFeedback,
-        onDismissPinRequiredNotice = viewModel::dismissPinRequiredNotice,
-        keepLoggedIn = keepLoggedIn,
-        onKeepLoggedInChange = if (viewModel.showKeepLoggedInOption) viewModel::updateKeepLoggedIn else null
+        onDismissFeedback = viewModel::dismissFeedback
     )
 }
 
 @Composable
 fun UserSelectionContent(
     users: List<User>,
-    isLoadingUsers: Boolean = false,
     searchQuery: String,
     scannedProduct: ScannedProductInfo? = null,
     notFoundNotice: Boolean = false,
@@ -110,15 +100,17 @@ fun UserSelectionContent(
     onAdminPasswordChange: (String) -> Unit,
     onAdminPasswordSubmit: () -> Unit,
     onAdminPasswordDismiss: () -> Unit,
-    onDismissFeedback: () -> Unit = {},
-    pinRequiredNoticeUser: User? = null,
-    onDismissPinRequiredNotice: () -> Unit = {},
-    keepLoggedIn: Boolean = false,
-    onKeepLoggedInChange: ((Boolean) -> Unit)? = null
+    onDismissFeedback: () -> Unit = {}
 ) {
     val strings = I18n.current
     val focusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(selectedUserForPin, showAdminAuthDialog, LanguageManager.currentLanguage) {
+        if (selectedUserForPin == null && !showAdminAuthDialog) {
+            focusRequester.safeRequestFocus()
+        }
+    }
 
     val trimmedQuery = remember(searchQuery) { searchQuery.trim() }
     val filteredUsers = remember(users, trimmedQuery) {
@@ -150,12 +142,11 @@ fun UserSelectionContent(
                 }
             },
             actions = {
-                val isCompactHeader = LocalHeaderCompact.current
                 Button(
                     onClick = onOpenAdminAuthDialog,
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = if (isCompactHeader) 12.dp else 16.dp, vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -163,24 +154,22 @@ fun UserSelectionContent(
                     ) {
                         Text(
                             text = strings.adminLoginBtn,
-                            fontSize = if (isCompactHeader) 12.sp else 13.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = SurfaceWhite
                         )
-                        if (!isCompactHeader) {
-                            Text(
-                                text = "(F12)",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Normal,
-                                color = SurfaceWhite.copy(alpha = 0.45f)
-                            )
-                        }
+                        Text(
+                            text = "(F12)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = SurfaceWhite.copy(alpha = 0.45f)
+                        )
                     }
                 }
             }
         )
 
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(SurfaceContainerLight)
@@ -192,20 +181,9 @@ fun UserSelectionContent(
                         focusRequester.safeRequestFocus()
                     }
                 }
+                .padding(ScreenPadding)
         ) {
-            val isMobile = maxWidth < MOBILE_BREAKPOINT
-
-            LaunchedEffect(selectedUserForPin, showAdminAuthDialog, LanguageManager.currentLanguage, isMobile) {
-                if (!isMobile && selectedUserForPin == null && !showAdminAuthDialog) {
-                    focusRequester.safeRequestFocus()
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(if (isMobile) 10.dp else ScreenPadding)
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 SearchInputField(
                     query = searchQuery,
                     onQueryChange = onSearchQueryChange,
@@ -222,15 +200,13 @@ fun UserSelectionContent(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(if (isMobile) 10.dp else 16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 UserGrid(
                     users = filteredUsers,
                     onUserClick = onUserClick,
                     emptyText = strings.noUsersFound,
                     isSearchActive = searchQuery.isNotBlank(),
-                    isLoading = isLoadingUsers,
-                    isMobile = isMobile,
                     onOpenAdminSetup = onOpenAdminAuthDialog
                 )
             }
@@ -244,10 +220,7 @@ fun UserSelectionContent(
                     onValueChange = onPinChange,
                     errorText = if (pinError != null) strings.pinIncorrect else null,
                     onDismiss = onPinDismiss,
-                    onSubmit = onPinSubmit,
-                    isMobile = isMobile,
-                    keepLoggedIn = keepLoggedIn,
-                    onKeepLoggedInChange = onKeepLoggedInChange
+                    onSubmit = onPinSubmit
                 )
             }
 
@@ -260,39 +233,7 @@ fun UserSelectionContent(
                     onValueChange = onAdminPasswordChange,
                     errorText = if (adminPasswordError != null) strings.adminPasswordIncorrect else null,
                     onDismiss = onAdminPasswordDismiss,
-                    onSubmit = onAdminPasswordSubmit,
-                    isMobile = isMobile
-                )
-            }
-
-            // Network Portal PIN Required Notice Dialog
-            if (pinRequiredNoticeUser != null) {
-                AlertDialog(
-                    onDismissRequest = onDismissPinRequiredNotice,
-                    title = {
-                        Text(
-                            text = strings.networkPortalPinRequiredTitle,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryNavy
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = strings.networkPortalPinRequiredMsg,
-                            color = PrimaryNavy
-                        )
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = onDismissPinRequiredNotice,
-                            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(strings.confirm, fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    containerColor = SurfaceWhite,
-                    shape = RoundedCornerShape(16.dp)
+                    onSubmit = onAdminPasswordSubmit
                 )
             }
 

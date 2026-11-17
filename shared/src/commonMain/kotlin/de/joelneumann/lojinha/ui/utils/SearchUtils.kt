@@ -56,6 +56,18 @@ fun String.removeAccents(): String {
 }
 
 /**
+ * Normalizes a user's display name for case- and accent-insensitive uniqueness and login checks.
+ */
+fun String.normalizeUserName(): String =
+    this.trim().replace(Regex("\\s+"), " ").removeAccents().lowercase()
+
+/**
+ * Returns true if the name collides with the reserved "Admin" login identifier.
+ */
+fun String.isReservedAdminName(): Boolean =
+    normalizeUserName() == "admin"
+
+/**
  * Returns true if this string contains [query], ignoring diacritics/accents (e.g. 'a' matches 'á', 'Â', etc.)
  * and case (by default).
  */
