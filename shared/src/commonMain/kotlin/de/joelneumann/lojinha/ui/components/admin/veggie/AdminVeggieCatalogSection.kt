@@ -42,7 +42,7 @@ fun AdminVeggieCatalogSection(
     unitTypes: List<VeggieUnitType>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
-    onSaveProduct: (product: VeggieProduct, newImageBytes: ByteArray?, removeExistingImage: Boolean) -> Unit,
+    onSaveProduct: (product: VeggieProduct, newImageBytes: ByteArray?, removeExistingImage: Boolean, onSuccess: (() -> Unit)?) -> Unit,
     onToggleProductActive: (VeggieProduct, Boolean) -> Unit,
     onDeleteProduct: (VeggieProduct) -> Unit,
     onSaveUnitType: (VeggieUnitType) -> Unit,
@@ -327,20 +327,14 @@ fun AdminVeggieCatalogSection(
     }
 
     if (editingProduct != null) {
-        var wasSaving by remember(editingProduct!!.id) { mutableStateOf(false) }
-        LaunchedEffect(isSavingProduct) {
-            if (isSavingProduct) {
-                wasSaving = true
-            } else if (wasSaving) {
-                editingProduct = null
-            }
-        }
         VeggieProductEditDialog(
             product = editingProduct!!,
             unitTypes = unitTypes,
             isSaving = isSavingProduct,
             onSave = { updated, newBytes, removeImg ->
-                onSaveProduct(updated, newBytes, removeImg)
+                onSaveProduct(updated, newBytes, removeImg) {
+                    editingProduct = null
+                }
             },
             onCancel = { editingProduct = null }
         )

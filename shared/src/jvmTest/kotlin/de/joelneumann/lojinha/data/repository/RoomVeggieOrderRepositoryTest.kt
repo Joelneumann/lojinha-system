@@ -751,4 +751,45 @@ class RoomVeggieOrderRepositoryTest {
         assertEquals(TransactionType.ADMIN_WITHDRAWAL, driverTxs[1].type)
         assertEquals(-15_00L, driverTxs[1].totalAmount)
     }
+
+    @Test
+    fun testCustomerOrderUpdateInOpenRound_resetsStaleActualQuantityScaled() = runTest {
+        userRepo.saveUser(User(id = "u-alice", name = "Alice", balance = 100_00L))
+        veggieRepo.saveUnitType(VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true))
+        veggieRepo.saveVeggieProduct(
+            VeggieProduct(id = "vp-tom", name = "Tomato", unitTypeId = "unit-kg", estimatedPriceCents = 10_00L, imageFileName = "tomate", isActive = true)
+        )
+
+        val round = veggieRepo.openNewRound(0L, 0L, 1_776_700_000_000L)
+        val alice = userRepo.getUserById("u-alice")!!
+
+        // Alice orders 1 kg, and admin saves draft settlement (setting actualQuantityScaled = 1000L)
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, alice, mapOf("vp-tom" to 1000L)))
+        val initialEntry = veggieRepo.getEntriesForRound(round.id).single()
+        assertTrue(
+            veggieRepo.saveDraftSettlement(
+                roundId = round.id,
+                buyerOperationFeeCents = 0L,
+                transportFeeCents = 0L,
+                transporterUserId = null,
+                productSettlements = emptyList(),
+                actualQuantitiesByEntryId = mapOf(initialEntry.id to 1000L)
+            )
+        )
+        assertEquals(1000L, veggieRepo.getEntriesForRound(round.id).single().actualQuantityScaled)
+
+        // Alice updates her order in the still-open round to 3.5 kg -> actualQuantityScaled must reset to null so deliveredQuantityScaled is 3500L
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, alice, mapOf("vp-tom" to 3500L)))
+        val updatedEntry = veggieRepo.getEntriesForRound(round.id).single()
+        assertEquals(3500L, updatedEntry.orderedQuantityScaled)
+        assertNull(updatedEntry.actualQuantityScaled)
+        assertEquals(3500L, updatedEntry.deliveredQuantityScaled)
+
+        // Soft-deleting an ordered product clears its imageFileName
+        veggieRepo.hardDeleteVeggieProduct("vp-tom")
+        val softDeleted = db.veggieOrderDao().getVeggieProductById("vp-tom")
+        assertNotNull(softDeleted)
+        assertTrue(softDeleted.isDeleted)
+        assertNull(softDeleted.imageFileName)
+    }
 }

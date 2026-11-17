@@ -130,14 +130,7 @@ class VeggieImageService(
         writeJpegFile(fullImg, fullFile, FULL_QUALITY)
 
         if (!previousImageFileName.isNullOrBlank() && previousImageFileName != imageKey) {
-            val cleanPrev = sanitizeFileName(previousImageFileName)
-            val isStillUsedByOther = existingImageKeys?.any { key ->
-                val cleanKey = sanitizeFileName(key)
-                cleanKey != null && cleanKey.equals(cleanPrev, ignoreCase = true)
-            } == true
-            if (!isStillUsedByOther) {
-                deleteProductImages(previousImageFileName)
-            }
+            deleteProductImages(previousImageFileName, existingImageKeys)
         }
 
         AppLogger.info(TAG, "Saved veggie images for '$productId' ($productName) as '$imageKey' (thumb: ${thumbFile.length()} B, full: ${fullFile.length()} B)")
@@ -178,8 +171,13 @@ class VeggieImageService(
         return getFullImageFile(imageFileName)?.readBytes()
     }
 
-    fun deleteProductImages(imageFileName: String?) {
+    fun deleteProductImages(imageFileName: String?, existingImageKeys: Collection<String>? = null) {
         val clean = sanitizeFileName(imageFileName) ?: return
+        val isStillUsedByOther = existingImageKeys?.any { key ->
+            val cleanKey = sanitizeFileName(key)
+            cleanKey != null && cleanKey.equals(clean, ignoreCase = true)
+        } == true
+        if (isStillUsedByOther) return
         listOf("_thumb.jpg", "_full.jpg", ".jpg", ".jpeg", ".png", ".webp").forEach { suffix ->
             File(imageDirectory, "$clean$suffix").takeIf { it.exists() }?.delete()
         }

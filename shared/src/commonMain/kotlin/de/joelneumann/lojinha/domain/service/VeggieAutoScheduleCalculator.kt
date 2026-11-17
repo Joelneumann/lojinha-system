@@ -54,11 +54,11 @@ object VeggieAutoScheduleCalculator {
         return hour to minute
     }
 
-    fun computeThisWeekSlotMillis(
+    private fun computeThisWeekSlotDateTime(
         settings: SystemSettings,
         nowMillis: Long,
-        timeZone: TimeZone = TimeZone.currentSystemDefault()
-    ): Long {
+        timeZone: TimeZone
+    ): LocalDateTime {
         val targetDayIso = settings.veggieAutoOpenDayOfWeek.coerceIn(1, 7)
         val (targetHour, targetMinute) = parseTimeOfDay(settings.veggieAutoOpenTime)
 
@@ -67,7 +67,7 @@ object VeggieAutoScheduleCalculator {
 
         val mondayOfCurrentWeek = nowLocal.date.minus(DatePeriod(days = currentDayIso - 1))
         val scheduledDateThisWeek = mondayOfCurrentWeek.plus(DatePeriod(days = targetDayIso - 1))
-        val scheduledDateTimeThisWeek = LocalDateTime(
+        return LocalDateTime(
             year = scheduledDateThisWeek.year,
             monthNumber = scheduledDateThisWeek.monthNumber,
             dayOfMonth = scheduledDateThisWeek.dayOfMonth,
@@ -76,7 +76,16 @@ object VeggieAutoScheduleCalculator {
             second = 0,
             nanosecond = 0
         )
-        return scheduledDateTimeThisWeek.toInstant(timeZone).toEpochMilliseconds()
+    }
+
+    fun computeThisWeekSlotMillis(
+        settings: SystemSettings,
+        nowMillis: Long,
+        timeZone: TimeZone = TimeZone.currentSystemDefault()
+    ): Long {
+        return computeThisWeekSlotDateTime(settings, nowMillis, timeZone)
+            .toInstant(timeZone)
+            .toEpochMilliseconds()
     }
 
     /**
@@ -93,10 +102,8 @@ object VeggieAutoScheduleCalculator {
     ): NextAutoRoundInfo? {
         if (!settings.veggieAutoOpenEnabled) return null
 
-        val targetDayIso = settings.veggieAutoOpenDayOfWeek.coerceIn(1, 7)
-        val (targetHour, targetMinute) = parseTimeOfDay(settings.veggieAutoOpenTime)
-        val slotThisWeekMillis = computeThisWeekSlotMillis(settings, nowMillis, timeZone)
-        val scheduledDateTimeThisWeek = Instant.fromEpochMilliseconds(slotThisWeekMillis).toLocalDateTime(timeZone)
+        val scheduledDateTimeThisWeek = computeThisWeekSlotDateTime(settings, nowMillis, timeZone)
+        val slotThisWeekMillis = scheduledDateTimeThisWeek.toInstant(timeZone).toEpochMilliseconds()
 
         val nextSlotDateTime = if (nowMillis < slotThisWeekMillis) {
             scheduledDateTimeThisWeek
@@ -106,18 +113,20 @@ object VeggieAutoScheduleCalculator {
                 year = nextWeekDate.year,
                 monthNumber = nextWeekDate.monthNumber,
                 dayOfMonth = nextWeekDate.dayOfMonth,
-                hour = targetHour,
-                minute = targetMinute,
+                hour = scheduledDateTimeThisWeek.hour,
+                minute = scheduledDateTimeThisWeek.minute,
                 second = 0,
                 nanosecond = 0
             )
         }
 
         val nextSlotMillis = nextSlotDateTime.toInstant(timeZone).toEpochMilliseconds()
+        val targetHour = scheduledDateTimeThisWeek.hour
+        val targetMinute = scheduledDateTimeThisWeek.minute
         val timeFormatted = "${targetHour.toString().padStart(2, '0')}:${targetMinute.toString().padStart(2, '0')}"
 
         return NextAutoRoundInfo(
-            targetDayIso = targetDayIso,
+            targetDayIso = settings.veggieAutoOpenDayOfWeek.coerceIn(1, 7),
             targetHour = targetHour,
             targetMinute = targetMinute,
             timeFormatted = timeFormatted,

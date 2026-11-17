@@ -358,38 +358,42 @@ class AdminVeggieViewModel(
         _selectedRoundEntries.value = mergedEntries
         _selectedRoundSettlements.value = settlements
 
+        val productCatalogMap = _products.value.associateBy { it.id }
+        val unitTypesById = _unitTypes.value.associateBy { it.id }
         if (resetDraft) {
-            val productCatalogMap = _products.value.associateBy { it.id }
-            val unitTypesById = _unitTypes.value.associateBy { it.id }
-            _draftActualQuantities.value = entries.associate { entry ->
+            _draftActualQuantities.value = mergedEntries.associate { entry ->
                 val deliveryAllowDecimals = productCatalogMap[entry.veggieProductId]
                     ?.deliveryUnitTypeId
                     ?.let { unitTypesById[it]?.allowDecimals }
                     ?: entry.effectiveAllowDecimals
                 entry.id to VeggieQuantityScaling.formatScaledQuantity(entry.deliveredQuantityScaled, deliveryAllowDecimals)
             }
-            val productIds = entries.map { it.veggieProductId }.distinct()
+            val productIds = mergedEntries.map { it.veggieProductId }.distinct()
 
             _draftMarketPrices.value = productIds.associateWith { pid ->
                 val savedPrice = settlements[pid]?.marketUnitPriceCents ?: productCatalogMap[pid]?.estimatedPriceCents
                 savedPrice?.let { formatCentsToInput(it) } ?: ""
             }
+            val manuallyEditedIds = mutableSetOf<String>()
             _draftTotalSpent.value = productIds.associateWith { pid ->
                 val savedSpent = settlements[pid]?.totalSpentCents
+                val savedPrice = settlements[pid]?.marketUnitPriceCents ?: productCatalogMap[pid]?.estimatedPriceCents
+                val totalDelivered = mergedEntries.filter { it.veggieProductId == pid }.sumOf { it.deliveredQuantityScaled }
+                val autoSpent = if (savedPrice != null && savedPrice > 0L && totalDelivered > 0L) {
+                    VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(savedPrice, totalDelivered)
+                } else null
                 if (savedSpent != null && savedSpent > 0L) {
-                    formatCentsToInput(savedSpent)
-                } else {
-                    val savedPrice = settlements[pid]?.marketUnitPriceCents ?: productCatalogMap[pid]?.estimatedPriceCents
-                    val totalDelivered = entries.filter { it.veggieProductId == pid }.sumOf { it.deliveredQuantityScaled }
-                    if (savedPrice != null && savedPrice > 0L && totalDelivered > 0L) {
-                        val autoSpent = VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(savedPrice, totalDelivered)
-                        formatCentsToInput(autoSpent)
-                    } else {
-                        ""
+                    if (autoSpent == null || savedSpent != autoSpent) {
+                        manuallyEditedIds.add(pid)
                     }
+                    formatCentsToInput(savedSpent)
+                } else if (autoSpent != null && autoSpent > 0L) {
+                    formatCentsToInput(autoSpent)
+                } else {
+                    ""
                 }
             }
-            _manuallyEditedTotalSpentProductIds.value = settlements.filterValues { (it.totalSpentCents ?: 0L) > 0L }.keys
+            _manuallyEditedTotalSpentProductIds.value = manuallyEditedIds
             _draftBuyerFeeInput.value = formatCentsToInput(round.buyerOperationFeeCents)
             _draftTransportFeeInput.value = formatCentsToInput(round.transportFeeCents)
             _draftTransporterUserId.value = round.transporterUserId
@@ -416,6 +420,38 @@ class AdminVeggieViewModel(
             } else {
                 _hasUnsavedSettlementChanges.value = false
             }
+        } else {
+            val updatedQuantities = _draftActualQuantities.value.toMutableMap()
+            for (entry in mergedEntries) {
+                if (!updatedQuantities.containsKey(entry.id)) {
+                    val deliveryAllowDecimals = productCatalogMap[entry.veggieProductId]
+                        ?.deliveryUnitTypeId
+                        ?.let { unitTypesById[it]?.allowDecimals }
+                        ?: entry.effectiveAllowDecimals
+                    updatedQuantities[entry.id] = VeggieQuantityScaling.formatScaledQuantity(entry.deliveredQuantityScaled, deliveryAllowDecimals)
+                }
+            }
+            _draftActualQuantities.value = updatedQuantities
+
+            val productIds = mergedEntries.map { it.veggieProductId }.distinct()
+            val updatedPrices = _draftMarketPrices.value.toMutableMap()
+            val updatedSpent = _draftTotalSpent.value.toMutableMap()
+            for (pid in productIds) {
+                if (!updatedPrices.containsKey(pid)) {
+                    val savedPrice = settlements[pid]?.marketUnitPriceCents ?: productCatalogMap[pid]?.estimatedPriceCents
+                    updatedPrices[pid] = savedPrice?.let { formatCentsToInput(it) } ?: ""
+                }
+                if (pid !in _manuallyEditedTotalSpentProductIds.value) {
+                    val unitPriceCents = parseBrlInputToCents(updatedPrices[pid] ?: "")
+                    if (unitPriceCents != null && unitPriceCents > 0L) {
+                        val totalDelivered = calculateDraftTotalDeliveredForProduct(pid, updatedQuantities)
+                        val autoSpent = VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(unitPriceCents, totalDelivered)
+                        updatedSpent[pid] = if (autoSpent > 0L) formatCentsToInput(autoSpent) else "0"
+                    }
+                }
+            }
+            _draftMarketPrices.value = updatedPrices
+            _draftTotalSpent.value = updatedSpent
         }
         recomputeLivePreview()
     }
@@ -955,7 +991,8 @@ class AdminVeggieViewModel(
     fun saveVeggieProduct(
         product: VeggieProduct,
         newImageBytes: ByteArray?,
-        removeExistingImage: Boolean
+        removeExistingImage: Boolean,
+        onSuccess: (() -> Unit)? = null
     ) {
         if (_isSaving.value) return
         _isSaving.value = true
@@ -983,6 +1020,7 @@ class AdminVeggieViewModel(
                     product.copy(imageFileName = finalImageFileName, updatedAt = currentTimeMillis())
                 )
                 loadData()
+                onSuccess?.invoke()
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: I18n.get().errFailedToSaveProduct
             } finally {

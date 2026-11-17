@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.CustomerVeggieRoundHistoryItem
+import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.users.UserTransactionsPdfExportDialog
@@ -1678,9 +1679,9 @@ private fun VeggieCartLineItemRow(
     val unitName = unitType?.name ?: "Unit"
     val qtyFormatted = VeggieQuantityScaling.formatScaledQuantity(quantityScaled, allowDecimals, decimalSeparator)
 
-    val lineTotalCents = if (product.estimatedPriceCents != null) {
-        ((quantityScaled.toDouble() / VEGGIE_QTY_SCALE.toDouble()) * product.estimatedPriceCents.toDouble()).roundToLong()
-    } else 0L
+    val lineTotalCents = product.estimatedPriceCents?.let {
+        VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(it, quantityScaled)
+    } ?: 0L
 
     Surface(
         onClick = onEditQuantity,
@@ -1836,7 +1837,7 @@ private fun CustomerVeggieProductCard(
 
     val cardContent: @Composable ColumnScope.() -> Unit = {
         val lineTotalCents = if (isOrdered && product.estimatedPriceCents != null) {
-            ((quantityScaled.toDouble() / VEGGIE_QTY_SCALE.toDouble()) * product.estimatedPriceCents.toDouble()).roundToLong()
+            VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(product.estimatedPriceCents, quantityScaled)
         } else 0L
 
         val previousBadge: @Composable () -> Unit = {
@@ -2379,7 +2380,7 @@ private fun CustomerVeggieHistoryRoundCard(
                 val unitPriceCents = entry.effectiveUnitPriceCents
                     ?: productsById[entry.veggieProductId]?.estimatedPriceCents
                 val lineTotalCents = entry.finalItemTotalCents ?: if (unitPriceCents != null && unitPriceCents > 0L) {
-                    ((deliveredScaled.toDouble() / VEGGIE_QTY_SCALE.toDouble()) * unitPriceCents.toDouble()).roundToLong()
+                    VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(unitPriceCents, deliveredScaled)
                 } else null
 
                 Row(

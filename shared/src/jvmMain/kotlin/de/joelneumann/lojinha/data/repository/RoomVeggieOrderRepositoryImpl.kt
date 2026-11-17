@@ -117,7 +117,9 @@ class RoomVeggieOrderRepositoryImpl(
         if (entryCount == 0) {
             veggieOrderDao.hardDeleteVeggieProduct(id)
         } else {
-            veggieOrderDao.softDeleteVeggieProduct(id, currentTimeMillis())
+            val now = currentTimeMillis()
+            veggieOrderDao.updateProductImage(id, null, now)
+            veggieOrderDao.softDeleteVeggieProduct(id, now)
         }
         onDataChanged?.invoke()
     }
@@ -343,7 +345,7 @@ class RoomVeggieOrderRepositoryImpl(
                 deliveryUnitNameSnapshot = deliveryUnit?.name ?: existing?.deliveryUnitNameSnapshot,
                 deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals ?: existing?.deliveryAllowDecimalsSnapshot,
                 orderedQuantityScaled = normalizedQty,
-                actualQuantityScaled = existing?.actualQuantityScaled,
+                actualQuantityScaled = if (existing?.orderedQuantityScaled == normalizedQty) existing.actualQuantityScaled else null,
                 effectiveUnitPriceCents = existing?.effectiveUnitPriceCents,
                 finalItemTotalCents = existing?.finalItemTotalCents,
                 updatedAt = now

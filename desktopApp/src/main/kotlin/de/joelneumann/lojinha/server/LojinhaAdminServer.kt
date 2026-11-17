@@ -741,8 +741,11 @@ class LojinhaAdminServer(
                             val repo = resolveVeggieRepo() ?: return@delete call.respond(HttpStatusCode.ServiceUnavailable)
                             val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
                             val existing = repo.getVeggieProductById(id)
+                            val otherProductKeys = repo.getAllVeggieProducts()
+                                .filter { it.id != id }
+                                .mapNotNull { it.imageFileName }
                             repo.hardDeleteVeggieProduct(id)
-                            veggieImageService.deleteProductImages(existing?.imageFileName ?: id)
+                            veggieImageService.deleteProductImages(existing?.imageFileName ?: id, otherProductKeys)
                             call.respond(HttpStatusCode.OK)
                         }
                         post("/products/{id}/image") {
@@ -788,7 +791,10 @@ class LojinhaAdminServer(
                             val repo = resolveVeggieRepo() ?: return@delete call.respond(HttpStatusCode.ServiceUnavailable)
                             val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
                             val existing = repo.getVeggieProductById(id)
-                            veggieImageService.deleteProductImages(existing?.imageFileName ?: id)
+                            val otherProductKeys = repo.getAllVeggieProducts()
+                                .filter { it.id != id }
+                                .mapNotNull { it.imageFileName }
+                            veggieImageService.deleteProductImages(existing?.imageFileName ?: id, otherProductKeys)
                             if (existing != null && existing.imageFileName != null) {
                                 repo.updateVeggieProductImage(id, null, System.currentTimeMillis())
                             } else {

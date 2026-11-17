@@ -1142,4 +1142,61 @@ class AdminVeggieViewModelTest {
 
         assertNotNull(vm.errorMessage.value)
     }
+
+    @Test
+    fun saveDraftSettlement_doesNotLockAutoCalculatedTotalSpentWhenQuantityLaterChanges() = runTest {
+        val (veggieRepo, userRepo) = setupTestFixture()
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        // Product has estimated price 5,00 (500 cents) and 1.0 kg ordered -> Total Spent is 5
+        assertEquals("5", vm.draftMarketPrices.value["prod-1"])
+        assertEquals("5", vm.draftTotalSpent.value["prod-1"])
+
+        // Admin saves draft without manually overriding Total Spent
+        vm.saveDraftSettlement()
+        advanceUntilIdle()
+
+        // Now admin updates delivered quantity from 1.0 kg to 3.0 kg -> Total Spent must auto-recalculate to 15 (3 * 5,00)
+        vm.updateEntryActualQuantity("entry-act-1", "3")
+        advanceUntilIdle()
+
+        assertEquals("15", vm.draftTotalSpent.value["prod-1"])
+        assertEquals(1500L, vm.liveSettlementPreview.value?.totalMarketProductsSpentCents)
+    }
+
+    @Test
+    fun saveVeggieProduct_invokesOnSuccessOnlyWhenSaveSucceeds() = runTest {
+        val (veggieRepo, userRepo) = setupTestFixture()
+        var shouldFail = true
+        val vm = AdminVeggieViewModel(
+            veggieOrderRepository = veggieRepo,
+            userRepository = userRepo,
+            onSaveProductImage = { _, _, _, _ ->
+                if (shouldFail) throw IllegalStateException("Upload failed")
+                "batata"
+            },
+            coroutineScope = this
+        )
+        advanceUntilIdle()
+
+        val product = veggieRepo.products.first()
+        var successCalled = false
+        vm.saveVeggieProduct(product, newImageBytes = byteArrayOf(1, 2, 3), removeExistingImage = false) {
+            successCalled = true
+        }
+        advanceUntilIdle()
+
+        assertFalse(successCalled)
+        assertNotNull(vm.errorMessage.value)
+
+        shouldFail = false
+        vm.saveVeggieProduct(product, newImageBytes = byteArrayOf(1, 2, 3), removeExistingImage = false) {
+            successCalled = true
+        }
+        advanceUntilIdle()
+
+        assertTrue(successCalled)
+        assertNull(vm.errorMessage.value)
+    }
 }

@@ -376,7 +376,7 @@ class BackupRestoreService(
                     val settlement = settlementsByProduct[e.veggieProductId]
                     val orderedStr = VeggieQuantityScaling.formatScaledQuantity(e.orderedQuantityScaled, e.allowDecimalsSnapshot)
                     val actualStr = e.actualQuantityScaled?.let {
-                        VeggieQuantityScaling.formatScaledQuantity(it, e.allowDecimalsSnapshot)
+                        VeggieQuantityScaling.formatScaledQuantity(it, e.deliveryAllowDecimalsSnapshot ?: e.allowDecimalsSnapshot)
                     } ?: ""
                     val marketUnitStr = settlement?.marketUnitPriceCents?.let { Formatting.formatBrlCanonical(it) } ?: ""
                     val totalSpentStr = settlement?.totalSpentCents?.let { Formatting.formatBrlCanonical(it) } ?: ""

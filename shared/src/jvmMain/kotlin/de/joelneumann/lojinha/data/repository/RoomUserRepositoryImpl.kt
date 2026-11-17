@@ -129,6 +129,7 @@ class RoomUserRepositoryImpl(
 
     override suspend fun hardDeleteUser(id: String): Boolean {
         val res = if (canHardDeleteUser(id)) {
+            veggieOrderDao?.deleteFavoritesForUser(id)
             userDao.deleteUser(id)
             true
         } else {

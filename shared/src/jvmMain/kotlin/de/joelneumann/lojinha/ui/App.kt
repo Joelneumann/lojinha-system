@@ -144,7 +144,7 @@ fun App(
     }
 
     val effectiveProductRepo = productRepository ?: remember { RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), database.productStockAdjustmentDao(), onDataChanged) }
-    val effectiveUserRepo = userRepository ?: remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
+    val effectiveUserRepo = userRepository ?: remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged, database.veggieOrderDao()) }
     val effectiveTransactionRepo = transactionRepository ?: remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
     val effectiveBillingListRepo = billingListRepository ?: remember { de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged) }
     val effectiveAdminNoteRepo = adminNoteRepository ?: remember { RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged) }
@@ -456,7 +456,10 @@ fun App(
                                 },
                                 onDeleteProductImage = { productId, previousFileName ->
                                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                        veggieImageService.deleteProductImages(previousFileName ?: productId)
+                                        val otherKeys = effectiveVeggieRepo.getAllVeggieProducts()
+                                            .filter { it.id != productId }
+                                            .mapNotNull { it.imageFileName }
+                                        veggieImageService.deleteProductImages(previousFileName ?: productId, otherKeys)
                                     }
                                 }
                             )
