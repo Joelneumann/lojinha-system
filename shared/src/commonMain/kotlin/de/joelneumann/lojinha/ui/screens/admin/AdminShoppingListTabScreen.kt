@@ -126,7 +126,7 @@ fun AdminShoppingListTabScreen(
         mutableStateOf(-1)
     }
 
-    LaunchedEffect(focusTrigger, pendingModal) {
+    LaunchedEffect(focusTrigger, pendingModal, showClearAllConfirm, showExportApprovalDialog, errorMessage) {
         if (pendingModal == null && !showClearAllConfirm && !showExportApprovalDialog && errorMessage == null) {
             searchFocusRequester.safeRequestFocus()
         }

@@ -14,6 +14,7 @@ import de.joelneumann.lojinha.data.service.CurrencyRates
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -108,11 +109,21 @@ class AdminViewModelsTest {
     private class TestUserRepository(
         var users: List<User> = emptyList()
     ) : UserRepository {
+        var shouldThrowOnSave: Boolean = false
         override fun getUsersFlow(): Flow<List<User>> = flowOf(users)
         override suspend fun getAllUsers(): List<User> = users
         override suspend fun getUserById(id: String): User? = users.find { it.id == id }
         override suspend fun getUserByBarcode(barcode: String): User? = null
-        override suspend fun saveUser(user: User) {}
+        override suspend fun saveUser(user: User) {
+            if (shouldThrowOnSave) {
+                throw RuntimeException("Database error saving user")
+            }
+            users = if (users.any { it.id == user.id }) {
+                users.map { if (it.id == user.id) user else it }
+            } else {
+                users + user
+            }
+        }
         override suspend fun deactivateUser(id: String) {}
         override suspend fun softDeleteUser(id: String) {}
         override suspend fun restoreUser(id: String) {}
@@ -1313,6 +1324,60 @@ class AdminViewModelsTest {
         appViewModel.refreshCurrentUser()
         assertNull(appViewModel.currentUser.value)
         assertEquals(de.joelneumann.lojinha.ui.viewmodel.AppScreen.MAIN_USER_SELECT, appViewModel.currentScreen.value)
+    }
+
+    @Test
+    fun testAdminProductsViewModel_saveProduct_invokesOnSuccessOnlyWhenSaveSucceeds() = runTest {
+        val product = Product(id = "p1", name = "Soda", barcodes = emptyList(), basePrice = 300, unitType = UnitType.PIECE, stockQuantity = 10)
+        val productRepo = TestProductRepository(listOf(product))
+        val viewModel = AdminProductsViewModel(productRepo)
+
+        var successCount = 0
+        viewModel.openEditProductModal(product)
+        viewModel.saveProduct(product.copy(name = "Soda Zero")) { successCount++ }
+        assertEquals(1, successCount)
+        assertFalse(viewModel.showProductModal.value)
+        assertNull(viewModel.productErrorMessage.value)
+
+        productRepo.shouldThrowOnSave = true
+        viewModel.openEditProductModal(product)
+        viewModel.saveProduct(product.copy(name = "Soda Error")) { successCount++ }
+        assertEquals(1, successCount)
+        assertTrue(viewModel.showProductModal.value)
+        assertNotNull(viewModel.productErrorMessage.value)
+    }
+
+    @Test
+    fun testAdminUsersViewModel_saveAndCustomTransactions_invokeOnSuccessOnCompletion() = runTest {
+        val user = User(id = "u1", name = "Bob", balance = 500)
+        val userRepo = TestUserRepository(listOf(user))
+        val txRepo = TestTransactionRepository()
+        val viewModel = AdminUsersViewModel(userRepo, txRepo)
+
+        var saveSuccessCount = 0
+        viewModel.openEditUserModal(user)
+        viewModel.saveUser(user.copy(name = "Bobby")) { saveSuccessCount++ }
+        assertEquals(1, saveSuccessCount)
+        assertFalse(viewModel.showUserModal.value)
+
+        var expenseSuccessCount = 0
+        viewModel.openCustomExpenseModal(user)
+        viewModel.submitCustomExpense(user, 200, "Coffee") { expenseSuccessCount++ }
+        assertEquals(1, expenseSuccessCount)
+        assertNull(viewModel.customExpenseUser.value)
+
+        var incomeSuccessCount = 0
+        viewModel.openCustomIncomeModal(user)
+        viewModel.submitCustomIncome(user, 1000, "PIX") { incomeSuccessCount++ }
+        assertEquals(1, incomeSuccessCount)
+        assertNull(viewModel.customIncomeUser.value)
+
+        userRepo.shouldThrowOnSave = true
+        viewModel.openEditUserModal(user)
+        viewModel.saveUser(user.copy(name = "Bob Error")) { saveSuccessCount++ }
+        assertEquals(1, saveSuccessCount)
+        assertTrue(viewModel.showUserModal.value)
+        assertNotNull(viewModel.userErrorMessage.value)
     }
 }
 

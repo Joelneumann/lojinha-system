@@ -43,6 +43,7 @@ fun AdminNotesTabScreen(
     viewModel: AdminNotesViewModel,
     onAddToShoppingListFromNote: ((productName: String, noteId: String) -> Unit)? = null,
     onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
+    isExternalModalOpen: Boolean = false,
     focusTrigger: Int = 0
 ) {
     val notes by viewModel.notes.collectAsState()
@@ -56,8 +57,8 @@ fun AdminNotesTabScreen(
     var noteToDelete by remember { mutableStateOf<AdminNote?>(null) }
     val searchFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(noteToDelete, errorMessage, focusTrigger) {
-        if (noteToDelete == null && errorMessage == null) {
+    LaunchedEffect(noteToDelete, errorMessage, isExternalModalOpen, focusTrigger) {
+        if (noteToDelete == null && errorMessage == null && !isExternalModalOpen) {
             searchFocusRequester.safeRequestFocus()
         }
     }

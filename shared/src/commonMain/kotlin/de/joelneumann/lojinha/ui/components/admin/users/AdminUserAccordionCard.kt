@@ -8,6 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -20,6 +22,7 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
 fun AdminUserAccordionCard(
@@ -30,12 +33,20 @@ fun AdminUserAccordionCard(
     onCustomExpense: (User) -> Unit,
     onCustomIncome: (User) -> Unit,
     onAdjustBalance: (User, Long, String, Boolean) -> Unit,
+    onBalanceAdjusted: () -> Unit = {},
     onToggleActive: (User) -> Unit,
     onDeleteUser: (User) -> Unit,
     onRequestExportPdf: ((User) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
+    val balanceFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isExpanded) {
+        if (isExpanded) {
+            balanceFocusRequester.safeRequestFocus()
+        }
+    }
 
     var moneyInput by remember(user.id) { mutableStateOf("") }
     var pendingBalanceAdjustment by remember { mutableStateOf<Long?>(null) }
@@ -102,6 +113,7 @@ fun AdminUserAccordionCard(
                     modifier = Modifier
                         .weight(1f)
                         .height(56.dp)
+                        .focusRequester(balanceFocusRequester)
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
                                 handleTriggerAdjustment()
@@ -154,6 +166,7 @@ fun AdminUserAccordionCard(
             onAdjustBalance(user, absCents, note, isDeposit)
             pendingBalanceAdjustment = null
             moneyInput = ""
+            onBalanceAdjusted()
         }
 
         AlertDialog(

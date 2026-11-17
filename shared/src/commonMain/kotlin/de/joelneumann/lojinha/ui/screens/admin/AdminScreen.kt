@@ -209,6 +209,14 @@ fun AdminScreen(
                     if (targetTabDef != null) {
                         handleTabSwitchRequest(targetTabDef.tab)
                         true
+                    } else if ((event.isCtrlPressed || event.isMetaPressed) && event.key == Key.F) {
+                        if (pendingTabSwitch == null && !isExitAdminPending) {
+                            expandedProductId = null
+                            expandedUserId = null
+                            expandedTransactionId = null
+                            tabFocusTrigger++
+                            true
+                        } else false
                     } else if (event.key == Key.PageDown) {
                         activePageScroller?.invoke(true) ?: false
                     } else if (event.key == Key.PageUp) {
@@ -340,6 +348,7 @@ fun AdminScreen(
                                     { productName, noteId -> vm.requestAddFromStockZeroNote(productName, noteId) }
                                 },
                                 onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                                isExternalModalOpen = pendingShoppingModal != null,
                                 focusTrigger = tabFocusTrigger
                             )
                         }
@@ -358,6 +367,7 @@ fun AdminScreen(
                                 { product -> vm.requestAddProduct(product) }
                             },
                             onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                            isExternalModalOpen = pendingShoppingModal != null,
                             focusTrigger = tabFocusTrigger
                         )
                     }

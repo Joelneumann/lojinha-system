@@ -51,6 +51,7 @@ fun AdminProductsTabScreen(
     onUnsavedStateChanged: (Boolean) -> Unit,
     onAddToShoppingList: ((Product) -> Unit)? = null,
     onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
+    isExternalModalOpen: Boolean = false,
     focusTrigger: Int = 0
 ) {
     val products by viewModel.products.collectAsState()
@@ -72,9 +73,30 @@ fun AdminProductsTabScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val searchFocusRequester = remember { FocusRequester() }
+    var searchRefocusTrigger by remember { mutableStateOf(0) }
 
-    LaunchedEffect(showProductModal, expandedProductId, focusTrigger) {
-        if (!showProductModal && expandedProductId == null) {
+    val completeProductWorkflow: () -> Unit = {
+        onRequestToggleExpand(null)
+        viewModel.updateSearchQuery("")
+        searchRefocusTrigger++
+    }
+
+    LaunchedEffect(
+        showProductModal,
+        historyProduct,
+        productErrorMessage,
+        isExternalModalOpen,
+        expandedProductId,
+        focusTrigger,
+        searchRefocusTrigger
+    ) {
+        if (
+            !showProductModal &&
+            historyProduct == null &&
+            productErrorMessage == null &&
+            !isExternalModalOpen &&
+            expandedProductId == null
+        ) {
             searchFocusRequester.safeRequestFocus()
         }
     }
@@ -190,9 +212,19 @@ fun AdminProductsTabScreen(
                             onAdjustStock = { id, delta, newPrice ->
                                 viewModel.adjustProductStock(id, delta, newPrice)
                             },
-
-                            onToggleActive = viewModel::toggleProductActive,
-                            onDeleteProduct = { viewModel.deleteProduct(it.id) },
+                            onStockAdjusted = completeProductWorkflow,
+                            onToggleActive = { prod ->
+                                viewModel.toggleProductActive(prod)
+                                if (expandedProductId == prod.id) {
+                                    completeProductWorkflow()
+                                }
+                            },
+                            onDeleteProduct = { prod ->
+                                viewModel.deleteProduct(prod.id)
+                                if (expandedProductId == prod.id) {
+                                    completeProductWorkflow()
+                                }
+                            },
                             onViewHistory = { viewModel.openProductHistoryModal(it) },
                             onAddToShoppingList = onAddToShoppingList
                         )
@@ -236,7 +268,7 @@ fun AdminProductsTabScreen(
             product = editProduct!!,
             allProducts = products,
             isSaving = isSavingProduct,
-            onSave = { viewModel.saveProduct(it) },
+            onSave = { viewModel.saveProduct(it, onSuccess = completeProductWorkflow) },
             onCancel = { viewModel.closeProductModal() }
         )
     }
