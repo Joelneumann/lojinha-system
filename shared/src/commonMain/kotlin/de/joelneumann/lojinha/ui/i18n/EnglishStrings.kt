@@ -157,7 +157,7 @@ object EnglishStrings : AppStrings {
     override val balanceWarningsCardTitle = "Balance Warning Thresholds"
     override val balanceWarningsCardSubtitle = "Configure the user account balance thresholds for showing the yellow (low balance) and red (critical balance) warning banners."
     override val balanceWarningYellowLabel = "Yellow Banner Threshold (R$):"
-    override val balanceWarningYellowPlaceholder = "300,00"
+    override val balanceWarningYellowPlaceholder = "300.00"
     override val balanceWarningYellowHelper = "Displayed when balance is at or below this amount"
     override val balanceWarningRedLabel = "Red Banner Threshold (R$):"
     override val balanceWarningRedPlaceholder = "0,00"
@@ -952,6 +952,20 @@ object EnglishStrings : AppStrings {
     override val kioskOfflineRetryButton = "Retry Now"
     override val adminSessionRestartedNotice = "Kiosk restarted — please log in again. Any unsaved veggie matrix edits were preserved locally."
     override val kioskOfflineSaveError = "Kiosk is currently offline. Please wait until Lojinha reconnects and try again."
+    override fun statementPdfPagePrefix(pageNum: Int) = "Page $pageNum / "
+    override fun supportEmailSubject(dateStr: String) = "Lojinha Support Diagnostic Bundle - $dateStr"
+    override fun supportEmailBody(fileName: String, filePath: String) = """
+        Hello Support,
+
+        Please find attached the diagnostic support bundle from my Lojinha Kiosk:
+        File: $fileName
+        Location: $filePath
+
+        Description of the issue encountered:
+        [Please describe what happened, what screen you were on, or any error message]
+
+        Thank you!
+    """.trimIndent()
 }
 
 

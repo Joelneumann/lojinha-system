@@ -952,6 +952,20 @@ object GermanStrings : AppStrings {
     override val kioskOfflineRetryButton = "Jetzt erneut prüfen"
     override val adminSessionRestartedNotice = "Kiosk wurde neu gestartet — bitte erneut anmelden. Ungespeicherte Änderungen in der Gemüse-Matrix wurden lokal gesichert."
     override val kioskOfflineSaveError = "Das Kiosk-System ist derzeit offline. Bitte warten Sie auf die Wiederverbindung und versuchen Sie es erneut."
+    override fun statementPdfPagePrefix(pageNum: Int) = "Seite $pageNum / "
+    override fun supportEmailSubject(dateStr: String) = "Lojinha Support-Diagnosepaket - $dateStr"
+    override fun supportEmailBody(fileName: String, filePath: String) = """
+        Hallo Support,
+
+        anbei finden Sie das Diagnosepaket meines Lojinha-Kiosks:
+        Datei: $fileName
+        Speicherort: $filePath
+
+        Beschreibung des aufgetretenen Problems:
+        [Bitte beschreiben Sie, was passiert ist, auf welchem Bildschirm Sie waren oder welche Fehlermeldung angezeigt wurde]
+
+        Vielen Dank!
+    """.trimIndent()
 }
 
 

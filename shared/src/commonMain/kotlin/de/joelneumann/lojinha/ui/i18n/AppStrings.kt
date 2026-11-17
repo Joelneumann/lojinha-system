@@ -929,6 +929,9 @@ interface AppStrings {
     val kioskOfflineRetryButton: String
     val adminSessionRestartedNotice: String
     val kioskOfflineSaveError: String
+    fun statementPdfPagePrefix(pageNum: Int): String
+    fun supportEmailSubject(dateStr: String): String
+    fun supportEmailBody(fileName: String, filePath: String): String
 }
 
 

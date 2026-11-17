@@ -189,7 +189,7 @@ object VeggieOrderPdfGenerator {
             .filter { it.isNotEmpty() }
             .sortedByAccentInsensitive { it.first().veggieNameSnapshot }
 
-        val decimalSep = if (language == Language.EN) '.' else ','
+        val decimalSep = Formatting.decimalSeparator(language)
 
         val document = Document(PageSize.A4, 36f, 36f, 36f, 45f)
         val writer = PdfWriter.getInstance(document, outputStream)
@@ -357,7 +357,7 @@ object VeggieOrderPdfGenerator {
         val labels = labelsFor(language)
         val weekInfo = IsoWeekUtils.fromEpochMillis(round.openedAt)
         val positiveEntries = entries.filter { it.orderedQuantityScaled > 0L }
-        val decimalSep = if (language == Language.EN) '.' else ','
+        val decimalSep = Formatting.decimalSeparator(language)
 
         val customers = positiveEntries
             .groupBy { it.userId }

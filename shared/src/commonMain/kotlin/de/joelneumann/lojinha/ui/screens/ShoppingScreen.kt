@@ -79,6 +79,10 @@ fun ShoppingScreen(
     val noteSubmitError by viewModel.noteSubmitError.collectAsState()
     var showNoteDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(LanguageManager.currentLanguage) {
+        viewModel.clearTransientMessages()
+    }
+
     ShoppingContent(
         user = user,
         settings = settings,

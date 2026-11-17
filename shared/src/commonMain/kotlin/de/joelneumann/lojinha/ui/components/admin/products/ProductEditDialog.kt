@@ -46,7 +46,7 @@ fun ProductEditDialog(
     val isNewProduct = remember(product.id) { product.id.isBlank() || product.name.isBlank() }
 
     var name by remember { mutableStateOf(product.name) }
-    var basePriceBrl by remember { mutableStateOf(if (isNewProduct) "0,00" else Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()) }
+    var basePriceBrl by remember { mutableStateOf(if (isNewProduct) "0${Formatting.decimalSeparator()}00" else Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim()) }
     var unitType by remember { mutableStateOf(product.unitType) }
     var stockQuantity by remember { mutableStateOf(if (isNewProduct) "0" else Formatting.formatStockForAdmin(product.stockQuantity, product.unitType)) }
     val initialPriceBrl = remember(product.basePrice) { Formatting.formatBrl(product.basePrice).removePrefix("R$ ").trim() }

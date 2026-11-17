@@ -419,11 +419,7 @@ object TransactionPdfGenerator {
         override fun onEndPage(writer: PdfWriter, document: Document) {
             val cb = writer.directContent
             val pageNum = writer.pageNumber
-            val pagePrefix = when (language) {
-                Language.DE -> "Seite $pageNum / "
-                Language.EN -> "Page $pageNum / "
-                Language.BR -> "Pág. $pageNum / "
-            }
+            val pagePrefix = strings.statementPdfPagePrefix(pageNum)
             val footerText = "Lojinha System  •  " + strings.statementPdfFooterGenerated(
                 SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
             ) + "  •  $pagePrefix"

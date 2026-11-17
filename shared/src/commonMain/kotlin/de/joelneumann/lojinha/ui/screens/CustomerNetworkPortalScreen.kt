@@ -542,7 +542,7 @@ private fun CustomerVeggieOrderTabContent(
 
     val weekInfo = remember(round.openedAt) { IsoWeekUtils.fromEpochMillis(round.openedAt) }
     val isRoundOpen = round.status == VeggieRoundStatus.OPEN
-    val decimalSep = if (currentLanguage == Language.EN) '.' else ','
+    val decimalSep = Formatting.decimalSeparator(currentLanguage)
 
     val filteredProducts = remember(
         products,
@@ -2187,7 +2187,7 @@ private fun CustomerVeggieHistoryTabContent(
     val historyPageSize by veggieViewModel.historyPageSize.collectAsState()
     val products by veggieViewModel.products.collectAsState()
     val productsById = remember(products) { products.associateBy { it.id } }
-    val decimalSep = if (currentLanguage == Language.EN) '.' else ','
+    val decimalSep = Formatting.decimalSeparator(currentLanguage)
 
     val filteredHistory = remember(historyItems, historySearchQuery) {
         veggieViewModel.filteredHistoryItems()

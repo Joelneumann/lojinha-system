@@ -14,7 +14,7 @@ data class User(
     val id: String,
     val name: String,
     val balance: Long = 0L,
-    val language: Language = Language.DE,
+    val language: Language = Language.DEFAULT,
     val secondaryCurrency: SecondaryCurrency = SecondaryCurrency.NONE,
     val pin: String? = null,
     val requirePinOnKiosk: Boolean = true,

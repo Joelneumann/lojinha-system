@@ -1171,11 +1171,16 @@ class BackupRestoreService(
         }
     }
 
-    suspend fun importProductsFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
+    suspend fun importProductsFromCsv(
+        csvFile: File,
+        dryRun: Boolean = false,
+        language: Language = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
+    ): CsvImportResult = withContext(Dispatchers.IO) {
+        val strings = I18n.get(language)
         require(csvFile.exists() && csvFile.isFile) { "Product CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
         if (records.isEmpty()) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvEmptyError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvEmptyError))
         }
 
         val header = records[0].map { it.trim().removePrefix("\uFEFF") }
@@ -1192,7 +1197,7 @@ class BackupRestoreService(
         val activeIdx = findHeaderIndex("isActive", "active", "is_active")
 
         if (nameIdx == -1 || priceIdx == -1) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvMissingHeadersError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvMissingHeadersError))
         }
 
         val existingProducts = db.productDao().getAllProducts().associateBy { it.id }
@@ -1462,11 +1467,16 @@ class BackupRestoreService(
         return if (isNegative) -cents else cents
     }
 
-    suspend fun importUsersFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
+    suspend fun importUsersFromCsv(
+        csvFile: File,
+        dryRun: Boolean = false,
+        language: Language = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
+    ): CsvImportResult = withContext(Dispatchers.IO) {
+        val strings = I18n.get(language)
         require(csvFile.exists() && csvFile.isFile) { "User CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
         if (records.isEmpty()) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvEmptyError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvEmptyError))
         }
 
         val header = records[0].map { it.trim().removePrefix("\uFEFF") }
@@ -1489,7 +1499,7 @@ class BackupRestoreService(
         val requirePinOnKioskIdx = findHeaderIndex("requirePinOnKiosk", "require_pin_on_kiosk")
 
         if (nameIdx == -1) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvMissingNameHeaderError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvMissingNameHeaderError))
         }
 
         val existingUsers = db.userDao().getAllUsers().associateBy { it.id }
@@ -1564,7 +1574,7 @@ class BackupRestoreService(
             val langStr = if (langIdx != -1 && langIdx < cols.size && cols[langIdx].trim().isNotEmpty()) {
                 Language.fromCode(cols[langIdx].trim()).code
             } else {
-                existing?.language ?: Language.DE.code
+                existing?.language ?: Language.DEFAULT.code
             }
 
             val secCurrStr = if (secCurrIdx != -1 && secCurrIdx < cols.size && cols[secCurrIdx].trim().isNotEmpty()) {
@@ -1725,11 +1735,16 @@ class BackupRestoreService(
         )
     }
 
-    suspend fun importVeggieProductsFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
+    suspend fun importVeggieProductsFromCsv(
+        csvFile: File,
+        dryRun: Boolean = false,
+        language: Language = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
+    ): CsvImportResult = withContext(Dispatchers.IO) {
+        val strings = I18n.get(language)
         require(csvFile.exists() && csvFile.isFile) { "Veggie Product CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
         if (records.isEmpty()) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvEmptyError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvEmptyError))
         }
 
         val header = records[0].map { it.trim().removePrefix("\uFEFF") }
@@ -1749,7 +1764,7 @@ class BackupRestoreService(
         val deletedIdx = findHeaderIndex("isDeleted", "deleted", "is_deleted")
 
         if (nameIdx == -1) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvMissingNameHeaderError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvMissingNameHeaderError))
         }
 
         val importTimestamp = System.currentTimeMillis()

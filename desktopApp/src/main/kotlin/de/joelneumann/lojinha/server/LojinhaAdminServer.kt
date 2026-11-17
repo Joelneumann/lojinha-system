@@ -1412,8 +1412,8 @@ class LojinhaAdminServer(
     }
 
     private fun ApplicationCall.parseLanguageParam(): Language {
-        val langStr = request.queryParameters["lang"] ?: "BR"
-        return try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.BR }
+        val langStr = request.queryParameters["lang"] ?: return Language.DEFAULT
+        return Language.fromCode(langStr, fallback = Language.DEFAULT)
     }
 
     private suspend fun ApplicationCall.respondPdf(pdfBytes: ByteArray, filename: String) {

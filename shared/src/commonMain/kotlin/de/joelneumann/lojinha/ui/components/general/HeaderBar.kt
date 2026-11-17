@@ -112,43 +112,14 @@ fun HeaderBar(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Language.entries.forEach { lang ->
-                                val isSelected = lang == currentLanguage
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isSelected) AccentNavy else SurfaceContainerHighLight)
-                                        .border(
-                                            width = if (isSelected) 2.dp else 1.dp,
-                                            color = if (isSelected) AccentBlue else DividerBorder,
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                        .clickable {
-                                            LanguageManager.setLanguage(lang)
-                                            onLanguageSelected?.invoke(lang)
-                                            onLanguageClick?.invoke()
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        LanguageFlagIcon(language = lang, width = 18.dp, height = 13.dp)
-                                        Text(
-                                            text = lang.code.uppercase(),
-                                            fontSize = 13.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) SurfaceWhite else PrimaryNavy
-                                        )
-                                    }
-                                }
+                        LanguageFlagSelector(
+                            selectedLanguage = currentLanguage,
+                            onLanguageSelected = { lang ->
+                                LanguageManager.setLanguage(lang)
+                                onLanguageSelected?.invoke(lang)
+                                onLanguageClick?.invoke()
                             }
-                        }
+                        )
 
                         Text(
                             text = title,

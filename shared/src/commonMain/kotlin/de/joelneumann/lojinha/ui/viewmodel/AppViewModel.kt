@@ -76,13 +76,11 @@ class AppViewModel(
 
     fun logout() {
         resetLanguageJob?.cancel()
-        viewModelScope.launch {
-            _currentUser.value = null
-            _currentScreen.value = AppScreen.MAIN_USER_SELECT
-            resetLanguageJob = viewModelScope.launch {
-                delay(300)
-                LanguageManager.resetToDefault()
-            }
+        _currentUser.value = null
+        _currentScreen.value = AppScreen.MAIN_USER_SELECT
+        resetLanguageJob = viewModelScope.launch {
+            delay(300)
+            LanguageManager.resetToDefault()
         }
     }
 
