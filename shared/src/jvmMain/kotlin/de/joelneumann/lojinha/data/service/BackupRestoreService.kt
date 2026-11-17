@@ -43,6 +43,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class BackupRestoreService(
     private val db: AppDatabase,
@@ -1183,7 +1184,7 @@ class BackupRestoreService(
             return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvEmptyError))
         }
 
-        val header = records[0].map { it.trim().removePrefix("\uFEFF") }
+        val header = records[0].map { it.trim() }
         fun findHeaderIndex(vararg candidates: String): Int =
             header.indexOfFirst { col -> candidates.any { it.equals(col, ignoreCase = true) } }
 
@@ -1479,7 +1480,7 @@ class BackupRestoreService(
             return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvEmptyError))
         }
 
-        val header = records[0].map { it.trim().removePrefix("\uFEFF") }
+        val header = records[0].map { it.trim() }
         fun findHeaderIndex(vararg candidates: String): Int =
             header.indexOfFirst { col -> candidates.any { it.equals(col, ignoreCase = true) } }
 
@@ -1747,7 +1748,7 @@ class BackupRestoreService(
             return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvEmptyError))
         }
 
-        val header = records[0].map { it.trim().removePrefix("\uFEFF") }
+        val header = records[0].map { it.trim() }
         fun findHeaderIndex(vararg candidates: String): Int =
             header.indexOfFirst { col -> candidates.any { it.equals(col, ignoreCase = true) } }
 
@@ -1774,30 +1775,34 @@ class BackupRestoreService(
         }
         val unitsById = existingUnitsList.associateBy { it.id }.toMutableMap()
         val newUnitsToInsert = mutableListOf<VeggieUnitTypeEntity>()
+        val warnings = mutableListOf<String>()
+        val errors = mutableListOf<String>()
+
+        fun ensureActiveUnit(unit: VeggieUnitTypeEntity): VeggieUnitTypeEntity {
+            if (!unit.isActive) {
+                val reactivated = unit.copy(isActive = true, updatedAt = importTimestamp)
+                unitsById[reactivated.id] = reactivated
+                newUnitsToInsert.removeAll { it.id == reactivated.id }
+                newUnitsToInsert.add(reactivated)
+                return reactivated
+            }
+            return unit
+        }
 
         fun resolveUnitType(
+            rowNum: Int,
+            productName: String,
             rawUnitId: String,
             rawUnitName: String,
             rawAllowDecimals: Boolean?,
             existingUnitTypeId: String?
         ): VeggieUnitTypeEntity {
-            fun ensureActive(unit: VeggieUnitTypeEntity): VeggieUnitTypeEntity {
-                if (!unit.isActive) {
-                    val reactivated = unit.copy(isActive = true, updatedAt = importTimestamp)
-                    unitsById[reactivated.id] = reactivated
-                    newUnitsToInsert.removeAll { it.id == reactivated.id }
-                    newUnitsToInsert.add(reactivated)
-                    return reactivated
-                }
-                return unit
-            }
-
             if (rawUnitId.isNotEmpty()) {
-                unitsById[rawUnitId]?.let { return ensureActive(it) }
+                unitsById[rawUnitId]?.let { return ensureActiveUnit(it) }
             }
             if (rawUnitName.isNotEmpty()) {
                 // Direct name match
-                unitsById.values.firstOrNull { it.name.equals(rawUnitName, ignoreCase = true) }?.let { return ensureActive(it) }
+                unitsById.values.firstOrNull { it.name.equals(rawUnitName, ignoreCase = true) }?.let { return ensureActiveUnit(it) }
                 // Common alias match
                 val aliasId = when (rawUnitName.lowercase()) {
                     "kg", "kilo", "kilogram", "weight", "g", "gram" -> "unit-kg"
@@ -1807,10 +1812,18 @@ class BackupRestoreService(
                     else -> null
                 }
                 if (aliasId != null) {
-                    unitsById[aliasId]?.let { return ensureActive(it) }
+                    unitsById[aliasId]?.let { return ensureActiveUnit(it) }
                 }
                 // Auto-create new custom unit type
-                val newId = if (rawUnitId.isNotEmpty()) rawUnitId else "unit-imp-${rawUnitName.lowercase().replace(Regex("[^a-z0-9]+"), "-")}"
+                val slug = rawUnitName.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+                var newId = if (rawUnitId.isNotEmpty()) {
+                    rawUnitId
+                } else {
+                    "unit-imp-${slug.ifEmpty { rawUnitName.hashCode().toUInt().toString(16) }}"
+                }
+                if (unitsById.containsKey(newId)) {
+                    newId = "$newId-${UUID.randomUUID().toString().take(6)}"
+                }
                 val created = VeggieUnitTypeEntity(
                     id = newId,
                     name = rawUnitName,
@@ -1822,24 +1835,28 @@ class BackupRestoreService(
                 newUnitsToInsert.add(created)
                 return created
             }
+            if (rawUnitId.isNotEmpty()) {
+                warnings.add("Row $rowNum ('$productName'): Unknown unitTypeId '$rawUnitId' with no unitTypeName; fell back to default unit.")
+            }
             if (existingUnitTypeId != null) {
-                unitsById[existingUnitTypeId]?.let { return ensureActive(it) }
+                unitsById[existingUnitTypeId]?.let { return ensureActiveUnit(it) }
             }
             val fallback = unitsById["unit-piece"] ?: existingUnitsList.first()
-            return ensureActive(fallback)
+            return ensureActiveUnit(fallback)
         }
 
         val existingProductsList = db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true)
-        val existingById = existingProductsList.associateBy { it.id }
+        val existingById = existingProductsList.associateBy { it.id }.toMutableMap()
         val existingByNameLower = existingProductsList
             .sortedBy { !it.isDeleted } // Put active (!isDeleted) last so associateBy prefers active products
             .associateBy { it.name.trim().lowercase() }
+            .toMutableMap()
 
         var addedCount = 0
         var updatedCount = 0
-        val warnings = mutableListOf<String>()
-        val errors = mutableListOf<String>()
-        val productsToInsert = mutableListOf<VeggieProductEntity>()
+        val productsToInsertById = linkedMapOf<String, VeggieProductEntity>()
+        val addedIdsInCsv = mutableSetOf<String>()
+        val updatedIdsInCsv = mutableSetOf<String>()
 
         for (i in 1 until records.size) {
             val cols = records[i]
@@ -1847,8 +1864,9 @@ class BackupRestoreService(
                 warnings.add("Row ${i + 1}: Skipped due to missing columns.")
                 continue
             }
+            fun col(idx: Int): String = if (idx != -1 && idx < cols.size) cols[idx].trim() else ""
 
-            val rawId = if (idIdx != -1 && idIdx < cols.size) cols[idIdx].trim() else ""
+            val rawId = col(idIdx)
             val name = cols[nameIdx].trim()
             if (name.isBlank()) {
                 warnings.add("Row ${i + 1}: Skipped veggie product because name is blank.")
@@ -1864,21 +1882,22 @@ class BackupRestoreService(
             val productId = when {
                 rawId.isNotEmpty() -> rawId
                 existing != null -> existing.id
-                else -> "vp-imp-${getTimestampString()}-$i"
+                else -> "vp-imp-${UUID.randomUUID()}"
             }
 
             val description = if (descIdx != -1 && descIdx < cols.size) {
-                cols[descIdx].trim().takeIf { it.isNotEmpty() }
+                col(descIdx).takeIf { it.isNotEmpty() }
             } else {
                 existing?.description
             }
 
             // Optional estimated price (null if blank and not existing)
-            val priceStr = if (priceIdx != -1 && priceIdx < cols.size) cols[priceIdx].trim() else ""
+            val priceStr = col(priceIdx)
             val estimatedPriceCents: Long? = if (priceStr.isNotEmpty()) {
                 val parsed = parseCurrencyToCents(priceStr)
                 if (parsed == null) {
-                    warnings.add("Row ${i + 1} ('$name'): Invalid price '$priceStr'. Price left empty.")
+                    val fallbackNote = if (existing?.estimatedPriceCents != null) "Kept existing price." else "Price left empty."
+                    warnings.add("Row ${i + 1} ('$name'): Invalid price '$priceStr'. $fallbackNote")
                     existing?.estimatedPriceCents
                 } else if (parsed < 0L) {
                     warnings.add("Row ${i + 1} ('$name'): Negative price '$priceStr' adjusted to 0,00.")
@@ -1893,35 +1912,40 @@ class BackupRestoreService(
                 existing?.estimatedPriceCents
             }
 
-            val rawUnitId = if (unitIdIdx != -1 && unitIdIdx < cols.size) cols[unitIdIdx].trim() else ""
-            val rawUnitName = if (unitNameIdx != -1 && unitNameIdx < cols.size) cols[unitNameIdx].trim() else ""
-            val rawAllowDecimals = if (allowDecimalsIdx != -1 && allowDecimalsIdx < cols.size && cols[allowDecimalsIdx].trim().isNotEmpty()) {
-                parseBooleanFlexible(cols[allowDecimalsIdx].trim())
-            } else {
-                null
-            }
-            val resolvedUnit = resolveUnitType(rawUnitId, rawUnitName, rawAllowDecimals, existing?.unitTypeId)
+            val rawUnitId = col(unitIdIdx)
+            val rawUnitName = col(unitNameIdx)
+            val rawAllowDecimals = col(allowDecimalsIdx).takeIf { it.isNotEmpty() }?.let { parseBooleanFlexible(it) }
+            val resolvedUnit = resolveUnitType(i + 1, name, rawUnitId, rawUnitName, rawAllowDecimals, existing?.unitTypeId)
 
-            val imageFileName = if (imageIdx != -1 && imageIdx < cols.size) {
-                cols[imageIdx].trim().takeIf { it.isNotEmpty() } ?: existing?.imageFileName
-            } else {
-                existing?.imageFileName
-            }
+            val imageFileName = col(imageIdx).takeIf { it.isNotEmpty() } ?: existing?.imageFileName
 
-            val isActive = if (activeIdx != -1 && activeIdx < cols.size && cols[activeIdx].trim().isNotEmpty()) {
-                parseBooleanFlexible(cols[activeIdx].trim()) ?: existing?.isActive ?: true
-            } else {
-                existing?.isActive ?: true
-            }
+            val isDeleted = col(deletedIdx).takeIf { it.isNotEmpty() }
+                ?.let { parseBooleanFlexible(it) }
+                ?: existing?.isDeleted
+                ?: false
 
-            val isDeleted = if (deletedIdx != -1 && deletedIdx < cols.size && cols[deletedIdx].trim().isNotEmpty()) {
-                parseBooleanFlexible(cols[deletedIdx].trim()) ?: existing?.isDeleted ?: false
+            val isActive = if (isDeleted) {
+                false
             } else {
-                existing?.isDeleted ?: false
+                col(activeIdx).takeIf { it.isNotEmpty() }
+                    ?.let { parseBooleanFlexible(it) }
+                    ?: existing?.isActive
+                    ?: true
             }
 
             val deliveryUnitTypeId = if (deliveryUnitIdIdx != -1 && deliveryUnitIdIdx < cols.size) {
-                cols[deliveryUnitIdIdx].trim().takeIf { it.isNotEmpty() && unitsById.containsKey(it) }
+                val rawDeliveryUnitId = col(deliveryUnitIdIdx)
+                if (rawDeliveryUnitId.isEmpty()) {
+                    null
+                } else {
+                    val matched = unitsById[rawDeliveryUnitId]
+                    if (matched != null) {
+                        ensureActiveUnit(matched).id
+                    } else {
+                        warnings.add("Row ${i + 1} ('$name'): Unknown deliveryUnitTypeId '$rawDeliveryUnitId'. Kept existing delivery unit.")
+                        existing?.deliveryUnitTypeId
+                    }
+                }
             } else {
                 existing?.deliveryUnitTypeId
             }
@@ -1938,9 +1962,18 @@ class BackupRestoreService(
                 isDeleted = isDeleted,
                 updatedAt = importTimestamp + i
             )
-            productsToInsert.add(entity)
-            if (isExisting) updatedCount++ else addedCount++
+            if (productsToInsertById.containsKey(productId)) {
+                warnings.add("Row ${i + 1} ('$name'): Duplicate product in CSV; overwriting earlier row.")
+            } else if (isExisting) {
+                if (updatedIdsInCsv.add(productId)) updatedCount++
+            } else {
+                if (addedIdsInCsv.add(productId)) addedCount++
+            }
+            productsToInsertById[productId] = entity
+            existingById[productId] = entity
+            existingByNameLower[name.lowercase()] = entity
         }
+        val productsToInsert = productsToInsertById.values.toList()
 
         if (!dryRun && (productsToInsert.isNotEmpty() || newUnitsToInsert.isNotEmpty())) {
             val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_csv_import_safety.db")

@@ -92,7 +92,27 @@ Ana Costa,0.00,pt-BR,NONE,,,true,INITIALS,,#DC2626
 
 ---
 
-## 📜 3. Export Formats (Backup Routines)
+## 🥬 3. Veggie Products CSV Specification (`veggie_products.csv`)
+
+### Column Schema
+
+| Column Name | Aliases Accepted | Type / Format | Required? | Description & Examples |
+|---|---|---|---|---|
+| `id` | `veggieProductId`, `productId`, `veggie_product_id` | UUID / String | Optional | If omitted, matches existing active product by `name` (case-insensitive) or generates a unique ID. |
+| `name` | `productName`, `veggieName`, `title` | String | **Yes** | Veggie product name (e.g., `Organic Carrots`). Cannot be blank. |
+| `description` | `desc`, `beschreibung` | String | Optional | Optional product description. |
+| `estimatedPrice` | `price`, `basePrice`, `estimated_price`, `estimatedPriceCents` | Currency / Number | Optional | Estimated unit price in BRL (`R$ 6,50`, `6.50`, `650`). If the column is present and the cell is blank, the price is imported as unknown (`null`). Negative numbers default to `0,00`. |
+| `unitTypeId` | `unit_type_id` | String | Optional | ID of an existing unit type (e.g., `unit-kg`, `unit-piece`). Deactivated units are automatically reactivated. |
+| `unitTypeName` | `unitType`, `unit`, `type`, `unit_type`, `unit_name` | String | Optional | Unit display name or common alias (`kg`, `unit`, `pack`, `bunch`). Unknown names auto-create a new custom unit type. |
+| `allowDecimals` | `allow_decimals`, `decimals` | Boolean | Optional | Used when auto-creating a new custom unit type (`true`/`false`, `1`/`0`). Default: `false`. |
+| `deliveryUnitTypeId` | `delivery_unit_type_id` | String | Optional | Optional delivery/settlement unit type ID (e.g., `unit-pack`). Blank clears it; unknown IDs preserve the existing value with a warning. |
+| `imageFileName` | `image`, `image_file_name` | String | Optional | Image filename key inside `~/.lojinha/veggie_images/`. |
+| `isActive` | `active`, `is_active` | Boolean | Optional | `true` or `false` (`1` or `0`). Default: `true` (forced `false` when `isDeleted` is `true`). |
+| `isDeleted` | `deleted`, `is_deleted` | Boolean | Optional | Soft-delete status (`true` or `false`). Default: `false`. |
+
+---
+
+## 📜 4. Export Formats (Backup Routines)
 
 When running a CSV backup routine, Lojinha creates a folder (`lojinha_csv_export_<timestamp>/` or `lojinha_csv_export_latest/`) containing standard Excel-compatible CSV files.
 
@@ -117,3 +137,5 @@ Exported files include:
    ```csv
    id;userId;userNameSnapshot;timestamp;message
    ```
+6. **`veggie_products.csv`**: Veggie catalog (`id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;isActive;isDeleted;deliveryUnitTypeId`).
+7. **`veggie_orders.csv`**: Veggie order rounds, entries, and per-product settlements (`roundId;isoYear;weekOfYear;openedAt;closedAt;settledAt;status;buyerOperationFee;transportFee;transporterUserId;entryId;userId;userName;veggieProductId;veggieName;unitName;allowDecimals;orderedQuantity;actualQuantity;marketUnitPrice;productTotalSpent;effectiveUnitPrice;finalItemTotal;deliveryUnitName;deliveryAllowDecimals`).

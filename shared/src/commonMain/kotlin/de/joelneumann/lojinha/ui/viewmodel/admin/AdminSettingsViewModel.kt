@@ -379,9 +379,12 @@ class AdminSettingsViewModel(
         _showWipeDataDialog.value = show
     }
 
+    private var csvPreviewJob: Job? = null
+
     fun prepareCsvImport(file: PlatformFile, type: String) {
         _csvImportType.value = type
-        viewModelScope.launch {
+        csvPreviewJob?.cancel()
+        csvPreviewJob = viewModelScope.launch {
             try {
                 val previewResult = if (onPreviewCsvImport != null) {
                     onPreviewCsvImport.invoke(file, type)

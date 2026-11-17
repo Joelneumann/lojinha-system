@@ -1725,5 +1725,65 @@ class BackupRestoreServiceJvmTest {
         assertEquals("unit-pack", updatedActive.deliveryUnitTypeId)
         assertEquals(300L, untouchedDeleted.estimatedPriceCents)
     }
+
+    @Test
+    fun testImportVeggieProductsFromCsv_deduplicatesRows_validatesDeliveryUnit_andEnforcesSoftDeleteActiveState() = runTest {
+        val initialUnits = DatabaseFactory.defaultVeggieUnitTypes(1000L).map {
+            if (it.id == "unit-pack") it.copy(isActive = false) else it
+        }
+        db.veggieOrderDao().insertOrUpdateUnitTypes(initialUnits)
+        db.veggieOrderDao().insertOrUpdateVeggieProducts(
+            listOf(
+                VeggieProductEntity(
+                    id = "vp-existing",
+                    name = "Spinach",
+                    description = null,
+                    estimatedPriceCents = 450L,
+                    unitTypeId = "unit-bunch",
+                    deliveryUnitTypeId = "unit-kg",
+                    imageFileName = null,
+                    isActive = true,
+                    isDeleted = false,
+                    updatedAt = 1000L
+                )
+            )
+        )
+
+        val csvFile = File(tempDir, "edge_cases_veggies.csv")
+        csvFile.writeText(
+            """
+            name;estimatedPrice;unitTypeName;deliveryUnitTypeId;isDeleted
+            Tomato;5,00;📦;;false
+            Tomato;6,00;🥬;;false
+            Spinach;not-a-price;bunch;unit-missing;false
+            Kale;3,00;bunch;unit-pack;true
+            """.trimIndent()
+        )
+
+        val result = service.importVeggieProductsFromCsv(csvFile, dryRun = false)
+        assertEquals(2, result.addedCount, "Tomato (coalesced) + Kale should be 2 added products")
+        assertEquals(1, result.updatedCount, "Spinach should be 1 updated product")
+        assertTrue(result.warnings.any { it.contains("Duplicate product in CSV") })
+        assertTrue(result.warnings.any { it.contains("Kept existing price.") })
+        assertTrue(result.warnings.any { it.contains("Unknown deliveryUnitTypeId 'unit-missing'") })
+
+        val allProducts = db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true)
+        val tomatoes = allProducts.filter { it.name == "Tomato" }
+        assertEquals(1, tomatoes.size)
+        assertEquals(600L, tomatoes[0].estimatedPriceCents)
+
+        val units = db.veggieOrderDao().getAllUnitTypes()
+        assertNotNull(units.firstOrNull { it.name == "📦" })
+        assertNotNull(units.firstOrNull { it.name == "🥬" })
+        assertTrue(db.veggieOrderDao().getUnitTypeById("unit-pack")!!.isActive, "Deactivated delivery unit must be reactivated")
+
+        val spinach = db.veggieOrderDao().getVeggieProductById("vp-existing")!!
+        assertEquals(450L, spinach.estimatedPriceCents)
+        assertEquals("unit-kg", spinach.deliveryUnitTypeId)
+
+        val kale = allProducts.first { it.name == "Kale" }
+        assertTrue(kale.isDeleted)
+        assertFalse(kale.isActive, "isDeleted = true must force isActive = false")
+    }
 }
 
