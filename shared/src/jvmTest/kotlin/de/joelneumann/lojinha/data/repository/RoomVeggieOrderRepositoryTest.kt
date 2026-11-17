@@ -792,4 +792,87 @@ class RoomVeggieOrderRepositoryTest {
         assertTrue(softDeleted.isDeleted)
         assertNull(softDeleted.imageFileName)
     }
+
+    @Test
+    fun testCanHardDeleteUser_blocksWhenUserIsTransporterInRound() = runTest {
+        userRepo.saveUser(User(id = "u-transporter", name = "Transporter"))
+        assertTrue(userRepo.canHardDeleteUser("u-transporter"))
+
+        val round = veggieRepo.openNewRound(0L, 1500L, 1_776_700_000_000L)
+        assertTrue(
+            veggieRepo.saveDraftSettlement(
+                roundId = round.id,
+                buyerOperationFeeCents = 0L,
+                transportFeeCents = 1500L,
+                transporterUserId = "u-transporter",
+                productSettlements = emptyList(),
+                actualQuantitiesByEntryId = emptyMap()
+            )
+        )
+
+        assertFalse(userRepo.canHardDeleteUser("u-transporter"))
+        assertFalse(userRepo.hardDeleteUser("u-transporter"))
+        val softDeleted = userRepo.getUserById("u-transporter")
+        assertNotNull(softDeleted)
+        assertTrue(softDeleted.isDeleted)
+    }
+
+    @Test
+    fun testUserRename_updatesSnapshotInUnsettledRoundsOnly() = runTest {
+        userRepo.saveUser(User(id = "u-maria", name = "Maria"))
+        veggieRepo.saveVeggieProduct(
+            VeggieProduct(id = "vp-tom", name = "Tomato", unitTypeId = "unit-kg", estimatedPriceCents = 10_00L, isActive = true)
+        )
+        val settledRound = veggieRepo.openNewRound(0L, 0L, 1_776_600_000_000L)
+        val maria = userRepo.getUserById("u-maria")!!
+        assertTrue(veggieRepo.saveCustomerOrder(settledRound.id, maria, mapOf("vp-tom" to 1000L)))
+        assertNotNull(
+            veggieRepo.executeRoundSettlement(
+                roundId = settledRound.id,
+                buyerOperationFeeCents = 0L,
+                transportFeeCents = 0L,
+                transporterUserId = null,
+                productSettlements = listOf(VeggieRoundProductSettlement(settledRound.id, "vp-tom", 10_00L, 10_00L)),
+                actualQuantitiesByEntryId = emptyMap(),
+                settledAt = 1_776_610_000_000L
+            )
+        )
+
+        val openRound = veggieRepo.openNewRound(0L, 0L, 1_776_700_000_000L)
+        assertTrue(veggieRepo.saveCustomerOrder(openRound.id, maria, mapOf("vp-tom" to 2000L)))
+
+        userRepo.saveUser(maria.copy(name = "Maria Silva"))
+
+        val settledEntry = veggieRepo.getEntriesForRound(settledRound.id).single()
+        val openEntry = veggieRepo.getEntriesForRound(openRound.id).single()
+        assertEquals("Maria", settledEntry.userNameSnapshot)
+        assertEquals("Maria Silva", openEntry.userNameSnapshot)
+    }
+
+    @Test
+    fun testExecuteRoundSettlement_throwsIfCustomerMissing() = runTest {
+        userRepo.saveUser(User(id = "u-ghost", name = "Ghost"))
+        veggieRepo.saveVeggieProduct(
+            VeggieProduct(id = "vp-tom", name = "Tomato", unitTypeId = "unit-kg", estimatedPriceCents = 10_00L, isActive = true)
+        )
+        val round = veggieRepo.openNewRound(0L, 0L, 1_776_700_000_000L)
+        val ghost = userRepo.getUserById("u-ghost")!!
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, ghost, mapOf("vp-tom" to 1000L)))
+
+        // Simulate missing user row
+        db.userDao().deleteUser("u-ghost")
+
+        assertFailsWith<IllegalStateException> {
+            veggieRepo.executeRoundSettlement(
+                roundId = round.id,
+                buyerOperationFeeCents = 0L,
+                transportFeeCents = 0L,
+                transporterUserId = null,
+                productSettlements = listOf(VeggieRoundProductSettlement(round.id, "vp-tom", 10_00L, 10_00L)),
+                actualQuantitiesByEntryId = emptyMap(),
+                settledAt = 1_776_710_000_000L
+            )
+        }
+        assertEquals(VeggieRoundStatus.OPEN, veggieRepo.getRoundById(round.id)?.status)
+    }
 }

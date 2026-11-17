@@ -182,6 +182,17 @@ interface VeggieOrderDao {
     @Query("SELECT COUNT(*) FROM veggie_order_entries WHERE userId = :userId")
     suspend fun getEntryCountForUser(userId: String): Int
 
+    @Query("SELECT COUNT(*) FROM veggie_order_rounds WHERE transporterUserId = :userId")
+    suspend fun getRoundCountForTransporter(userId: String): Int
+
+    @Query("""
+        UPDATE veggie_order_entries
+        SET userNameSnapshot = :newName
+        WHERE userId = :userId
+          AND roundId IN (SELECT id FROM veggie_order_rounds WHERE status != 'SETTLED')
+    """)
+    suspend fun updateUserNameSnapshotInUnsettledRounds(userId: String, newName: String)
+
     @Query("DELETE FROM veggie_order_entries")
     suspend fun deleteAllEntries()
 

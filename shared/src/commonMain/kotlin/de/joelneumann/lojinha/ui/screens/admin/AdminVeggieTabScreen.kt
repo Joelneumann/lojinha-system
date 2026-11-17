@@ -62,6 +62,7 @@ fun AdminVeggieTabScreen(
     val unitTypes by viewModel.unitTypes.collectAsState()
     val catalogSearchQuery by viewModel.catalogSearchQuery.collectAsState()
     val users by viewModel.users.collectAsState()
+    val allUsersById by viewModel.allUsersById.collectAsState()
     val rounds by viewModel.rounds.collectAsState()
     val historyCurrentPage by viewModel.historyCurrentPage.collectAsState()
     val historyTotalPages by viewModel.historyTotalPages.collectAsState()
@@ -395,6 +396,7 @@ fun AdminVeggieTabScreen(
                         entries = selectedRoundEntries,
                         products = products,
                         users = users,
+                        allUsersById = allUsersById,
                         draftActualQuantities = draftActualQuantities,
                         draftMarketPrices = draftMarketPrices,
                         draftTotalSpent = draftTotalSpent,
@@ -521,6 +523,7 @@ fun AdminVeggieTabScreen(
                             entries = selectedRoundEntries,
                             products = products,
                             users = users,
+                            allUsersById = allUsersById,
                             draftActualQuantities = draftActualQuantities,
                             draftMarketPrices = draftMarketPrices,
                             draftTotalSpent = draftTotalSpent,
@@ -579,7 +582,9 @@ fun AdminVeggieTabScreen(
                                     RoundHistoryCard(
                                         round = round,
                                         isSelected = false,
-                                        transporterName = users.find { it.id == round.transporterUserId }?.name,
+                                        transporterName = round.transporterUserId?.let { tid ->
+                                            allUsersById[tid]?.name ?: users.find { it.id == tid }?.name
+                                        },
                                         onOpenInMatrix = { viewModel.openPastRoundForEditing(round.id) },
                                         onExportBuyerPdf = onExportBuyerPdf?.let { { pendingPdfConfirmation = VeggiePdfExportTarget.Buyer(round.id) } },
                                         onExportWorkerPdf = onExportWorkerPdf?.let { { pendingPdfConfirmation = VeggiePdfExportTarget.Worker(round.id) } }

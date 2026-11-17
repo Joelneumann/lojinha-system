@@ -76,6 +76,9 @@ class AdminVeggieViewModel(
     private val _users = MutableStateFlow<List<User>>(emptyList())
     val users: StateFlow<List<User>> = _users.asStateFlow()
 
+    private val _allUsersById = MutableStateFlow<Map<String, User>>(emptyMap())
+    val allUsersById: StateFlow<Map<String, User>> = _allUsersById.asStateFlow()
+
     private val _rounds = MutableStateFlow<List<VeggieOrderRound>>(emptyList())
     val rounds: StateFlow<List<VeggieOrderRound>> = _rounds.asStateFlow()
 
@@ -196,12 +199,14 @@ class AdminVeggieViewModel(
                     }
                     allUnits = veggieOrderRepository.getAllUnitTypes()
                 }
-                val allUsers = userRepository.getAllUsers().filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
+                val rawUsers = userRepository.getAllUsers()
+                val allUsers = rawUsers.filter { it.isActive && !it.isDeleted }.sortedByAccentInsensitive { it.name }
                 val allRounds = veggieOrderRepository.getAllRounds().sortedByDescending { it.openedAt }
                 val settings = settingsRepository?.getSettings() ?: SystemSettings()
 
                 _unitTypes.value = allUnits
                 _products.value = allProducts
+                _allUsersById.value = rawUsers.associateBy { it.id }
                 _users.value = allUsers
                 _rounds.value = allRounds
                 updatePagedSettledRounds()

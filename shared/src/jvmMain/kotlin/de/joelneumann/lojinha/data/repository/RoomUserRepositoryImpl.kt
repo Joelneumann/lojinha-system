@@ -9,6 +9,8 @@ import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class RoomUserRepositoryImpl(
     private val userDao: UserDao,
@@ -16,6 +18,8 @@ class RoomUserRepositoryImpl(
     private val onDataChanged: (() -> Unit)? = null,
     private val veggieOrderDao: VeggieOrderDao? = null
 ) : UserRepository {
+
+    private val deleteMutex = Mutex()
 
     override fun getUsersFlow(): Flow<List<User>> {
         return userDao.getUsersFlow().map { entities ->
@@ -59,6 +63,9 @@ class RoomUserRepositoryImpl(
                 avatarColor = entity.avatarColor,
                 requirePinOnKiosk = entity.requirePinOnKiosk
             )
+            if (existing.name != entity.name) {
+                veggieOrderDao?.updateUserNameSnapshotInUnsettledRounds(entity.id, entity.name)
+            }
         } else {
             // New user must always start with 0L balance
             val newUser = sanitizedUser.copy(balance = 0L)
@@ -124,10 +131,11 @@ class RoomUserRepositoryImpl(
     override suspend fun canHardDeleteUser(id: String): Boolean {
         val txCount = transactionDao.getTransactionCountForUser(id)
         val veggieCount = veggieOrderDao?.getEntryCountForUser(id) ?: 0
-        return txCount == 0 && veggieCount == 0
+        val transporterCount = veggieOrderDao?.getRoundCountForTransporter(id) ?: 0
+        return txCount == 0 && veggieCount == 0 && transporterCount == 0
     }
 
-    override suspend fun hardDeleteUser(id: String): Boolean {
+    override suspend fun hardDeleteUser(id: String): Boolean = deleteMutex.withLock {
         val res = if (canHardDeleteUser(id)) {
             veggieOrderDao?.deleteFavoritesForUser(id)
             userDao.deleteUser(id)
@@ -137,7 +145,7 @@ class RoomUserRepositoryImpl(
             false
         }
         onDataChanged?.invoke()
-        return res
+        res
     }
 
     override suspend fun updateBalance(userId: String, amountDelta: Long) {

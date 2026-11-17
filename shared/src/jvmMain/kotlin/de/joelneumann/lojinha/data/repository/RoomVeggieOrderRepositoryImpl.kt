@@ -406,23 +406,7 @@ class RoomVeggieOrderRepositoryImpl(
             )
             val userFeeShare = feeShares[userId] ?: 0L
 
-            val itemsSubtotal = if (round.status == VeggieRoundStatus.SETTLED) {
-                userEntries.sumOf { it.finalItemTotalCents ?: 0L }
-            } else {
-                userEntries.sumOf { entry ->
-                    entry.finalItemTotalCents ?: run {
-                        val estPrice = entry.effectiveUnitPriceCents ?: productsById[entry.veggieProductId]?.estimatedPriceCents
-                        if (estPrice != null && estPrice > 0L) {
-                            VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(
-                                unitPriceCents = estPrice,
-                                totalDeliveredQtyScaled = entry.deliveredQuantityScaled
-                            )
-                        } else {
-                            0L
-                        }
-                    }
-                }
-            }
+            val itemsSubtotal = userEntries.sumOf { it.finalItemTotalCents ?: 0L }
 
             historyItems.add(
                 CustomerVeggieRoundHistoryItem(
@@ -551,7 +535,8 @@ class RoomVeggieOrderRepositoryImpl(
             for (summary in calculationResult.customerSummaries) {
                 if (summary.grandTotalCents <= 0L) continue
                 // Verify user exists in DB before recording transaction
-                val userEntity = userDao.getUserById(summary.userId) ?: continue
+                val userEntity = userDao.getUserById(summary.userId)
+                    ?: throw IllegalStateException("Cannot settle round '$roundId': user '${summary.userId}' does not exist.")
                 val withdrawalAmount = -summary.grandTotalCents
                 val txEntity = TransactionEntity(
                     id = generateUuid(),
@@ -590,9 +575,9 @@ class RoomVeggieOrderRepositoryImpl(
             // Post-settlement correction: compare against ACTUAL ledger transactions for this round
             val roundTransactions = transactionDao.getTransactionsForRound(roundId)
 
-            // Customer transactions: all round transactions except transporter deposit
+            // Customer transactions: all round VEGGIE transactions
             val customerTransactions = roundTransactions.filter { tx ->
-                tx.note?.startsWith("SYSNOTE|VEGGIE_TRANSPORT|") != true
+                tx.type == TransactionType.VEGGIE.name
             }
 
             // Total amount previously charged to each user:
@@ -611,7 +596,8 @@ class RoomVeggieOrderRepositoryImpl(
             )
 
             for ((userId, balanceDelta) in customerDeltas) {
-                val userEntity = userDao.getUserById(userId) ?: continue
+                val userEntity = userDao.getUserById(userId)
+                    ?: throw IllegalStateException("Cannot settle round '$roundId': user '$userId' does not exist.")
                 val txEntity = TransactionEntity(
                     id = generateUuid(),
                     userId = userEntity.id,

@@ -85,6 +85,7 @@ fun AdminVeggieSettlementMatrix(
     entries: List<VeggieOrderEntry>,
     products: List<VeggieProduct>,
     users: List<User>,
+    allUsersById: Map<String, User> = emptyMap(),
     draftActualQuantities: Map<String, String>,
     draftMarketPrices: Map<String, String>,
     draftTotalSpent: Map<String, String>,
@@ -481,7 +482,8 @@ fun AdminVeggieSettlementMatrix(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Box {
-                            val selectedTransporterName = users.find { it.id == draftTransporterUserId }?.name
+                            val selectedTransporterName = (allUsersById[draftTransporterUserId]
+                                ?: users.find { it.id == draftTransporterUserId })?.name
                                 ?: strings.transporterExternal
                             OutlinedButton(
                                 onClick = { transporterDropdownExpanded = true },
