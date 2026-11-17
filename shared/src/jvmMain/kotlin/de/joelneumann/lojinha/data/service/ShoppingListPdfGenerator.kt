@@ -42,6 +42,7 @@ object ShoppingListPdfGenerator {
         val title: String,
         val itemsCountLabel: (Int) -> String,
         val colCheck: String,
+        val colStock: String,
         val colQuantity: String,
         val colName: String,
         val emptyMessage: String,
@@ -53,6 +54,7 @@ object ShoppingListPdfGenerator {
             title = "Lojinha — Einkaufsliste",
             itemsCountLabel = { count -> if (count == 1) "1 Eintrag" else "$count Einträge" },
             colCheck = "",
+            colStock = "Akt. Bestand",
             colQuantity = "Menge",
             colName = "Artikel / Produkt",
             emptyMessage = "Keine Einträge in der Einkaufsliste vorhanden.",
@@ -62,6 +64,7 @@ object ShoppingListPdfGenerator {
             title = "Lojinha — Shopping List",
             itemsCountLabel = { count -> if (count == 1) "1 item" else "$count items" },
             colCheck = "",
+            colStock = "Current Stock",
             colQuantity = "Quantity",
             colName = "Item / Product",
             emptyMessage = "No items on the shopping list.",
@@ -71,6 +74,7 @@ object ShoppingListPdfGenerator {
             title = "Lojinha — Lista de Compras",
             itemsCountLabel = { count -> if (count == 1) "1 item" else "$count itens" },
             colCheck = "",
+            colStock = "Estoque Atual",
             colQuantity = "Quantidade",
             colName = "Produto / Item",
             emptyMessage = "Nenhum item na lista de compras.",
@@ -127,7 +131,7 @@ object ShoppingListPdfGenerator {
             language = language
         )
 
-        val table = PdfPTable(floatArrayOf(70f, 22f, 8f)).apply {
+        val table = PdfPTable(floatArrayOf(56f, 18f, 18f, 8f)).apply {
             widthPercentage = 100f
             headerRows = 1
         }
@@ -149,12 +153,13 @@ object ShoppingListPdfGenerator {
         }
 
         addTh(labels.colName, Element.ALIGN_LEFT)
+        addTh(labels.colStock, Element.ALIGN_CENTER)
         addTh(labels.colQuantity, Element.ALIGN_CENTER)
         addTh(labels.colCheck, Element.ALIGN_CENTER)
 
         if (sortedItems.isEmpty()) {
             val emptyCell = PdfPCell(Phrase(labels.emptyMessage, FONT_MUTED)).apply {
-                colspan = 3
+                colspan = 4
                 setPadding(16f)
                 horizontalAlignment = Element.ALIGN_CENTER
                 border = Rectangle.BOX
@@ -166,6 +171,7 @@ object ShoppingListPdfGenerator {
             val checkboxEvent = CheckboxCellEvent()
             sortedItems.forEachIndexed { idx, item ->
                 val rowBg = if (idx % 2 == 0) Color.WHITE else COLOR_BG_ZEBRA
+                val linkedProduct = item.productId?.let { productsById[it] }
 
                 // Col 1: Product / Item Name
                 val nameCell = PdfPCell(Phrase(item.name, FONT_BODY)).apply {
@@ -183,8 +189,29 @@ object ShoppingListPdfGenerator {
                 }
                 table.addCell(nameCell)
 
-                // Col 2: Quantity (with localized unit label appended for catalog products)
-                val unitType = item.productId?.let { productsById[it]?.unitType }
+                // Col 2: Current Stock
+                val currentStockStr = if (linkedProduct != null) {
+                    Formatting.formatQuantity(linkedProduct.stockQuantity, linkedProduct.unitType, strings, language)
+                } else {
+                    "-"
+                }
+                val stockCell = PdfPCell(Phrase(currentStockStr, FONT_MUTED)).apply {
+                    backgroundColor = rowBg
+                    border = Rectangle.BOX
+                    borderColor = COLOR_BORDER
+                    borderWidth = 0.75f
+                    minimumHeight = 18f
+                    setPaddingLeft(5f)
+                    setPaddingRight(5f)
+                    setPaddingTop(3f)
+                    setPaddingBottom(3f)
+                    horizontalAlignment = Element.ALIGN_CENTER
+                    verticalAlignment = Element.ALIGN_MIDDLE
+                }
+                table.addCell(stockCell)
+
+                // Col 3: Quantity (with localized unit label appended for catalog products)
+                val unitType = linkedProduct?.unitType
                 val numericPart = AdminShoppingListViewModel.extractEditableNumericPart(item.quantity, unitType)
                 val displayQuantity = when (unitType) {
                     UnitType.PIECE -> "$numericPart ${strings.unitPieceBadge}"
@@ -209,7 +236,7 @@ object ShoppingListPdfGenerator {
                 }
                 table.addCell(qtyCell)
 
-                // Col 3: Crisp vector checkbox square
+                // Col 4: Crisp vector checkbox square
                 val checkCell = PdfPCell(Phrase("")).apply {
                     backgroundColor = rowBg
                     border = Rectangle.BOX

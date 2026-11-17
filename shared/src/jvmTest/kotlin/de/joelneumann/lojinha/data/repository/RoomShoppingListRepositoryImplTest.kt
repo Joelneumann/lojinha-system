@@ -112,6 +112,15 @@ class RoomShoppingListRepositoryImplTest {
         val updatedApples = afterEdit.first { it.id == "i1" }
         assertTrue(updatedApples.isContentChanged)
         assertTrue(updatedApples.isReviewedForExport)
+
+        // Unconfirm edited "Apples" -> keeps edited quantity and sortOrder, sets isPendingReview = true
+        repository.unconfirmItem("i1")
+        val afterUnconfirm = repository.getAllItems()
+        val unconfirmedApples = afterUnconfirm.first { it.id == "i1" }
+        assertEquals("3 kg", unconfirmedApples.quantity)
+        assertEquals(1, unconfirmedApples.sortOrder)
+        assertFalse(unconfirmedApples.isConfirmedForCurrentExport)
+        assertTrue(unconfirmedApples.isPendingReview)
     }
 
     @Test

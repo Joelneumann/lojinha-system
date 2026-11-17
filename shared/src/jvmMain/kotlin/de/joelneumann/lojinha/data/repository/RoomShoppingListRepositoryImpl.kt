@@ -76,6 +76,11 @@ class RoomShoppingListRepositoryImpl(
         onDataChanged?.invoke()
     }
 
+    override suspend fun unconfirmItem(id: String) {
+        dao.unconfirmItem(id)
+        onDataChanged?.invoke()
+    }
+
     override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
         val existingMap = dao.getAllItems().associateBy { it.id }
         val updated = items.mapIndexedNotNull { index, item ->

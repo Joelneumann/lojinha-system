@@ -57,6 +57,10 @@ class AdminShoppingListViewModelTest {
             itemsFlow.value = itemsFlow.value.map { if (it.id == id) it.copy(isConfirmedForCurrentExport = true) else it }
         }
 
+        override suspend fun unconfirmItem(id: String) {
+            itemsFlow.value = itemsFlow.value.map { if (it.id == id) it.copy(isConfirmedForCurrentExport = false) else it }
+        }
+
         override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
             itemsFlow.value = items.mapIndexed { idx, item -> item.copy(sortOrder = idx) }
         }
@@ -219,5 +223,64 @@ class AdminShoppingListViewModelTest {
         val vm2 = AdminShoppingListViewModel(repo2, FakeProductRepository(listOf(milkWithLegacy)))
         vm2.updateItemInPlace("m1", "Milk", "10", confirm = false)
         assertTrue(vm2.items.value.first().isPendingReview, "Unchanged quantity on blur must remain unadjusted")
+    }
+
+    @Test
+    fun testUnconfirmWorkflowForConfirmedEditedAndNewItems() = runTest {
+        val shoppingRepo = FakeShoppingListRepository()
+        shoppingRepo.itemsFlow.value = listOf(
+            ShoppingListItem(
+                id = "c1",
+                name = "Confirmed Item",
+                quantity = "5",
+                sortOrder = 0,
+                lastExportedName = "Confirmed Item",
+                lastExportedQuantity = "5",
+                isConfirmedForCurrentExport = true
+            ),
+            ShoppingListItem(
+                id = "e1",
+                name = "Edited Item",
+                quantity = "8",
+                sortOrder = 1,
+                lastExportedName = "Edited Item",
+                lastExportedQuantity = "4",
+                isConfirmedForCurrentExport = true
+            ),
+            ShoppingListItem(
+                id = "n1",
+                name = "New Item",
+                quantity = "3",
+                sortOrder = 2,
+                lastExportedName = null,
+                lastExportedQuantity = null,
+                isConfirmedForCurrentExport = true
+            )
+        )
+        val vm = AdminShoppingListViewModel(shoppingRepo, FakeProductRepository())
+
+        // 1. Unconfirm Confirmed -> moves to Unadjusted (isPendingReview == true)
+        vm.unconfirmItem("c1")
+        val c1AfterUnconfirm = vm.items.value.first { it.id == "c1" }
+        assertTrue(c1AfterUnconfirm.isPendingReview)
+        assertFalse(c1AfterUnconfirm.isConfirmedForCurrentExport)
+
+        // 2. Unconfirm Edited -> keeps edited text while moving to Unadjusted; re-confirming restores Edited
+        vm.unconfirmItem("e1")
+        val e1AfterUnconfirm = vm.items.value.first { it.id == "e1" }
+        assertEquals("8", e1AfterUnconfirm.quantity)
+        assertTrue(e1AfterUnconfirm.isPendingReview)
+        assertTrue(e1AfterUnconfirm.isContentChanged)
+
+        vm.confirmItem("e1")
+        val e1AfterReconfirm = vm.items.value.first { it.id == "e1" }
+        assertTrue(e1AfterReconfirm.isReviewedForExport)
+        assertTrue(e1AfterReconfirm.isContentChanged)
+
+        // 3. Attempting to unconfirm New item is a no-op
+        vm.unconfirmItem("n1")
+        val n1After = vm.items.value.first { it.id == "n1" }
+        assertTrue(n1After.isNewlyAdded)
+        assertFalse(n1After.isPendingReview)
     }
 }

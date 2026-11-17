@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
@@ -620,7 +622,15 @@ fun AdminShoppingListTabScreen(
                     color = TextSecondaryMuted,
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = strings.shoppingListColStock,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextSecondaryMuted,
+                    modifier = Modifier.width(105.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = strings.shoppingListColQuantity,
                     fontSize = 12.sp,
@@ -628,7 +638,7 @@ fun AdminShoppingListTabScreen(
                     color = TextSecondaryMuted,
                     modifier = Modifier.width(170.dp)
                 )
-                Spacer(modifier = Modifier.width(164.dp)) // Status + Confirm + Delete space
+                Spacer(modifier = Modifier.width(180.dp)) // Status + Confirm + Delete space
             }
         }
 
@@ -664,6 +674,25 @@ fun AdminShoppingListTabScreen(
                 }
             } else {
                 val currentItemsState by rememberUpdatedState(items)
+                val itemIdsKey = remember(items) { items.map { it.id } }
+                val qtyFocusRequesters = remember(itemIdsKey) {
+                    items.associate { it.id to FocusRequester() }
+                }
+                val focusQuantityAt: (Int) -> Unit = { targetIndex ->
+                    if (targetIndex in currentItemsState.indices) {
+                        val targetId = currentItemsState[targetIndex].id
+                        val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.key == targetId }
+                        if (isVisible) {
+                            try { qtyFocusRequesters[targetId]?.requestFocus() } catch (_: Exception) {}
+                        } else {
+                            coroutineScope.launch {
+                                listState.scrollToItem(targetIndex + 1)
+                                yield()
+                                qtyFocusRequesters[targetId]?.safeRequestFocus()
+                            }
+                        }
+                    }
+                }
 
                 LazyColumn(
                     state = listState,
@@ -679,15 +708,25 @@ fun AdminShoppingListTabScreen(
                     itemsIndexed(
                         items = items,
                         key = { _, item -> item.id }
-                    ) { _, item ->
+                    ) { index, item ->
                         val isDragging = draggedItemId == item.id
-                        val unitType = item.productId?.let { productsById[it]?.unitType }
+                        val linkedProduct = item.productId?.let { productsById[it] }
 
                         ShoppingListRowCard(
                             item = item,
-                            unitType = unitType,
+                            linkedProduct = linkedProduct,
                             isDragging = isDragging,
                             dragOffsetY = if (isDragging) dragOffsetY else 0f,
+                            qtyFocusRequester = qtyFocusRequesters[item.id],
+                            onFocusOwnQty = { focusQuantityAt(index) },
+                            onTabQuantity = { reverse ->
+                                val targetIndex = if (reverse) index - 1 else index + 1
+                                if (targetIndex in currentItemsState.indices) {
+                                    focusQuantityAt(targetIndex)
+                                } else {
+                                    focusManager.clearFocus()
+                                }
+                            },
                             onDragModifier = Modifier
                                 .pointerHoverIcon(PointerIcon.Hand)
                                 .pointerInput(item.id) {
@@ -759,6 +798,7 @@ fun AdminShoppingListTabScreen(
                                 viewModel.updateItemInPlace(item.id, newName, newQty, confirm = confirm)
                             },
                             onConfirmItem = { viewModel.confirmItem(item.id) },
+                            onUnconfirmItem = { viewModel.unconfirmItem(item.id) },
                             onDeleteItem = { viewModel.deleteItem(item.id) }
                         )
                     }
@@ -830,16 +870,21 @@ fun AdminShoppingListTabScreen(
 @Composable
 private fun ShoppingListRowCard(
     item: ShoppingListItem,
-    unitType: UnitType?,
+    linkedProduct: Product?,
     isDragging: Boolean,
     dragOffsetY: Float,
+    qtyFocusRequester: FocusRequester?,
+    onFocusOwnQty: () -> Unit,
+    onTabQuantity: (reverse: Boolean) -> Unit,
     onDragModifier: Modifier,
     onUpdateInPlace: (newName: String, newQuantity: String, confirm: Boolean) -> Unit,
     onConfirmItem: () -> Unit,
+    onUnconfirmItem: () -> Unit,
     onDeleteItem: () -> Unit
 ) {
     val strings = I18n.current
     val focusManager = LocalFocusManager.current
+    val unitType = linkedProduct?.unitType
     val unitLabel = when (unitType) {
         UnitType.PIECE -> strings.unitPieceBadge
         UnitType.WEIGHT -> "kg"
@@ -860,8 +905,6 @@ private fun ShoppingListRowCard(
     val (cardBg, borderColor) = when {
         isDragging -> SurfaceWhite to AccentNavy
         item.isPendingReview -> ColorWarningAmber.copy(alpha = 0.06f) to ColorWarningAmber.copy(alpha = 0.45f)
-        item.isNewlyAdded -> ColorSuccessEmerald.copy(alpha = 0.05f) to ColorSuccessEmerald.copy(alpha = 0.35f)
-        item.isContentChanged -> AccentNavy.copy(alpha = 0.05f) to AccentNavy.copy(alpha = 0.35f)
         else -> SurfaceWhite to DividerBorder
     }
 
@@ -914,7 +957,7 @@ private fun ShoppingListRowCard(
                 }
             }
 
-            // Directly Editable Name Textbox
+            // Directly Editable Name Textbox (normal cursor placement, no auto-select-all)
             InlineSelectAllTextField(
                 value = nameField,
                 onValueChange = { nameField = it },
@@ -925,17 +968,60 @@ private fun ShoppingListRowCard(
                     nameField = TextFieldValue(item.name)
                     focusManager.clearFocus()
                 },
-                onClearFocus = { focusManager.clearFocus() },
+                onEnterAction = {
+                    commitIfChanged(true)
+                    focusManager.clearFocus()
+                },
                 onTabNavigate = { reverse ->
-                    focusManager.moveFocus(if (reverse) FocusDirection.Previous else FocusDirection.Next)
+                    if (reverse) {
+                        focusManager.moveFocus(FocusDirection.Previous)
+                    } else {
+                        onFocusOwnQty()
+                    }
                 },
                 textStyle = TextStyle(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = PrimaryNavy
                 ),
+                selectAllOnFocus = false,
                 modifier = Modifier.weight(1f)
             )
+
+            // Current Stock Display (Read-Only, before Quantity Field)
+            Box(
+                modifier = Modifier.width(105.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (linkedProduct != null) {
+                    val isZeroStock = linkedProduct.stockQuantity <= 0L
+                    Surface(
+                        color = if (isZeroStock) ColorDangerCrimson.copy(alpha = 0.1f) else SurfaceContainerLight,
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isZeroStock) ColorDangerCrimson.copy(alpha = 0.35f) else DividerBorder
+                        )
+                    ) {
+                        Text(
+                            text = Formatting.formatQuantity(linkedProduct.stockQuantity, linkedProduct.unitType, strings),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isZeroStock) ColorDangerCrimson else TextSecondarySubtle,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "-",
+                        fontSize = 13.sp,
+                        color = TextSecondaryMuted,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
+            }
 
             // Directly Editable Quantity Textbox + Localized Unit Label Behind Input Field
             Row(
@@ -957,15 +1043,18 @@ private fun ShoppingListRowCard(
                         qtyField = TextFieldValue(editableQty)
                         focusManager.clearFocus()
                     },
-                    onClearFocus = { focusManager.clearFocus() },
-                    onTabNavigate = { reverse ->
-                        focusManager.moveFocus(if (reverse) FocusDirection.Previous else FocusDirection.Next)
+                    onEnterAction = {
+                        commitIfChanged(true)
+                        onTabQuantity(false)
                     },
+                    onTabNavigate = onTabQuantity,
                     textStyle = TextStyle(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavy
                     ),
+                    selectAllOnFocus = true,
+                    focusRequester = qtyFocusRequester,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -1002,7 +1091,7 @@ private fun ShoppingListRowCard(
                 }
             }
 
-            // Quick Confirm Button (for unadjusted items from last week)
+            // Confirm / Unconfirm Toggle Button (reserved 32.dp slot so pills stay vertically aligned)
             Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
                 if (item.isPendingReview) {
                     IconButton(
@@ -1018,13 +1107,20 @@ private fun ShoppingListRowCard(
                             modifier = Modifier.size(20.dp)
                         )
                     }
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = ColorSuccessEmerald.copy(alpha = 0.55f),
-                        modifier = Modifier.size(18.dp)
-                    )
+                } else if (!item.isNewlyAdded) {
+                    IconButton(
+                        onClick = onUnconfirmItem,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .focusProperties { canFocus = false }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = strings.shoppingListMarkUnadjustedTooltip,
+                            tint = ColorSuccessEmerald.copy(alpha = 0.75f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
@@ -1052,72 +1148,137 @@ private fun InlineSelectAllTextField(
     onValueChange: (TextFieldValue) -> Unit,
     onCommit: (confirm: Boolean) -> Unit,
     onCancel: () -> Unit,
-    onClearFocus: () -> Unit,
+    onEnterAction: () -> Unit,
     onTabNavigate: (reverse: Boolean) -> Unit,
     textStyle: TextStyle,
+    selectAllOnFocus: Boolean = false,
+    focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    var selectAllPending by remember { mutableStateOf(false) }
+    val latestValue by rememberUpdatedState(value)
+    val coroutineScope = rememberCoroutineScope()
+    val internalFocusRequester = remember(focusRequester) { focusRequester ?: FocusRequester() }
 
-    // Select all text whenever the field gains focus (whether via mouse click or Tab)
-    LaunchedEffect(isFocused) {
-        if (isFocused) {
+    LaunchedEffect(selectAllPending) {
+        if (selectAllPending) {
+            delay(250L)
+            selectAllPending = false
+        }
+    }
+
+    // Ensure full selection on initial focus gain (including keyboard Tab/Enter)
+    LaunchedEffect(isFocused, selectAllOnFocus) {
+        if (isFocused && selectAllOnFocus) {
             yield()
-            onValueChange(value.copy(selection = TextRange(0, value.text.length)))
+            if (isFocused && selectAllPending) {
+                onValueChange(latestValue.copy(selection = TextRange(0, latestValue.text.length)))
+            }
         }
     }
 
     BasicTextField(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = { newValue ->
+            if (selectAllOnFocus && selectAllPending && isFocused && newValue.text == latestValue.text) {
+                // Preserve full selection while the initial focus click settles
+                onValueChange(newValue.copy(selection = TextRange(0, newValue.text.length)))
+            } else {
+                selectAllPending = false
+                onValueChange(newValue)
+            }
+        },
         singleLine = true,
         textStyle = textStyle,
         cursorBrush = SolidColor(AccentNavy),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(
-            onDone = {
-                onCommit(true)
-                onClearFocus()
-            }
+            onDone = { onEnterAction() }
         ),
         modifier = modifier
-            .background(
-                color = if (isFocused) SurfaceWhite else Color.Transparent,
-                shape = RoundedCornerShape(6.dp)
-            )
-            .border(
-                width = 1.dp,
-                color = if (isFocused) AccentNavy else DividerBorder.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(6.dp)
-            )
-            .padding(horizontal = 10.dp, vertical = 7.dp)
+            .focusRequester(internalFocusRequester)
             .onFocusChanged { focusState ->
                 val wasFocused = isFocused
                 isFocused = focusState.isFocused
-                if (wasFocused && !focusState.isFocused) {
+                if (!wasFocused && focusState.isFocused) {
+                    if (selectAllOnFocus) {
+                        selectAllPending = true
+                        onValueChange(latestValue.copy(selection = TextRange(0, latestValue.text.length)))
+                    }
+                } else if (wasFocused && !focusState.isFocused) {
+                    selectAllPending = false
+                    // Collapse selection on blur so unfocused text never stays highlighted
+                    if (!latestValue.selection.collapsed) {
+                        onValueChange(latestValue.copy(selection = TextRange(latestValue.text.length)))
+                    }
                     onCommit(false)
                 }
             }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
+                    if (
+                        event.key == Key.DirectionLeft ||
+                        event.key == Key.DirectionRight ||
+                        event.key == Key.MoveHome ||
+                        event.key == Key.MoveEnd
+                    ) {
+                        selectAllPending = false
+                    }
                     when (event.key) {
                         Key.Escape -> {
+                            selectAllPending = false
                             onCancel()
                             true
                         }
                         Key.Tab -> {
+                            selectAllPending = false
                             onCommit(false)
                             onTabNavigate(event.isShiftPressed)
                             true
                         }
                         Key.Enter, Key.NumPadEnter -> {
-                            onCommit(true)
-                            onClearFocus()
+                            selectAllPending = false
+                            onEnterAction()
                             true
                         }
                         else -> false
                     }
                 } else false
             }
+            .pointerInput(selectAllOnFocus) {
+                if (selectAllOnFocus) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            if (event.type == PointerEventType.Release && selectAllPending) {
+                                coroutineScope.launch {
+                                    yield()
+                                    selectAllPending = false
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        decorationBox = { innerTextField ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = if (isFocused) SurfaceWhite else Color.Transparent,
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = if (isFocused) AccentNavy else DividerBorder.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                innerTextField()
+            }
+        }
     )
 }

@@ -824,6 +824,20 @@ class HttpShoppingListRepository(private val client: AdminNetworkClient) : Shopp
         }
     }
 
+    override suspend fun unconfirmItem(id: String) {
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/unconfirm")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("unconfirmItem failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpShoppingListRepository", "unconfirmItem failed: ${e.message}", e)
+            throw e
+        }
+    }
+
     override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
         try {
             val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/reorder")) {

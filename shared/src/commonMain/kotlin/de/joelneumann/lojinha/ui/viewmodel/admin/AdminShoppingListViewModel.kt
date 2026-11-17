@@ -276,6 +276,23 @@ class AdminShoppingListViewModel(
         }
     }
 
+    fun unconfirmItem(id: String) {
+        val current = _items.value.find { it.id == id } ?: return
+        if (current.isNewlyAdded || current.isPendingReview) return
+
+        val updated = current.copy(isConfirmedForCurrentExport = false)
+        _items.value = _items.value.map { if (it.id == id) updated else it }
+
+        viewModelScope.launch {
+            try {
+                shoppingListRepository.unconfirmItem(id)
+            } catch (e: Exception) {
+                AppLogger.error("AdminShoppingListViewModel", "Failed to unconfirm item: ${e.message}", e)
+                _errorMessage.value = e.message
+            }
+        }
+    }
+
     fun moveItem(fromIndex: Int, toIndex: Int) {
         val current = _items.value.toMutableList()
         if (fromIndex !in current.indices || toIndex !in current.indices || fromIndex == toIndex) return

@@ -764,8 +764,10 @@ interface AppStrings {
     val shoppingListRemoveNoteCheckbox: String
     val shoppingListOverwriteBtn: String
     val shoppingListColName: String
+    val shoppingListColStock: String
     val shoppingListColQuantity: String
     val shoppingListConfirmUnchangedTooltip: String
+    val shoppingListMarkUnadjustedTooltip: String
     val shoppingListStatusPending: String
     val shoppingListStatusConfirmed: String
     val shoppingListStatusEdited: String

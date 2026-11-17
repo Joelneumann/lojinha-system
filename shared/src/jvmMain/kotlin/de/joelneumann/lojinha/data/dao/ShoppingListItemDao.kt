@@ -24,6 +24,9 @@ interface ShoppingListItemDao {
     @Query("UPDATE shopping_list_items SET isConfirmedForCurrentExport = 1 WHERE id = :id")
     suspend fun confirmItem(id: String)
 
+    @Query("UPDATE shopping_list_items SET isConfirmedForCurrentExport = 0 WHERE id = :id")
+    suspend fun unconfirmItem(id: String)
+
     @Query("DELETE FROM shopping_list_items WHERE id = :id")
     suspend fun deleteItemById(id: String)
 

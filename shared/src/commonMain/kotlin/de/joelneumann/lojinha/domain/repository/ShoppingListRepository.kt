@@ -9,6 +9,7 @@ interface ShoppingListRepository {
     suspend fun addOrUpdateItem(item: ShoppingListItem)
     suspend fun updateItem(item: ShoppingListItem)
     suspend fun confirmItem(id: String)
+    suspend fun unconfirmItem(id: String)
     suspend fun updateItemsOrder(items: List<ShoppingListItem>)
     suspend fun deleteItem(id: String)
     suspend fun clearAllItems()

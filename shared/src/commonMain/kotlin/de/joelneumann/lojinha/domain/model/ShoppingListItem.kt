@@ -22,7 +22,7 @@ data class ShoppingListItem(
             (name != lastExportedName || quantity != lastExportedQuantity)
 
     val isReviewedForExport: Boolean
-        get() = isNewlyAdded || isContentChanged || isConfirmedForCurrentExport
+        get() = isNewlyAdded || isConfirmedForCurrentExport
 
     val isPendingReview: Boolean
         get() = !isReviewedForExport

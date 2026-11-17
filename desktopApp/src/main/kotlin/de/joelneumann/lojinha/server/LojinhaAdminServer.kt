@@ -576,6 +576,14 @@ class LojinhaAdminServer(
                             call.respond(HttpStatusCode.OK)
                         }
 
+                        post("/{id}/unconfirm") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            val repo = resolveShoppingListRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                            repo.unconfirmItem(id)
+                            call.respond(HttpStatusCode.OK)
+                        }
+
                         put("/reorder") {
                             if (!call.checkAdminAuth(settingsRepository)) return@put
                             val repo = resolveShoppingListRepo() ?: return@put call.respond(HttpStatusCode.ServiceUnavailable)
