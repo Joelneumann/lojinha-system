@@ -65,4 +65,10 @@ object SystemNoteHelper {
             else -> note // fallback if code not recognized
         }
     }
+
+    fun extractStockZeroProductName(note: String?): String? {
+        if (note == null || !note.startsWith("SYSNOTE|STOCK_ZERO|")) return null
+        val parts = note.split("|")
+        return parts.getOrNull(2)?.trim()?.takeIf { it.isNotEmpty() }
+    }
 }

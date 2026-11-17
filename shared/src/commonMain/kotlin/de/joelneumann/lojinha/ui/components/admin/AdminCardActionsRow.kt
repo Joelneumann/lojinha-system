@@ -23,6 +23,7 @@ fun AdminCardActionsRow(
     isStatusActive: Boolean,
     onDelete: () -> Unit,
     onHistory: (() -> Unit)? = null,
+    onAddToShoppingList: (() -> Unit)? = null,
     onCustomExpense: (() -> Unit)? = null,
     onCustomIncome: (() -> Unit)? = null,
     onExportPdf: (() -> Unit)? = null,
@@ -88,6 +89,35 @@ fun AdminCardActionsRow(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavy
+                        )
+                    }
+                }
+            }
+
+            if (onAddToShoppingList != null) {
+                OutlinedButton(
+                    onClick = onAddToShoppingList,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(40.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = AccentNavy
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddShoppingCart,
+                            contentDescription = null,
+                            tint = AccentNavy,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = strings.shoppingListAddToBtn,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AccentNavy
                         )
                     }
                 }

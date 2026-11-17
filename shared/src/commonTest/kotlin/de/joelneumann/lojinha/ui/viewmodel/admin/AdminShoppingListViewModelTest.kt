@@ -1,0 +1,178 @@
+package de.joelneumann.lojinha.ui.viewmodel.admin
+
+import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.domain.repository.AdminNoteRepository
+import de.joelneumann.lojinha.domain.repository.ProductRepository
+import de.joelneumann.lojinha.domain.repository.ShoppingListRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlin.test.*
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class AdminShoppingListViewModelTest {
+
+    private val testDispatcher = UnconfinedTestDispatcher()
+
+    @BeforeTest
+    fun setUp() {
+        Dispatchers.setMain(testDispatcher)
+    }
+
+    @AfterTest
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    private class FakeShoppingListRepository : ShoppingListRepository {
+        val itemsFlow = MutableStateFlow<List<ShoppingListItem>>(emptyList())
+
+        override fun getItemsFlow(): Flow<List<ShoppingListItem>> = itemsFlow
+        override suspend fun getAllItems(): List<ShoppingListItem> = itemsFlow.value
+
+        override suspend fun addOrUpdateItem(item: ShoppingListItem) {
+            val existing = itemsFlow.value.find {
+                (item.id.isNotBlank() && it.id == item.id) ||
+                    (item.productId != null && it.productId == item.productId)
+            }
+            itemsFlow.value = if (existing != null) {
+                itemsFlow.value.map {
+                    if (it.id == existing.id) it.copy(name = item.name, quantity = item.quantity, isConfirmedForCurrentExport = true) else it
+                }
+            } else {
+                itemsFlow.value + item
+            }
+        }
+
+        override suspend fun updateItem(item: ShoppingListItem) {
+            itemsFlow.value = itemsFlow.value.map { if (it.id == item.id) item else it }
+        }
+
+        override suspend fun confirmItem(id: String) {
+            itemsFlow.value = itemsFlow.value.map { if (it.id == id) it.copy(isConfirmedForCurrentExport = true) else it }
+        }
+
+        override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
+            itemsFlow.value = items.mapIndexed { idx, item -> item.copy(sortOrder = idx) }
+        }
+
+        override suspend fun deleteItem(id: String) {
+            itemsFlow.value = itemsFlow.value.filter { it.id != id }
+        }
+
+        override suspend fun clearAllItems() {
+            itemsFlow.value = emptyList()
+        }
+
+        override suspend fun commitExportBaseline() {
+            itemsFlow.value = itemsFlow.value.map {
+                it.copy(lastExportedName = it.name, lastExportedQuantity = it.quantity, isConfirmedForCurrentExport = false)
+            }
+        }
+    }
+
+    private class FakeProductRepository(products: List<Product> = emptyList()) : ProductRepository {
+        val productsFlow = MutableStateFlow(products)
+        override fun getProductsFlow(): Flow<List<Product>> = productsFlow
+        override suspend fun getAllProducts(): List<Product> = productsFlow.value
+        override suspend fun getProductById(id: String): Product? = productsFlow.value.find { it.id == id }
+        override suspend fun getProductByBarcode(barcode: String): Product? = null
+        override suspend fun saveProduct(product: Product) {}
+        override suspend fun deactivateProduct(id: String) {}
+        override suspend fun hardDeleteProduct(id: String) {}
+        override suspend fun updateStock(productId: String, delta: Long) {}
+        override suspend fun getProductHistory(productId: String, page: Int, pageSize: Int) = PagedResult<ProductHistoryEntry>(emptyList(), 0, page, pageSize, 0)
+        override suspend fun recordStockAdjustment(adjustment: ProductStockAdjustment) {}
+    }
+
+    private class FakeAdminNoteRepository(notes: List<AdminNote> = emptyList()) : AdminNoteRepository {
+        val notesFlow = MutableStateFlow(notes)
+        val deletedIds = mutableListOf<String>()
+        override fun getNotesFlow(): Flow<List<AdminNote>> = notesFlow
+        override suspend fun getAllNotes(): List<AdminNote> = notesFlow.value
+        override suspend fun addNote(note: AdminNote) {}
+        override suspend fun deleteNote(id: String) {
+            deletedIds.add(id)
+            notesFlow.value = notesFlow.value.filter { it.id != id }
+        }
+        override suspend fun deleteAllNotes() {}
+    }
+
+    @Test
+    fun testRequestAddFromStockZeroNoteAndDeleteNote() = runTest {
+        val clubMate = Product(id = "p-1", name = "Club Mate", basePrice = 500L, unitType = UnitType.PIECE, stockQuantity = 0L)
+        val note = AdminNote(id = "n-1", message = "SYSNOTE|STOCK_ZERO|Club Mate|Alice", userId = "SYSTEM", userNameSnapshot = "System")
+        val shoppingRepo = FakeShoppingListRepository()
+        val productRepo = FakeProductRepository(listOf(clubMate))
+        val noteRepo = FakeAdminNoteRepository(listOf(note))
+
+        val vm = AdminShoppingListViewModel(shoppingRepo, productRepo, noteRepo)
+        vm.requestAddFromStockZeroNote("Club Mate", "n-1")
+
+        val modal = vm.pendingModalRequest.value
+        assertNotNull(modal)
+        assertEquals("p-1", modal.product?.id)
+        assertEquals("n-1", modal.sourceNoteId)
+        assertNull(modal.existingItem)
+
+        val added = vm.confirmModalAdd(
+            name = modal.customName,
+            rawQuantityInput = "12",
+            product = modal.product,
+            sourceNoteId = modal.sourceNoteId,
+            existingItem = modal.existingItem,
+            removeNote = true
+        )
+        assertTrue(added)
+        assertNull(vm.pendingModalRequest.value)
+        assertTrue(noteRepo.deletedIds.contains("n-1"))
+        assertEquals(1, vm.items.value.size)
+        assertEquals("Club Mate", vm.items.value[0].name)
+    }
+
+    @Test
+    fun testOverwriteNoticeWhenProductAlreadyExists() = runTest {
+        val bananas = Product(id = "p-2", name = "Bananas", basePrice = 300L, unitType = UnitType.WEIGHT, stockQuantity = 1000L)
+        val shoppingRepo = FakeShoppingListRepository()
+        val productRepo = FakeProductRepository(listOf(bananas))
+        val vm = AdminShoppingListViewModel(shoppingRepo, productRepo)
+
+        vm.requestAddProduct(bananas)
+        vm.confirmModalAdd("Bananas", "2,5", bananas, null, null, removeNote = false)
+
+        // Request adding Bananas again -> existingItem should be populated
+        vm.requestAddProduct(bananas)
+        val secondModal = vm.pendingModalRequest.value
+        assertNotNull(secondModal)
+        assertNotNull(secondModal.existingItem)
+        assertEquals("2,5 kg", secondModal.existingItem?.quantity)
+    }
+
+    @Test
+    fun testMoveItemAndConfirmItemPreservesStatusProperly() = runTest {
+        val shoppingRepo = FakeShoppingListRepository()
+        shoppingRepo.itemsFlow.value = listOf(
+            ShoppingListItem(id = "1", name = "A", quantity = "1", sortOrder = 0, lastExportedName = "A", lastExportedQuantity = "1", isConfirmedForCurrentExport = false),
+            ShoppingListItem(id = "2", name = "B", quantity = "2", sortOrder = 1, lastExportedName = "B", lastExportedQuantity = "2", isConfirmedForCurrentExport = false)
+        )
+        val vm = AdminShoppingListViewModel(shoppingRepo, FakeProductRepository())
+
+        assertTrue(vm.items.value.all { it.isPendingReview })
+
+        vm.moveItem(0, 1)
+        vm.persistCurrentOrder()
+
+        assertEquals("B", vm.items.value[0].name)
+        assertEquals("A", vm.items.value[1].name)
+        assertTrue(vm.items.value.all { it.isPendingReview })
+
+        vm.confirmItem("1")
+        assertFalse(vm.items.value.first { it.id == "1" }.isPendingReview)
+        assertTrue(vm.items.value.first { it.id == "2" }.isPendingReview)
+    }
+}

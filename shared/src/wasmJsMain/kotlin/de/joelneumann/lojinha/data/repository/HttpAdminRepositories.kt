@@ -762,3 +762,125 @@ class HttpAdminNoteRepository(private val client: AdminNetworkClient) : AdminNot
     }
 }
 
+class HttpShoppingListRepository(private val client: AdminNetworkClient) : ShoppingListRepository {
+    override fun getItemsFlow(): Flow<List<ShoppingListItem>> = flow {
+        emit(getAllItems())
+    }
+
+    override suspend fun getAllItems(): List<ShoppingListItem> {
+        return try {
+            client.httpClient.get(client.resolveUrl("/api/admin/shopping-list")) {
+                client.run { appendAdminAuth() }
+            }.body()
+        } catch (e: Exception) {
+            AppLogger.error("HttpShoppingListRepository", "getAllItems failed: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    override suspend fun addOrUpdateItem(item: ShoppingListItem) {
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(item)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("addOrUpdateItem failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpShoppingListRepository", "addOrUpdateItem failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun updateItem(item: ShoppingListItem) {
+        try {
+            val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/item")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(item)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("updateItem failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpShoppingListRepository", "updateItem failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun confirmItem(id: String) {
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/confirm")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("confirmItem failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpShoppingListRepository", "confirmItem failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
+        try {
+            val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/reorder")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(items)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("updateItemsOrder failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpShoppingListRepository", "updateItemsOrder failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun deleteItem(id: String) {
+        try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("deleteItem failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpShoppingListRepository", "deleteItem failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun clearAllItems() {
+        try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("clearAllItems failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpShoppingListRepository", "clearAllItems failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun commitExportBaseline() {
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/commit-export")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("commitExportBaseline failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpShoppingListRepository", "commitExportBaseline failed: ${e.message}", e)
+            throw e
+        }
+    }
+}
+
+

@@ -37,6 +37,7 @@ import de.joelneumann.lojinha.ui.theme.PrimaryNavy
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 
@@ -47,6 +48,7 @@ fun AdminProductsTabScreen(
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandProduct: (String) -> Unit,
     onUnsavedStateChanged: (Boolean) -> Unit,
+    onAddToShoppingList: ((Product) -> Unit)? = null,
     onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
     focusTrigger: Int = 0
 ) {
@@ -196,7 +198,8 @@ fun AdminProductsTabScreen(
 
                             onToggleActive = viewModel::toggleProductActive,
                             onDeleteProduct = { viewModel.deleteProduct(it.id) },
-                            onViewHistory = { viewModel.openProductHistoryModal(it) }
+                            onViewHistory = { viewModel.openProductHistoryModal(it) },
+                            onAddToShoppingList = onAddToShoppingList
                         )
                     }
                 }

@@ -44,6 +44,7 @@ fun AdminProductAccordionCard(
     onToggleActive: (Product) -> Unit,
     onDeleteProduct: (Product) -> Unit,
     onViewHistory: ((Product) -> Unit)? = null,
+    onAddToShoppingList: ((Product) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -286,6 +287,7 @@ fun AdminProductAccordionCard(
         AdminCardActionsRow(
             onEdit = { onEditProduct(product) },
             onHistory = onViewHistory?.let { { it(product) } },
+            onAddToShoppingList = onAddToShoppingList?.let { { it(product) } },
             toggleStatusText = if (product.isActive) strings.disable else strings.enable,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = product.isActive,

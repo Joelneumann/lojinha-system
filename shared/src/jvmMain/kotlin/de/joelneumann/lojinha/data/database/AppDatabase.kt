@@ -16,9 +16,10 @@ import de.joelneumann.lojinha.data.entity.*
         BillingListEntity::class,
         BillingListUserEntity::class,
         AdminNoteEntity::class,
-        ProductStockAdjustmentEntity::class
+        ProductStockAdjustmentEntity::class,
+        ShoppingListItemEntity::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -31,4 +32,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun billingListDao(): BillingListDao
     abstract fun adminNoteDao(): AdminNoteDao
     abstract fun productStockAdjustmentDao(): ProductStockAdjustmentDao
+    abstract fun shoppingListItemDao(): ShoppingListItemDao
 }
