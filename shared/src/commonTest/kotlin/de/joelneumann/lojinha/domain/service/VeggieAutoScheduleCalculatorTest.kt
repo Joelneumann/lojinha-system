@@ -88,4 +88,16 @@ class VeggieAutoScheduleCalculatorTest {
         val ptText = schedule.formatScheduleText(PortugueseStrings, Language.BR)
         assertEquals("Próxima rodada começa automaticamente: Segunda-feira, 16/11 às 08:00", ptText)
     }
+
+    @Test
+    fun testNormalizeTimeOfDayValidation() {
+        assertEquals("08:05", VeggieAutoScheduleCalculator.normalizeTimeOfDay(" 8:5 "))
+        assertEquals("00:00", VeggieAutoScheduleCalculator.normalizeTimeOfDay("0:0"))
+        assertEquals("23:59", VeggieAutoScheduleCalculator.normalizeTimeOfDay("23:59"))
+        assertNull(VeggieAutoScheduleCalculator.normalizeTimeOfDay(""))
+        assertNull(VeggieAutoScheduleCalculator.normalizeTimeOfDay("24:00"))
+        assertNull(VeggieAutoScheduleCalculator.normalizeTimeOfDay("08:60"))
+        assertNull(VeggieAutoScheduleCalculator.normalizeTimeOfDay("08"))
+        assertNull(VeggieAutoScheduleCalculator.normalizeTimeOfDay("abc:00"))
+    }
 }

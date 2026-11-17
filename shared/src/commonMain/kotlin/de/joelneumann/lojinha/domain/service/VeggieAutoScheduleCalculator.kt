@@ -47,7 +47,21 @@ data class NextAutoRoundInfo(
 
 object VeggieAutoScheduleCalculator {
 
+    fun parseValidTimeOfDay(rawTime: String): Pair<Int, Int>? {
+        val parts = rawTime.trim().split(":")
+        if (parts.size != 2) return null
+        val hour = parts[0].toIntOrNull()?.takeIf { it in 0..23 } ?: return null
+        val minute = parts[1].toIntOrNull()?.takeIf { it in 0..59 } ?: return null
+        return hour to minute
+    }
+
+    fun normalizeTimeOfDay(rawTime: String): String? {
+        val (hour, minute) = parseValidTimeOfDay(rawTime) ?: return null
+        return "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+    }
+
     fun parseTimeOfDay(rawTime: String): Pair<Int, Int> {
+        parseValidTimeOfDay(rawTime)?.let { return it }
         val parts = rawTime.trim().split(":")
         val hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 8
         val minute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0

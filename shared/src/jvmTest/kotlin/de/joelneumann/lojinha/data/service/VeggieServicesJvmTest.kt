@@ -216,6 +216,14 @@ class VeggieServicesJvmTest {
             val nextMonday = LocalDateTime(2026, 4, 27, 8, 1, 0).toInstant(utc).toEpochMilliseconds()
             assertTrue(scheduler.evaluateAndAutoOpenIfDue(nextMonday, utc))
             assertEquals(2, veggieRepo.getAllRounds().size)
+
+            // 6. Deleting the Week 18 round must NOT cause the scheduler to recreate it for the same slot!
+            val week18Round = veggieRepo.getActiveOrLatestRound()
+            assertNotNull(week18Round)
+            assertTrue(veggieRepo.deleteRound(week18Round.id))
+            val nextMondayLater = LocalDateTime(2026, 4, 27, 8, 5, 0).toInstant(utc).toEpochMilliseconds()
+            assertFalse(scheduler.evaluateAndAutoOpenIfDue(nextMondayLater, utc))
+            assertEquals(1, veggieRepo.getAllRounds().size)
         } finally {
             db.close()
         }

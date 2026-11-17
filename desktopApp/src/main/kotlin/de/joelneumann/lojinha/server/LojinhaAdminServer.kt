@@ -316,7 +316,13 @@ class LojinhaAdminServer(
                     // Read-only non-sensitive display/business settings for Web Admin parity
                     get("/ui-settings") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
-                        call.respond(settingsRepository.getSettings().copy(adminPasswordHash = ""))
+                        call.respond(
+                            settingsRepository.getSettings().copy(
+                                adminPasswordHash = "",
+                                oneDriveRefreshToken = null,
+                                backupLocationPath = ""
+                            )
+                        )
                     }
 
                     // Products

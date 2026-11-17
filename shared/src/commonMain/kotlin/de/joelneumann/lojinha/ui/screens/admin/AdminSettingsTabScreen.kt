@@ -132,10 +132,10 @@ fun AdminSettingsTabScreen(
     val isRedThresholdValid = parsedRed != null && parsedRed in -100_000_00L..100_000_00L
     val isThresholdOrderValid = isYellowThresholdValid && isRedThresholdValid && parsedYellow!! > parsedRed!!
 
-    val isVeggieTimeValid = remember(veggieAutoOpenTime) {
-        val parts = veggieAutoOpenTime.trim().split(":")
-        parts.size == 2 && parts[0].toIntOrNull() in 0..23 && parts[1].toIntOrNull() in 0..59
+    val normalizedVeggieTimeInput = remember(veggieAutoOpenTime) {
+        de.joelneumann.lojinha.domain.service.VeggieAutoScheduleCalculator.normalizeTimeOfDay(veggieAutoOpenTime)
     }
+    val isVeggieTimeValid = normalizedVeggieTimeInput != null
     val parsedVeggieBuyerFee = remember(veggieBuyerFeeInput) { parseBrlInputToCents(veggieBuyerFeeInput) }
     val isVeggieBuyerFeeValid = parsedVeggieBuyerFee != null && parsedVeggieBuyerFee in 0L..100_000_00L
     val parsedVeggieTransportFee = remember(veggieTransportFeeInput) { parseBrlInputToCents(veggieTransportFeeInput) }
@@ -298,10 +298,7 @@ fun AdminSettingsTabScreen(
                             val newRed = parsedRed ?: settings.redBalanceWarningThresholdCents
                             val newBuyerFee = parsedVeggieBuyerFee ?: settings.defaultVeggieBuyerFeeCents
                             val newTransportFee = parsedVeggieTransportFee ?: settings.defaultVeggieTransportFeeCents
-                            val timeParts = veggieAutoOpenTime.trim().split(":")
-                            val normalizedVeggieTime = if (timeParts.size == 2) {
-                                "${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}"
-                            } else settings.veggieAutoOpenTime
+                            val normalizedVeggieTime = normalizedVeggieTimeInput ?: settings.veggieAutoOpenTime
                             val updatedSettings = settings.copy(
                                 adminPasswordHash = if (newPassword.isNotBlank()) de.joelneumann.lojinha.security.PasswordHasher.hash(newPassword) else settings.adminPasswordHash,
                                 globalMarkupPercent = globalMarkupValue ?: settings.globalMarkupPercent,
