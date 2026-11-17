@@ -12,6 +12,7 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.util.AppLogger
@@ -40,6 +41,9 @@ class AdminShoppingListViewModel(
 
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     val products: StateFlow<List<Product>> = _products.asStateFlow()
+
+    private val _productsById = MutableStateFlow<Map<String, Product>>(emptyMap())
+    val productsById: StateFlow<Map<String, Product>> = _productsById.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -85,6 +89,7 @@ class AdminShoppingListViewModel(
         productsJob = viewModelScope.launch {
             try {
                 productRepository.getProductsFlow().collect { list ->
+                    _productsById.value = list.associateBy { it.id }
                     _products.value = list.filter { it.isActive }.sortedByAccentInsensitive { it.name }
                 }
             } catch (e: CancellationException) {
@@ -100,12 +105,7 @@ class AdminShoppingListViewModel(
     }
 
     fun getMatchingProducts(query: String): List<Product> {
-        val trimmed = query.trim()
-        if (trimmed.isBlank()) return emptyList()
-        return _products.value.filter { p ->
-            p.name.containsIgnoreAccents(trimmed) ||
-                p.barcodes.any { it.code.contains(trimmed, ignoreCase = true) }
-        }.take(8)
+        return _products.value.filterAndRankProducts(query).take(8)
     }
 
     fun requestAddProduct(product: Product, sourceNoteId: String? = null) {
@@ -136,11 +136,17 @@ class AdminShoppingListViewModel(
         }
     }
 
-    fun requestAddCustomItem(name: String) {
+    fun requestAddCustomItem(name: String, forceCustom: Boolean = true) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
-        val existing = _items.value.find { it.name.equals(trimmed, ignoreCase = true) }
-        val matchedProduct = _products.value.find { it.name.equals(trimmed, ignoreCase = true) }
+        val matchedProduct = if (forceCustom) null else _products.value.find { it.name.equals(trimmed, ignoreCase = true) }
+        val existing = if (matchedProduct != null) {
+            _items.value.find { it.productId == matchedProduct.id }
+                ?: _items.value.find { it.name.equals(matchedProduct.name, ignoreCase = true) }
+        } else {
+            _items.value.find { it.productId == null && it.name.equals(trimmed, ignoreCase = true) }
+                ?: _items.value.find { it.name.equals(trimmed, ignoreCase = true) }
+        }
         _pendingModalRequest.value = ShoppingListModalRequest(
             product = matchedProduct,
             customName = matchedProduct?.name ?: trimmed,
@@ -222,18 +228,23 @@ class AdminShoppingListViewModel(
 
     fun updateItemInPlace(id: String, newName: String, newQuantity: String, confirm: Boolean = false) {
         val current = _items.value.find { it.id == id } ?: return
+        val unitType = current.productId?.let { _productsById.value[it]?.unitType }
         val cleanName = newName.trim().ifBlank { current.name }
-        val cleanQty = newQuantity.trim().ifBlank { current.quantity }
+        val normalizedNewQty = normalizeInlineQuantity(newQuantity, unitType) ?: current.quantity
+        val normalizedCurrentQty = normalizeInlineQuantity(current.quantity, unitType) ?: current.quantity
 
-        val contentChanged = cleanName != current.name || cleanQty != current.quantity
+        val qtyTextActuallyChanged = normalizedNewQty != normalizedCurrentQty
+        val nameChanged = cleanName != current.name
+        val contentChanged = nameChanged || qtyTextActuallyChanged
         val shouldConfirm = confirm || contentChanged
         if (!contentChanged && (!shouldConfirm || current.isConfirmedForCurrentExport)) {
             return
         }
 
+        val finalQty = if (qtyTextActuallyChanged) normalizedNewQty else current.quantity
         val updated = current.copy(
             name = cleanName,
-            quantity = cleanQty,
+            quantity = finalQty,
             isConfirmedForCurrentExport = current.isConfirmedForCurrentExport || shouldConfirm
         )
         _items.value = _items.value.map { if (it.id == id) updated else it }
@@ -341,34 +352,75 @@ class AdminShoppingListViewModel(
     }
 
     companion object {
+        fun isAllowedQuantityText(text: String, unitType: UnitType?): Boolean {
+            return when (unitType) {
+                UnitType.PIECE -> text.all { it.isDigit() }
+                UnitType.WEIGHT -> {
+                    var sepCount = 0
+                    text.all { ch ->
+                        if (ch.isDigit()) {
+                            true
+                        } else if (ch == '.' || ch == ',') {
+                            sepCount++
+                            sepCount <= 1
+                        } else {
+                            false
+                        }
+                    }
+                }
+                null -> true
+            }
+        }
+
+        fun extractEditableNumericPart(rawQuantity: String, unitType: UnitType?): String {
+            val trimmed = rawQuantity.trim()
+            return when (unitType) {
+                UnitType.PIECE -> trimmed.takeWhile { it.isDigit() }.ifBlank { trimmed }
+                UnitType.WEIGHT -> {
+                    val lower = trimmed.lowercase()
+                    when {
+                        lower.endsWith("kg") -> trimmed.dropLast(2).trim()
+                        lower.endsWith("g") -> {
+                            val grams = lower.dropLast(1).trim().replace(',', '.').toDoubleOrNull()
+                            if (grams != null) {
+                                (grams / 1000.0).toString().trimEnd('0').trimEnd('.').replace('.', ',')
+                            } else {
+                                trimmed
+                            }
+                        }
+                        else -> trimmed
+                    }
+                }
+                null -> trimmed
+            }
+        }
+
         fun formatQuantityInput(rawInput: String, product: Product?): String? {
+            return normalizeInlineQuantity(rawInput, product?.unitType)
+        }
+
+        fun normalizeInlineQuantity(rawInput: String, unitType: UnitType?): String? {
             val trimmed = rawInput.trim()
             if (trimmed.isBlank()) return null
 
-            if (product == null) {
-                return trimmed
-            }
-
-            val strings = I18n.get()
-            return when (product.unitType) {
+            return when (unitType) {
                 UnitType.PIECE -> {
-                    val qty = trimmed.toLongOrNull() ?: return null
+                    val digits = trimmed.takeWhile { it.isDigit() }
+                    val qty = digits.toLongOrNull() ?: return null
                     if (qty <= 0L) return null
-                    strings.pieceUnitSuffix(qty)
+                    qty.toString()
                 }
                 UnitType.WEIGHT -> {
                     val grams = Formatting.parseWeightInputToGrams(trimmed) ?: return null
                     if (grams <= 0L) return null
-                    if (grams < 1000L) {
-                        "$grams g"
-                    } else if (grams % 1000L == 0L) {
-                        "${grams / 1000L} kg"
+                    if (grams % 1000L == 0L) {
+                        (grams / 1000L).toString()
                     } else {
                         val kg = grams.toDouble() / 1000.0
-                        val formatted = kg.toString().trimEnd('0').trimEnd('.').replace('.', ',')
-                        "$formatted kg"
+                        kg.toString().trimEnd('0').trimEnd('.').replace('.', ',')
                     }
                 }
+                null -> trimmed
             }
         }
     }

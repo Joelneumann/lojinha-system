@@ -1,7 +1,9 @@
 package de.joelneumann.lojinha.data.service
 
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.ShoppingListItem
+import de.joelneumann.lojinha.domain.model.UnitType
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -35,16 +37,21 @@ class ShoppingListPdfGeneratorTest {
 
     @Test
     fun testGenerateCompactPdfWithManyItems() {
+        val products = listOf(
+            Product(id = "p-1", name = "Product Item #1", basePrice = 100L, unitType = UnitType.PIECE),
+            Product(id = "p-2", name = "Product Item #2", basePrice = 200L, unitType = UnitType.WEIGHT)
+        )
         val items = (1..80).map { i ->
             ShoppingListItem(
                 id = "item-$i",
+                productId = if (i <= 2) "p-$i" else null,
                 name = "Product Item #$i",
-                quantity = "${i * 2} Stk.",
+                quantity = if (i == 2) "2,5" else "${i * 2}",
                 sortOrder = i - 1
             )
         }
         val targetFile = File(tempDir, "shopping_list.pdf")
-        val resultFile = ShoppingListPdfGenerator.generatePdf(targetFile, items, Language.DE)
+        val resultFile = ShoppingListPdfGenerator.generatePdf(targetFile, items, Language.DE, products)
 
         assertTrue(resultFile.exists())
         assertTrue(resultFile.length() > 1000)

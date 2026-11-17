@@ -3,8 +3,12 @@ package de.joelneumann.lojinha.data.service
 import com.lowagie.text.*
 import com.lowagie.text.pdf.*
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.ShoppingListItem
+import de.joelneumann.lojinha.domain.model.UnitType
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminShoppingListViewModel
 import de.joelneumann.lojinha.util.AppLogger
 import java.awt.Color
 import java.io.ByteArrayOutputStream
@@ -76,21 +80,23 @@ object ShoppingListPdfGenerator {
 
     fun generateBytes(
         items: List<ShoppingListItem>,
-        language: Language = Language.DE
+        language: Language = Language.DE,
+        products: List<Product> = emptyList()
     ): ByteArray {
         val out = ByteArrayOutputStream()
-        writePdf(out, items, language)
+        writePdf(out, items, language, products)
         return out.toByteArray()
     }
 
     fun generatePdf(
         outputFile: File,
         items: List<ShoppingListItem>,
-        language: Language = Language.DE
+        language: Language = Language.DE,
+        products: List<Product> = emptyList()
     ): File {
         outputFile.parentFile?.mkdirs()
         FileOutputStream(outputFile).use { fos ->
-            writePdf(fos, items, language)
+            writePdf(fos, items, language, products)
         }
         AppLogger.info(TAG, "Generated Shopping List PDF at: ${outputFile.absolutePath} (${outputFile.length()} bytes)")
         return outputFile
@@ -99,9 +105,12 @@ object ShoppingListPdfGenerator {
     private fun writePdf(
         outputStream: java.io.OutputStream,
         items: List<ShoppingListItem>,
-        language: Language
+        language: Language,
+        products: List<Product>
     ) {
         val labels = labelsFor(language)
+        val strings = I18n.get(language)
+        val productsById = products.associateBy { it.id }
         val sortedItems = items.sortedWith(compareBy<ShoppingListItem> { it.sortOrder }.thenBy { it.createdAt })
 
         // Compact A4 layout to minimize paper usage
@@ -118,7 +127,7 @@ object ShoppingListPdfGenerator {
             language = language
         )
 
-        val table = PdfPTable(floatArrayOf(8f, 22f, 70f)).apply {
+        val table = PdfPTable(floatArrayOf(70f, 22f, 8f)).apply {
             widthPercentage = 100f
             headerRows = 1
         }
@@ -139,9 +148,9 @@ object ShoppingListPdfGenerator {
             table.addCell(cell)
         }
 
-        addTh(labels.colCheck, Element.ALIGN_CENTER)
-        addTh(labels.colQuantity, Element.ALIGN_CENTER)
         addTh(labels.colName, Element.ALIGN_LEFT)
+        addTh(labels.colQuantity, Element.ALIGN_CENTER)
+        addTh(labels.colCheck, Element.ALIGN_CENTER)
 
         if (sortedItems.isEmpty()) {
             val emptyCell = PdfPCell(Phrase(labels.emptyMessage, FONT_MUTED)).apply {
@@ -158,35 +167,7 @@ object ShoppingListPdfGenerator {
             sortedItems.forEachIndexed { idx, item ->
                 val rowBg = if (idx % 2 == 0) Color.WHITE else COLOR_BG_ZEBRA
 
-                // Col 1: Crisp vector checkbox square
-                val checkCell = PdfPCell(Phrase("")).apply {
-                    backgroundColor = rowBg
-                    border = Rectangle.BOX
-                    borderColor = COLOR_BORDER
-                    borderWidth = 0.75f
-                    minimumHeight = 18f
-                    setPadding(3f)
-                    cellEvent = checkboxEvent
-                }
-                table.addCell(checkCell)
-
-                // Col 2: Quantity
-                val qtyCell = PdfPCell(Phrase(item.quantity, FONT_BODY_BOLD)).apply {
-                    backgroundColor = rowBg
-                    border = Rectangle.BOX
-                    borderColor = COLOR_BORDER
-                    borderWidth = 0.75f
-                    minimumHeight = 18f
-                    setPaddingLeft(5f)
-                    setPaddingRight(5f)
-                    setPaddingTop(3f)
-                    setPaddingBottom(3f)
-                    horizontalAlignment = Element.ALIGN_CENTER
-                    verticalAlignment = Element.ALIGN_MIDDLE
-                }
-                table.addCell(qtyCell)
-
-                // Col 3: Product / Item Name
+                // Col 1: Product / Item Name
                 val nameCell = PdfPCell(Phrase(item.name, FONT_BODY)).apply {
                     backgroundColor = rowBg
                     border = Rectangle.BOX
@@ -201,6 +182,44 @@ object ShoppingListPdfGenerator {
                     verticalAlignment = Element.ALIGN_MIDDLE
                 }
                 table.addCell(nameCell)
+
+                // Col 2: Quantity (with localized unit label appended for catalog products)
+                val unitType = item.productId?.let { productsById[it]?.unitType }
+                val numericPart = AdminShoppingListViewModel.extractEditableNumericPart(item.quantity, unitType)
+                val displayQuantity = when (unitType) {
+                    UnitType.PIECE -> "$numericPart ${strings.unitPieceBadge}"
+                    UnitType.WEIGHT -> {
+                        val localizedNum = if (language == Language.EN) numericPart.replace(',', '.') else numericPart.replace('.', ',')
+                        "$localizedNum kg"
+                    }
+                    null -> item.quantity
+                }
+                val qtyCell = PdfPCell(Phrase(displayQuantity, FONT_BODY_BOLD)).apply {
+                    backgroundColor = rowBg
+                    border = Rectangle.BOX
+                    borderColor = COLOR_BORDER
+                    borderWidth = 0.75f
+                    minimumHeight = 18f
+                    setPaddingLeft(5f)
+                    setPaddingRight(5f)
+                    setPaddingTop(3f)
+                    setPaddingBottom(3f)
+                    horizontalAlignment = Element.ALIGN_CENTER
+                    verticalAlignment = Element.ALIGN_MIDDLE
+                }
+                table.addCell(qtyCell)
+
+                // Col 3: Crisp vector checkbox square
+                val checkCell = PdfPCell(Phrase("")).apply {
+                    backgroundColor = rowBg
+                    border = Rectangle.BOX
+                    borderColor = COLOR_BORDER
+                    borderWidth = 0.75f
+                    minimumHeight = 18f
+                    setPadding(3f)
+                    cellEvent = checkboxEvent
+                }
+                table.addCell(checkCell)
             }
         }
 

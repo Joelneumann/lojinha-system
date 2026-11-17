@@ -17,14 +17,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.ShoppingListItem
+import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminShoppingListViewModel
 
 @Composable
 fun ShoppingListExportApprovalDialog(
     items: List<ShoppingListItem>,
+    productsById: Map<String, Product> = emptyMap(),
     onDismiss: () -> Unit,
     onConfirmExport: () -> Unit
 ) {
@@ -109,6 +113,13 @@ fun ShoppingListExportApprovalDialog(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 unreviewedItems.forEach { item ->
+                                    val unitType = item.productId?.let { productsById[it]?.unitType }
+                                    val numPart = AdminShoppingListViewModel.extractEditableNumericPart(item.quantity, unitType)
+                                    val displayQty = when (unitType) {
+                                        UnitType.PIECE -> "$numPart ${strings.unitPieceBadge}"
+                                        UnitType.WEIGHT -> "$numPart kg"
+                                        null -> item.quantity
+                                    }
                                     Row(
                                         modifier = Modifier.fillMaxWidth().padding(start = 26.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -124,7 +135,7 @@ fun ShoppingListExportApprovalDialog(
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = item.quantity,
+                                            text = displayQty,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = TextSecondaryMuted

@@ -23,7 +23,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
@@ -39,8 +38,17 @@ fun ShoppingListQuantityDialog(
     onConfirm: (name: String, rawQuantity: String, removeNote: Boolean) -> Boolean
 ) {
     val strings = I18n.current
+    val unitType = request.product?.unitType
+    val unitLabel = when (unitType) {
+        UnitType.PIECE -> strings.unitPieceBadge
+        UnitType.WEIGHT -> "kg"
+        null -> null
+    }
+
     val initialQty = remember(request) {
-        extractInitialQuantityInput(request.existingItem?.quantity, request.product)
+        request.existingItem?.let {
+            AdminShoppingListViewModel.extractEditableNumericPart(it.quantity, unitType)
+        } ?: ""
     }
     var qtyValue by remember(request) {
         mutableStateOf(
@@ -70,16 +78,10 @@ fun ShoppingListQuantityDialog(
         }
     }
 
-    val placeholderText = when (request.product?.unitType) {
+    val placeholderText = when (unitType) {
         UnitType.PIECE -> strings.shoppingListQuantityPlaceholderPiece
         UnitType.WEIGHT -> strings.shoppingListQuantityPlaceholderWeight
         null -> strings.shoppingListQuantityPlaceholderCustom
-    }
-
-    val unitSuffix = when (request.product?.unitType) {
-        UnitType.PIECE -> strings.unitPieceBadge
-        UnitType.WEIGHT -> "kg / g"
-        null -> null
     }
 
     AlertDialog(
@@ -134,13 +136,13 @@ fun ShoppingListQuantityDialog(
                             color = PrimaryNavy,
                             modifier = Modifier.weight(1f)
                         )
-                        if (unitSuffix != null) {
+                        if (unitLabel != null) {
                             Surface(
                                 color = AccentNavy.copy(alpha = 0.1f),
                                 shape = RoundedCornerShape(6.dp)
                             ) {
                                 Text(
-                                    text = unitSuffix,
+                                    text = unitLabel,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = AccentNavy,
@@ -153,6 +155,14 @@ fun ShoppingListQuantityDialog(
 
                 // Informational note if product is already on the list
                 request.existingItem?.let { existing ->
+                    val existingDisplay = buildString {
+                        val num = AdminShoppingListViewModel.extractEditableNumericPart(existing.quantity, unitType)
+                        append(num)
+                        if (unitLabel != null) {
+                            append(" ")
+                            append(unitLabel)
+                        }
+                    }
                     Surface(
                         color = ColorWarningAmber.copy(alpha = 0.12f),
                         shape = RoundedCornerShape(10.dp),
@@ -171,7 +181,7 @@ fun ShoppingListQuantityDialog(
                                 modifier = Modifier.size(18.dp).padding(top = 1.dp)
                             )
                             Text(
-                                text = strings.shoppingListAlreadyExistsWarning(existing.quantity),
+                                text = strings.shoppingListAlreadyExistsWarning(existingDisplay),
                                 fontSize = 12.sp,
                                 color = PrimaryNavy,
                                 lineHeight = 16.sp
@@ -180,38 +190,56 @@ fun ShoppingListQuantityDialog(
                     }
                 }
 
-                // Quantity Input
-                OutlinedTextField(
-                    value = qtyValue,
-                    onValueChange = {
-                        qtyValue = it
-                        validationError = null
-                    },
-                    label = { Text(strings.shoppingListQuantityLabel) },
-                    placeholder = { Text(placeholderText) },
-                    singleLine = true,
-                    isError = validationError != null,
-                    supportingText = validationError?.let { err ->
-                        { Text(err, color = ColorDangerCrimson) }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = when (request.product?.unitType) {
-                            UnitType.PIECE -> KeyboardType.Number
-                            UnitType.WEIGHT -> KeyboardType.Decimal
-                            null -> KeyboardType.Text
-                        },
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { submit() }),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(qtyFocusRequester)
-                        .onFocusChanged { focusState ->
-                            if (focusState.isFocused && qtyValue.text.isNotEmpty()) {
-                                qtyValue = qtyValue.copy(selection = TextRange(0, qtyValue.text.length))
+                // Quantity Input with localized Unit Label behind it
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = qtyValue,
+                        onValueChange = { newVal ->
+                            if (AdminShoppingListViewModel.isAllowedQuantityText(newVal.text, unitType)) {
+                                qtyValue = newVal
+                                validationError = null
                             }
-                        }
-                )
+                        },
+                        label = { Text(strings.shoppingListQuantityLabel) },
+                        placeholder = { Text(placeholderText) },
+                        singleLine = true,
+                        isError = validationError != null,
+                        supportingText = validationError?.let { err ->
+                            { Text(err, color = ColorDangerCrimson) }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = when (unitType) {
+                                UnitType.PIECE -> KeyboardType.Number
+                                UnitType.WEIGHT -> KeyboardType.Decimal
+                                null -> KeyboardType.Text
+                            },
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { submit() }),
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(qtyFocusRequester)
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused && qtyValue.text.isNotEmpty()) {
+                                    qtyValue = qtyValue.copy(selection = TextRange(0, qtyValue.text.length))
+                                }
+                            }
+                    )
+
+                    if (unitLabel != null) {
+                        Text(
+                            text = unitLabel,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryNavy,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                }
 
                 // Optional Remove System Note checkbox
                 if (request.sourceNoteId != null) {
@@ -255,18 +283,4 @@ fun ShoppingListQuantityDialog(
             }
         }
     )
-}
-
-private fun extractInitialQuantityInput(existingQuantity: String?, product: Product?): String {
-    if (existingQuantity.isNullOrBlank()) return ""
-    if (product == null) return existingQuantity
-    return when (product.unitType) {
-        UnitType.PIECE -> {
-            val digits = existingQuantity.takeWhile { it.isDigit() }
-            digits.ifBlank { existingQuantity }
-        }
-        UnitType.WEIGHT -> {
-            existingQuantity.removeSuffix(" kg").trim()
-        }
-    }
 }

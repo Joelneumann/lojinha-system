@@ -613,7 +613,8 @@ class LojinhaAdminServer(
                             val language = try { Language.valueOf(langStr.uppercase()) } catch (_: Exception) { Language.DE }
                             try {
                                 val items = repo.getAllItems()
-                                val pdfBytes = ShoppingListPdfGenerator.generateBytes(items, language)
+                                val products = productRepository.getAllProducts()
+                                val pdfBytes = ShoppingListPdfGenerator.generateBytes(items, language, products)
                                 repo.commitExportBaseline()
                                 val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                                 val filename = "ShoppingList_$dateStr.pdf"

@@ -536,6 +536,7 @@ fun App(
                                 coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                     try {
                                         val items = effectiveShoppingListRepo.getAllItems()
+                                        val products = effectiveProductRepo.getAllProducts()
                                         val targetDir = java.io.File(defaultSaveDir)
                                         if (!targetDir.exists()) targetDir.mkdirs()
                                         val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -543,7 +544,8 @@ fun App(
                                         de.joelneumann.lojinha.data.service.ShoppingListPdfGenerator.generatePdf(
                                             outputFile = targetFile,
                                             items = items,
-                                            language = language
+                                            language = language,
+                                            products = products
                                         )
                                         effectiveShoppingListRepo.commitExportBaseline()
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {

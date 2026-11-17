@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -58,6 +60,7 @@ import de.joelneumann.lojinha.ui.utils.pageDown
 import de.joelneumann.lojinha.ui.utils.pageUp
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminShoppingListViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 
@@ -71,7 +74,10 @@ fun AdminShoppingListTabScreen(
     focusTrigger: Int = 0
 ) {
     val items by viewModel.items.collectAsState()
+    val products by viewModel.products.collectAsState()
+    val productsById by viewModel.productsById.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val pendingModal by viewModel.pendingModalRequest.collectAsState()
     val showExportApprovalDialog by viewModel.showExportApprovalDialog.collectAsState()
     val exportResultPath by viewModel.exportResultPath.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -79,19 +85,47 @@ fun AdminShoppingListTabScreen(
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
     val searchFocusRequester = remember { FocusRequester() }
     var showClearAllConfirm by remember { mutableStateOf(false) }
 
     // Drag-and-drop state
     var draggedItemId by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableStateOf(0f) }
+    var expectedLazyIndexAfterSwap by remember { mutableStateOf<Int?>(null) }
 
-    val matchingProducts = remember(searchQuery, viewModel.products.collectAsState().value) {
-        viewModel.getMatchingProducts(searchQuery)
+    LaunchedEffect(draggedItemId) {
+        while (draggedItemId != null) {
+            val activeId = draggedItemId ?: break
+            val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == activeId }
+            if (info != null) {
+                val viewportStart = listState.layoutInfo.viewportStartOffset.toFloat()
+                val viewportEnd = listState.layoutInfo.viewportEndOffset.toFloat()
+                val itemTop = info.offset + dragOffsetY
+                val itemBottom = itemTop + info.size
+                val scrollStep = when {
+                    itemTop < viewportStart + 44f && listState.canScrollBackward -> -12f
+                    itemBottom > viewportEnd - 44f && listState.canScrollForward -> 12f
+                    else -> 0f
+                }
+                if (scrollStep != 0f) {
+                    val consumed = listState.scrollBy(scrollStep)
+                    dragOffsetY += consumed
+                }
+            }
+            delay(16L)
+        }
     }
 
-    LaunchedEffect(focusTrigger) {
-        if (!showClearAllConfirm && !showExportApprovalDialog && errorMessage == null) {
+    val matchingProducts = remember(searchQuery, products) {
+        viewModel.getMatchingProducts(searchQuery)
+    }
+    var highlightedSuggestionIndex by remember(searchQuery, matchingProducts) {
+        mutableStateOf(-1)
+    }
+
+    LaunchedEffect(focusTrigger, pendingModal) {
+        if (pendingModal == null && !showClearAllConfirm && !showExportApprovalDialog && errorMessage == null) {
             searchFocusRequester.safeRequestFocus()
         }
     }
@@ -110,18 +144,64 @@ fun AdminShoppingListTabScreen(
     val handleQuickAddFromSearch = {
         val trimmed = searchQuery.trim()
         if (trimmed.isNotEmpty()) {
-            val exactProduct = matchingProducts.firstOrNull { it.name.equals(trimmed, ignoreCase = true) }
-            if (exactProduct != null) {
-                viewModel.requestAddProduct(exactProduct)
+            if (highlightedSuggestionIndex in matchingProducts.indices) {
+                viewModel.requestAddProduct(matchingProducts[highlightedSuggestionIndex])
             } else {
-                viewModel.requestAddCustomItem(trimmed)
+                viewModel.requestAddCustomItem(trimmed, forceCustom = true)
             }
+            viewModel.updateSearchQuery("")
+            highlightedSuggestionIndex = -1
         }
+    }
+
+    val searchKeyHandler: (KeyEvent) -> Boolean = { keyEvent ->
+        if (keyEvent.type == KeyEventType.KeyDown && searchQuery.isNotBlank()) {
+            when (keyEvent.key) {
+                Key.Tab -> {
+                    if (matchingProducts.isNotEmpty()) {
+                        highlightedSuggestionIndex = if (keyEvent.isShiftPressed) {
+                            if (highlightedSuggestionIndex <= -1) matchingProducts.lastIndex else highlightedSuggestionIndex - 1
+                        } else {
+                            if (highlightedSuggestionIndex >= matchingProducts.lastIndex) -1 else highlightedSuggestionIndex + 1
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                Key.DirectionDown -> {
+                    if (matchingProducts.isNotEmpty()) {
+                        highlightedSuggestionIndex = if (highlightedSuggestionIndex >= matchingProducts.lastIndex) -1 else highlightedSuggestionIndex + 1
+                        true
+                    } else false
+                }
+                Key.DirectionUp -> {
+                    if (matchingProducts.isNotEmpty()) {
+                        highlightedSuggestionIndex = if (highlightedSuggestionIndex <= -1) matchingProducts.lastIndex else highlightedSuggestionIndex - 1
+                        true
+                    } else false
+                }
+                Key.Escape -> {
+                    if (highlightedSuggestionIndex >= 0) {
+                        highlightedSuggestionIndex = -1
+                        true
+                    } else false
+                }
+                Key.Enter, Key.NumPadEnter -> {
+                    handleQuickAddFromSearch()
+                    true
+                }
+                else -> false
+            }
+        } else false
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { focusManager.clearFocus() })
+            }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && !showClearAllConfirm && !showExportApprovalDialog && errorMessage == null) {
                     when (event.key) {
@@ -158,6 +238,7 @@ fun AdminShoppingListTabScreen(
                                 onQueryChange = viewModel::updateSearchQuery,
                                 placeholder = strings.shoppingListSearchOrAddPlaceholder,
                                 onSearchSubmitted = handleQuickAddFromSearch,
+                                onKeyDown = searchKeyHandler,
                                 focusRequester = searchFocusRequester,
                                 modifier = Modifier.fillMaxSize()
                             )
@@ -262,6 +343,7 @@ fun AdminShoppingListTabScreen(
                             onQueryChange = viewModel::updateSearchQuery,
                             placeholder = strings.shoppingListSearchOrAddPlaceholder,
                             onSearchSubmitted = handleQuickAddFromSearch,
+                            onKeyDown = searchKeyHandler,
                             focusRequester = searchFocusRequester,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -354,14 +436,17 @@ fun AdminShoppingListTabScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    matchingProducts.forEach { product ->
+                    matchingProducts.forEachIndexed { idx, product ->
                         val alreadyInList = items.any { it.productId == product.id }
+                        val isHighlighted = idx == highlightedSuggestionIndex
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(if (isHighlighted) AccentNavy.copy(alpha = 0.10f) else Color.Transparent)
                                 .clickable {
                                     viewModel.requestAddProduct(product)
                                     viewModel.updateSearchQuery("")
+                                    highlightedSuggestionIndex = -1
                                 }
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -375,13 +460,13 @@ fun AdminShoppingListTabScreen(
                                 Icon(
                                     imageVector = Icons.Default.Inventory2,
                                     contentDescription = null,
-                                    tint = AccentNavy,
+                                    tint = if (isHighlighted) AccentNavy else AccentNavy.copy(alpha = 0.75f),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
                                     text = product.name,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
+                                    fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
                                     color = PrimaryNavy
                                 )
                                 Text(
@@ -420,12 +505,15 @@ fun AdminShoppingListTabScreen(
                     }
 
                     // Option to add typed text as custom item
+                    val isCustomDefault = highlightedSuggestionIndex == -1
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .background(if (isCustomDefault) ColorSuccessEmerald.copy(alpha = 0.08f) else Color.Transparent)
                             .clickable {
-                                viewModel.requestAddCustomItem(searchQuery.trim())
+                                viewModel.requestAddCustomItem(searchQuery.trim(), forceCustom = true)
                                 viewModel.updateSearchQuery("")
+                                highlightedSuggestionIndex = -1
                             }
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -440,7 +528,7 @@ fun AdminShoppingListTabScreen(
                         Text(
                             text = strings.shoppingListAddCustomItem(searchQuery.trim()),
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = if (isCustomDefault) FontWeight.Bold else FontWeight.SemiBold,
                             color = ColorSuccessEmerald
                         )
                     }
@@ -583,15 +671,21 @@ fun AdminShoppingListTabScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
+                    // Fixed top anchor prevents LazyColumn from jumping scroll when swapping the first item
+                    item(key = "top-anchor") {
+                        Spacer(modifier = Modifier.height(1.dp))
+                    }
+
                     itemsIndexed(
                         items = items,
                         key = { _, item -> item.id }
-                    ) { index, item ->
+                    ) { _, item ->
                         val isDragging = draggedItemId == item.id
-                        val currentIndex by rememberUpdatedState(index)
+                        val unitType = item.productId?.let { productsById[it]?.unitType }
 
                         ShoppingListRowCard(
                             item = item,
+                            unitType = unitType,
                             isDragging = isDragging,
                             dragOffsetY = if (isDragging) dragOffsetY else 0f,
                             onDragModifier = Modifier
@@ -599,29 +693,50 @@ fun AdminShoppingListTabScreen(
                                 .pointerInput(item.id) {
                                     detectDragGestures(
                                         onDragStart = {
+                                            focusManager.clearFocus()
                                             draggedItemId = item.id
                                             dragOffsetY = 0f
+                                            expectedLazyIndexAfterSwap = null
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
                                             dragOffsetY += dragAmount.y
 
-                                            val visibleItems = listState.layoutInfo.visibleItemsInfo
+                                            val visibleItems = listState.layoutInfo.visibleItemsInfo.filter { it.key != "top-anchor" }
                                             val draggedInfo = visibleItems.firstOrNull { it.key == item.id } ?: return@detectDragGestures
-                                            val draggedCenter = draggedInfo.offset + draggedInfo.size / 2f + dragOffsetY
 
-                                            // Check if we crossed over an adjacent visible item
+                                            // Gate further swaps until Compose layout reflects the previous swap
+                                            val expectedIdx = expectedLazyIndexAfterSwap
+                                            if (expectedIdx != null) {
+                                                if (draggedInfo.index != expectedIdx) {
+                                                    return@detectDragGestures
+                                                }
+                                                expectedLazyIndexAfterSwap = null
+                                            }
+
+                                            val draggedTop = draggedInfo.offset + dragOffsetY
+                                            val draggedBottom = draggedTop + draggedInfo.size
+
+                                            // Directional midpoint crossing prevents ping-pong oscillation
                                             val targetInfo = visibleItems.firstOrNull { candidate ->
-                                                candidate.key != item.id &&
-                                                    draggedCenter in candidate.offset.toFloat()..(candidate.offset + candidate.size).toFloat()
+                                                if (candidate.key == item.id) return@firstOrNull false
+                                                val candidateMid = candidate.offset + candidate.size / 2f
+                                                if (dragOffsetY > 0f && candidate.index > draggedInfo.index) {
+                                                    draggedBottom > candidateMid
+                                                } else if (dragOffsetY < 0f && candidate.index < draggedInfo.index) {
+                                                    draggedTop < candidateMid
+                                                } else {
+                                                    false
+                                                }
                                             }
 
                                             if (targetInfo != null) {
-                                                val fromIdx = currentIndex
-                                                val toIdx = targetInfo.index
+                                                val fromIdx = currentItemsState.indexOfFirst { it.id == item.id }
+                                                val toIdx = currentItemsState.indexOfFirst { it.id == targetInfo.key }
                                                 if (fromIdx in currentItemsState.indices && toIdx in currentItemsState.indices && fromIdx != toIdx) {
                                                     val offsetDelta = targetInfo.offset - draggedInfo.offset
                                                     dragOffsetY -= offsetDelta.toFloat()
+                                                    expectedLazyIndexAfterSwap = targetInfo.index
                                                     viewModel.moveItem(fromIdx, toIdx)
                                                 }
                                             }
@@ -629,11 +744,13 @@ fun AdminShoppingListTabScreen(
                                         onDragEnd = {
                                             draggedItemId = null
                                             dragOffsetY = 0f
+                                            expectedLazyIndexAfterSwap = null
                                             viewModel.persistCurrentOrder()
                                         },
                                         onDragCancel = {
                                             draggedItemId = null
                                             dragOffsetY = 0f
+                                            expectedLazyIndexAfterSwap = null
                                             viewModel.persistCurrentOrder()
                                         }
                                     )
@@ -676,6 +793,7 @@ fun AdminShoppingListTabScreen(
     if (showExportApprovalDialog) {
         ShoppingListExportApprovalDialog(
             items = items,
+            productsById = productsById,
             onDismiss = { viewModel.dismissExportApprovalDialog() },
             onConfirmExport = {
                 viewModel.dismissExportApprovalDialog()
@@ -712,6 +830,7 @@ fun AdminShoppingListTabScreen(
 @Composable
 private fun ShoppingListRowCard(
     item: ShoppingListItem,
+    unitType: UnitType?,
     isDragging: Boolean,
     dragOffsetY: Float,
     onDragModifier: Modifier,
@@ -721,12 +840,21 @@ private fun ShoppingListRowCard(
 ) {
     val strings = I18n.current
     val focusManager = LocalFocusManager.current
+    val unitLabel = when (unitType) {
+        UnitType.PIECE -> strings.unitPieceBadge
+        UnitType.WEIGHT -> "kg"
+        null -> null
+    }
+
+    val editableQty = remember(item.id, item.quantity, unitType) {
+        AdminShoppingListViewModel.extractEditableNumericPart(item.quantity, unitType)
+    }
 
     var nameField by remember(item.id, item.name) {
         mutableStateOf(TextFieldValue(item.name))
     }
-    var qtyField by remember(item.id, item.quantity) {
-        mutableStateOf(TextFieldValue(item.quantity))
+    var qtyField by remember(item.id, editableQty) {
+        mutableStateOf(TextFieldValue(editableQty))
     }
 
     val (cardBg, borderColor) = when {
@@ -779,13 +907,25 @@ private fun ShoppingListRowCard(
                 )
             }
 
+            val commitIfChanged = { confirm: Boolean ->
+                val hasTextChanges = nameField.text.trim() != item.name || qtyField.text.trim() != editableQty
+                if (hasTextChanges || confirm) {
+                    onUpdateInPlace(nameField.text, qtyField.text, confirm)
+                }
+            }
+
             // Directly Editable Name Textbox
             InlineSelectAllTextField(
                 value = nameField,
                 onValueChange = { nameField = it },
                 onCommit = { confirm ->
-                    onUpdateInPlace(nameField.text, qtyField.text, confirm)
+                    commitIfChanged(confirm)
                 },
+                onCancel = {
+                    nameField = TextFieldValue(item.name)
+                    focusManager.clearFocus()
+                },
+                onClearFocus = { focusManager.clearFocus() },
                 onTabNavigate = { reverse ->
                     focusManager.moveFocus(if (reverse) FocusDirection.Previous else FocusDirection.Next)
                 },
@@ -797,23 +937,49 @@ private fun ShoppingListRowCard(
                 modifier = Modifier.weight(1f)
             )
 
-            // Directly Editable Quantity Textbox
-            InlineSelectAllTextField(
-                value = qtyField,
-                onValueChange = { qtyField = it },
-                onCommit = { confirm ->
-                    onUpdateInPlace(nameField.text, qtyField.text, confirm)
-                },
-                onTabNavigate = { reverse ->
-                    focusManager.moveFocus(if (reverse) FocusDirection.Previous else FocusDirection.Next)
-                },
-                textStyle = TextStyle(
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy
-                ),
-                modifier = Modifier.width(170.dp)
-            )
+            // Directly Editable Quantity Textbox + Localized Unit Label Behind Input Field
+            Row(
+                modifier = Modifier.width(170.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                InlineSelectAllTextField(
+                    value = qtyField,
+                    onValueChange = { newVal ->
+                        if (AdminShoppingListViewModel.isAllowedQuantityText(newVal.text, unitType)) {
+                            qtyField = newVal
+                        }
+                    },
+                    onCommit = { confirm ->
+                        commitIfChanged(confirm)
+                    },
+                    onCancel = {
+                        qtyField = TextFieldValue(editableQty)
+                        focusManager.clearFocus()
+                    },
+                    onClearFocus = { focusManager.clearFocus() },
+                    onTabNavigate = { reverse ->
+                        focusManager.moveFocus(if (reverse) FocusDirection.Previous else FocusDirection.Next)
+                    },
+                    textStyle = TextStyle(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (unitLabel != null) {
+                    Text(
+                        text = unitLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextSecondaryMuted,
+                        maxLines = 1,
+                        modifier = Modifier.width(34.dp)
+                    )
+                }
+            }
 
             // Status Helper Pill
             Surface(
@@ -885,6 +1051,8 @@ private fun InlineSelectAllTextField(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
     onCommit: (confirm: Boolean) -> Unit,
+    onCancel: () -> Unit,
+    onClearFocus: () -> Unit,
     onTabNavigate: (reverse: Boolean) -> Unit,
     textStyle: TextStyle,
     modifier: Modifier = Modifier
@@ -909,6 +1077,7 @@ private fun InlineSelectAllTextField(
         keyboardActions = KeyboardActions(
             onDone = {
                 onCommit(true)
+                onClearFocus()
             }
         ),
         modifier = modifier
@@ -932,6 +1101,10 @@ private fun InlineSelectAllTextField(
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
+                        Key.Escape -> {
+                            onCancel()
+                            true
+                        }
                         Key.Tab -> {
                             onCommit(false)
                             onTabNavigate(event.isShiftPressed)
@@ -939,7 +1112,7 @@ private fun InlineSelectAllTextField(
                         }
                         Key.Enter, Key.NumPadEnter -> {
                             onCommit(true)
-                            onTabNavigate(false)
+                            onClearFocus()
                             true
                         }
                         else -> false

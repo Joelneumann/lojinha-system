@@ -145,12 +145,47 @@ class AdminShoppingListViewModelTest {
         vm.requestAddProduct(bananas)
         vm.confirmModalAdd("Bananas", "2,5", bananas, null, null, removeNote = false)
 
-        // Request adding Bananas again -> existingItem should be populated
+        // Request adding Bananas again -> existingItem should be populated with normalized numeric quantity
         vm.requestAddProduct(bananas)
         val secondModal = vm.pendingModalRequest.value
         assertNotNull(secondModal)
         assertNotNull(secondModal.existingItem)
-        assertEquals("2,5 kg", secondModal.existingItem?.quantity)
+        assertEquals("2,5", secondModal.existingItem?.quantity)
+    }
+
+    @Test
+    fun testRankedSearchAndCustomForceAndQuantityFilter() = runTest {
+        val iceTea = Product(id = "p-1", name = "Mate Ice Tea", basePrice = 400L, unitType = UnitType.PIECE, stockQuantity = 5L)
+        val clubMate = Product(id = "p-2", name = "Club Mate", basePrice = 500L, unitType = UnitType.PIECE, stockQuantity = 5L)
+        val mate = Product(id = "p-3", name = "Mate", basePrice = 300L, unitType = UnitType.WEIGHT, stockQuantity = 1000L)
+
+        val vm = AdminShoppingListViewModel(
+            FakeShoppingListRepository(),
+            FakeProductRepository(listOf(clubMate, iceTea, mate))
+        )
+
+        // Exact match "Mate" -> Tier 0, "Mate Ice Tea" starts with -> Tier 1, "Club Mate" word starts -> Tier 2
+        val ranked = vm.getMatchingProducts("Mate")
+        assertEquals(listOf("Mate", "Mate Ice Tea", "Club Mate"), ranked.map { it.name })
+
+        // Force custom item even when "Mate" exists in catalog (Search -> Enter workflow)
+        vm.requestAddCustomItem("Mate", forceCustom = true)
+        val customModal = vm.pendingModalRequest.value
+        assertNotNull(customModal)
+        assertNull(customModal.product)
+        assertEquals("Mate", customModal.customName)
+
+        // Quantity character filtering by unit type
+        assertTrue(AdminShoppingListViewModel.isAllowedQuantityText("123", UnitType.PIECE))
+        assertFalse(AdminShoppingListViewModel.isAllowedQuantityText("12.5", UnitType.PIECE))
+        assertFalse(AdminShoppingListViewModel.isAllowedQuantityText("12a", UnitType.PIECE))
+
+        assertTrue(AdminShoppingListViewModel.isAllowedQuantityText("2,5", UnitType.WEIGHT))
+        assertTrue(AdminShoppingListViewModel.isAllowedQuantityText("2.5", UnitType.WEIGHT))
+        assertFalse(AdminShoppingListViewModel.isAllowedQuantityText("2,5.1", UnitType.WEIGHT))
+        assertFalse(AdminShoppingListViewModel.isAllowedQuantityText("2kg", UnitType.WEIGHT))
+
+        assertTrue(AdminShoppingListViewModel.isAllowedQuantityText("2 packs", null))
     }
 
     @Test
@@ -174,5 +209,15 @@ class AdminShoppingListViewModelTest {
         vm.confirmItem("1")
         assertFalse(vm.items.value.first { it.id == "1" }.isPendingReview)
         assertTrue(vm.items.value.first { it.id == "2" }.isPendingReview)
+
+        // Focus-loss without text changes (even with legacy unit suffix in baseline) must NOT mark item edited
+        val milkWithLegacy = Product(id = "p-milk", name = "Milk", basePrice = 100L, unitType = UnitType.PIECE)
+        val repo2 = FakeShoppingListRepository()
+        repo2.itemsFlow.value = listOf(
+            ShoppingListItem(id = "m1", productId = "p-milk", name = "Milk", quantity = "10 Stk.", sortOrder = 0, lastExportedName = "Milk", lastExportedQuantity = "10 Stk.", isConfirmedForCurrentExport = false)
+        )
+        val vm2 = AdminShoppingListViewModel(repo2, FakeProductRepository(listOf(milkWithLegacy)))
+        vm2.updateItemInPlace("m1", "Milk", "10", confirm = false)
+        assertTrue(vm2.items.value.first().isPendingReview, "Unchanged quantity on blur must remain unadjusted")
     }
 }

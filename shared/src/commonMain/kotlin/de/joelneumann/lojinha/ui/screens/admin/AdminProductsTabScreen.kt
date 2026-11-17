@@ -39,6 +39,7 @@ import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 
 @Composable
@@ -102,18 +103,12 @@ fun AdminProductsTabScreen(
 
     val filteredActiveProducts = remember(activeProducts, searchQuery) {
         if (searchQuery.isBlank()) activeProducts
-        else activeProducts.filter { p ->
-            p.name.containsIgnoreAccents(searchQuery) ||
-                    p.barcodes.any { b -> b.code.containsIgnoreAccents(searchQuery) || (b.description != null && b.description.containsIgnoreAccents(searchQuery)) }
-        }
+        else activeProducts.filterAndRankProducts(searchQuery)
     }
 
     val filteredDisabledProducts = remember(disabledProducts, searchQuery) {
         if (searchQuery.isBlank()) disabledProducts
-        else disabledProducts.filter { p ->
-            p.name.containsIgnoreAccents(searchQuery) ||
-                    p.barcodes.any { b -> b.code.containsIgnoreAccents(searchQuery) || (b.description != null && b.description.containsIgnoreAccents(searchQuery)) }
-        }
+        else disabledProducts.filterAndRankProducts(searchQuery)
     }
 
     val totalMatches = filteredActiveProducts.size + filteredDisabledProducts.size
