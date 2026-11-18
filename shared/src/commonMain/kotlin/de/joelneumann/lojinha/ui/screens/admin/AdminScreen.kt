@@ -45,6 +45,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
+import de.joelneumann.lojinha.ui.utils.setBrowserBeforeUnloadWarning
 
 enum class AdminTab {
     NOTES,
@@ -126,6 +127,14 @@ fun AdminScreen(
     var expandedTransactionId by remember { mutableStateOf<String?>(null) }
 
     var hasUnsavedChanges by remember { mutableStateOf(false) }
+
+    DisposableEffect(hasUnsavedChanges) {
+        setBrowserBeforeUnloadWarning(hasUnsavedChanges)
+        onDispose {
+            setBrowserBeforeUnloadWarning(false)
+        }
+    }
+
     var pendingTabSwitch by remember { mutableStateOf<AdminTab?>(null) }
     var isExitAdminPending by remember { mutableStateOf(false) }
     var activePageScroller by remember { mutableStateOf<((Boolean) -> Boolean)?>(null) }

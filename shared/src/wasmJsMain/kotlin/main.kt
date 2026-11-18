@@ -470,6 +470,7 @@ private fun KioskOfflineBlockingOverlay(onRetryClick: () -> Unit) {
 
 @JsFun("""
 (showAdminRestartNotice) => {
+    window.onbeforeunload = null;
     try {
         if (showAdminRestartNotice) {
             window.sessionStorage.setItem('lojinha_admin_restart_notice', '1');
