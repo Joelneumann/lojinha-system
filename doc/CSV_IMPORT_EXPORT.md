@@ -2,7 +2,7 @@
 
 Lojinha supports importing and exporting user accounts, product catalogs, billing lists, and transactions via standard Comma-Separated Values (CSV) files.
 
-Admins can access CSV operations from the **Admin Panel** (`F5` Settings $\rightarrow$ **Import Data from CSV Files** or **Configured Backup Routines** with CSV format).
+Admins can access CSV operations from the **Admin Panel** (`F8` Settings $\rightarrow$ **Import Data from CSV Files** or **Configured Backup Routines** with CSV format).
 
 ---
 
@@ -53,6 +53,10 @@ Discontinued Soda,7891234567890,3.00,PIECE,0,,false
 | `avatarType` | `avatar_type` | Enum | Optional | `INITIALS` or `EMOJI`. Default: `INITIALS`. |
 | `avatarEmoji` | `avatar_emoji`, `emoji` | String | Optional | Emoji icon if avatarType is `EMOJI` (e.g., `☕`, `🚀`, `⭐`). |
 | `avatarColor` | `avatar_color`, `color` | Hex Color | Optional | Background hex color (e.g., `#1E293B`, `#2563EB`). |
+| `requirePinOnKiosk` | `require_pin_on_kiosk` | Boolean | Optional | Whether PIN is required on the Desktop POS kiosk (`true` or `false`). Default: `true`. |
+
+> [!NOTE]
+> Exported `users.csv` backups also include a `nickname` column (`id;name;nickname;...;requirePinOnKiosk`). During CSV import, `nickname` is not currently parsed.
 
 ### Example `users.csv`
 
@@ -124,7 +128,7 @@ When running a CSV backup routine, Lojinha creates a folder (`lojinha_csv_export
 Exported files include:
 
 1. **`products.csv`**: Full product catalog (`id;name;barcodes;basePrice;unitType;stockQuantity;customMarkupPercent;isActive`).
-2. **`users.csv`**: All accounts including balances, avatar configs, and hashed PINs (`id;name;balance;language;secondaryCurrency;pin;userBarcode;userBarcodeNumber;isActive;isDeleted;avatarType;avatarEmoji;avatarColor`).
+2. **`users.csv`**: All accounts including nicknames, balances, avatar configs, kiosk PIN enforcement, and hashed PINs (`id;name;nickname;balance;language;secondaryCurrency;pin;userBarcode;userBarcodeNumber;isActive;isDeleted;avatarType;avatarEmoji;avatarColor;requirePinOnKiosk`).
 3. **`transactions.csv`**: Complete audit ledger with columns:
    ```csv
    id;userId;userNameSnapshot;timestamp;type;referenceTransactionId;note;totalAmount;itemCount;items;userBalanceBefore;userBalanceAfter
@@ -137,5 +141,5 @@ Exported files include:
    ```csv
    id;userId;userNameSnapshot;timestamp;message
    ```
-6. **`veggie_products.csv`**: Veggie catalog (`id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;isActive;isDeleted;deliveryUnitTypeId`).
+6. **`veggie_products.csv`**: Veggie catalog (`id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;excludeFromBuyerPdf;isActive;isDeleted;deliveryUnitTypeId`). *(Note: `excludeFromBuyerPdf` is included in CSV exports and preserved on backups; it is not parsed on CSV import.)*
 7. **`veggie_orders.csv`**: Veggie order rounds, entries, and per-product settlements (`roundId;isoYear;weekOfYear;openedAt;closedAt;settledAt;status;buyerOperationFee;transportFee;transporterUserId;entryId;userId;userName;veggieProductId;veggieName;unitName;allowDecimals;orderedQuantity;actualQuantity;marketUnitPrice;productTotalSpent;effectiveUnitPrice;finalItemTotal;deliveryUnitName;deliveryAllowDecimals`).

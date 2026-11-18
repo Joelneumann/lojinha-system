@@ -133,6 +133,7 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 * **Balance Flow Tracker:** Displays before-and-after balance progression on every entry (e.g. `R$ 50,00 → R$ 34,50`).
 * **Search & Filters:** Instant search filter (searches items, notes, IDs, and dates) and transaction type chips (`ALL`, `PURCHASE`, `DEPOSIT`, `WITHDRAWAL`, `CORRECTION`, `CANCELLATION`).
 * **User Settings Modal:**
+  * Set or edit a unique short **Nickname** (max 10 characters, displayed in Veggie Worker PDFs and sorting matrices).
   * Change or remove numeric PIN with show/hide toggle.
   * Change preferred language (`BR`, `EN`, `DE`).
   * Select optional **Secondary Display Currency** (`NONE`, `USD`, `EUR`).
@@ -143,7 +144,7 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 
 ### Admin Management
 
-*Protected by the master Admin Password.* Accessible via the desktop app or the remote Kotlin/Wasm web console. Includes an **Unsaved Changes Guard** modal preventing accidental tab navigation or logout with uncommitted edits, persistent scrollbars, and keyboard-first workflows across all admin views (`F1`–`F8` tab switching, `Ctrl+F` / `Cmd+F` search focus, `Esc` to collapse open cards, `PageUp` / `PageDown` list scrolling, and `Enter` / `Tab` rapid entry flows).
+*Protected by the master Admin Password.* Accessible via the desktop app or the remote Kotlin/Wasm web console. Includes an **Unsaved Changes Guard** modal (plus browser `beforeunload` unload warning on the Web Admin page) preventing accidental tab navigation, page close, or logout with uncommitted edits, persistent scrollbars, and keyboard-first workflows across all admin views (`F1`–`F8` tab switching, `Ctrl+F` / `Cmd+F` search focus, `Esc` to collapse open cards, `PageUp` / `PageDown` list scrolling, and `Enter` / `Tab` rapid entry flows).
 
 ```
 [ F1: Notes ]  [ F2: Products ]  [ F3: Shopping List ]  [ F4: Users ]  [ F5: Bulk Billing ]  [ F6: Veggie Orders ]  [ F7: Transactions ]  [ F8: Settings ]
@@ -182,7 +183,7 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
   * Exporting commits the new baseline (`lastExportedName`, `lastExportedQuantity`) so items transition cleanly into the next weekly review cycle.
 
 #### 4. Users Tab (`F4`)
-* Create and edit users (Name, Language, PIN, Barcode, Barcode ID, and Avatar config).
+* Create and edit users (Name, unique Nickname up to 10 chars, Language, PIN, Kiosk PIN enforcement toggle `requirePinOnKiosk`, Barcode, Barcode ID, and Avatar config).
 * Segregated collapsible sections: **Active Accounts**, **Deactivated Accounts**, and **Deleted Accounts** with 1-click reactivate/restore workflows.
 * Inline quick balance adjustment (`+` / `-`) with Enter key support.
 * **Custom Income / Expense Dialogs:** Add deposits or deductions with customizable note descriptions.
@@ -197,9 +198,11 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 * 1-click **Execute Billing** runs an atomic batch transaction across all assigned members, logs individual debit transactions, and updates the `lastExecutionTime` tracker.
 
 #### 6. Veggie Orders Tab (`F6`)
-* Manage weekly **Veggie Order Rounds** (auto-scheduled or manual open/close/reopen/settle), dual-unit catalog products with thumbnails, custom unit types, and CSV import (`veggie_products.csv`).
-* Interactive settlement matrix with draft persistence, buyer shopping list PDF, worker sorting matrix PDF, and customer order form PDF exports.
-* Customers can place and review orders directly through the mobile-friendly **Customer Network Portal** (`HttpOnly` cookie sessions + PWA offline resilience).
+* Manage weekly **Veggie Order Rounds** (manual open/close/reopen/delete, or automated weekly opening via `VeggieRoundAutoScheduler` with configurable day, time, and default fees), dual-unit catalog products with thumbnails, custom unit types, buyer PDF exclusion (`excludeFromBuyerPdf`), and CSV import (`veggie_products.csv`).
+* Searchable **Add / Edit Order** modal for managing customer entries directly in the round.
+* Interactive settlement matrix with draft persistence, Largest Remainder proportional cost distribution, equal fee splitting, transporter credit, and re-settlement differential corrections.
+* Export **Buyer Shopping List PDF** (respecting `excludeFromBuyerPdf`), **Worker Sorting Matrix PDF** (using `User.veggieDisplayName` / `nickname`), and blank **Customer Order Form PDF**.
+* Customers can place and review orders directly through the mobile-friendly **Customer Network Portal** (see [Veggie Orders & Customer Portal Guide](doc/VEGGIE_ORDERS.md)).
 
 #### 7. Transactions Tab (`F7`)
 * Searchable, filterable system-wide transaction history backed by Room database pagination.
@@ -229,12 +232,12 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 
 ---
 
-## 🌐 Remote Web Admin Console (Kotlin/Wasm)
+## 🌐 Remote Web Admin Console & Customer Portal (Kotlin/Wasm)
 
-The desktop application includes an integrated **Ktor Netty Web Server** serving a **Compose Multiplatform for Web (Kotlin/Wasm)** Single-Page Application:
+The desktop application includes an integrated **Ktor Netty Web Server** serving a **Compose Multiplatform for Web (Kotlin/Wasm)** Single-Page Application for both administrators and customers:
 
 * **Automatic Binding:** Starts on `http://0.0.0.0:8080` (falls back to `8081` if busy) when the desktop kiosk launches.
-* **LAN Accessibility:** Any device (phone, tablet, PC) on the same local network can access the admin portal via browser.
+* **LAN Accessibility:** Any device (phone, tablet, PC) on the same local network can access the admin or customer portal via browser.
 * **Security & Hardening:**
   * Native HTML login (`/login.html`) issuing `HttpOnly` session cookies (`lojinha_admin_session`, `lojinha_customer_session`) with SHA-256 token hashing on the server.
   * Tiered brute-force rate limiting (IP + account lockout) and strict `CSP` / `X-Frame-Options` / `X-Content-Type-Options` / `Referrer-Policy` headers.
@@ -243,7 +246,13 @@ The desktop application includes an integrated **Ktor Netty Web Server** serving
   * Automatic **Gzip compression** for Wasm, JS, and static assets when supported by the client.
   * RFC-compliant **`ETag` validation** and **`Cache-Control`** policies (1-year immutable caching for content-hashed `.wasm` chunks; `no-cache` with ETag revalidation for entry HTML/JS).
   * Deferred script loading for faster initial paint.
-* **Real-time Synchronization:** Built-in **Server-Sent Events (SSE)** endpoint (`/api/admin/events`) notifies connected web clients whenever database changes occur on the kiosk or another client.
+* **Real-time Synchronization:** Built-in **Server-Sent Events (SSE)** endpoints (`/api/admin/events` and `/api/customer/events`) notify connected web clients whenever database changes occur on the kiosk or another client.
+
+### 📱 Customer Network Portal (PWA)
+* **Veggie Ordering & Favorites:** Browse active produce items, toggle personal favorites, place or update orders during `OPEN` rounds, and inspect past round history.
+* **Account & Statements:** View live prepaid balance (with low/negative balance warning banners), paginated transaction history, and export A4 PDF account statements directly from the browser.
+* **Self-Service Settings & Notes:** Update personal nickname, PIN, language, secondary currency, and avatar, or submit product suggestions/notes to admins.
+* **Mobile UX:** Responsive layout with mobile keyboard/viewport handling to prevent horizontal viewport scrolling on iOS and Android browsers.
 
 ---
 
@@ -304,6 +313,7 @@ Detailed architecture specifications, configuration guides, and data formats are
 | Document | Description |
 | :--- | :--- |
 | [📐 Domain Models & Lifecycle Rules](doc/DOMAIN_MODELS.md) | Database entities, state transitions, barcode encoding, balance calculations, and immutability invariants. |
+| [🥬 Veggie Orders & Customer Portal](doc/VEGGIE_ORDERS.md) | Weekly produce ordering rounds, auto-open scheduling, Largest Remainder settlement math, PDFs, and Customer Network Portal (PWA). |
 | [☁️ OneDrive Setup Guide](doc/ONEDRIVE_SETUP.md) | Azure App Registration, OAuth2 PKCE configuration, MS Graph permissions, and automated routine setup. |
 | [💾 Storage Locations & Diagnostics](doc/STORAGE_LOCATIONS.md) | SQLite database paths, WAL mode, rolling log specifications, startup safety snapshots, and disaster recovery. |
 | [📊 CSV Import & Export Specification](doc/CSV_IMPORT_EXPORT.md) | CSV formats for products, users, transactions, and billing lists, schema validation, barcode syntax, and balance adjustment audits. |

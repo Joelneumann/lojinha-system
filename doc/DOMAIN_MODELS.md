@@ -37,10 +37,12 @@ Defined in [`User.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/do
 |---|---|---|
 | `id` | `String` (UUID) | Unique primary key. |
 | `name` | `String` | Unique user name displayed in kiosk and admin views. |
+| `nickname` | `String?` | Optional unique short nickname (max `MAX_USER_NICKNAME_LENGTH = 10` chars), used by `veggieDisplayName` in Veggie Worker PDFs and sorting matrices. |
 | `balance` | `Long` | Current account balance in cents. Can be negative (no hard credit limit enforced). |
 | `language` | `Language` | Preferred UI language (`BR`, `EN`, `DE`). Default: `DE`. |
 | `secondaryCurrency` | `SecondaryCurrency` | Visual reference currency (`NONE`, `USD`, `EUR`). Default: `NONE`. |
 | `pin` | `String?` | Optional numeric PIN, hashed using SHA-256 with salt. |
+| `requirePinOnKiosk` | `Boolean` | Whether the PIN prompt is enforced when logging in on the Desktop POS kiosk. Default: `true`. |
 | `userBarcode` | `String?` | Optional scanned barcode string (e.g., Code 128 / EAN). |
 | `userBarcodeNumber` | `String?` | Optional visual barcode identifier displayed on badges/cards. |
 | `isActive` | `Boolean` | Whether the user is active on the POS terminal. Default: `true`. |
@@ -192,6 +194,12 @@ Single-row configuration entity persisted in Room SQLite.
 | `oneDriveAccountEmail` | `String?` | `null` | Display email of connected Microsoft account. |
 | `oneDriveAccountName` | `String?` | `null` | Display name of connected Microsoft account. |
 | `oneDriveDefaultFolder` | `String` | `"/LojinhaBackups"` | Target folder in user's OneDrive. |
+| `oneDriveTenant` | `String` | `"common"` | Microsoft Entra tenant identifier for OAuth2 PKCE. |
+| `veggieAutoOpenEnabled` | `Boolean` | `false` | Enables automatic weekly Veggie Order round opening. |
+| `veggieAutoOpenDayOfWeek` | `Int` | `1` | ISO day of week (`1` = Monday .. `7` = Sunday) for auto-opening rounds. |
+| `veggieAutoOpenTime` | `String` | `"08:00"` | Local 24-hour `"HH:mm"` time slot for auto-opening rounds. |
+| `defaultVeggieBuyerFeeCents` | `Long` | `0L` | Default buyer operation fee (in cents) pre-filled on new rounds. |
+| `defaultVeggieTransportFeeCents` | `Long` | `0L` | Default transport fee (in cents) pre-filled on new rounds. |
 
 ---
 
@@ -294,3 +302,19 @@ Tracks manual inventory changes and initial stock baselines in the `product_stoc
 * Creating a product or adjusting its stock records a corresponding `ProductStockAdjustment` entry.
 * When upgrading existing databases to Room v17+, migration seeding establishes an initial stock baseline so historical timelines remain consistent.
 * The Product History modal aggregates `STOCK_ADJUSTMENT`, `PURCHASE`, and `CANCELLATION` events in chronological pages (`25`, `50`, or `100` entries per page) with a computed `stockAfter` column.
+
+---
+
+## 🥬 10. Veggie Orders
+
+Defined in [`VeggieModels.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/domain/model/VeggieModels.kt).
+
+Manages recurring weekly produce ordering rounds, dual-unit catalogs, and proportional market settlement:
+
+* **`VeggieUnitType`:** Defines ordering and delivery units (`id`, `name`, `allowDecimals`, `isActive`).
+* **`VeggieProduct`:** Catalog item (`id`, `name`, `description`, `estimatedPriceCents`, `unitTypeId`, optional `deliveryUnitTypeId`, `imageFileName`, `excludeFromBuyerPdf`, `isActive`, `isDeleted`).
+* **`VeggieOrderRound`:** Weekly round (`OPEN`, `CLOSED`, `SETTLED`) with `buyerOperationFeeCents`, `transportFeeCents`, optional `transporterUserId`, and PDF export timestamps (`buyerPdfExportedAt`, `workerPdfExportedAt`).
+* **`VeggieRoundProductSettlement`:** Per-product market settlement record (`marketUnitPriceCents`, `totalSpentCents`).
+* **`VeggieOrderEntry`:** Per-user, per-product order line with snapshotted product/unit names, `orderedQuantityScaled`, `actualQuantityScaled`, `effectiveUnitPriceCents`, and `finalItemTotalCents`. Quantities use fixed-point scaling (`VEGGIE_QTY_SCALE = 1000L`, e.g., `1,5` → `1500L`).
+
+👉 **For round lifecycle rules, auto-open scheduling, Largest Remainder settlement math, and Customer Portal integration, see [Veggie Orders & Customer Network Portal](VEGGIE_ORDERS.md).**
