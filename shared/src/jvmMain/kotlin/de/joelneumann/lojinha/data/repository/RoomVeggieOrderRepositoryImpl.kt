@@ -13,6 +13,7 @@ import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
@@ -27,6 +28,10 @@ class RoomVeggieOrderRepositoryImpl(
     private val onAdminOnlyDataChanged: (() -> Unit)? = null,
     private val runInTransaction: (suspend (suspend () -> Unit) -> Unit)? = null
 ) : VeggieOrderRepository {
+
+    companion object {
+        private const val TAG = "VeggieOrderRepository"
+    }
 
     private val mutationMutex = Mutex()
 
@@ -170,14 +175,21 @@ class RoomVeggieOrderRepositoryImpl(
             updatedAt = now
         )
         veggieOrderDao.insertOrUpdateRound(VeggieOrderRoundEntity.fromDomain(newRound))
+        AppLogger.info(TAG, "Opened veggie round '${newRound.id}' (buyerFee=${newRound.buyerOperationFeeCents}, transportFee=${newRound.transportFeeCents})")
         onDataChanged?.invoke()
         newRound
     }
 
     override suspend fun closeRound(roundId: String, closedAt: Long): Boolean = mutationMutex.withLock {
-        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: run {
+            AppLogger.warn(TAG, "Cannot close veggie round '$roundId': not found")
+            return@withLock false
+        }
         val round = roundEntity.toDomain()
-        if (round.status != VeggieRoundStatus.OPEN) return@withLock false
+        if (round.status != VeggieRoundStatus.OPEN) {
+            AppLogger.warn(TAG, "Cannot close veggie round '$roundId': status is ${round.status}")
+            return@withLock false
+        }
 
         val now = if (closedAt > 0L) closedAt else currentTimeMillis()
         val updated = round.copy(
@@ -186,18 +198,28 @@ class RoomVeggieOrderRepositoryImpl(
             updatedAt = now
         )
         veggieOrderDao.insertOrUpdateRound(VeggieOrderRoundEntity.fromDomain(updated))
+        AppLogger.info(TAG, "Closed veggie round '$roundId'")
         onDataChanged?.invoke()
         true
     }
 
     override suspend fun reopenRound(roundId: String): Boolean = mutationMutex.withLock {
-        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: run {
+            AppLogger.warn(TAG, "Cannot reopen veggie round '$roundId': not found")
+            return@withLock false
+        }
         val round = roundEntity.toDomain()
-        if (round.status != VeggieRoundStatus.CLOSED) return@withLock false
+        if (round.status != VeggieRoundStatus.CLOSED) {
+            AppLogger.warn(TAG, "Cannot reopen veggie round '$roundId': status is ${round.status}")
+            return@withLock false
+        }
 
         // Ensure no other round is currently active
         val active = veggieOrderDao.getActiveRound()
-        if (active != null && active.id != roundId) return@withLock false
+        if (active != null && active.id != roundId) {
+            AppLogger.warn(TAG, "Cannot reopen veggie round '$roundId': active round '${active.id}' already exists")
+            return@withLock false
+        }
 
         val now = currentTimeMillis()
         val updated = round.copy(
@@ -206,15 +228,22 @@ class RoomVeggieOrderRepositoryImpl(
             updatedAt = now
         )
         veggieOrderDao.insertOrUpdateRound(VeggieOrderRoundEntity.fromDomain(updated))
+        AppLogger.info(TAG, "Reopened veggie round '$roundId'")
         onDataChanged?.invoke()
         true
     }
 
     override suspend fun deleteRound(roundId: String): Boolean = mutationMutex.withLock {
-        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: run {
+            AppLogger.warn(TAG, "Cannot delete veggie round '$roundId': not found")
+            return@withLock false
+        }
         // Disallow deletion if round has recorded financial transactions
         val existingTxs = transactionDao.getTransactionsForRound(roundId)
-        if (existingTxs.isNotEmpty()) return@withLock false
+        if (existingTxs.isNotEmpty()) {
+            AppLogger.warn(TAG, "Cannot delete veggie round '$roundId': ${existingTxs.size} recorded transaction(s) exist")
+            return@withLock false
+        }
 
         val performDelete: suspend () -> Unit = {
             veggieOrderDao.deleteEntriesForRound(roundId)
@@ -226,6 +255,7 @@ class RoomVeggieOrderRepositoryImpl(
         } else {
             performDelete()
         }
+        AppLogger.info(TAG, "Deleted veggie round '$roundId'")
         onDataChanged?.invoke()
         true
     }
@@ -284,8 +314,14 @@ class RoomVeggieOrderRepositoryImpl(
         user: User,
         productQuantitiesScaled: Map<String, Long>
     ): Boolean = mutationMutex.withLock {
-        val round = veggieOrderDao.getRoundById(roundId)?.toDomain() ?: return@withLock false
-        if (round.status != VeggieRoundStatus.OPEN) return@withLock false
+        val round = veggieOrderDao.getRoundById(roundId)?.toDomain() ?: run {
+            AppLogger.warn(TAG, "Rejected customer order for user '${user.id}': round '$roundId' not found")
+            return@withLock false
+        }
+        if (round.status != VeggieRoundStatus.OPEN) {
+            AppLogger.warn(TAG, "Rejected customer order for user '${user.id}': round '$roundId' status is ${round.status}")
+            return@withLock false
+        }
 
         val existingEntries = veggieOrderDao.getEntriesForUserInRound(roundId, user.id)
             .associateBy { it.veggieProductId }
@@ -710,6 +746,11 @@ class RoomVeggieOrderRepositoryImpl(
             persistSettlement()
         }
 
+        AppLogger.info(
+            TAG,
+            "Settled veggie round '$roundId' (correction=${previousRound.status == VeggieRoundStatus.SETTLED}, " +
+                "customers=${calculationResult.customerSummaries.size}, transactions=${batchTransactions.size})"
+        )
         onDataChanged?.invoke()
         calculationResult
     }

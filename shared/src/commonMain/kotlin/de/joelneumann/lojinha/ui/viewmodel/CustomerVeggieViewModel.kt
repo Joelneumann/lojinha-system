@@ -7,6 +7,7 @@ import de.joelneumann.lojinha.domain.repository.CustomerVeggieRoundHistoryItem
 import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -150,6 +151,7 @@ class CustomerVeggieViewModel(
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                AppLogger.error("CustomerVeggieViewModel", "Failed to load veggie state: ${e.message}", e)
                 _errorMessage.value = e.message
             }
         }
@@ -202,6 +204,7 @@ class CustomerVeggieViewModel(
                     save(updated)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
+                    AppLogger.error("CustomerVeggieViewModel", "Failed to save veggie favorites: ${e.message}", e)
                     false
                 }
                 if (!ok && _favoriteProductIds.value == updated) {
@@ -332,6 +335,8 @@ class CustomerVeggieViewModel(
                     loadData(preserveDraftIfSameRound = true)
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("CustomerVeggieViewModel", "Failed to save veggie order for round '${round.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to save veggie order"
             } finally {
                 _isSavingOrder.value = false

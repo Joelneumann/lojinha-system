@@ -17,6 +17,7 @@ import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.invalidateVeggieImageCache
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.util.AppLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -669,6 +670,8 @@ class AdminVeggieViewModel(
                 _selectedRound.value = newRound
                 loadData(preserveDraftEdits = false)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to open veggie round: ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to open round"
             } finally {
                 _isSaving.value = false
@@ -691,6 +694,8 @@ class AdminVeggieViewModel(
                     _errorMessage.value = "Could not close round"
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to close veggie round '${round.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to close round"
             } finally {
                 _isSaving.value = false
@@ -712,6 +717,8 @@ class AdminVeggieViewModel(
                     _errorMessage.value = "Could not reopen round"
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to reopen veggie round '${round.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to reopen round"
             } finally {
                 _isSaving.value = false
@@ -770,6 +777,8 @@ class AdminVeggieViewModel(
                     _errorMessage.value = "Failed to save draft settlement"
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to save draft settlement for '${payload.round.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to save draft settlement"
             } finally {
                 _isSaving.value = false
@@ -801,6 +810,8 @@ class AdminVeggieViewModel(
                     _errorMessage.value = "Could not delete round (may have existing transactions)"
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to delete veggie round '${round.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to delete round"
             } finally {
                 _isSaving.value = false
@@ -869,6 +880,8 @@ class AdminVeggieViewModel(
                     _errorMessage.value = "Failed to execute round settlement"
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to settle veggie round '${payload.round.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to execute round settlement"
             } finally {
                 _isSaving.value = false
@@ -984,6 +997,8 @@ class AdminVeggieViewModel(
 
                 loadData(preserveDraftEdits = true)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to add/update order entry for '${user.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to add order entry"
             } finally {
                 _isSaving.value = false
@@ -1017,6 +1032,8 @@ class AdminVeggieViewModel(
                 }
                 loadData(preserveDraftEdits = true)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to remove order entry '${existing.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to remove order entry"
             } finally {
                 _isSaving.value = false
@@ -1060,6 +1077,8 @@ class AdminVeggieViewModel(
                 loadData()
                 onSuccess?.invoke()
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to save veggie product '${product.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: I18n.get().errFailedToSaveProduct
             } finally {
                 _isSaving.value = false
@@ -1089,6 +1108,8 @@ class AdminVeggieViewModel(
                 }
                 loadData()
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to toggle veggie product '${product.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: I18n.get().errFailedToUpdateProductStatus
             } finally {
                 _isSaving.value = false
@@ -1108,6 +1129,8 @@ class AdminVeggieViewModel(
                 veggieOrderRepository.hardDeleteVeggieProduct(product.id)
                 loadData()
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to delete veggie product '${product.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: I18n.get().errFailedToDeleteProduct
             } finally {
                 _isSaving.value = false
@@ -1143,6 +1166,8 @@ class AdminVeggieViewModel(
                 veggieOrderRepository.saveUnitType(toSave)
                 loadData()
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to save veggie unit type '${unitType.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to save unit type"
             } finally {
                 _isSaving.value = false
@@ -1161,6 +1186,8 @@ class AdminVeggieViewModel(
                 )
                 loadData()
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                AppLogger.error("AdminVeggieViewModel", "Failed to delete veggie unit type '$unitTypeId': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to delete unit type"
             } finally {
                 _isSaving.value = false
