@@ -15,9 +15,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -65,6 +70,8 @@ import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.filterAndRankUsers
+import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.ui.viewmodel.admin.AddOrderEntryMode
 import kotlinx.coroutines.delay
@@ -106,6 +113,7 @@ fun AdminVeggieSettlementMatrix(
     onExecuteSettlement: () -> Unit,
     onDeleteRound: (() -> Unit)? = null,
     onAddAdminEntry: (user: User, product: VeggieProduct, quantityInput: String, mode: AddOrderEntryMode) -> Unit,
+    onRemoveAdminEntry: ((user: User, product: VeggieProduct) -> Unit)? = null,
     onExportBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onExportWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     hasUnsavedChanges: Boolean = false,
@@ -311,9 +319,9 @@ fun AdminVeggieSettlementMatrix(
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryNavy)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(strings.addUserToList, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
+                            Text(strings.addOrEditOrderBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryNavy)
                         }
 
                         when (round.status) {
@@ -1301,7 +1309,7 @@ fun AdminVeggieSettlementMatrix(
     }
 
     if (showAddEntryDialog) {
-        AddAdminVeggieEntryDialog(
+        AddOrEditVeggieOrderDialog(
             roundStatus = round.status,
             users = users,
             products = products.filter { !it.isDeleted && it.isActive },
@@ -1309,6 +1317,10 @@ fun AdminVeggieSettlementMatrix(
             existingEntries = entries,
             onConfirm = { user, product, qtyInput, mode ->
                 onAddAdminEntry(user, product, qtyInput, mode)
+                showAddEntryDialog = false
+            },
+            onRemove = { user, product ->
+                onRemoveAdminEntry?.invoke(user, product)
                 showAddEntryDialog = false
             },
             onDismiss = { showAddEntryDialog = false }
@@ -1426,21 +1438,221 @@ private fun MatrixHeaderCell(
     )
 }
 
+private enum class OrderPickerType {
+    USER,
+    PRODUCT
+}
+
 @Composable
-private fun AddAdminVeggieEntryDialog(
+private fun <T> SearchableOrderPickerSection(
+    label: String,
+    selectedText: String,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    searchPlaceholder: String,
+    items: List<T>,
+    itemKey: (T) -> String,
+    emptyMessage: String,
+    onSelectItem: (T) -> Unit,
+    itemContent: @Composable RowScope.(T) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+        OutlinedButton(
+            onClick = onToggleExpand,
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(
+                width = if (isExpanded) 1.5.dp else 1.dp,
+                color = if (isExpanded) AccentNavy else DividerBorder
+            ),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = selectedText,
+                    color = PrimaryNavy,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = PrimaryNavy
+                )
+            }
+        }
+
+        AnimatedVisibility(visible = isExpanded) {
+            val searchFocusRequester = remember { FocusRequester() }
+            val listState = rememberLazyListState()
+            var highlightedIndex by remember(items, isExpanded) { mutableStateOf(0) }
+
+            LaunchedEffect(isExpanded) {
+                if (isExpanded) {
+                    delay(50)
+                    searchFocusRequester.requestFocus()
+                }
+            }
+            LaunchedEffect(highlightedIndex, items.size) {
+                if (items.isNotEmpty()) {
+                    listState.animateScrollToItem(highlightedIndex.coerceIn(0, items.lastIndex))
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = SurfaceContainerLight,
+                border = BorderStroke(1.dp, DividerBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        placeholder = { Text(searchPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = TextSecondaryMuted
+                            )
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { onSearchQueryChange("") },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = TextSecondaryMuted
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (items.isNotEmpty()) {
+                                    onSelectItem(items[highlightedIndex.coerceIn(0, items.lastIndex)])
+                                }
+                            }
+                        ),
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = PrimaryNavy),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = SurfaceWhite,
+                            unfocusedContainerColor = SurfaceWhite
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(searchFocusRequester)
+                            .onPreviewKeyEvent { keyEvent ->
+                                if (keyEvent.type != KeyEventType.KeyDown || items.isEmpty()) {
+                                    return@onPreviewKeyEvent false
+                                }
+                                when (keyEvent.key) {
+                                    Key.Enter, Key.NumPadEnter -> {
+                                        onSelectItem(items[highlightedIndex.coerceIn(0, items.lastIndex)])
+                                        true
+                                    }
+                                    Key.Tab -> {
+                                        highlightedIndex = if (keyEvent.isShiftPressed) {
+                                            (highlightedIndex - 1 + items.size) % items.size
+                                        } else {
+                                            (highlightedIndex + 1) % items.size
+                                        }
+                                        true
+                                    }
+                                    Key.DirectionDown -> {
+                                        highlightedIndex = (highlightedIndex + 1) % items.size
+                                        true
+                                    }
+                                    Key.DirectionUp -> {
+                                        highlightedIndex = (highlightedIndex - 1 + items.size) % items.size
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            }
+                    )
+
+                    if (items.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(220.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(emptyMessage, fontSize = 12.sp, color = TextSecondaryMuted)
+                        }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxWidth().height(220.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            itemsIndexed(items, key = { _, item -> itemKey(item) }) { index, item ->
+                                val isHighlighted = index == highlightedIndex.coerceIn(0, items.lastIndex)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isHighlighted) AccentNavy.copy(alpha = 0.08f) else SurfaceWhite.copy(alpha = 0f))
+                                        .then(
+                                            if (isHighlighted) {
+                                                Modifier.border(1.dp, AccentNavy.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
+                                        .clickable { onSelectItem(item) }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    content = { itemContent(item) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddOrEditVeggieOrderDialog(
     roundStatus: VeggieRoundStatus,
     users: List<User>,
     products: List<VeggieProduct>,
     unitTypes: List<VeggieUnitType>,
     existingEntries: List<VeggieOrderEntry>,
     onConfirm: (User, VeggieProduct, String, AddOrderEntryMode) -> Unit,
+    onRemove: (User, VeggieProduct) -> Unit,
     onDismiss: () -> Unit
 ) {
     val strings = I18n.current
-    var selectedUser by remember { mutableStateOf(users.firstOrNull()) }
-    var selectedProduct by remember { mutableStateOf(products.firstOrNull()) }
-    var userMenuExpanded by remember { mutableStateOf(false) }
-    var productMenuExpanded by remember { mutableStateOf(false) }
+    val sortedUsers = remember(users) { users.sortedByAccentInsensitive { it.name } }
+    val sortedProducts = remember(products) { products.sortedByAccentInsensitive { it.name } }
+
+    var selectedUser by remember { mutableStateOf(sortedUsers.firstOrNull()) }
+    var selectedProduct by remember { mutableStateOf(sortedProducts.firstOrNull()) }
+    var activePicker by remember { mutableStateOf<OrderPickerType?>(null) }
+    var userSearchQuery by remember { mutableStateOf("") }
+    var productSearchQuery by remember { mutableStateOf("") }
 
     val unitTypesById = remember(unitTypes) { unitTypes.associateBy { it.id } }
     val unitType = if (roundStatus != VeggieRoundStatus.OPEN) {
@@ -1451,11 +1663,22 @@ private fun AddAdminVeggieEntryDialog(
     val allowDecimals = unitType?.allowDecimals ?: false
     val unitName = unitType?.name ?: "Unit"
 
-    val existingEntry = remember(selectedUser?.id, selectedProduct?.id, existingEntries) {
-        val uid = selectedUser?.id ?: return@remember null
-        val pid = selectedProduct?.id ?: return@remember null
-        existingEntries.find { it.userId == uid && it.veggieProductId == pid }
+    val filteredUsers = remember(sortedUsers, userSearchQuery) {
+        sortedUsers.filterAndRankUsers(userSearchQuery)
     }
+    val filteredProducts = remember(sortedProducts, productSearchQuery, unitTypesById) {
+        if (productSearchQuery.isBlank()) sortedProducts
+        else sortedProducts.filterAndRankVeggieProducts(
+            query = productSearchQuery,
+            unitTypesById = unitTypesById
+        )
+    }
+
+    val existingEntriesByProductId = remember(selectedUser?.id, existingEntries) {
+        val uid = selectedUser?.id ?: return@remember emptyMap()
+        existingEntries.filter { it.userId == uid }.associateBy { it.veggieProductId }
+    }
+    val existingEntry = selectedProduct?.let { existingEntriesByProductId[it.id] }
 
     var mode by remember(selectedUser?.id, selectedProduct?.id) {
         mutableStateOf(AddOrderEntryMode.OVERWRITE)
@@ -1480,12 +1703,34 @@ private fun AddAdminVeggieEntryDialog(
     }
     var hadFocus by remember { mutableStateOf(false) }
     var justFocused by remember { mutableStateOf(false) }
+    var showConfirmRemove by remember { mutableStateOf(false) }
+    val quantityFocusRequester = remember { FocusRequester() }
+    var focusQuantityTrigger by remember { mutableStateOf(0) }
+
+    LaunchedEffect(focusQuantityTrigger) {
+        if (focusQuantityTrigger > 0) {
+            delay(50)
+            quantityFocusRequester.requestFocus()
+        }
+    }
 
     val parsedQtyScaled = remember(textFieldValue.text, allowDecimals) {
         VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals)
     }
 
-    val canAdd = selectedUser != null && selectedProduct != null && parsedQtyScaled != null && parsedQtyScaled > 0L
+    val canSubmit = selectedUser != null && selectedProduct != null && parsedQtyScaled != null && (
+        parsedQtyScaled > 0L || (existingEntry != null && parsedQtyScaled == 0L)
+    )
+
+    val submitOrderChange: () -> Unit = {
+        if (canSubmit) {
+            if (existingEntry != null && parsedQtyScaled == 0L) {
+                showConfirmRemove = true
+            } else {
+                onConfirm(selectedUser!!, selectedProduct!!, textFieldValue.text, mode)
+            }
+        }
+    }
 
     val newTotalScaled = when (mode) {
         AddOrderEntryMode.OVERWRITE -> parsedQtyScaled ?: 0L
@@ -1508,15 +1753,15 @@ private fun AddAdminVeggieEntryDialog(
             shadowElevation = 8.dp,
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .widthIn(max = 460.dp)
-                .wrapContentHeight()
+                .widthIn(max = 560.dp)
+                .height(660.dp)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.fillMaxSize().padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Text(
-                    text = strings.addUserToList,
+                    text = strings.addOrEditOrderBtn,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavy
@@ -1524,76 +1769,114 @@ private fun AddAdminVeggieEntryDialog(
 
                 HorizontalDivider(color = DividerBorder)
 
-                // User Selector
-                Column {
-                    Text(strings.tabUsers, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box {
-                        OutlinedButton(
-                            onClick = { userMenuExpanded = true },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth().height(48.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(selectedUser?.name ?: "—", color = PrimaryNavy, fontWeight = FontWeight.SemiBold)
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = PrimaryNavy)
-                            }
-                        }
-                        DropdownMenu(
-                            expanded = userMenuExpanded,
-                            onDismissRequest = { userMenuExpanded = false },
-                            modifier = Modifier.heightIn(max = 280.dp)
-                        ) {
-                            users.forEach { u ->
-                                DropdownMenuItem(
-                                    text = { Text(u.name) },
-                                    onClick = {
-                                        selectedUser = u
-                                        userMenuExpanded = false
-                                    }
-                                )
-                            }
-                        }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+
+                // User Selector (Expandable Inline Search)
+                SearchableOrderPickerSection(
+                    label = strings.tabUsers,
+                    selectedText = selectedUser?.name ?: "—",
+                    isExpanded = activePicker == OrderPickerType.USER,
+                    onToggleExpand = {
+                        activePicker = if (activePicker == OrderPickerType.USER) null else OrderPickerType.USER
+                    },
+                    searchQuery = userSearchQuery,
+                    onSearchQueryChange = { userSearchQuery = it },
+                    searchPlaceholder = strings.searchUserPlaceholder,
+                    items = filteredUsers,
+                    itemKey = { it.id },
+                    emptyMessage = strings.noMatchingUsersFound,
+                    onSelectItem = { u ->
+                        selectedUser = u
+                        userSearchQuery = ""
+                        activePicker = OrderPickerType.PRODUCT
+                    }
+                ) { u ->
+                    val isSelected = selectedUser?.id == u.id
+                    Text(
+                        text = u.name,
+                        fontSize = 13.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) AccentNavy else PrimaryNavy,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isSelected) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = AccentNavy
+                        )
                     }
                 }
 
-                // Product Selector
-                Column {
-                    Text(strings.veggieProductNameLabel, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box {
-                        OutlinedButton(
-                            onClick = { productMenuExpanded = true },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth().height(48.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(selectedProduct?.name ?: "—", color = PrimaryNavy, fontWeight = FontWeight.SemiBold)
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = PrimaryNavy)
-                            }
+                // Product Selector (Expandable Inline Search)
+                SearchableOrderPickerSection(
+                    label = strings.veggieProductNameLabel,
+                    selectedText = selectedProduct?.name ?: "—",
+                    isExpanded = activePicker == OrderPickerType.PRODUCT,
+                    onToggleExpand = {
+                        activePicker = if (activePicker == OrderPickerType.PRODUCT) null else OrderPickerType.PRODUCT
+                    },
+                    searchQuery = productSearchQuery,
+                    onSearchQueryChange = { productSearchQuery = it },
+                    searchPlaceholder = strings.searchProductPlaceholder,
+                    items = filteredProducts,
+                    itemKey = { it.id },
+                    emptyMessage = strings.noMatchingProductsFound,
+                    onSelectItem = { p ->
+                        selectedProduct = p
+                        productSearchQuery = ""
+                        activePicker = null
+                        focusQuantityTrigger++
+                    }
+                ) { p ->
+                    val isSelected = selectedProduct?.id == p.id
+                    val entryForProduct = existingEntriesByProductId[p.id]
+                    val prodUnit = if (roundStatus != VeggieRoundStatus.OPEN) {
+                        p.deliveryUnitTypeId?.let { unitTypesById[it] } ?: unitTypesById[p.unitTypeId]
+                    } else {
+                        unitTypesById[p.unitTypeId]
+                    }
+                    val prodAllowDecimals = prodUnit?.allowDecimals ?: false
+                    val prodUnitName = prodUnit?.name ?: ""
+
+                    Text(
+                        text = p.name,
+                        fontSize = 13.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) AccentNavy else PrimaryNavy,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (entryForProduct != null) {
+                        val qtyScaled = if (roundStatus == VeggieRoundStatus.OPEN) {
+                            entryForProduct.orderedQuantityScaled
+                        } else {
+                            entryForProduct.actualQuantityScaled ?: entryForProduct.orderedQuantityScaled
                         }
-                        DropdownMenu(
-                            expanded = productMenuExpanded,
-                            onDismissRequest = { productMenuExpanded = false },
-                            modifier = Modifier.heightIn(max = 280.dp)
+                        val qtyText = VeggieQuantityScaling.formatScaledQuantity(qtyScaled, prodAllowDecimals)
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = AccentNavy.copy(alpha = 0.1f),
+                            border = BorderStroke(1.dp, AccentNavy.copy(alpha = 0.25f)),
+                            modifier = Modifier.padding(start = 8.dp)
                         ) {
-                            products.forEach { p ->
-                                DropdownMenuItem(
-                                    text = { Text(p.name) },
-                                    onClick = {
-                                        selectedProduct = p
-                                        productMenuExpanded = false
-                                    }
-                                )
-                            }
+                            Text(
+                                text = if (prodUnitName.isNotBlank()) "$qtyText $prodUnitName" else qtyText,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AccentNavy,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
                         }
                     }
                 }
@@ -1634,12 +1917,27 @@ private fun AddAdminVeggieEntryDialog(
                             ),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(
-                                keyboardType = if (allowDecimals) KeyboardType.Decimal else KeyboardType.Number
+                                keyboardType = if (allowDecimals) KeyboardType.Decimal else KeyboardType.Number,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = { submitOrderChange() }
                             ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp)
+                                .focusRequester(quantityFocusRequester)
+                                .onPreviewKeyEvent { keyEvent ->
+                                    if (keyEvent.type == KeyEventType.KeyDown &&
+                                        (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)
+                                    ) {
+                                        submitOrderChange()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
                                 .onFocusChanged { focusState ->
                                     if (focusState.isFocused) {
                                         if (!hadFocus) {
@@ -1706,7 +2004,7 @@ private fun AddAdminVeggieEntryDialog(
                                     text = strings.addOrderNewTotalLabel(newTotalFormatted, unitName),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (canAdd) ColorSuccessEmerald else TextSecondaryMuted
+                                    color = if (canSubmit) ColorSuccessEmerald else TextSecondaryMuted
                                 )
                             }
 
@@ -1758,13 +2056,33 @@ private fun AddAdminVeggieEntryDialog(
                         }
                     }
                 }
+                } // end scrollable content column
 
                 HorizontalDivider(color = DividerBorder)
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (existingEntry != null && selectedUser != null && selectedProduct != null) {
+                        TextButton(
+                            onClick = { showConfirmRemove = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = ColorDangerCrimson),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.DeleteOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = ColorDangerCrimson
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(strings.removeOrderEntryAction, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
                     OutlinedButton(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
@@ -1773,21 +2091,35 @@ private fun AddAdminVeggieEntryDialog(
                         Text(strings.cancel)
                     }
                     Button(
-                        onClick = {
-                            if (canAdd) {
-                                onConfirm(selectedUser!!, selectedProduct!!, textFieldValue.text, mode)
-                            }
-                        },
-                        enabled = canAdd,
+                        onClick = submitOrderChange,
+                        enabled = canSubmit,
                         colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(strings.confirm, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (existingEntry != null) strings.updateOrderAction else strings.addOrderAction,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
         }
+    }
+
+    if (showConfirmRemove && selectedUser != null && selectedProduct != null) {
+        ConfirmationDialog(
+            title = strings.confirmRemoveOrderEntryTitle,
+            message = strings.confirmRemoveOrderEntryMsg(selectedUser!!.name, selectedProduct!!.name),
+            confirmText = strings.removeOrderEntryAction,
+            cancelText = strings.cancel,
+            confirmButtonColor = ColorDangerCrimson,
+            onConfirm = {
+                showConfirmRemove = false
+                onRemove(selectedUser!!, selectedProduct!!)
+            },
+            onDismiss = { showConfirmRemove = false }
+        )
     }
 }
 

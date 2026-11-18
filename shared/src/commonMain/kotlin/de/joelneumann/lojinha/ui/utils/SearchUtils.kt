@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha.ui.utils
 
 import de.joelneumann.lojinha.domain.model.Product
+import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.VeggieProduct
 import de.joelneumann.lojinha.domain.model.VeggieUnitType
 
@@ -255,5 +256,58 @@ fun List<VeggieProduct>.filterAndRankVeggieProducts(
     }
 
     return rankedList.sortedWith(tierComparator).map { it.second }
+}
+
+/**
+ * Filters and ranks a list of users against a search query using tiered relevance ranking,
+ * mirroring the search functionality on Lojinha and Veggie products.
+ *
+ * Searches across `name` and `nickname` (case- and accent-insensitive).
+ * If [query] is blank, returns the list sorted alphabetically by `name` (accent-insensitive).
+ */
+fun List<User>.filterAndRankUsers(query: String): List<User> {
+    val trimmed = query.trim()
+    if (trimmed.isEmpty()) {
+        return sortedByAccentInsensitive { it.name }
+    }
+
+    val normQuery = trimmed.removeAccents().lowercase()
+    val queryTokens = normQuery.split("\\s+".toRegex()).filter { it.isNotEmpty() }
+    val wordSplitRegex = "[\\s\\-_/(),.:;+]+".toRegex()
+
+    val rankedList = mutableListOf<Pair<Int, User>>()
+
+    for (user in this) {
+        val normName = user.name.removeAccents().lowercase()
+        val nameWords = normName.split(wordSplitRegex).filter { it.isNotEmpty() }
+        val normNickname = user.nickname?.trim()?.removeAccents()?.lowercase()?.takeIf { it.isNotEmpty() }
+        val nicknameWords = normNickname?.split(wordSplitRegex)?.filter { it.isNotEmpty() }.orEmpty()
+
+        val tier: Int? = when {
+            normName == normQuery || normNickname == normQuery -> 0
+            normName.startsWith(normQuery) || (normNickname != null && normNickname.startsWith(normQuery)) -> 1
+            nameWords.any { it.startsWith(normQuery) } || nicknameWords.any { it.startsWith(normQuery) } -> 2
+            queryTokens.size > 1 && queryTokens.all { token ->
+                nameWords.any { it.startsWith(token) } || nicknameWords.any { it.startsWith(token) }
+            } -> 3
+            queryTokens.size > 1 && queryTokens.all { token ->
+                normName.contains(token) || (normNickname != null && normNickname.contains(token))
+            } -> 4
+            normName.contains(normQuery) -> 5
+            normNickname != null && normNickname.contains(normQuery) -> 6
+            else -> null
+        }
+
+        if (tier != null) {
+            rankedList.add(tier to user)
+        }
+    }
+
+    return rankedList
+        .sortedWith(
+            compareBy<Pair<Int, User>> { it.first }
+                .thenBy(ACCENT_INSENSITIVE_COMPARATOR) { it.second.name }
+        )
+        .map { it.second }
 }
 

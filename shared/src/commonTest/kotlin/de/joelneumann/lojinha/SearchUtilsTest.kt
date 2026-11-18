@@ -1,11 +1,13 @@
 package de.joelneumann.lojinha
 
+import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.VeggieProduct
 import de.joelneumann.lojinha.domain.model.VeggieUnitType
 import de.joelneumann.lojinha.ui.components.admin.veggie.VeggieSortOption
 import de.joelneumann.lojinha.ui.components.admin.veggie.toComparator
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
+import de.joelneumann.lojinha.ui.utils.filterAndRankUsers
 import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
 import de.joelneumann.lojinha.ui.utils.isReservedAdminName
 import de.joelneumann.lojinha.ui.utils.normalizeUserName
@@ -345,6 +347,28 @@ class SearchUtilsTest {
         assertTrue("Admin".isReservedAdminName())
         assertTrue("  ädmin  ".isReservedAdminName())
         assertFalse("Alice".isReservedAdminName())
+    }
+
+    @Test
+    fun testFilterAndRankUsers() {
+        val u1 = User(id = "u1", name = "João Silva", nickname = "Jão", userBarcode = "USR-999", userBarcodeNumber = "999")
+        val u2 = User(id = "u2", name = "Maria João", nickname = "Mari")
+        val u3 = User(id = "u3", name = "Carlos Eduardo", nickname = "João")
+        val u4 = User(id = "u4", name = "Ana Clara", nickname = null)
+
+        val users = listOf(u3, u2, u4, u1)
+
+        // Blank query sorts alphabetically (accent-insensitive)
+        assertEquals(listOf("Ana Clara", "Carlos Eduardo", "João Silva", "Maria João"), users.filterAndRankUsers("   ").map { it.name })
+
+        // Tiered ranking for "joao": u3 has exact nickname "João" (Tier 0), u1 starts with "João" (Tier 1), u2 has word "João" (Tier 2)
+        assertEquals(listOf("Carlos Eduardo", "João Silva", "Maria João"), users.filterAndRankUsers("joao").map { it.name })
+
+        // Multi-token prefix match
+        assertEquals(listOf("João Silva"), users.filterAndRankUsers("jo sil").map { it.name })
+
+        // Does not match barcode number
+        assertTrue(users.filterAndRankUsers("999").isEmpty())
     }
 }
 

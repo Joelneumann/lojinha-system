@@ -1314,6 +1314,18 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
         }
     }
 
+    override suspend fun deleteAdminOrderEntry(roundId: String, entryId: String): Boolean {
+        return try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/veggie/rounds/$roundId/entries/$entryId")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "deleteAdminOrderEntry failed: ${e.message}", e)
+            false
+        }
+    }
+
     override suspend fun getProductSettlementsForRound(roundId: String): List<VeggieRoundProductSettlement> {
         return try {
             client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/$roundId/settlements")) {

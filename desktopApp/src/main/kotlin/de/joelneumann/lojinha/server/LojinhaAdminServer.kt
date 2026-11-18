@@ -1297,6 +1297,18 @@ class LojinhaAdminServer(
                                 call.respond(HttpStatusCode.BadRequest, "Failed to upsert order entry")
                             }
                         }
+                        delete("/rounds/{id}/entries/{entryId}") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@delete
+                            val repo = resolveVeggieRepo() ?: return@delete call.respond(HttpStatusCode.ServiceUnavailable)
+                            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                            val entryId = call.parameters["entryId"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                            val ok = repo.deleteAdminOrderEntry(id, entryId)
+                            if (ok) {
+                                call.respond(HttpStatusCode.OK)
+                            } else {
+                                call.respond(HttpStatusCode.BadRequest, "Failed to delete order entry")
+                            }
+                        }
                         get("/rounds/{id}/settlements") {
                             if (!call.checkAdminAuth(settingsRepository)) return@get
                             val repo = resolveVeggieRepo() ?: return@get call.respond(emptyList<VeggieRoundProductSettlement>())

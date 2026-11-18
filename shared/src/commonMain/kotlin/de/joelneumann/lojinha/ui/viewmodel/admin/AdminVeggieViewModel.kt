@@ -991,6 +991,39 @@ class AdminVeggieViewModel(
         }
     }
 
+    fun removeCustomerEntry(user: User, product: VeggieProduct) {
+        val round = _selectedRound.value ?: return
+        val existing = _selectedRoundEntries.value.find {
+            it.userId == user.id && it.veggieProductId == product.id
+        } ?: return
+
+        if (round.status == VeggieRoundStatus.SETTLED) {
+            updateEntryActualQuantity(existing.id, "0")
+            return
+        }
+
+        if (_isSaving.value) return
+        _isSaving.value = true
+
+        activeScope.launch {
+            try {
+                val deleted = veggieOrderRepository.deleteAdminOrderEntry(round.id, existing.id)
+                if (!deleted) {
+                    _errorMessage.value = "Failed to remove order entry"
+                    return@launch
+                }
+                if (_draftActualQuantities.value.containsKey(existing.id)) {
+                    _draftActualQuantities.value = _draftActualQuantities.value - existing.id
+                }
+                loadData(preserveDraftEdits = true)
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Failed to remove order entry"
+            } finally {
+                _isSaving.value = false
+            }
+        }
+    }
+
     // --- Catalog Management ---
 
     fun saveVeggieProduct(

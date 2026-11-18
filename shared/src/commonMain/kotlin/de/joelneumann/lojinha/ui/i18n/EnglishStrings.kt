@@ -982,6 +982,15 @@ object EnglishStrings : AppStrings {
     override val addOrderModeAddToExisting = "Add to existing order"
     override fun addOrderCurrentQuantityLabel(quantity: String, unit: String) = "Current order: $quantity $unit"
     override fun addOrderNewTotalLabel(quantity: String, unit: String) = "New total: $quantity $unit"
+    override val addOrEditOrderBtn = "Add / Edit Order"
+    override val addOrderAction = "Add"
+    override val updateOrderAction = "Update"
+    override val removeOrderEntryAction = "Remove"
+    override val confirmRemoveOrderEntryTitle = "Remove Order Entry"
+    override fun confirmRemoveOrderEntryMsg(userName: String, productName: String) =
+        "Remove $productName from $userName's order?"
+    override val noMatchingUsersFound = "No matching users"
+    override val noMatchingProductsFound = "No matching products"
     override val veggieProductDiscontinuedBadge = "Discontinued"
     override fun veggieAmountMaxExceededError(maxFormatted: String, unitName: String) =
         "Product is discontinued. You can keep or reduce your ordered quantity (max $maxFormatted $unitName), or remove it."

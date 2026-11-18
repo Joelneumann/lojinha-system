@@ -442,6 +442,18 @@ class RoomVeggieOrderRepositoryImpl(
         true
     }
 
+    override suspend fun deleteAdminOrderEntry(roundId: String, entryId: String): Boolean = mutationMutex.withLock {
+        val round = veggieOrderDao.getRoundById(roundId)?.toDomain() ?: return@withLock false
+        val now = currentTimeMillis()
+        veggieOrderDao.deleteEntryById(entryId)
+        val updatedRound = round.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null, updatedAt = now)
+        veggieOrderDao.insertOrUpdateRound(
+            VeggieOrderRoundEntity.fromDomain(updatedRound)
+        )
+        onDataChanged?.invoke()
+        true
+    }
+
     override suspend fun getProductSettlementsForRound(roundId: String): List<VeggieRoundProductSettlement> {
         return veggieOrderDao.getRoundProductSettlements(roundId).map { it.toDomain() }
     }

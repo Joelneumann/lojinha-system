@@ -62,6 +62,7 @@ interface VeggieOrderRepository {
 
     // 5. Settlement & Corrections
     suspend fun upsertAdminOrderEntry(entry: VeggieOrderEntry): Boolean = false
+    suspend fun deleteAdminOrderEntry(roundId: String, entryId: String): Boolean = false
     suspend fun getProductSettlementsForRound(roundId: String): List<VeggieRoundProductSettlement>
     suspend fun saveDraftSettlement(
         roundId: String,
