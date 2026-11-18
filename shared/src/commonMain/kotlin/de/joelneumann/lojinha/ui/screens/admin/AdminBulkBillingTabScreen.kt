@@ -5,7 +5,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
+import kotlinx.coroutines.yield
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -58,6 +71,7 @@ fun AdminBulkBillingTabScreen(
     val listsListState = rememberLazyListState()
     val usersListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
     val isModalOpen = editingList != null || isCreatingNew || showDeleteDialogFor != null || showExecuteDialogFor != null
 
@@ -270,6 +284,30 @@ fun AdminBulkBillingTabScreen(
                     }
                 }
 
+                val variableUserIdsKey = remember(selectedList.id, activeListUsers) {
+                    activeListUsers.map { it.first.id }
+                }
+                val variableFocusRequesters = remember(selectedList.id, variableUserIdsKey) {
+                    activeListUsers.associate { (u, _) -> u.id to FocusRequester() }
+                }
+                val focusVariableUserAt: (Int) -> Unit = { targetIndex ->
+                    if (targetIndex in activeListUsers.indices) {
+                        val targetUserId = activeListUsers[targetIndex].first.id
+                        val isVisible = usersListState.layoutInfo.visibleItemsInfo.any { it.key == targetUserId }
+                        if (isVisible) {
+                            try { variableFocusRequesters[targetUserId]?.requestFocus() } catch (_: Exception) {}
+                        } else {
+                            coroutineScope.launch {
+                                usersListState.scrollToItem(targetIndex)
+                                yield()
+                                variableFocusRequesters[targetUserId]?.safeRequestFocus()
+                            }
+                        }
+                    } else {
+                        focusManager.clearFocus()
+                    }
+                }
+
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     LazyColumn(
                         state = usersListState,
@@ -282,7 +320,7 @@ fun AdminBulkBillingTabScreen(
                                 Text(strings.noUsersInList, color = TextSecondaryMuted, modifier = Modifier.padding(16.dp))
                             }
                         } else {
-                            items(activeListUsers, key = { it.first.id }) { (user, listUser) ->
+                            itemsIndexed(activeListUsers, key = { _, pair -> pair.first.id }) { index, (user, listUser) ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -322,25 +360,69 @@ fun AdminBulkBillingTabScreen(
                                         }
                                     } else {
                                         val currentAmount = variableAmounts["${selectedList.id}:${user.id}"] ?: variableAmounts[user.id] ?: 0L
-                                        var amountStr by remember(selectedList.id, user.id) { 
-                                            mutableStateOf(if (currentAmount == 0L) "" else Formatting.formatBrl(currentAmount).removePrefix("R$ ").trim()) 
+                                        var amountValue by remember(selectedList.id, user.id) {
+                                            val initial = if (currentAmount == 0L) "" else Formatting.formatBrl(currentAmount).removePrefix("R$ ").trim()
+                                            mutableStateOf(TextFieldValue(initial, TextRange(initial.length)))
                                         }
+                                        var isFieldFocused by remember { mutableStateOf(false) }
                                         LaunchedEffect(isExecutingCharges) {
-                                            if (!isExecutingCharges && currentAmount == 0L && amountStr.isNotBlank()) {
-                                                amountStr = ""
+                                            if (!isExecutingCharges && currentAmount == 0L && amountValue.text.isNotBlank()) {
+                                                amountValue = TextFieldValue("")
                                             }
                                         }
+                                        LaunchedEffect(isFieldFocused) {
+                                            if (isFieldFocused && amountValue.text.isNotEmpty()) {
+                                                amountValue = amountValue.copy(selection = TextRange(0, amountValue.text.length))
+                                            }
+                                        }
+                                        val isLastRow = index == activeListUsers.lastIndex
                                         OutlinedTextField(
-                                            value = amountStr,
-                                            onValueChange = { 
-                                                val sanitized = it.filter { c -> c.isDigit() || c == '.' || c == ',' }
-                                                amountStr = sanitized
+                                            value = amountValue,
+                                            onValueChange = { newVal ->
+                                                val sanitized = newVal.text.filter { c -> c.isDigit() || c == '.' || c == ',' }
+                                                amountValue = newVal.copy(text = sanitized)
                                                 val cents = sanitized.replace(',', '.').toDoubleOrNull()
                                                     ?.let { v -> kotlin.math.round(v * 100).toLong().coerceAtLeast(0L) } ?: 0L
                                                 viewModel.setVariableAmount(selectedList.id, user.id, cents)
                                             },
                                             enabled = !isExecutingCharges,
-                                            modifier = Modifier.width(120.dp),
+                                            keyboardOptions = KeyboardOptions(
+                                                keyboardType = KeyboardType.Decimal,
+                                                imeAction = if (isLastRow) ImeAction.Done else ImeAction.Next
+                                            ),
+                                            keyboardActions = KeyboardActions(
+                                                onNext = { focusVariableUserAt(index + 1) },
+                                                onDone = { focusManager.clearFocus() }
+                                            ),
+                                            modifier = Modifier
+                                                .width(120.dp)
+                                                .then(variableFocusRequesters[user.id]?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                                .onFocusChanged { focusState ->
+                                                    isFieldFocused = focusState.isFocused
+                                                    if (focusState.isFocused && amountValue.text.isNotEmpty()) {
+                                                        amountValue = amountValue.copy(selection = TextRange(0, amountValue.text.length))
+                                                    }
+                                                }
+                                                .onPreviewKeyEvent { keyEvent ->
+                                                    if (keyEvent.type == KeyEventType.KeyDown) {
+                                                        when (keyEvent.key) {
+                                                            Key.Enter, Key.NumPadEnter -> {
+                                                                focusVariableUserAt(index + 1)
+                                                                true
+                                                            }
+                                                            Key.Tab -> {
+                                                                val nextIdx = if (keyEvent.isShiftPressed) index - 1 else index + 1
+                                                                if (nextIdx in activeListUsers.indices) {
+                                                                    focusVariableUserAt(nextIdx)
+                                                                    true
+                                                                } else {
+                                                                    false
+                                                                }
+                                                            }
+                                                            else -> false
+                                                        }
+                                                    } else false
+                                                },
                                             label = { Text(strings.amount, fontSize = 10.sp) },
                                             singleLine = true
                                         )

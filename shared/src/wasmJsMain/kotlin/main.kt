@@ -29,6 +29,7 @@ fun main() {
         val transactionRepository = remember { HttpTransactionRepository(networkClient) }
         val billingListRepository = remember { HttpBillingListRepository(networkClient) }
         val adminNoteRepository = remember { HttpAdminNoteRepository(networkClient) }
+        val shoppingListRepository = remember { HttpShoppingListRepository(networkClient) }
 
         // Session restoration on startup
         LaunchedEffect(Unit) {
@@ -65,6 +66,7 @@ fun main() {
                     } else {
                         val notesViewModel = remember { AdminNotesViewModel(adminNoteRepository) }
                         val productsViewModel = remember { AdminProductsViewModel(productRepository) }
+                        val shoppingListViewModel = remember { AdminShoppingListViewModel(shoppingListRepository, productRepository, adminNoteRepository) }
                         val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository) }
                         val transactionsViewModel = remember { AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
                         val bulkBillingViewModel = remember { AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository) }
@@ -75,6 +77,7 @@ fun main() {
                                 networkClient.onDataChanged.collect {
                                     notesViewModel.loadNotes()
                                     productsViewModel.loadData()
+                                    shoppingListViewModel.loadData()
                                     usersViewModel.loadData()
                                     transactionsViewModel.loadData()
                                     bulkBillingViewModel.loadData()
@@ -96,11 +99,17 @@ fun main() {
                         AdminScreen(
                             notesViewModel = notesViewModel,
                             productsViewModel = productsViewModel,
+                            shoppingListViewModel = shoppingListViewModel,
                             usersViewModel = usersViewModel,
                             transactionsViewModel = transactionsViewModel,
                             bulkBillingViewModel = bulkBillingViewModel,
                             settingsViewModel = null,
                             defaultSaveDirectory = "Downloads",
+                            onExportShoppingListPdf = { language ->
+                                val token = networkClient.authToken ?: ""
+                                val url = networkClient.resolveUrl("/api/admin/shopping-list/pdf?lang=${language.name}&token=$token")
+                                jsTriggerDownload(url)
+                            },
                             onExecutePdfExport = { user, _, fromTimestamp, toTimestamp, language ->
                                 usersViewModel.setIsExportingPdf(true)
                                 val token = networkClient.authToken ?: ""

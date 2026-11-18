@@ -8,6 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -21,6 +23,7 @@ import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.formModalKeys
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
 private fun CustomAmountDialog(
@@ -38,6 +41,11 @@ private fun CustomAmountDialog(
     var description by remember { mutableStateOf("") }
     var amountBrl by remember { mutableStateOf("") }
     var showDiscardConfirm by remember { mutableStateOf(false) }
+    val descriptionFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        descriptionFocusRequester.safeRequestFocus()
+    }
 
     val parsedDouble = remember(amountBrl) {
         amountBrl.replace(',', '.').trim().toDoubleOrNull()
@@ -158,7 +166,10 @@ private fun CustomAmountDialog(
                             )
                         },
                         textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .focusRequester(descriptionFocusRequester),
                         shape = RoundedCornerShape(8.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = SurfaceWhite,

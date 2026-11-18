@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
@@ -40,7 +41,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun AdminNotesTabScreen(
     viewModel: AdminNotesViewModel,
+    onAddToShoppingListFromNote: ((productName: String, noteId: String) -> Unit)? = null,
     onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
+    isExternalModalOpen: Boolean = false,
     focusTrigger: Int = 0
 ) {
     val notes by viewModel.notes.collectAsState()
@@ -54,8 +57,8 @@ fun AdminNotesTabScreen(
     var noteToDelete by remember { mutableStateOf<AdminNote?>(null) }
     val searchFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(noteToDelete, errorMessage, focusTrigger) {
-        if (noteToDelete == null && errorMessage == null) {
+    LaunchedEffect(noteToDelete, errorMessage, isExternalModalOpen, focusTrigger) {
+        if (noteToDelete == null && errorMessage == null && !isExternalModalOpen) {
             searchFocusRequester.safeRequestFocus()
         }
     }
@@ -210,17 +213,49 @@ fun AdminNotesTabScreen(
                                         )
                                     }
 
-                                    IconButton(
-                                        onClick = { noteToDelete = note },
-                                        enabled = !isDeletingNote,
-                                        modifier = Modifier.size(32.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = strings.deleteNote,
-                                            tint = ColorDangerCrimson,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                        val stockZeroProductName = if (isSystem) {
+                                            SystemNoteHelper.extractStockZeroProductName(note.message)
+                                        } else null
+                                        if (stockZeroProductName != null && onAddToShoppingListFromNote != null) {
+                                            OutlinedButton(
+                                                onClick = { onAddToShoppingListFromNote(stockZeroProductName, note.id) },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                modifier = Modifier.height(32.dp),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentNavy)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.AddShoppingCart,
+                                                    contentDescription = null,
+                                                    tint = AccentNavy,
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = strings.shoppingListAddToBtn,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = AccentNavy
+                                                )
+                                            }
+                                        }
+
+                                        IconButton(
+                                            onClick = { noteToDelete = note },
+                                            enabled = !isDeletingNote,
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = strings.deleteNote,
+                                                tint = ColorDangerCrimson,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
                                 }
 

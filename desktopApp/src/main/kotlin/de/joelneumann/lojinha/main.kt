@@ -19,6 +19,7 @@ import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl
+import de.joelneumann.lojinha.data.repository.RoomShoppingListRepositoryImpl
 import de.joelneumann.lojinha.data.service.DataChangeNotifier
 import de.joelneumann.lojinha.server.LojinhaAdminServer
 import de.joelneumann.lojinha.ui.App
@@ -52,6 +53,7 @@ fun main() {
         val billingListRepository = RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged)
         val settingsRepository = RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged)
         val adminNoteRepository = RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged)
+        val shoppingListRepository = RoomShoppingListRepositoryImpl(database.shoppingListItemDao(), onDataChanged)
 
         val adminServer = LojinhaAdminServer(
             productRepository = productRepository,
@@ -60,6 +62,7 @@ fun main() {
             billingListRepository = billingListRepository,
             settingsRepository = settingsRepository,
             adminNoteRepository = adminNoteRepository,
+            shoppingListRepository = shoppingListRepository,
             database = database,
             port = 8080
         )
@@ -119,6 +122,7 @@ fun main() {
                 billingListRepository = billingListRepository,
                 settingsRepository = settingsRepository,
                 adminNoteRepository = adminNoteRepository,
+                shoppingListRepository = shoppingListRepository,
                 showExitAuthDialog = showExitAuthDialog,
                 onDismissExitAuthDialog = { showExitAuthDialog = false }
             )

@@ -76,9 +76,16 @@ fun AdminUsersTabScreen(
     val coroutineScope = rememberCoroutineScope()
     val isModalOpen = showUserModal || customExpenseUser != null || customIncomeUser != null || exportPdfUser != null
     val searchFocusRequester = remember { FocusRequester() }
+    var searchRefocusTrigger by remember { mutableStateOf(0) }
 
-    LaunchedEffect(isModalOpen, expandedUserId, focusTrigger) {
-        if (!isModalOpen && expandedUserId == null) {
+    val completeUserWorkflow: () -> Unit = {
+        onRequestToggleExpand(null)
+        viewModel.updateSearchQuery("")
+        searchRefocusTrigger++
+    }
+
+    LaunchedEffect(isModalOpen, userErrorMessage, expandedUserId, focusTrigger, searchRefocusTrigger) {
+        if (!isModalOpen && userErrorMessage == null && expandedUserId == null) {
             searchFocusRequester.safeRequestFocus()
         }
     }
@@ -201,8 +208,19 @@ fun AdminUsersTabScreen(
                                 val delta = if (isDeposit) absCents else -absCents
                                 viewModel.adjustUserBalance(u.id, u.name, delta, note)
                             },
-                            onToggleActive = viewModel::toggleUserActive,
-                            onDeleteUser = { viewModel.softDeleteUser(it.id) },
+                            onBalanceAdjusted = completeUserWorkflow,
+                            onToggleActive = { usr ->
+                                viewModel.toggleUserActive(usr)
+                                if (expandedUserId == usr.id) {
+                                    completeUserWorkflow()
+                                }
+                            },
+                            onDeleteUser = { usr ->
+                                viewModel.softDeleteUser(usr.id)
+                                if (expandedUserId == usr.id) {
+                                    completeUserWorkflow()
+                                }
+                            },
                             onRequestExportPdf = { viewModel.openExportPdfModal(it) }
                         )
                     }
@@ -264,7 +282,7 @@ fun AdminUsersTabScreen(
         UserEditDialog(
             user = editUser!!,
             allUsers = users,
-            onSave = { viewModel.saveUser(it) },
+            onSave = { viewModel.saveUser(it, onSuccess = completeUserWorkflow) },
             onCancel = { viewModel.closeUserModal() },
             isSaving = isSavingUser
         )
@@ -275,7 +293,7 @@ fun AdminUsersTabScreen(
         UserCustomExpenseDialog(
             user = targetUser,
             onSubmit = { deltaCents, description ->
-                viewModel.submitCustomExpense(targetUser, deltaCents, description)
+                viewModel.submitCustomExpense(targetUser, deltaCents, description, onSuccess = completeUserWorkflow)
             },
             onDismiss = { viewModel.closeCustomExpenseModal() }
         )
@@ -286,7 +304,7 @@ fun AdminUsersTabScreen(
         UserCustomIncomeDialog(
             user = targetUser,
             onSubmit = { amountCents, description ->
-                viewModel.submitCustomIncome(targetUser, amountCents, description)
+                viewModel.submitCustomIncome(targetUser, amountCents, description, onSuccess = completeUserWorkflow)
             },
             onDismiss = { viewModel.closeCustomIncomeModal() }
         )

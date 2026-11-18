@@ -40,9 +40,10 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 ---
 
 ### 1. Primary Database (`lojinha_room.db`)
-* **Format:** Standard SQLite 3 relational database managed by **AndroidX Room (KMP)** using the bundled C SQLite driver.
-* **Tables:** `users`, `products`, `transactions`, `billing_lists`, `billing_list_users`, `settings`, `backups`, `admin_notes`.
+* **Format:** Standard SQLite 3 relational database managed by **AndroidX Room (KMP)** using the bundled C SQLite driver (schema v18).
+* **Tables:** `users`, `products`, `transactions`, `billing_lists`, `billing_list_users`, `settings`, `backups`, `admin_notes`, `product_stock_adjustments`, `shopping_list_items`.
 * **WAL Mode:** Operates in Write-Ahead Logging (`PRAGMA journal_mode=WAL;`). When backing up manually, ensure you copy `lojinha_room.db`, `lojinha_room.db-wal`, and `lojinha_room.db-shm` together, or perform a checkpoint before copying.
+* **Backup & Restore Coverage:** All tables (including `product_stock_adjustments` and `shopping_list_items`) are included in `.db` snapshots, table-level restore, and factory reset wipes via `BackupRestoreService`. Scheduled CSV backups export `products.csv`, `users.csv`, `transactions.csv`, `billing_lists.csv`, and `admin_notes.csv`.
 
 ### 2. Pre-Startup, Pre-Restore & Pre-Wipe Safety Backups
 * **Pre-Startup Snapshot (`lojinha_room.db.startup_backup`):** Before initializing Room and executing any database migrations on application launch, Lojinha automatically creates a point-in-time snapshot of the `.db`, `-wal`, and `-shm` files. If an unexpected power failure or migration error occurs, this file acts as an immediate fallback recovery point.

@@ -9,6 +9,7 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.flow.Flow
@@ -761,4 +762,95 @@ class HttpAdminNoteRepository(private val client: AdminNetworkClient) : AdminNot
         // Not used by admin client directly
     }
 }
+
+class HttpShoppingListRepository(private val client: AdminNetworkClient) : ShoppingListRepository {
+    override fun getItemsFlow(): Flow<List<ShoppingListItem>> = flow {
+        emit(getAllItems())
+    }
+
+    override suspend fun getAllItems(): List<ShoppingListItem> {
+        val response = client.httpClient.get(client.resolveUrl("/api/admin/shopping-list")) {
+            client.run { appendAdminAuth() }
+        }
+        ensureSuccess("getAllItems", response)
+        return response.body()
+    }
+
+    override suspend fun addOrUpdateItem(item: ShoppingListItem) {
+        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list")) {
+            contentType(ContentType.Application.Json)
+            client.run { appendAdminAuth() }
+            setBody(item)
+        }
+        ensureSuccess("addOrUpdateItem", response)
+    }
+
+    override suspend fun updateItem(item: ShoppingListItem) {
+        val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/item")) {
+            contentType(ContentType.Application.Json)
+            client.run { appendAdminAuth() }
+            setBody(item)
+        }
+        ensureSuccess("updateItem", response)
+    }
+
+    override suspend fun confirmItem(id: String) {
+        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/confirm")) {
+            client.run { appendAdminAuth() }
+        }
+        ensureSuccess("confirmItem", response)
+    }
+
+    override suspend fun unconfirmItem(id: String) {
+        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/unconfirm")) {
+            client.run { appendAdminAuth() }
+        }
+        ensureSuccess("unconfirmItem", response)
+    }
+
+    override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
+        val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/reorder")) {
+            contentType(ContentType.Application.Json)
+            client.run { appendAdminAuth() }
+            setBody(items)
+        }
+        ensureSuccess("updateItemsOrder", response)
+    }
+
+    override suspend fun deleteItem(id: String) {
+        val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list/$id")) {
+            client.run { appendAdminAuth() }
+        }
+        ensureSuccess("deleteItem", response)
+    }
+
+    override suspend fun clearAllItems() {
+        val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list")) {
+            client.run { appendAdminAuth() }
+        }
+        ensureSuccess("clearAllItems", response)
+    }
+
+    override suspend fun commitExportBaseline() {
+        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/commit-export")) {
+            client.run { appendAdminAuth() }
+        }
+        ensureSuccess("commitExportBaseline", response)
+    }
+
+    private suspend fun ensureSuccess(operation: String, response: HttpResponse) {
+        if (!response.status.isSuccess()) {
+            val detail = try {
+                response.bodyAsText().take(200).trim()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                ""
+            }
+            val suffix = if (detail.isNotEmpty()) ": $detail" else ""
+            throw IllegalStateException("$operation failed with status ${response.status}$suffix")
+        }
+    }
+}
+
 

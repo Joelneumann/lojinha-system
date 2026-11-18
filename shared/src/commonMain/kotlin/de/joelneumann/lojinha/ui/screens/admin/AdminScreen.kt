@@ -29,9 +29,12 @@ import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminNotesViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminShoppingListViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
+import de.joelneumann.lojinha.ui.components.admin.shoppinglist.ShoppingListQuantityDialog
+import kotlinx.coroutines.delay
 
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
@@ -45,10 +48,22 @@ import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 enum class AdminTab {
     NOTES,
     PRODUCTS,
+    SHOPPING_LIST,
     USERS,
     BULK_BILLING,
     TRANSACTIONS,
     SETTINGS
+}
+
+private fun fKeyForIndex(index: Int): Key = when (index) {
+    1 -> Key.F1
+    2 -> Key.F2
+    3 -> Key.F3
+    4 -> Key.F4
+    5 -> Key.F5
+    6 -> Key.F6
+    7 -> Key.F7
+    else -> Key.F8
 }
 
 private data class AdminTabDefinition(
@@ -64,12 +79,14 @@ private data class AdminTabDefinition(
 fun AdminScreen(
     notesViewModel: AdminNotesViewModel? = null,
     productsViewModel: AdminProductsViewModel,
+    shoppingListViewModel: AdminShoppingListViewModel? = null,
     usersViewModel: AdminUsersViewModel,
     transactionsViewModel: AdminTransactionsViewModel,
     bulkBillingViewModel: AdminBulkBillingViewModel? = null,
     settingsViewModel: AdminSettingsViewModel? = null,
     defaultSaveDirectory: String = "",
     onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
+    onExportShoppingListPdf: ((Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null,
     onExitAdmin: () -> Unit
@@ -87,6 +104,16 @@ fun AdminScreen(
     }
 
     val notes by (notesViewModel?.notes?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
+    val shoppingListItems by (shoppingListViewModel?.items?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
+    val pendingShoppingModal by (shoppingListViewModel?.pendingModalRequest?.collectAsState() ?: remember { mutableStateOf(null) })
+    val shoppingStatusMessage by (shoppingListViewModel?.statusMessage?.collectAsState() ?: remember { mutableStateOf(null) })
+
+    LaunchedEffect(shoppingStatusMessage) {
+        if (shoppingStatusMessage != null) {
+            delay(3000)
+            shoppingListViewModel?.clearStatusMessage()
+        }
+    }
 
     var expandedProductId by remember { mutableStateOf<String?>(null) }
     var expandedUserId by remember { mutableStateOf<String?>(null) }
@@ -97,7 +124,7 @@ fun AdminScreen(
     var isExitAdminPending by remember { mutableStateOf(false) }
     var activePageScroller by remember { mutableStateOf<((Boolean) -> Boolean)?>(null) }
 
-    val tabItems = remember(strings, notes, bulkBillingViewModel, settingsViewModel, notesViewModel) {
+    val tabItems = remember(strings, notes, shoppingListItems, shoppingListViewModel, bulkBillingViewModel, settingsViewModel, notesViewModel) {
         buildList {
             var fKeyIndex = 1
             if (notesViewModel != null) {
@@ -106,25 +133,38 @@ fun AdminScreen(
                         tab = AdminTab.NOTES,
                         icon = Icons.Default.ChatBubbleOutline,
                         label = strings.tabNotes,
-                        key = Key.F1,
-                        keyLabel = "F1",
+                        key = fKeyForIndex(fKeyIndex),
+                        keyLabel = "F$fKeyIndex",
                         badgeCount = notes.size.takeIf { it > 0 }
                     )
                 )
                 fKeyIndex++
             }
-            add(AdminTabDefinition(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts, if (fKeyIndex == 1) Key.F1 else Key.F2, "F$fKeyIndex"))
+            add(AdminTabDefinition(AdminTab.PRODUCTS, Icons.Default.Inventory, strings.tabProducts, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
             fKeyIndex++
-            add(AdminTabDefinition(AdminTab.USERS, Icons.Default.People, strings.tabUsers, if (fKeyIndex == 2) Key.F2 else Key.F3, "F$fKeyIndex"))
-            fKeyIndex++
-            if (bulkBillingViewModel != null) {
-                add(AdminTabDefinition(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling, if (fKeyIndex == 3) Key.F3 else Key.F4, "F$fKeyIndex"))
+            if (shoppingListViewModel != null) {
+                add(
+                    AdminTabDefinition(
+                        tab = AdminTab.SHOPPING_LIST,
+                        icon = Icons.Default.ShoppingCart,
+                        label = strings.tabShoppingList,
+                        key = fKeyForIndex(fKeyIndex),
+                        keyLabel = "F$fKeyIndex",
+                        badgeCount = shoppingListItems.size.takeIf { it > 0 }
+                    )
+                )
                 fKeyIndex++
             }
-            add(AdminTabDefinition(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions, if (fKeyIndex == 4) Key.F4 else Key.F5, "F$fKeyIndex"))
+            add(AdminTabDefinition(AdminTab.USERS, Icons.Default.People, strings.tabUsers, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
+            fKeyIndex++
+            if (bulkBillingViewModel != null) {
+                add(AdminTabDefinition(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
+                fKeyIndex++
+            }
+            add(AdminTabDefinition(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
             fKeyIndex++
             if (settingsViewModel != null) {
-                add(AdminTabDefinition(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings, if (fKeyIndex == 5) Key.F5 else Key.F6, "F$fKeyIndex"))
+                add(AdminTabDefinition(AdminTab.SETTINGS, Icons.Default.Settings, strings.tabSettings, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
             }
         }
     }
@@ -169,6 +209,14 @@ fun AdminScreen(
                     if (targetTabDef != null) {
                         handleTabSwitchRequest(targetTabDef.tab)
                         true
+                    } else if ((event.isCtrlPressed || event.isMetaPressed) && event.key == Key.F) {
+                        if (pendingTabSwitch == null && !isExitAdminPending) {
+                            expandedProductId = null
+                            expandedUserId = null
+                            expandedTransactionId = null
+                            tabFocusTrigger++
+                            true
+                        } else false
                     } else if (event.key == Key.PageDown) {
                         activePageScroller?.invoke(true) ?: false
                     } else if (event.key == Key.PageUp) {
@@ -296,7 +344,11 @@ fun AdminScreen(
                         if (notesViewModel != null) {
                             AdminNotesTabScreen(
                                 viewModel = notesViewModel,
+                                onAddToShoppingListFromNote = shoppingListViewModel?.let { vm ->
+                                    { productName, noteId -> vm.requestAddFromStockZeroNote(productName, noteId) }
+                                },
                                 onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                                isExternalModalOpen = pendingShoppingModal != null,
                                 focusTrigger = tabFocusTrigger
                             )
                         }
@@ -311,9 +363,26 @@ fun AdminScreen(
                             },
                             onRequestExpandProduct = { id -> expandedProductId = id },
                             onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
+                            onAddToShoppingList = shoppingListViewModel?.let { vm ->
+                                { product -> vm.requestAddProduct(product) }
+                            },
                             onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                            isExternalModalOpen = pendingShoppingModal != null,
                             focusTrigger = tabFocusTrigger
                         )
+                    }
+
+                    AdminTab.SHOPPING_LIST -> {
+                        if (shoppingListViewModel != null) {
+                            AdminShoppingListTabScreen(
+                                viewModel = shoppingListViewModel,
+                                onExportPdf = onExportShoppingListPdf,
+                                onOpenExportedPdf = onOpenExportedPdf,
+                                onRevealExportedFolder = onRevealExportedFolder,
+                                onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                                focusTrigger = tabFocusTrigger
+                            )
+                        }
                     }
 
                     AdminTab.USERS -> {
@@ -441,5 +510,57 @@ fun AdminScreen(
                 }
             }
         )
+    }
+
+    pendingShoppingModal?.let { request ->
+        shoppingListViewModel?.let { vm ->
+            ShoppingListQuantityDialog(
+                request = request,
+                onDismiss = { vm.dismissModal() },
+                onConfirm = { name, rawQty, removeNote ->
+                    vm.confirmModalAdd(
+                        name = name,
+                        rawQuantityInput = rawQty,
+                        product = request.product,
+                        sourceNoteId = request.sourceNoteId,
+                        existingItem = request.existingItem,
+                        removeNote = removeNote,
+                        clearSearchQuery = currentTab == AdminTab.SHOPPING_LIST
+                    )
+                }
+            )
+        }
+    }
+
+    shoppingStatusMessage?.let { toastMsg ->
+        Box(
+            modifier = Modifier.fillMaxSize().padding(bottom = 24.dp),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Surface(
+                color = PrimaryNavy,
+                shape = RoundedCornerShape(12.dp),
+                shadowElevation = 6.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = ColorSuccessEmerald,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = toastMsg,
+                        color = SurfaceWhite,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
     }
 }

@@ -131,7 +131,7 @@ class AdminProductsViewModel(
         _products.value = productRepository.getAllProducts().sortedByAccentInsensitive { p -> p.name }
     }
 
-    fun saveProduct(product: Product) {
+    fun saveProduct(product: Product, onSuccess: () -> Unit = {}) {
         if (_isSavingProduct.value) return
         viewModelScope.launch {
             _isSavingProduct.value = true
@@ -150,6 +150,7 @@ class AdminProductsViewModel(
                 }
                 refreshProducts()
                 closeProductModal()
+                onSuccess()
             } catch (e: Exception) {
                 AppLogger.error("AdminProductsViewModel", "saveProduct error: ${e.message}", e)
                 _productErrorMessage.value = e.message ?: I18n.get().errFailedToSaveProduct
