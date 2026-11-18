@@ -80,7 +80,7 @@ class AdminShoppingListViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                AppLogger.error("AdminShoppingListViewModel", "Failed to load shopping list: ${e.message}", e)
+                AppLogger.error(TAG, "Failed to load shopping list: ${e.message}", e)
                 _errorMessage.value = e.message
             }
         }
@@ -95,7 +95,7 @@ class AdminShoppingListViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                AppLogger.error("AdminShoppingListViewModel", "Failed to load products: ${e.message}", e)
+                AppLogger.error(TAG, "Failed to load products: ${e.message}", e)
             }
         }
     }
@@ -213,14 +213,24 @@ class AdminShoppingListViewModel(
                     _items.value = _items.value + itemToSave
                 }
 
-                if (removeNote && sourceNoteId != null) {
-                    adminNoteRepository?.deleteNote(sourceNoteId)
-                }
-
                 _statusMessage.value = strings.shoppingListAddedToast(cleanName)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                AppLogger.error("AdminShoppingListViewModel", "Failed to add item: ${e.message}", e)
+                AppLogger.error(TAG, "Failed to add item: ${e.message}", e)
                 _errorMessage.value = e.message
+                return@launch
+            }
+
+            if (removeNote && sourceNoteId != null) {
+                try {
+                    adminNoteRepository?.deleteNote(sourceNoteId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    AppLogger.warn(TAG, "Added '$cleanName', but failed to delete source note $sourceNoteId: ${e.message}", e)
+                    _errorMessage.value = e.message
+                }
             }
         }
         return true
@@ -250,14 +260,8 @@ class AdminShoppingListViewModel(
         val previousItems = _items.value
         _items.value = _items.value.map { if (it.id == id) updated else it }
 
-        viewModelScope.launch {
-            try {
-                shoppingListRepository.updateItem(updated)
-            } catch (e: Exception) {
-                AppLogger.error("AdminShoppingListViewModel", "Failed to update item: ${e.message}", e)
-                _items.value = previousItems
-                _errorMessage.value = e.message
-            }
+        runOptimisticMutation("update item", previousItems) {
+            shoppingListRepository.updateItem(updated)
         }
     }
 
@@ -269,14 +273,8 @@ class AdminShoppingListViewModel(
         val updated = current.copy(isConfirmedForCurrentExport = true)
         _items.value = _items.value.map { if (it.id == id) updated else it }
 
-        viewModelScope.launch {
-            try {
-                shoppingListRepository.confirmItem(id)
-            } catch (e: Exception) {
-                AppLogger.error("AdminShoppingListViewModel", "Failed to confirm item: ${e.message}", e)
-                _items.value = previousItems
-                _errorMessage.value = e.message
-            }
+        runOptimisticMutation("confirm item", previousItems) {
+            shoppingListRepository.confirmItem(id)
         }
     }
 
@@ -288,14 +286,8 @@ class AdminShoppingListViewModel(
         val updated = current.copy(isConfirmedForCurrentExport = false)
         _items.value = _items.value.map { if (it.id == id) updated else it }
 
-        viewModelScope.launch {
-            try {
-                shoppingListRepository.unconfirmItem(id)
-            } catch (e: Exception) {
-                AppLogger.error("AdminShoppingListViewModel", "Failed to unconfirm item: ${e.message}", e)
-                _items.value = previousItems
-                _errorMessage.value = e.message
-            }
+        runOptimisticMutation("unconfirm item", previousItems) {
+            shoppingListRepository.unconfirmItem(id)
         }
     }
 
@@ -313,8 +305,10 @@ class AdminShoppingListViewModel(
         viewModelScope.launch {
             try {
                 shoppingListRepository.updateItemsOrder(snapshot)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                AppLogger.error("AdminShoppingListViewModel", "Failed to persist order: ${e.message}", e)
+                AppLogger.error(TAG, "Failed to persist order: ${e.message}", e)
                 _errorMessage.value = e.message
                 loadData()
             }
@@ -324,25 +318,31 @@ class AdminShoppingListViewModel(
     fun deleteItem(id: String) {
         val previousItems = _items.value
         _items.value = _items.value.filter { it.id != id }
-        viewModelScope.launch {
-            try {
-                shoppingListRepository.deleteItem(id)
-            } catch (e: Exception) {
-                AppLogger.error("AdminShoppingListViewModel", "Failed to delete item: ${e.message}", e)
-                _items.value = previousItems
-                _errorMessage.value = e.message
-            }
+        runOptimisticMutation("delete item", previousItems) {
+            shoppingListRepository.deleteItem(id)
         }
     }
 
     fun clearAllItems() {
         val previousItems = _items.value
         _items.value = emptyList()
+        runOptimisticMutation("clear items", previousItems) {
+            shoppingListRepository.clearAllItems()
+        }
+    }
+
+    private fun runOptimisticMutation(
+        actionName: String,
+        previousItems: List<ShoppingListItem>,
+        block: suspend () -> Unit
+    ) {
         viewModelScope.launch {
             try {
-                shoppingListRepository.clearAllItems()
+                block()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                AppLogger.error("AdminShoppingListViewModel", "Failed to clear items: ${e.message}", e)
+                AppLogger.error(TAG, "Failed to $actionName: ${e.message}", e)
                 _items.value = previousItems
                 _errorMessage.value = e.message
             }
@@ -384,6 +384,8 @@ class AdminShoppingListViewModel(
     }
 
     companion object {
+        private const val TAG = "AdminShoppingListViewModel"
+
         fun isAllowedQuantityText(text: String, unitType: UnitType?): Boolean {
             return when (unitType) {
                 UnitType.PIECE -> text.all { it.isDigit() }

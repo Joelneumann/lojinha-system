@@ -9,6 +9,7 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.flow.Flow
@@ -768,131 +769,86 @@ class HttpShoppingListRepository(private val client: AdminNetworkClient) : Shopp
     }
 
     override suspend fun getAllItems(): List<ShoppingListItem> {
-        return try {
-            client.httpClient.get(client.resolveUrl("/api/admin/shopping-list")) {
-                client.run { appendAdminAuth() }
-            }.body()
-        } catch (e: Exception) {
-            AppLogger.error("HttpShoppingListRepository", "getAllItems failed: ${e.message}", e)
-            throw e
+        val response = client.httpClient.get(client.resolveUrl("/api/admin/shopping-list")) {
+            client.run { appendAdminAuth() }
         }
+        ensureSuccess("getAllItems", response)
+        return response.body()
     }
 
     override suspend fun addOrUpdateItem(item: ShoppingListItem) {
-        try {
-            val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list")) {
-                contentType(ContentType.Application.Json)
-                client.run { appendAdminAuth() }
-                setBody(item)
-            }
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("addOrUpdateItem failed with status ${response.status}")
-            }
-        } catch (e: Exception) {
-            AppLogger.error("HttpShoppingListRepository", "addOrUpdateItem failed: ${e.message}", e)
-            throw e
+        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list")) {
+            contentType(ContentType.Application.Json)
+            client.run { appendAdminAuth() }
+            setBody(item)
         }
+        ensureSuccess("addOrUpdateItem", response)
     }
 
     override suspend fun updateItem(item: ShoppingListItem) {
-        try {
-            val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/item")) {
-                contentType(ContentType.Application.Json)
-                client.run { appendAdminAuth() }
-                setBody(item)
-            }
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("updateItem failed with status ${response.status}")
-            }
-        } catch (e: Exception) {
-            AppLogger.error("HttpShoppingListRepository", "updateItem failed: ${e.message}", e)
-            throw e
+        val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/item")) {
+            contentType(ContentType.Application.Json)
+            client.run { appendAdminAuth() }
+            setBody(item)
         }
+        ensureSuccess("updateItem", response)
     }
 
     override suspend fun confirmItem(id: String) {
-        try {
-            val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/confirm")) {
-                client.run { appendAdminAuth() }
-            }
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("confirmItem failed with status ${response.status}")
-            }
-        } catch (e: Exception) {
-            AppLogger.error("HttpShoppingListRepository", "confirmItem failed: ${e.message}", e)
-            throw e
+        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/confirm")) {
+            client.run { appendAdminAuth() }
         }
+        ensureSuccess("confirmItem", response)
     }
 
     override suspend fun unconfirmItem(id: String) {
-        try {
-            val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/unconfirm")) {
-                client.run { appendAdminAuth() }
-            }
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("unconfirmItem failed with status ${response.status}")
-            }
-        } catch (e: Exception) {
-            AppLogger.error("HttpShoppingListRepository", "unconfirmItem failed: ${e.message}", e)
-            throw e
+        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/unconfirm")) {
+            client.run { appendAdminAuth() }
         }
+        ensureSuccess("unconfirmItem", response)
     }
 
     override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
-        try {
-            val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/reorder")) {
-                contentType(ContentType.Application.Json)
-                client.run { appendAdminAuth() }
-                setBody(items)
-            }
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("updateItemsOrder failed with status ${response.status}")
-            }
-        } catch (e: Exception) {
-            AppLogger.error("HttpShoppingListRepository", "updateItemsOrder failed: ${e.message}", e)
-            throw e
+        val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/reorder")) {
+            contentType(ContentType.Application.Json)
+            client.run { appendAdminAuth() }
+            setBody(items)
         }
+        ensureSuccess("updateItemsOrder", response)
     }
 
     override suspend fun deleteItem(id: String) {
-        try {
-            val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list/$id")) {
-                client.run { appendAdminAuth() }
-            }
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("deleteItem failed with status ${response.status}")
-            }
-        } catch (e: Exception) {
-            AppLogger.error("HttpShoppingListRepository", "deleteItem failed: ${e.message}", e)
-            throw e
+        val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list/$id")) {
+            client.run { appendAdminAuth() }
         }
+        ensureSuccess("deleteItem", response)
     }
 
     override suspend fun clearAllItems() {
-        try {
-            val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list")) {
-                client.run { appendAdminAuth() }
-            }
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("clearAllItems failed with status ${response.status}")
-            }
-        } catch (e: Exception) {
-            AppLogger.error("HttpShoppingListRepository", "clearAllItems failed: ${e.message}", e)
-            throw e
+        val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list")) {
+            client.run { appendAdminAuth() }
         }
+        ensureSuccess("clearAllItems", response)
     }
 
     override suspend fun commitExportBaseline() {
-        try {
-            val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/commit-export")) {
-                client.run { appendAdminAuth() }
+        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/commit-export")) {
+            client.run { appendAdminAuth() }
+        }
+        ensureSuccess("commitExportBaseline", response)
+    }
+
+    private suspend fun ensureSuccess(operation: String, response: HttpResponse) {
+        if (!response.status.isSuccess()) {
+            val detail = try {
+                response.bodyAsText().take(200).trim()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                ""
             }
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("commitExportBaseline failed with status ${response.status}")
-            }
-        } catch (e: Exception) {
-            AppLogger.error("HttpShoppingListRepository", "commitExportBaseline failed: ${e.message}", e)
-            throw e
+            val suffix = if (detail.isNotEmpty()) ": $detail" else ""
+            throw IllegalStateException("$operation failed with status ${response.status}$suffix")
         }
     }
 }

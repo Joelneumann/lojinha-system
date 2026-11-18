@@ -553,6 +553,8 @@ fun App(
                                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                                 adminShoppingListViewModel.setExportResultPath(targetFile.absolutePath)
                                             }
+                                        } catch (e: kotlinx.coroutines.CancellationException) {
+                                            throw e
                                         } catch (e: Exception) {
                                             AppLogger.error("App", "Failed to export Shopping List PDF: ${e.message}", e)
                                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {

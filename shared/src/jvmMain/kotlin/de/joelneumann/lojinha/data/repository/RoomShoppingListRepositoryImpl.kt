@@ -4,6 +4,7 @@ import de.joelneumann.lojinha.data.dao.ShoppingListItemDao
 import de.joelneumann.lojinha.data.entity.ShoppingListItemEntity
 import de.joelneumann.lojinha.domain.model.ShoppingListItem
 import de.joelneumann.lojinha.domain.repository.ShoppingListRepository
+import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
@@ -14,6 +15,10 @@ class RoomShoppingListRepositoryImpl(
     private val dao: ShoppingListItemDao,
     private val onDataChanged: (() -> Unit)? = null
 ) : ShoppingListRepository {
+
+    private companion object {
+        const val TAG = "RoomShoppingListRepository"
+    }
 
     private val writeMutex = Mutex()
 
@@ -66,7 +71,10 @@ class RoomShoppingListRepositoryImpl(
     override suspend fun updateItem(item: ShoppingListItem) {
         writeMutex.withLock {
             val all = dao.getAllItems()
-            val existing = all.find { it.id == item.id } ?: return@withLock
+            val existing = all.find { it.id == item.id } ?: run {
+                AppLogger.warn(TAG, "Skipping updateItem: item '${item.id}' not found")
+                return@withLock
+            }
             val updated = existing.copy(
                 name = item.name.trim(),
                 quantity = item.quantity.trim(),
@@ -115,6 +123,7 @@ class RoomShoppingListRepositoryImpl(
     override suspend fun clearAllItems() {
         writeMutex.withLock {
             dao.deleteAllItems()
+            AppLogger.info(TAG, "Cleared all shopping list items")
             onDataChanged?.invoke()
         }
     }

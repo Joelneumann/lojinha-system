@@ -89,7 +89,9 @@ object ShoppingListPdfGenerator {
     ): ByteArray {
         val out = ByteArrayOutputStream()
         writePdf(out, items, language, products)
-        return out.toByteArray()
+        val bytes = out.toByteArray()
+        AppLogger.info(TAG, "Generated Shopping List PDF bytes (${bytes.size} bytes, ${items.size} items, lang=$language)")
+        return bytes
     }
 
     fun generatePdf(

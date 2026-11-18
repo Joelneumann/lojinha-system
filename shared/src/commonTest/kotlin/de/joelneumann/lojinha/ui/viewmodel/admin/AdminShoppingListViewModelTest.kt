@@ -112,10 +112,15 @@ class AdminShoppingListViewModelTest {
     private class FakeAdminNoteRepository(notes: List<AdminNote> = emptyList()) : AdminNoteRepository {
         val notesFlow = MutableStateFlow(notes)
         val deletedIds = mutableListOf<String>()
+        var failNextDelete = false
         override fun getNotesFlow(): Flow<List<AdminNote>> = notesFlow
         override suspend fun getAllNotes(): List<AdminNote> = notesFlow.value
         override suspend fun addNote(note: AdminNote) {}
         override suspend fun deleteNote(id: String) {
+            if (failNextDelete) {
+                failNextDelete = false
+                throw IllegalStateException("Simulated note deletion failure")
+            }
             deletedIds.add(id)
             notesFlow.value = notesFlow.value.filter { it.id != id }
         }
@@ -354,5 +359,47 @@ class AdminShoppingListViewModelTest {
         repo.failNextWrite = true
         vm.clearAllItems()
         assertEquals(1, vm.items.value.size, "Failed clearAll must roll back optimistic clear")
+    }
+
+    @Test
+    fun testNoteDeletionFailureAfterItemAddKeepsAddedItem() = runTest {
+        val clubMate = Product(id = "p-1", name = "Club Mate", basePrice = 500L, unitType = UnitType.PIECE, stockQuantity = 0L)
+        val note = AdminNote(id = "n-1", message = "SYSNOTE|STOCK_ZERO|Club Mate|Alice", userId = "SYSTEM", userNameSnapshot = "System")
+        val shoppingRepo = FakeShoppingListRepository()
+        val productRepo = FakeProductRepository(listOf(clubMate))
+        val noteRepo = FakeAdminNoteRepository(listOf(note)).apply { failNextDelete = true }
+
+        val vm = AdminShoppingListViewModel(shoppingRepo, productRepo, noteRepo)
+        vm.confirmModalAdd("Club Mate", "6", clubMate, sourceNoteId = "n-1", existingItem = null, removeNote = true)
+
+        assertEquals(1, vm.items.value.size)
+        assertNotNull(vm.statusMessage.value)
+        assertEquals("Simulated note deletion failure", vm.errorMessage.value)
+    }
+
+    @Test
+    fun testCancellationExceptionIsRethrownAndNotSurfacedAsError() = runTest {
+        val cancellingRepo = object : ShoppingListRepository {
+            private val flow = MutableStateFlow(
+                listOf(ShoppingListItem(id = "i1", name = "Milk", quantity = "1", sortOrder = 0))
+            )
+            override fun getItemsFlow(): Flow<List<ShoppingListItem>> = flow
+            override suspend fun getAllItems(): List<ShoppingListItem> = flow.value
+            override suspend fun addOrUpdateItem(item: ShoppingListItem) = throw kotlinx.coroutines.CancellationException("cancelled")
+            override suspend fun updateItem(item: ShoppingListItem) = throw kotlinx.coroutines.CancellationException("cancelled")
+            override suspend fun confirmItem(id: String) = throw kotlinx.coroutines.CancellationException("cancelled")
+            override suspend fun unconfirmItem(id: String) = throw kotlinx.coroutines.CancellationException("cancelled")
+            override suspend fun updateItemsOrder(items: List<ShoppingListItem>) = throw kotlinx.coroutines.CancellationException("cancelled")
+            override suspend fun deleteItem(id: String) = throw kotlinx.coroutines.CancellationException("cancelled")
+            override suspend fun clearAllItems() = throw kotlinx.coroutines.CancellationException("cancelled")
+            override suspend fun commitExportBaseline() {}
+        }
+
+        val vm = AdminShoppingListViewModel(cancellingRepo, FakeProductRepository())
+        vm.deleteItem("i1")
+        vm.confirmItem("i1")
+        vm.persistCurrentOrder()
+
+        assertNull(vm.errorMessage.value, "CancellationException must not set errorMessage")
     }
 }

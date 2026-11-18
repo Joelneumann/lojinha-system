@@ -10,8 +10,10 @@ A local, offline-first Point-of-Sale (POS) and prepaid balance management system
 * **100% Offline-First Architecture:** Operates completely independently of an internet connection using local SQLite storage with WAL (Write-Ahead Logging) checkpointing via AndroidX Room.
 * **Dual Interface (Desktop Kiosk & Remote Web Admin):**
   * **Desktop POS Terminal:** Fullscreen Compose Multiplatform kiosk optimized for keyboard-wedge USB barcode scanners and rapid touchscreen or mouse navigation.
-  * **Remote Web Admin (Kotlin/Wasm):** Embedded Ktor Netty server running on port `8080` (or `8081`) serving a production WebAssembly admin application over LAN, complete with token session authentication, brute-force rate limiting, and real-time Server-Sent Events (SSE).
-* **Product Suggestions & Admin Notes:** Kiosk users can submit wishlist requests, restock suggestions, or messages to the administration directly from the shopping screen (via a lightbulb icon in the header). Admins can view, search, and manage notes in a dedicated Admin Notes tab with full CSV export support.
+  * **Remote Web Admin (Kotlin/Wasm):** Embedded Ktor Netty server running on port `8080` (or `8081`) serving a production WebAssembly admin application over LAN, complete with token session authentication, brute-force rate limiting, real-time Server-Sent Events (SSE), Gzip compression, and RFC-compliant HTTP `ETag` / `Cache-Control` asset delivery.
+* **Product Suggestions & Admin Notes:** Kiosk users can submit wishlist requests, restock suggestions, or messages to the administration directly from the shopping screen (via a lightbulb icon in the header). In addition, when a purchase depletes a product's stock to `0`, Lojinha automatically generates a localized **stock-zero system alert** (`STOCK_ZERO`). Admins can search, review, delete, or forward stock-zero alerts directly to the Shopping List in a dedicated Admin Notes tab with full CSV export support.
+* **Persistent Admin Shopping List & PDF Checklist Export:** Maintain a persistent restocking list across desktop and Web Admin with catalog-linked product search, custom items, live current-stock badges, inline editing, drag-and-drop reordering, weekly review status tracking (`New`, `Edited`, `Confirmed`, `Unadjusted`), and compact localized A4 PDF checklist export (`ShoppingList_<date>.pdf`).
+* **Product History & Moving-Average Stock Tracking:** Inspect an item's paginated audit timeline combining purchases, cancellations, and manual stock adjustments with a running `Stock After` column, plus optional moving-average purchase price recalculation on restock.
 * **Printable PDF Transaction Statements:** Admins can generate and export localized A4 PDF account statements for any user directly from the desktop app or Web Admin. Features flexible date filters (Last 30/60/90 days, Current Month, All Time, or Custom Range), language selection (PT-BR, EN, DE), and one-click "Open PDF" / "Reveal in Folder" actions.
 * **Bulk Billing Lists:** Create recurring charge groups (fixed fees or variable usage) with per-user multiplier quantities and execute batch charges in a single atomic transaction.
 * **Automated & Cloud Backups (OneDrive Integration):**
@@ -51,7 +53,7 @@ A local, offline-first Point-of-Sale (POS) and prepaid balance management system
 | **Remote Web Admin UI** | Compose Multiplatform for Web (**Kotlin/Wasm**) | Browser-based administrative single-page application |
 | **Embedded Web Server** | Ktor Server (Netty engine) | Content negotiation, CORS, token authentication, static asset serving, and SSE |
 | **HTTP & Cloud Client** | Ktor Client (CIO engine) | Microsoft Graph / OneDrive PKCE OAuth2 and dynamic currency exchange rates API |
-| **Document Generation** | OpenPDF (JVM) | Server/Desktop PDF rendering for printable transaction account statements |
+| **Document Generation** | OpenPDF (JVM) | Server/Desktop PDF rendering for printable transaction account statements and compact shopping list checklists |
 | **Database & Storage** | AndroidX Room (KMP) with SQLite Bundled Driver | Local relational persistence with Room migrations |
 | **Serialization & Time** | `kotlinx.serialization` & `kotlinx.datetime` | JSON serialization and timezone-aware schedule calculations |
 | **Hardware & Input** | USB Barcode Scanner (Keyboard Wedge) / Mouse / Keyboard | Fast auto-focus text fields and accent-insensitive search |
@@ -141,21 +143,45 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 
 ### Admin Management
 
-*Protected by the master Admin Password.* Accessible via the desktop app or the remote Kotlin/Wasm web console. Includes an **Unsaved Changes Guard** modal preventing accidental tab navigation or logout with uncommitted edits, persistent scrollbars, and **PageUp / PageDown** keyboard navigation across all admin views.
+*Protected by the master Admin Password.* Accessible via the desktop app or the remote Kotlin/Wasm web console. Includes an **Unsaved Changes Guard** modal preventing accidental tab navigation or logout with uncommitted edits, persistent scrollbars, and keyboard-first workflows across all admin views (`F1`–`F7` tab switching, `Ctrl+F` / `Cmd+F` search focus, `Esc` to collapse open cards, `PageUp` / `PageDown` list scrolling, and `Enter` / `Tab` rapid entry flows).
 
 ```
-[ F1: Products ]  [ F2: Users ]  [ F3: Bulk Billing ]  [ F4: Transactions ]  [ F5: Settings ]  [ F6: Notes ]
+[ F1: Notes ]  [ F2: Products ]  [ F3: Shopping List ]  [ F4: Users ]  [ F5: Bulk Billing ]  [ F6: Transactions ]  [ F7: Settings ]
 ```
+*(Note: `F7: Settings` is available on the Desktop POS application and omitted from the Remote Web Admin console.)*
 
-#### 1. Products Tab (`F1`)
+#### 1. Notes Tab (`F1`)
+* Review customer wishlist requests, restocking suggestions, and automatic **stock-zero system alerts** (`STOCK_ZERO`, triggered atomically whenever a purchase reduces a product's stock to `0`).
+* Search filter for quick discovery by decoded message content, user name, or `System` label.
+* **1-Click Shopping List Handoff:** Stock-zero system notes include a **Shopping List** button that opens the quantity prompt for the depleted product and optionally removes the note once added.
+* One-click note deletion with confirmation and real-time reactive updates via `DataChangeNotifier` and LAN Server-Sent Events.
+
+#### 2. Products Tab (`F2`)
 * Create, edit, deactivate, or permanently delete products.
 * Add multiple barcodes per product with descriptions (e.g. "Single Can", "6-Pack").
 * Interactive sorting controls (Name A-Z/Z-A, Stock Low-High/High-Low, Price Low-High/High-Low).
-* Accordion view with inline quick stock adjustments (`+` / `-`) and Enter key support.
+* Accordion view with inline quick stock adjustments (`+` / `-`, optional incoming purchase price for weighted moving-average cost recalculation, and `Enter` key submission).
+* **Product History Modal:** View a paginated audit ledger of manual stock adjustments, purchases, and cancellations for any product, including a running **Stock After** column.
+* **Add to Shopping List:** Quick action button on product cards to queue an item onto the Admin Shopping List.
 * Separate "Disabled Products" collapsible section.
 * Edit modal with "Revert Changes" and unsaved changes tracking.
 
-#### 2. Users Tab (`F2`)
+#### 3. Shopping List Tab (`F3`)
+* **Search & Quick-Add Bar:** Type to search active catalog products (ranked autocomplete suggestions with `Tab`, `Up`/`Down`, and `Enter` keyboard selection) or press `Enter` / click **Add** to create a custom non-catalog item.
+* **Quantity & Duplicate Handling:** Adding an item opens a unit-aware quantity modal (`pcs` for piece goods, `kg` for weighted goods, or freeform text for custom items). If the product or custom item is already on the list, the modal warns and pre-fills the existing quantity to update it in place.
+* **Interactive List Management:**
+  * Inline editing for both **Item / Product** name and **Quantity**, with `Tab` / `Shift+Tab` / `Enter` navigation across rows and automatic select-all on focus.
+  * **Current Stock** column displaying live catalog stock (highlighted in crimson when stock is `<= 0`).
+  * **Drag-and-Drop Reordering** via drag handles with persistent `sortOrder` synchronization across desktop and Web Admin.
+  * **Clear All** and per-row delete actions.
+* **Weekly Review Lifecycle & Status Badges:**
+  * Items track their review state relative to the previous PDF export (`New`, `Edited`, `Confirmed`, `Unadjusted`).
+  * Existing items carried over from a previous export start as **Unadjusted** (`isPendingReview`) until edited or explicitly confirmed with the check toggle.
+* **Compact PDF Checklist Export:**
+  * Clicking **Export PDF** opens an approval dialog listing any remaining `Unadjusted` items before generating a compact, localized A4 checklist (`ShoppingList_<date>.pdf`) with checkboxes, current stock, quantities, and item names (available on both Desktop and Web Admin download).
+  * Exporting commits the new baseline (`lastExportedName`, `lastExportedQuantity`) so items transition cleanly into the next weekly review cycle.
+
+#### 4. Users Tab (`F4`)
 * Create and edit users (Name, Language, PIN, Barcode, Barcode ID, and Avatar config).
 * Segregated collapsible sections: **Active Accounts**, **Deactivated Accounts**, and **Deleted Accounts** with 1-click reactivate/restore workflows.
 * Inline quick balance adjustment (`+` / `-`) with Enter key support.
@@ -163,20 +189,20 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 * **Printable PDF Transaction Statement:** Generate localized A4 statements for any user with date range presets (Last 30/60/90 days, Current Month, All Time, or Custom Range), language selection, custom destination folder, and one-click "Open PDF" / "Reveal in Folder" actions.
 * Admin Reset PIN checkbox and PIN visibility toggle.
 
-#### 3. Bulk Billing Tab (`F3`)
+#### 5. Bulk Billing Tab (`F5`)
 * Create and manage recurring billing lists:
   * **Fixed Lists:** Fixed fee per billing unit (e.g., Monthly Locker Fee).
   * **Variable Lists:** Custom individual amounts per member.
 * Assign active users with custom quantity multipliers.
 * 1-click **Execute Billing** runs an atomic batch transaction across all assigned members, logs individual debit transactions, and updates the `lastExecutionTime` tracker.
 
-#### 4. Transactions Tab (`F4`)
+#### 6. Transactions Tab (`F6`)
 * Searchable, filterable system-wide transaction history backed by Room database pagination.
 * Visual link badges connecting parent transactions to cancellations or corrections.
 * **Purchase Correction:** Opens an interactive editor allowing admins to alter line item quantities, calculating delta balance and stock adjustments automatically.
 * **Non-Purchase Storno:** 1-click reversal of admin deposits and withdrawals.
 
-#### 5. Settings Tab (`F5`)
+#### 7. Settings Tab (`F7`)
 * **Admin Security:** Update master admin password with double-confirmation.
 * **Pricing & Currency Exchange Rates:**
   * Configure Global Markup %, USD exchange rate, and EUR exchange rate.
@@ -196,12 +222,6 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 * **CSV Data Import & Export:** Full CSV import/export for users, products, billing lists, transactions, and notes with duplicate barcode validation and audit tracking (see [CSV Import/Export Specification](doc/CSV_IMPORT_EXPORT.md)).
 * **Diagnostics & Logs:** Export comprehensive Diagnostic Support Bundle (`.zip`) and inspect persistent log storage metrics (see [Storage Locations & Diagnostics](doc/STORAGE_LOCATIONS.md)).
 
-#### 6. Notes Tab (`F6`)
-* Review customer wishlist requests, restocking suggestions, and admin notes submitted from the kiosk.
-* Search filter for quick discovery by message content or user name.
-* One-click note deletion.
-* Real-time reactive updates via `DataChangeNotifier` and LAN Server-Sent Events.
-
 ---
 
 ## 🌐 Remote Web Admin Console (Kotlin/Wasm)
@@ -214,6 +234,10 @@ The desktop application includes an integrated **Ktor Netty Web Server** serving
   * Session token authentication with Bearer tokens.
   * Brute-force rate limiting (temporary lockout after 5 consecutive failed attempts).
   * Canonical path validation preventing path traversal attacks.
+* **Fast Asset Delivery & Caching:**
+  * Automatic **Gzip compression** for Wasm, JS, and static assets when supported by the client.
+  * RFC-compliant **`ETag` validation** and **`Cache-Control`** policies (1-year immutable caching for content-hashed `.wasm` chunks; `no-cache` with ETag revalidation for entry HTML/JS).
+  * Deferred script loading for faster initial paint.
 * **Real-time Synchronization:** Built-in **Server-Sent Events (SSE)** endpoint (`/api/admin/events`) notifies connected web clients whenever database changes occur on the kiosk or another client.
 
 ---
