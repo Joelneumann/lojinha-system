@@ -13,6 +13,7 @@ import de.joelneumann.lojinha.data.entity.BillingListUserEntity
 import de.joelneumann.lojinha.data.entity.ProductEntity
 import de.joelneumann.lojinha.data.entity.ProductStockAdjustmentEntity
 import de.joelneumann.lojinha.data.entity.SettingsEntity
+import de.joelneumann.lojinha.data.entity.ShoppingListItemEntity
 import de.joelneumann.lojinha.data.entity.TransactionEntity
 import de.joelneumann.lojinha.data.entity.UserEntity
 import de.joelneumann.lojinha.domain.model.Barcode
@@ -310,6 +311,7 @@ class BackupRestoreService(
         val backupBillingListUsers = mutableListOf<BillingListUserEntity>()
         val backupNotes = mutableListOf<AdminNoteEntity>()
         val backupStockAdjustments = mutableListOf<ProductStockAdjustmentEntity>()
+        val backupShoppingListItems = mutableListOf<ShoppingListItemEntity>()
         val tableNames = mutableSetOf<String>()
 
         // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
@@ -702,6 +704,32 @@ class BackupRestoreService(
                     stmt.close()
                 }
             }
+
+            // Read shopping_list_items
+            if (tableNames.contains("shopping_list_items")) {
+                val stmt = connection.prepare(
+                    "SELECT id, productId, name, quantity, sortOrder, createdAt, lastExportedName, lastExportedQuantity, isConfirmedForCurrentExport FROM shopping_list_items"
+                )
+                try {
+                    while (stmt.step()) {
+                        backupShoppingListItems.add(
+                            ShoppingListItemEntity(
+                                id = stmt.getText(0),
+                                productId = if (stmt.isNull(1)) null else stmt.getText(1),
+                                name = stmt.getText(2),
+                                quantity = stmt.getText(3),
+                                sortOrder = stmt.getLong(4).toInt(),
+                                createdAt = stmt.getLong(5),
+                                lastExportedName = if (stmt.isNull(6)) null else stmt.getText(6),
+                                lastExportedQuantity = if (stmt.isNull(7)) null else stmt.getText(7),
+                                isConfirmedForCurrentExport = stmt.getLong(8) != 0L
+                            )
+                        )
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
         } finally {
             connection.close()
         }
@@ -721,6 +749,7 @@ class BackupRestoreService(
                     // Clear tables in reverse dependency order (children first)
                     db.productStockAdjustmentDao().deleteAllAdjustments()
                     db.adminNoteDao().deleteAllNotes()
+                    db.shoppingListItemDao().deleteAllItems()
                     db.billingListDao().deleteAllBillingListUsers()
                     db.billingListDao().deleteAllBillingLists()
                     db.userDao().deleteAllUsers()
@@ -743,6 +772,7 @@ class BackupRestoreService(
                         .forEach { db.billingListDao().insertBillingListUser(it) }
                     backupNotes.forEach { db.adminNoteDao().insertNote(it) }
                     backupStockAdjustments.forEach { db.productStockAdjustmentDao().insertAdjustment(it) }
+                    backupShoppingListItems.forEach { db.shoppingListItemDao().insertItem(it) }
 
                     if (hasBackupRoutinesInBackup && !preserveExistingRoutines) {
                         backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
@@ -799,6 +829,7 @@ class BackupRestoreService(
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     db.adminNoteDao().deleteAllNotes()
+                    db.shoppingListItemDao().deleteAllItems()
                     db.billingListDao().deleteAllBillingListUsers()
                     db.billingListDao().deleteAllBillingLists()
                     db.productStockAdjustmentDao().deleteAllAdjustments()

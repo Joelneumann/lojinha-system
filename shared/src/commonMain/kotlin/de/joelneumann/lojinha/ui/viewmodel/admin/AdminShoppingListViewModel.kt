@@ -9,13 +9,13 @@ import de.joelneumann.lojinha.domain.repository.AdminNoteRepository
 import de.joelneumann.lojinha.domain.repository.ProductRepository
 import de.joelneumann.lojinha.domain.repository.ShoppingListRepository
 import de.joelneumann.lojinha.ui.i18n.I18n
-import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.util.AppLogger
+import kotlin.math.round
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -145,7 +145,6 @@ class AdminShoppingListViewModel(
                 ?: _items.value.find { it.name.equals(matchedProduct.name, ignoreCase = true) }
         } else {
             _items.value.find { it.productId == null && it.name.equals(trimmed, ignoreCase = true) }
-                ?: _items.value.find { it.name.equals(trimmed, ignoreCase = true) }
         }
         _pendingModalRequest.value = ShoppingListModalRequest(
             product = matchedProduct,
@@ -187,6 +186,7 @@ class AdminShoppingListViewModel(
             try {
                 val itemToSave = if (existingItem != null) {
                     existingItem.copy(
+                        productId = existingItem.productId ?: product?.id,
                         name = cleanName,
                         quantity = formattedQuantity,
                         isConfirmedForCurrentExport = true
@@ -247,6 +247,7 @@ class AdminShoppingListViewModel(
             quantity = finalQty,
             isConfirmedForCurrentExport = current.isConfirmedForCurrentExport || shouldConfirm
         )
+        val previousItems = _items.value
         _items.value = _items.value.map { if (it.id == id) updated else it }
 
         viewModelScope.launch {
@@ -254,6 +255,7 @@ class AdminShoppingListViewModel(
                 shoppingListRepository.updateItem(updated)
             } catch (e: Exception) {
                 AppLogger.error("AdminShoppingListViewModel", "Failed to update item: ${e.message}", e)
+                _items.value = previousItems
                 _errorMessage.value = e.message
             }
         }
@@ -263,6 +265,7 @@ class AdminShoppingListViewModel(
         val current = _items.value.find { it.id == id } ?: return
         if (current.isReviewedForExport) return
 
+        val previousItems = _items.value
         val updated = current.copy(isConfirmedForCurrentExport = true)
         _items.value = _items.value.map { if (it.id == id) updated else it }
 
@@ -271,6 +274,7 @@ class AdminShoppingListViewModel(
                 shoppingListRepository.confirmItem(id)
             } catch (e: Exception) {
                 AppLogger.error("AdminShoppingListViewModel", "Failed to confirm item: ${e.message}", e)
+                _items.value = previousItems
                 _errorMessage.value = e.message
             }
         }
@@ -280,6 +284,7 @@ class AdminShoppingListViewModel(
         val current = _items.value.find { it.id == id } ?: return
         if (current.isNewlyAdded || current.isPendingReview) return
 
+        val previousItems = _items.value
         val updated = current.copy(isConfirmedForCurrentExport = false)
         _items.value = _items.value.map { if (it.id == id) updated else it }
 
@@ -288,6 +293,7 @@ class AdminShoppingListViewModel(
                 shoppingListRepository.unconfirmItem(id)
             } catch (e: Exception) {
                 AppLogger.error("AdminShoppingListViewModel", "Failed to unconfirm item: ${e.message}", e)
+                _items.value = previousItems
                 _errorMessage.value = e.message
             }
         }
@@ -310,29 +316,34 @@ class AdminShoppingListViewModel(
             } catch (e: Exception) {
                 AppLogger.error("AdminShoppingListViewModel", "Failed to persist order: ${e.message}", e)
                 _errorMessage.value = e.message
+                loadData()
             }
         }
     }
 
     fun deleteItem(id: String) {
+        val previousItems = _items.value
         _items.value = _items.value.filter { it.id != id }
         viewModelScope.launch {
             try {
                 shoppingListRepository.deleteItem(id)
             } catch (e: Exception) {
                 AppLogger.error("AdminShoppingListViewModel", "Failed to delete item: ${e.message}", e)
+                _items.value = previousItems
                 _errorMessage.value = e.message
             }
         }
     }
 
     fun clearAllItems() {
+        val previousItems = _items.value
         _items.value = emptyList()
         viewModelScope.launch {
             try {
                 shoppingListRepository.clearAllItems()
             } catch (e: Exception) {
                 AppLogger.error("AdminShoppingListViewModel", "Failed to clear items: ${e.message}", e)
+                _items.value = previousItems
                 _errorMessage.value = e.message
             }
         }
@@ -366,6 +377,10 @@ class AdminShoppingListViewModel(
 
     fun clearError() {
         _errorMessage.value = null
+    }
+
+    fun reportError(message: String) {
+        _errorMessage.value = message
     }
 
     companion object {
@@ -428,13 +443,21 @@ class AdminShoppingListViewModel(
                     qty.toString()
                 }
                 UnitType.WEIGHT -> {
-                    val grams = Formatting.parseWeightInputToGrams(trimmed) ?: return null
-                    if (grams <= 0L) return null
-                    if (grams % 1000L == 0L) {
-                        (grams / 1000L).toString()
+                    val lower = trimmed.lowercase()
+                    val kgValue = when {
+                        lower.endsWith("kg") -> lower.dropLast(2).trim().replace(',', '.').toDoubleOrNull()
+                        lower.endsWith("g") -> lower.dropLast(1).trim().replace(',', '.').toDoubleOrNull()?.div(1000.0)
+                        else -> trimmed.replace(',', '.').toDoubleOrNull()
+                    } ?: return null
+                    if (!kgValue.isFinite() || kgValue <= 0.0) return null
+                    val millis = round(kgValue * 1000.0).toLong()
+                    if (millis <= 0L) return null
+                    val whole = millis / 1000L
+                    val rem = millis % 1000L
+                    if (rem == 0L) {
+                        whole.toString()
                     } else {
-                        val kg = grams.toDouble() / 1000.0
-                        kg.toString().trimEnd('0').trimEnd('.').replace('.', ',')
+                        "$whole,${rem.toString().padStart(3, '0').trimEnd('0')}"
                     }
                 }
                 null -> trimmed

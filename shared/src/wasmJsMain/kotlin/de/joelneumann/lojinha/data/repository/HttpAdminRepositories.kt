@@ -774,7 +774,7 @@ class HttpShoppingListRepository(private val client: AdminNetworkClient) : Shopp
             }.body()
         } catch (e: Exception) {
             AppLogger.error("HttpShoppingListRepository", "getAllItems failed: ${e.message}", e)
-            emptyList()
+            throw e
         }
     }
 

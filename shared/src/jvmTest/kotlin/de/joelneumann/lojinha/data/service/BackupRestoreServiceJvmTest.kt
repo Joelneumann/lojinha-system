@@ -1305,5 +1305,40 @@ class BackupRestoreServiceJvmTest {
         val file = DatabaseFactory.getDatabaseFile()
         assertTrue(file.absolutePath.endsWith(".lojinha/lojinha_room.db"))
     }
+
+    @Test
+    fun testShoppingListIncludedInDbBackupRestoreAndWipe() = runTest {
+        val item1 = de.joelneumann.lojinha.data.entity.ShoppingListItemEntity(
+            id = "sl-1",
+            productId = null,
+            name = "Oat Milk",
+            quantity = "12",
+            sortOrder = 0,
+            createdAt = 1000L,
+            lastExportedName = "Oat Milk",
+            lastExportedQuantity = "10",
+            isConfirmedForCurrentExport = true
+        )
+        db.shoppingListItemDao().insertItem(item1)
+
+        val backupFile = service.performDbBackup(tempDir, BackupWriteMode.CREATE_NEW_FILE)
+
+        // Modify live DB after backup
+        db.shoppingListItemDao().deleteAllItems()
+        db.shoppingListItemDao().insertItem(item1.copy(id = "sl-stale", name = "Stale Item"))
+
+        // Restore must clear stale items and restore backed-up shopping list items
+        service.restoreDbFromBackup(backupFile)
+        val restored = db.shoppingListItemDao().getAllItems()
+        assertEquals(1, restored.size)
+        assertEquals("sl-1", restored[0].id)
+        assertEquals("Oat Milk", restored[0].name)
+        assertEquals("12", restored[0].quantity)
+        assertTrue(restored[0].isConfirmedForCurrentExport)
+
+        // Wipe all data must clear shopping_list_items
+        service.wipeAllData()
+        assertTrue(db.shoppingListItemDao().getAllItems().isEmpty())
+    }
 }
 

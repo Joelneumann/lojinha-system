@@ -496,7 +496,6 @@ fun App(
                             val listener = {
                                 adminNotesViewModel.loadNotes()
                                 adminProductsViewModel.loadData()
-                                adminShoppingListViewModel.loadData()
                                 adminUsersViewModel.loadData()
                                 adminTransactionsViewModel.loadData()
                                 adminBulkBillingViewModel.loadData()
@@ -522,6 +521,7 @@ fun App(
                             val downloads = java.io.File(userHome, "Downloads")
                             if (downloads.exists()) downloads.absolutePath else userHome
                         }
+                        var isExportingShoppingListPdf by remember { mutableStateOf(false) }
 
                         de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
                             notesViewModel = adminNotesViewModel,
@@ -533,26 +533,36 @@ fun App(
                             settingsViewModel = adminSettingsViewModel,
                             defaultSaveDirectory = defaultSaveDir,
                             onExportShoppingListPdf = { language ->
-                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    try {
-                                        val items = effectiveShoppingListRepo.getAllItems()
-                                        val products = effectiveProductRepo.getAllProducts()
-                                        val targetDir = java.io.File(defaultSaveDir)
-                                        if (!targetDir.exists()) targetDir.mkdirs()
-                                        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                        val targetFile = java.io.File(targetDir, "ShoppingList_$dateStr.pdf")
-                                        de.joelneumann.lojinha.data.service.ShoppingListPdfGenerator.generatePdf(
-                                            outputFile = targetFile,
-                                            items = items,
-                                            language = language,
-                                            products = products
-                                        )
-                                        effectiveShoppingListRepo.commitExportBaseline()
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            adminShoppingListViewModel.setExportResultPath(targetFile.absolutePath)
+                                if (!isExportingShoppingListPdf) {
+                                    isExportingShoppingListPdf = true
+                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        try {
+                                            val items = effectiveShoppingListRepo.getAllItems()
+                                            val products = effectiveProductRepo.getAllProducts()
+                                            val targetDir = java.io.File(defaultSaveDir)
+                                            if (!targetDir.exists()) targetDir.mkdirs()
+                                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                            val targetFile = java.io.File(targetDir, "ShoppingList_$dateStr.pdf")
+                                            de.joelneumann.lojinha.data.service.ShoppingListPdfGenerator.generatePdf(
+                                                outputFile = targetFile,
+                                                items = items,
+                                                language = language,
+                                                products = products
+                                            )
+                                            effectiveShoppingListRepo.commitExportBaseline()
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminShoppingListViewModel.setExportResultPath(targetFile.absolutePath)
+                                            }
+                                        } catch (e: Exception) {
+                                            AppLogger.error("App", "Failed to export Shopping List PDF: ${e.message}", e)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminShoppingListViewModel.reportError(e.message ?: "Failed to export PDF")
+                                            }
+                                        } finally {
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                isExportingShoppingListPdf = false
+                                            }
                                         }
-                                    } catch (e: Exception) {
-                                        AppLogger.error("App", "Failed to export Shopping List PDF: ${e.message}", e)
                                     }
                                 }
                             },

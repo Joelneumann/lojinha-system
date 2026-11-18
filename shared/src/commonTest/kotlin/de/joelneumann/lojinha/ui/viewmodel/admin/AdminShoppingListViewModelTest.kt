@@ -31,18 +31,27 @@ class AdminShoppingListViewModelTest {
 
     private class FakeShoppingListRepository : ShoppingListRepository {
         val itemsFlow = MutableStateFlow<List<ShoppingListItem>>(emptyList())
+        var failNextWrite = false
+
+        private fun checkFailure() {
+            if (failNextWrite) {
+                failNextWrite = false
+                throw IllegalStateException("Simulated repository failure")
+            }
+        }
 
         override fun getItemsFlow(): Flow<List<ShoppingListItem>> = itemsFlow
         override suspend fun getAllItems(): List<ShoppingListItem> = itemsFlow.value
 
         override suspend fun addOrUpdateItem(item: ShoppingListItem) {
+            checkFailure()
             val existing = itemsFlow.value.find {
                 (item.id.isNotBlank() && it.id == item.id) ||
                     (item.productId != null && it.productId == item.productId)
             }
             itemsFlow.value = if (existing != null) {
                 itemsFlow.value.map {
-                    if (it.id == existing.id) it.copy(name = item.name, quantity = item.quantity, isConfirmedForCurrentExport = true) else it
+                    if (it.id == existing.id) it.copy(productId = it.productId ?: item.productId, name = item.name, quantity = item.quantity, isConfirmedForCurrentExport = true) else it
                 }
             } else {
                 itemsFlow.value + item
@@ -50,26 +59,32 @@ class AdminShoppingListViewModelTest {
         }
 
         override suspend fun updateItem(item: ShoppingListItem) {
+            checkFailure()
             itemsFlow.value = itemsFlow.value.map { if (it.id == item.id) item else it }
         }
 
         override suspend fun confirmItem(id: String) {
+            checkFailure()
             itemsFlow.value = itemsFlow.value.map { if (it.id == id) it.copy(isConfirmedForCurrentExport = true) else it }
         }
 
         override suspend fun unconfirmItem(id: String) {
+            checkFailure()
             itemsFlow.value = itemsFlow.value.map { if (it.id == id) it.copy(isConfirmedForCurrentExport = false) else it }
         }
 
         override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
+            checkFailure()
             itemsFlow.value = items.mapIndexed { idx, item -> item.copy(sortOrder = idx) }
         }
 
         override suspend fun deleteItem(id: String) {
+            checkFailure()
             itemsFlow.value = itemsFlow.value.filter { it.id != id }
         }
 
         override suspend fun clearAllItems() {
+            checkFailure()
             itemsFlow.value = emptyList()
         }
 
@@ -282,5 +297,62 @@ class AdminShoppingListViewModelTest {
         val n1After = vm.items.value.first { it.id == "n1" }
         assertTrue(n1After.isNewlyAdded)
         assertFalse(n1After.isPendingReview)
+    }
+
+    @Test
+    fun testWeightQuantityAlwaysInterpretedAsKilograms() = runTest {
+        assertEquals("25", AdminShoppingListViewModel.normalizeInlineQuantity("25", UnitType.WEIGHT))
+        assertEquals("25,5", AdminShoppingListViewModel.normalizeInlineQuantity("25.5", UnitType.WEIGHT))
+        assertEquals("120", AdminShoppingListViewModel.normalizeInlineQuantity("120", UnitType.WEIGHT))
+        assertEquals("0,25", AdminShoppingListViewModel.normalizeInlineQuantity("0,25", UnitType.WEIGHT))
+        assertEquals("0,5", AdminShoppingListViewModel.normalizeInlineQuantity("500g", UnitType.WEIGHT))
+        assertNull(AdminShoppingListViewModel.normalizeInlineQuantity("0", UnitType.WEIGHT))
+        assertNull(AdminShoppingListViewModel.normalizeInlineQuantity("", UnitType.WEIGHT))
+    }
+
+    @Test
+    fun testForceCustomDoesNotMatchOrCorruptCatalogItem() = runTest {
+        val clubMate = Product(id = "p-1", name = "Club Mate", basePrice = 500L, unitType = UnitType.PIECE, stockQuantity = 5L)
+        val repo = FakeShoppingListRepository()
+        val vm = AdminShoppingListViewModel(repo, FakeProductRepository(listOf(clubMate)))
+
+        vm.requestAddProduct(clubMate)
+        vm.confirmModalAdd("Club Mate", "10", clubMate, null, null, removeNote = false)
+
+        vm.requestAddCustomItem("Club Mate", forceCustom = true)
+        val customModal = vm.pendingModalRequest.value
+        assertNotNull(customModal)
+        assertNull(customModal.product)
+        assertNull(customModal.existingItem, "Custom item prompt must not overwrite catalog-linked row")
+
+        vm.confirmModalAdd("Club Mate", "2 packs", null, null, customModal.existingItem, removeNote = false)
+        assertEquals(2, vm.items.value.size)
+        assertEquals("10", vm.items.value.first { it.productId == "p-1" }.quantity)
+        assertEquals("2 packs", vm.items.value.first { it.productId == null }.quantity)
+    }
+
+    @Test
+    fun testOptimisticMutationRollsBackOnFailure() = runTest {
+        val repo = FakeShoppingListRepository()
+        repo.itemsFlow.value = listOf(
+            ShoppingListItem(id = "i1", name = "Milk", quantity = "5", sortOrder = 0, lastExportedName = "Milk", lastExportedQuantity = "5")
+        )
+        val vm = AdminShoppingListViewModel(repo, FakeProductRepository())
+
+        repo.failNextWrite = true
+        vm.deleteItem("i1")
+        assertEquals(1, vm.items.value.size, "Failed delete must roll back optimistic removal")
+        assertNotNull(vm.errorMessage.value)
+        vm.clearError()
+
+        repo.failNextWrite = true
+        vm.updateItemInPlace("i1", "Milk", "12", confirm = true)
+        assertEquals("5", vm.items.value.first().quantity, "Failed update must roll back optimistic edit")
+        assertTrue(vm.items.value.first().isPendingReview)
+        vm.clearError()
+
+        repo.failNextWrite = true
+        vm.clearAllItems()
+        assertEquals(1, vm.items.value.size, "Failed clearAll must roll back optimistic clear")
     }
 }

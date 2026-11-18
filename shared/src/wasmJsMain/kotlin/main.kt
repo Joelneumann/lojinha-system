@@ -109,7 +109,6 @@ fun main() {
                                 val token = networkClient.authToken ?: ""
                                 val url = networkClient.resolveUrl("/api/admin/shopping-list/pdf?lang=${language.name}&token=$token")
                                 jsTriggerDownload(url)
-                                shoppingListViewModel.markExportedLocally()
                             },
                             onExecutePdfExport = { user, _, fromTimestamp, toTimestamp, language ->
                                 usersViewModel.setIsExportingPdf(true)

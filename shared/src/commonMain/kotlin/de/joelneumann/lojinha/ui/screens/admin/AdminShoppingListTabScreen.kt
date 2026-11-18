@@ -95,6 +95,39 @@ fun AdminShoppingListTabScreen(
     var draggedItemId by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableStateOf(0f) }
     var expectedLazyIndexAfterSwap by remember { mutableStateOf<Int?>(null) }
+    val currentItemsState by rememberUpdatedState(items)
+
+    val trySwapDraggedItem: (String) -> Unit = { activeId ->
+        val visibleItems = listState.layoutInfo.visibleItemsInfo.filter { it.key != "top-anchor" }
+        val draggedInfo = visibleItems.firstOrNull { it.key == activeId }
+        val expectedIdx = expectedLazyIndexAfterSwap
+        if (draggedInfo != null && (expectedIdx == null || draggedInfo.index == expectedIdx)) {
+            expectedLazyIndexAfterSwap = null
+            val draggedTop = draggedInfo.offset + dragOffsetY
+            val draggedBottom = draggedTop + draggedInfo.size
+
+            // Directional midpoint crossing prevents ping-pong oscillation
+            val targetInfo = visibleItems.firstOrNull { candidate ->
+                if (candidate.key == activeId) return@firstOrNull false
+                val candidateMid = candidate.offset + candidate.size / 2f
+                when {
+                    dragOffsetY > 0f && candidate.index > draggedInfo.index -> draggedBottom > candidateMid
+                    dragOffsetY < 0f && candidate.index < draggedInfo.index -> draggedTop < candidateMid
+                    else -> false
+                }
+            }
+
+            if (targetInfo != null) {
+                val fromIdx = currentItemsState.indexOfFirst { it.id == activeId }
+                val toIdx = currentItemsState.indexOfFirst { it.id == targetInfo.key }
+                if (fromIdx in currentItemsState.indices && toIdx in currentItemsState.indices && fromIdx != toIdx) {
+                    dragOffsetY -= (targetInfo.offset - draggedInfo.offset).toFloat()
+                    expectedLazyIndexAfterSwap = targetInfo.index
+                    viewModel.moveItem(fromIdx, toIdx)
+                }
+            }
+        }
+    }
 
     LaunchedEffect(draggedItemId) {
         while (draggedItemId != null) {
@@ -113,6 +146,7 @@ fun AdminShoppingListTabScreen(
                 if (scrollStep != 0f) {
                     val consumed = listState.scrollBy(scrollStep)
                     dragOffsetY += consumed
+                    trySwapDraggedItem(activeId)
                 }
             }
             delay(16L)
@@ -198,140 +232,64 @@ fun AdminShoppingListTabScreen(
         } else false
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(Unit) {
-                detectTapGestures(onTap = { focusManager.clearFocus() })
-            }
-            .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && !showClearAllConfirm && !showExportApprovalDialog && errorMessage == null) {
-                    when (event.key) {
-                        Key.PageDown -> {
-                            coroutineScope.launch { listState.pageDown() }
-                            true
-                        }
-                        Key.PageUp -> {
-                            coroutineScope.launch { listState.pageUp() }
-                            true
-                        }
-                        else -> false
-                    }
-                } else false
-            }
-    ) {
-        // Top Bar: Search/Add input + Count Pill + Export PDF + Clear All (matching AdminTopBar styling)
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val isCompact = maxWidth < 760.dp
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isCompact = maxWidth < 760.dp
 
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { focusManager.clearFocus() })
+                }
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && !showClearAllConfirm && !showExportApprovalDialog && errorMessage == null) {
+                        when (event.key) {
+                            Key.PageDown -> {
+                                coroutineScope.launch { listState.pageDown() }
+                                true
+                            }
+                            Key.PageUp -> {
+                                coroutineScope.launch { listState.pageUp() }
+                                true
+                            }
+                            else -> false
+                        }
+                    } else false
+                }
+        ) {
+            // Top Bar: Search/Add input + Count Pill + Export PDF + Clear All
             if (isCompact) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                            SearchInputField(
-                                query = searchQuery,
-                                onQueryChange = viewModel::updateSearchQuery,
-                                placeholder = strings.shoppingListSearchOrAddPlaceholder,
-                                onSearchSubmitted = handleQuickAddFromSearch,
-                                onKeyDown = searchKeyHandler,
-                                focusRequester = searchFocusRequester,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                        Button(
-                            onClick = { handleQuickAddFromSearch() },
-                            enabled = searchQuery.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxHeight()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                tint = SurfaceWhite,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = strings.shoppingListAddBtn,
-                                color = SurfaceWhite,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                maxLines = 1
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(40.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AdminCountPill(
-                            text = strings.shoppingListCountText(items.size),
-                            modifier = Modifier.fillMaxHeight()
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxHeight(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Button(
-                                onClick = { viewModel.requestExportPdf() },
-                                enabled = items.isNotEmpty(),
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.fillMaxHeight()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Print,
-                                    contentDescription = null,
-                                    tint = SurfaceWhite,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = strings.shoppingListExportPdfBtn,
-                                    color = SurfaceWhite,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    maxLines = 1
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = { showClearAllConfirm = true },
-                                enabled = items.isNotEmpty(),
-                                border = BorderStroke(1.dp, if (items.isNotEmpty()) ColorDangerCrimson else DividerBorder),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.fillMaxHeight()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DeleteSweep,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = strings.shoppingListClearAllBtn,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
+                    ShoppingListSearchAndAddBar(
+                        searchQuery = searchQuery,
+                        onQueryChange = viewModel::updateSearchQuery,
+                        placeholder = strings.shoppingListSearchOrAddPlaceholder,
+                        addLabel = strings.shoppingListAddBtn,
+                        onQuickAdd = handleQuickAddFromSearch,
+                        onKeyDown = searchKeyHandler,
+                        focusRequester = searchFocusRequester,
+                        isCompact = true,
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    )
+                    ShoppingListToolbarActions(
+                        countText = strings.shoppingListCountText(items.size),
+                        exportLabel = strings.shoppingListExportPdfBtn,
+                        clearAllLabel = strings.shoppingListClearAllBtn,
+                        hasItems = items.isNotEmpty(),
+                        isCompact = true,
+                        onExportClick = {
+                            focusManager.clearFocus()
+                            viewModel.requestExportPdf()
+                        },
+                        onClearAllClick = {
+                            focusManager.clearFocus()
+                            showClearAllConfirm = true
+                        },
+                        modifier = Modifier.fillMaxWidth().height(40.dp)
+                    )
                 }
             } else {
                 Row(
@@ -339,93 +297,35 @@ fun AdminShoppingListTabScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        SearchInputField(
-                            query = searchQuery,
-                            onQueryChange = viewModel::updateSearchQuery,
-                            placeholder = strings.shoppingListSearchOrAddPlaceholder,
-                            onSearchSubmitted = handleQuickAddFromSearch,
-                            onKeyDown = searchKeyHandler,
-                            focusRequester = searchFocusRequester,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-
-                    Button(
-                        onClick = { handleQuickAddFromSearch() },
-                        enabled = searchQuery.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxHeight()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            tint = SurfaceWhite,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = strings.shoppingListAddBtn,
-                            color = SurfaceWhite,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            maxLines = 1
-                        )
-                    }
-
-                    AdminCountPill(
-                        text = strings.shoppingListCountText(items.size),
+                    ShoppingListSearchAndAddBar(
+                        searchQuery = searchQuery,
+                        onQueryChange = viewModel::updateSearchQuery,
+                        placeholder = strings.shoppingListSearchOrAddPlaceholder,
+                        addLabel = strings.shoppingListAddBtn,
+                        onQuickAdd = handleQuickAddFromSearch,
+                        onKeyDown = searchKeyHandler,
+                        focusRequester = searchFocusRequester,
+                        isCompact = false,
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                    )
+                    ShoppingListToolbarActions(
+                        countText = strings.shoppingListCountText(items.size),
+                        exportLabel = strings.shoppingListExportPdfBtn,
+                        clearAllLabel = strings.shoppingListClearAllBtn,
+                        hasItems = items.isNotEmpty(),
+                        isCompact = false,
+                        onExportClick = {
+                            focusManager.clearFocus()
+                            viewModel.requestExportPdf()
+                        },
+                        onClearAllClick = {
+                            focusManager.clearFocus()
+                            showClearAllConfirm = true
+                        },
                         modifier = Modifier.fillMaxHeight()
                     )
-
-                    Button(
-                        onClick = { viewModel.requestExportPdf() },
-                        enabled = items.isNotEmpty(),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxHeight()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Print,
-                            contentDescription = null,
-                            tint = SurfaceWhite,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = strings.shoppingListExportPdfBtn,
-                            color = SurfaceWhite,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            maxLines = 1
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = { showClearAllConfirm = true },
-                        enabled = items.isNotEmpty(),
-                        border = BorderStroke(1.dp, if (items.isNotEmpty()) ColorDangerCrimson else DividerBorder),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxHeight()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteSweep,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = strings.shoppingListClearAllBtn,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            maxLines = 1
-                        )
-                    }
                 }
             }
-        }
 
         // Inline Search Suggestions Dropdown when typing
         if (searchQuery.isNotBlank()) {
@@ -607,7 +507,7 @@ fun AdminShoppingListTabScreen(
         Spacer(modifier = Modifier.height(14.dp))
 
         // Column Headers
-        if (items.isNotEmpty()) {
+        if (items.isNotEmpty() && !isCompact) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -638,7 +538,7 @@ fun AdminShoppingListTabScreen(
                     color = TextSecondaryMuted,
                     modifier = Modifier.width(170.dp)
                 )
-                Spacer(modifier = Modifier.width(180.dp)) // Status + Confirm + Delete space
+                Spacer(modifier = Modifier.width(184.dp)) // Status + Confirm + Delete + Scrollbar space
             }
         }
 
@@ -673,7 +573,6 @@ fun AdminShoppingListTabScreen(
                     }
                 }
             } else {
-                val currentItemsState by rememberUpdatedState(items)
                 val itemIdsKey = remember(items) { items.map { it.id } }
                 val qtyFocusRequesters = remember(itemIdsKey) {
                     items.associate { it.id to FocusRequester() }
@@ -715,6 +614,7 @@ fun AdminShoppingListTabScreen(
                         ShoppingListRowCard(
                             item = item,
                             linkedProduct = linkedProduct,
+                            isCompact = isCompact,
                             isDragging = isDragging,
                             dragOffsetY = if (isDragging) dragOffsetY else 0f,
                             qtyFocusRequester = qtyFocusRequesters[item.id],
@@ -740,45 +640,7 @@ fun AdminShoppingListTabScreen(
                                         onDrag = { change, dragAmount ->
                                             change.consume()
                                             dragOffsetY += dragAmount.y
-
-                                            val visibleItems = listState.layoutInfo.visibleItemsInfo.filter { it.key != "top-anchor" }
-                                            val draggedInfo = visibleItems.firstOrNull { it.key == item.id } ?: return@detectDragGestures
-
-                                            // Gate further swaps until Compose layout reflects the previous swap
-                                            val expectedIdx = expectedLazyIndexAfterSwap
-                                            if (expectedIdx != null) {
-                                                if (draggedInfo.index != expectedIdx) {
-                                                    return@detectDragGestures
-                                                }
-                                                expectedLazyIndexAfterSwap = null
-                                            }
-
-                                            val draggedTop = draggedInfo.offset + dragOffsetY
-                                            val draggedBottom = draggedTop + draggedInfo.size
-
-                                            // Directional midpoint crossing prevents ping-pong oscillation
-                                            val targetInfo = visibleItems.firstOrNull { candidate ->
-                                                if (candidate.key == item.id) return@firstOrNull false
-                                                val candidateMid = candidate.offset + candidate.size / 2f
-                                                if (dragOffsetY > 0f && candidate.index > draggedInfo.index) {
-                                                    draggedBottom > candidateMid
-                                                } else if (dragOffsetY < 0f && candidate.index < draggedInfo.index) {
-                                                    draggedTop < candidateMid
-                                                } else {
-                                                    false
-                                                }
-                                            }
-
-                                            if (targetInfo != null) {
-                                                val fromIdx = currentItemsState.indexOfFirst { it.id == item.id }
-                                                val toIdx = currentItemsState.indexOfFirst { it.id == targetInfo.key }
-                                                if (fromIdx in currentItemsState.indices && toIdx in currentItemsState.indices && fromIdx != toIdx) {
-                                                    val offsetDelta = targetInfo.offset - draggedInfo.offset
-                                                    dragOffsetY -= offsetDelta.toFloat()
-                                                    expectedLazyIndexAfterSwap = targetInfo.index
-                                                    viewModel.moveItem(fromIdx, toIdx)
-                                                }
-                                            }
+                                            trySwapDraggedItem(item.id)
                                         },
                                         onDragEnd = {
                                             draggedItemId = null
@@ -797,9 +659,18 @@ fun AdminShoppingListTabScreen(
                             onUpdateInPlace = { newName, newQty, confirm ->
                                 viewModel.updateItemInPlace(item.id, newName, newQty, confirm = confirm)
                             },
-                            onConfirmItem = { viewModel.confirmItem(item.id) },
-                            onUnconfirmItem = { viewModel.unconfirmItem(item.id) },
-                            onDeleteItem = { viewModel.deleteItem(item.id) }
+                            onConfirmItem = {
+                                focusManager.clearFocus()
+                                viewModel.confirmItem(item.id)
+                            },
+                            onUnconfirmItem = {
+                                focusManager.clearFocus()
+                                viewModel.unconfirmItem(item.id)
+                            },
+                            onDeleteItem = {
+                                focusManager.clearFocus()
+                                viewModel.deleteItem(item.id)
+                            }
                         )
                     }
                 }
@@ -812,6 +683,7 @@ fun AdminShoppingListTabScreen(
                         .padding(vertical = 4.dp)
                 )
             }
+        }
         }
     }
 
@@ -868,9 +740,142 @@ fun AdminShoppingListTabScreen(
 }
 
 @Composable
+private fun ShoppingListSearchAndAddBar(
+    searchQuery: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+    addLabel: String,
+    onQuickAdd: () -> Unit,
+    onKeyDown: (KeyEvent) -> Boolean,
+    focusRequester: FocusRequester,
+    isCompact: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 12.dp)
+    ) {
+        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            SearchInputField(
+                query = searchQuery,
+                onQueryChange = onQueryChange,
+                placeholder = placeholder,
+                onSearchSubmitted = onQuickAdd,
+                onKeyDown = onKeyDown,
+                focusRequester = focusRequester,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Button(
+            onClick = onQuickAdd,
+            enabled = searchQuery.isNotBlank(),
+            colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxHeight()
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = null,
+                tint = SurfaceWhite,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(if (isCompact) 4.dp else 6.dp))
+            Text(
+                text = addLabel,
+                color = SurfaceWhite,
+                fontWeight = FontWeight.Bold,
+                fontSize = if (isCompact) 13.sp else 14.sp,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShoppingListToolbarActions(
+    countText: String,
+    exportLabel: String,
+    clearAllLabel: String,
+    hasItems: Boolean,
+    isCompact: Boolean,
+    onExportClick: () -> Unit,
+    onClearAllClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val iconSize = if (isCompact) 16.dp else 18.dp
+    val fontSize = if (isCompact) 12.sp else 14.sp
+    val shape = RoundedCornerShape(if (isCompact) 10.dp else 12.dp)
+    val padding = if (isCompact) PaddingValues(horizontal = 12.dp, vertical = 6.dp) else ButtonDefaults.ContentPadding
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = if (isCompact) Arrangement.SpaceBetween else Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AdminCountPill(
+            text = countText,
+            modifier = Modifier.fillMaxHeight()
+        )
+        Row(
+            modifier = Modifier.fillMaxHeight(),
+            horizontalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = onExportClick,
+                enabled = hasItems,
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                shape = shape,
+                contentPadding = padding,
+                modifier = Modifier.fillMaxHeight()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Print,
+                    contentDescription = null,
+                    tint = SurfaceWhite,
+                    modifier = Modifier.size(iconSize)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = exportLabel,
+                    color = SurfaceWhite,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = fontSize,
+                    maxLines = 1
+                )
+            }
+            OutlinedButton(
+                onClick = onClearAllClick,
+                enabled = hasItems,
+                border = BorderStroke(1.dp, if (hasItems) ColorDangerCrimson else DividerBorder),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson),
+                shape = shape,
+                contentPadding = padding,
+                modifier = Modifier.fillMaxHeight()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DeleteSweep,
+                    contentDescription = null,
+                    modifier = Modifier.size(iconSize)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = clearAllLabel,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = fontSize,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ShoppingListRowCard(
     item: ShoppingListItem,
     linkedProduct: Product?,
+    isCompact: Boolean,
     isDragging: Boolean,
     dragOffsetY: Float,
     qtyFocusRequester: FocusRequester?,
@@ -915,6 +920,221 @@ private fun ShoppingListRowCard(
         else -> strings.shoppingListStatusConfirmed to ColorSuccessEmerald
     }
 
+    val commitIfChanged = { confirm: Boolean ->
+        val validName = nameField.text.trim().ifBlank { item.name }
+        val normalizedQty = AdminShoppingListViewModel.normalizeInlineQuantity(qtyField.text, unitType)
+        if (nameField.text.isBlank()) {
+            nameField = TextFieldValue(item.name)
+        }
+        if (normalizedQty == null) {
+            qtyField = TextFieldValue(editableQty)
+        }
+        val effectiveQty = normalizedQty ?: item.quantity
+        val hasTextChanges = validName != item.name ||
+            (normalizedQty != null && normalizedQty != (AdminShoppingListViewModel.normalizeInlineQuantity(item.quantity, unitType) ?: item.quantity))
+        if (hasTextChanges || (confirm && normalizedQty != null)) {
+            onUpdateInPlace(validName, effectiveQty, confirm)
+        }
+    }
+
+    val resetFieldsAndClearFocus = {
+        nameField = TextFieldValue(item.name)
+        qtyField = TextFieldValue(editableQty)
+        focusManager.clearFocus()
+    }
+
+    val dragHandle: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .focusProperties { canFocus = false }
+                .then(onDragModifier),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.DragHandle,
+                contentDescription = strings.shoppingListDragHandleTooltip,
+                tint = if (isDragging) AccentNavy else TextSecondaryMuted,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+
+    val nameBox: @Composable (Modifier) -> Unit = { mod ->
+        InlineSelectAllTextField(
+            value = nameField,
+            onValueChange = { nameField = it },
+            onCommit = { confirm -> commitIfChanged(confirm) },
+            onCancel = resetFieldsAndClearFocus,
+            onEnterAction = {
+                commitIfChanged(true)
+                focusManager.clearFocus()
+            },
+            onTabNavigate = { reverse ->
+                if (reverse) {
+                    focusManager.moveFocus(FocusDirection.Previous)
+                } else {
+                    onFocusOwnQty()
+                }
+            },
+            textStyle = TextStyle(
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = PrimaryNavy
+            ),
+            selectAllOnFocus = false,
+            modifier = mod
+        )
+    }
+
+    val stockBox: @Composable (Modifier) -> Unit = { mod ->
+        Box(modifier = mod, contentAlignment = Alignment.CenterStart) {
+            if (linkedProduct != null) {
+                val isZeroStock = linkedProduct.stockQuantity <= 0L
+                Surface(
+                    color = if (isZeroStock) ColorDangerCrimson.copy(alpha = 0.1f) else SurfaceContainerLight,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isZeroStock) ColorDangerCrimson.copy(alpha = 0.35f) else DividerBorder
+                    )
+                ) {
+                    Text(
+                        text = Formatting.formatQuantity(linkedProduct.stockQuantity, linkedProduct.unitType, strings),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isZeroStock) ColorDangerCrimson else TextSecondarySubtle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            } else {
+                Text(
+                    text = "-",
+                    fontSize = 13.sp,
+                    color = TextSecondaryMuted,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
+        }
+    }
+
+    val qtyBox: @Composable (Modifier) -> Unit = { mod ->
+        Row(
+            modifier = mod,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            InlineSelectAllTextField(
+                value = qtyField,
+                onValueChange = { newVal ->
+                    if (AdminShoppingListViewModel.isAllowedQuantityText(newVal.text, unitType)) {
+                        qtyField = newVal
+                    }
+                },
+                onCommit = { confirm -> commitIfChanged(confirm) },
+                onCancel = resetFieldsAndClearFocus,
+                onEnterAction = {
+                    commitIfChanged(true)
+                    onTabQuantity(false)
+                },
+                onTabNavigate = onTabQuantity,
+                textStyle = TextStyle(
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavy
+                ),
+                selectAllOnFocus = true,
+                focusRequester = qtyFocusRequester,
+                modifier = Modifier.weight(1f)
+            )
+
+            if (unitLabel != null) {
+                Text(
+                    text = unitLabel,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondaryMuted,
+                    maxLines = 1,
+                    modifier = Modifier.width(34.dp)
+                )
+            }
+        }
+    }
+
+    val statusPill: @Composable () -> Unit = {
+        Surface(
+            color = statusColor.copy(alpha = 0.14f),
+            shape = RoundedCornerShape(6.dp),
+            modifier = Modifier.width(92.dp)
+        ) {
+            Box(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = statusText,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = statusColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+
+    val confirmSlot: @Composable () -> Unit = {
+        Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+            if (item.isPendingReview) {
+                IconButton(
+                    onClick = onConfirmItem,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .focusProperties { canFocus = false }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircleOutline,
+                        contentDescription = strings.shoppingListConfirmUnchangedTooltip,
+                        tint = ColorSuccessEmerald,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else if (!item.isNewlyAdded) {
+                IconButton(
+                    onClick = onUnconfirmItem,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .focusProperties { canFocus = false }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = strings.shoppingListMarkUnadjustedTooltip,
+                        tint = ColorSuccessEmerald.copy(alpha = 0.75f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    val deleteBtn: @Composable () -> Unit = {
+        IconButton(
+            onClick = onDeleteItem,
+            modifier = Modifier
+                .size(32.dp)
+                .focusProperties { canFocus = false }
+        ) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = strings.shoppingListDeleteItemTooltip,
+                tint = ColorDangerCrimson,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+
     Surface(
         color = cardBg,
         shape = RoundedCornerShape(10.dp),
@@ -927,216 +1147,48 @@ private fun ShoppingListRowCard(
                 translationY = dragOffsetY
             }
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Drag Handle (non-focusable so Tab skips directly between textboxes)
-            Box(
+        if (isCompact) {
+            Column(
                 modifier = Modifier
-                    .size(28.dp)
-                    .focusProperties { canFocus = false }
-                    .then(onDragModifier),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.DragHandle,
-                    contentDescription = strings.shoppingListDragHandleTooltip,
-                    tint = if (isDragging) AccentNavy else TextSecondaryMuted,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            val commitIfChanged = { confirm: Boolean ->
-                val hasTextChanges = nameField.text.trim() != item.name || qtyField.text.trim() != editableQty
-                if (hasTextChanges || confirm) {
-                    onUpdateInPlace(nameField.text, qtyField.text, confirm)
-                }
-            }
-
-            // Directly Editable Name Textbox (normal cursor placement, no auto-select-all)
-            InlineSelectAllTextField(
-                value = nameField,
-                onValueChange = { nameField = it },
-                onCommit = { confirm ->
-                    commitIfChanged(confirm)
-                },
-                onCancel = {
-                    nameField = TextFieldValue(item.name)
-                    focusManager.clearFocus()
-                },
-                onEnterAction = {
-                    commitIfChanged(true)
-                    focusManager.clearFocus()
-                },
-                onTabNavigate = { reverse ->
-                    if (reverse) {
-                        focusManager.moveFocus(FocusDirection.Previous)
-                    } else {
-                        onFocusOwnQty()
-                    }
-                },
-                textStyle = TextStyle(
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = PrimaryNavy
-                ),
-                selectAllOnFocus = false,
-                modifier = Modifier.weight(1f)
-            )
-
-            // Current Stock Display (Read-Only, before Quantity Field)
-            Box(
-                modifier = Modifier.width(105.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                if (linkedProduct != null) {
-                    val isZeroStock = linkedProduct.stockQuantity <= 0L
-                    Surface(
-                        color = if (isZeroStock) ColorDangerCrimson.copy(alpha = 0.1f) else SurfaceContainerLight,
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isZeroStock) ColorDangerCrimson.copy(alpha = 0.35f) else DividerBorder
-                        )
-                    ) {
-                        Text(
-                            text = Formatting.formatQuantity(linkedProduct.stockQuantity, linkedProduct.unitType, strings),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isZeroStock) ColorDangerCrimson else TextSecondarySubtle,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                } else {
-                    Text(
-                        text = "-",
-                        fontSize = 13.sp,
-                        color = TextSecondaryMuted,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
-                }
-            }
-
-            // Directly Editable Quantity Textbox + Localized Unit Label Behind Input Field
-            Row(
-                modifier = Modifier.width(170.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                InlineSelectAllTextField(
-                    value = qtyField,
-                    onValueChange = { newVal ->
-                        if (AdminShoppingListViewModel.isAllowedQuantityText(newVal.text, unitType)) {
-                            qtyField = newVal
-                        }
-                    },
-                    onCommit = { confirm ->
-                        commitIfChanged(confirm)
-                    },
-                    onCancel = {
-                        qtyField = TextFieldValue(editableQty)
-                        focusManager.clearFocus()
-                    },
-                    onEnterAction = {
-                        commitIfChanged(true)
-                        onTabQuantity(false)
-                    },
-                    onTabNavigate = onTabQuantity,
-                    textStyle = TextStyle(
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryNavy
-                    ),
-                    selectAllOnFocus = true,
-                    focusRequester = qtyFocusRequester,
-                    modifier = Modifier.weight(1f)
-                )
-
-                if (unitLabel != null) {
-                    Text(
-                        text = unitLabel,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextSecondaryMuted,
-                        maxLines = 1,
-                        modifier = Modifier.width(34.dp)
-                    )
-                }
-            }
-
-            // Status Helper Pill
-            Surface(
-                color = statusColor.copy(alpha = 0.14f),
-                shape = RoundedCornerShape(6.dp),
-                modifier = Modifier.width(92.dp)
-            ) {
-                Box(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = statusText,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = statusColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    dragHandle()
+                    nameBox(Modifier.weight(1f))
+                    deleteBtn()
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 36.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    stockBox(Modifier.wrapContentWidth())
+                    qtyBox(Modifier.weight(1f))
+                    statusPill()
+                    confirmSlot()
                 }
             }
-
-            // Confirm / Unconfirm Toggle Button (reserved 32.dp slot so pills stay vertically aligned)
-            Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                if (item.isPendingReview) {
-                    IconButton(
-                        onClick = onConfirmItem,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .focusProperties { canFocus = false }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircleOutline,
-                            contentDescription = strings.shoppingListConfirmUnchangedTooltip,
-                            tint = ColorSuccessEmerald,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                } else if (!item.isNewlyAdded) {
-                    IconButton(
-                        onClick = onUnconfirmItem,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .focusProperties { canFocus = false }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = strings.shoppingListMarkUnadjustedTooltip,
-                            tint = ColorSuccessEmerald.copy(alpha = 0.75f),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-
-            // Delete Button (non-focusable so Tab skips directly between textboxes)
-            IconButton(
-                onClick = onDeleteItem,
+        } else {
+            Row(
                 modifier = Modifier
-                    .size(32.dp)
-                    .focusProperties { canFocus = false }
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = strings.shoppingListDeleteItemTooltip,
-                    tint = ColorDangerCrimson,
-                    modifier = Modifier.size(18.dp)
-                )
+                dragHandle()
+                nameBox(Modifier.weight(1f))
+                stockBox(Modifier.width(105.dp))
+                qtyBox(Modifier.width(170.dp))
+                statusPill()
+                confirmSlot()
+                deleteBtn()
             }
         }
     }
@@ -1157,6 +1209,7 @@ private fun InlineSelectAllTextField(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var selectAllPending by remember { mutableStateOf(false) }
+    var suppressNextBlurCommit by remember { mutableStateOf(false) }
     val latestValue by rememberUpdatedState(value)
     val coroutineScope = rememberCoroutineScope()
     val internalFocusRequester = remember(focusRequester) { focusRequester ?: FocusRequester() }
@@ -1202,17 +1255,22 @@ private fun InlineSelectAllTextField(
                 val wasFocused = isFocused
                 isFocused = focusState.isFocused
                 if (!wasFocused && focusState.isFocused) {
+                    suppressNextBlurCommit = false
                     if (selectAllOnFocus) {
                         selectAllPending = true
                         onValueChange(latestValue.copy(selection = TextRange(0, latestValue.text.length)))
                     }
                 } else if (wasFocused && !focusState.isFocused) {
                     selectAllPending = false
-                    // Collapse selection on blur so unfocused text never stays highlighted
-                    if (!latestValue.selection.collapsed) {
-                        onValueChange(latestValue.copy(selection = TextRange(latestValue.text.length)))
+                    if (suppressNextBlurCommit) {
+                        suppressNextBlurCommit = false
+                    } else {
+                        // Collapse selection on blur so unfocused text never stays highlighted
+                        if (!latestValue.selection.collapsed) {
+                            onValueChange(latestValue.copy(selection = TextRange(latestValue.text.length)))
+                        }
+                        onCommit(false)
                     }
-                    onCommit(false)
                 }
             }
             .onPreviewKeyEvent { event ->
@@ -1228,6 +1286,7 @@ private fun InlineSelectAllTextField(
                     when (event.key) {
                         Key.Escape -> {
                             selectAllPending = false
+                            suppressNextBlurCommit = true
                             onCancel()
                             true
                         }

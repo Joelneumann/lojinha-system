@@ -71,9 +71,13 @@ class RoomShoppingListRepositoryImplTest {
         repository.addOrUpdateItem(
             ShoppingListItem(productId = "p-1", name = "Club Mate", quantity = "24 Stk.")
         )
+        // Even with a fresh non-blank UUID, productId deduplication still merges into existing row
+        repository.addOrUpdateItem(
+            ShoppingListItem(id = "new-uuid-should-merge", productId = "p-1", name = "Club Mate", quantity = "30 Stk.")
+        )
         val afterOverwrite = repository.getAllItems()
         assertEquals(2, afterOverwrite.size)
-        assertEquals("24 Stk.", afterOverwrite[0].quantity)
+        assertEquals("30 Stk.", afterOverwrite[0].quantity)
         assertEquals(0, afterOverwrite[0].sortOrder)
     }
 
