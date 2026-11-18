@@ -61,6 +61,7 @@ fun VeggieProductEditDialog(
             product.deliveryUnitTypeId?.takeIf { id -> activeUnits.any { it.id == id } }
         )
     }
+    var excludeFromBuyerPdf by remember(product.id) { mutableStateOf(product.excludeFromBuyerPdf) }
     var selectedImageBytes by remember(product.id) { mutableStateOf<ByteArray?>(null) }
     var removeExistingImage by remember(product.id) { mutableStateOf(false) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
@@ -78,6 +79,7 @@ fun VeggieProductEditDialog(
             estimatedPriceInput.trim() != initialPriceInput ||
             selectedUnitId != product.unitTypeId ||
             selectedDeliveryUnitId != product.deliveryUnitTypeId ||
+            excludeFromBuyerPdf != product.excludeFromBuyerPdf ||
             selectedImageBytes != null ||
             removeExistingImage
 
@@ -105,6 +107,7 @@ fun VeggieProductEditDialog(
                 estimatedPriceCents = if (estimatedPriceInput.isBlank()) null else parsedPriceCents,
                 unitTypeId = selectedUnitId,
                 deliveryUnitTypeId = selectedDeliveryUnitId,
+                excludeFromBuyerPdf = excludeFromBuyerPdf,
                 imageFileName = if (removeExistingImage && selectedImageBytes == null) null else product.imageFileName,
                 updatedAt = currentTimeMillis()
             )
@@ -156,6 +159,7 @@ fun VeggieProductEditDialog(
                                 estimatedPriceInput = initialPriceInput
                                 selectedUnitId = product.unitTypeId
                                 selectedDeliveryUnitId = product.deliveryUnitTypeId
+                                excludeFromBuyerPdf = product.excludeFromBuyerPdf
                                 selectedImageBytes = null
                                 removeExistingImage = false
                             },
@@ -390,6 +394,26 @@ fun VeggieProductEditDialog(
                         maxLines = 4,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // Exclude from Buyer List Checkbox
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp)
+                ) {
+                    Checkbox(
+                        checked = excludeFromBuyerPdf,
+                        onCheckedChange = { excludeFromBuyerPdf = it }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = strings.veggieExcludeFromBuyerPdfLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryNavy
                     )
                 }
 

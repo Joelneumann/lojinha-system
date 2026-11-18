@@ -1504,5 +1504,89 @@ class LojinhaAdminServerTest {
             "Content-Disposition should use localized Shopping_List_ filename"
         )
     }
+
+    @Test
+    fun testUserNicknameValidationAndWebLogin() {
+        val adminCookie = getValidAdminCookie()
+
+        val u1 = User(
+            id = "u-nick-1",
+            name = "Robert Johnson",
+            nickname = "Bobby",
+            pin = de.joelneumann.lojinha.security.PasswordHasher.hash("4321"),
+            isActive = true
+        )
+        val saveU1Res = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/users"))
+                .header("Cookie", adminCookie)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(testJson.encodeToString(u1)))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(200, saveU1Res.statusCode())
+
+        // > 10 chars rejected
+        val tooLongRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/users"))
+                .header("Cookie", adminCookie)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(testJson.encodeToString(u1.copy(nickname = "TooLongNick11"))))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(400, tooLongRes.statusCode())
+
+        // "Admin" nickname rejected
+        val adminNickRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/users"))
+                .header("Cookie", adminCookie)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(testJson.encodeToString(u1.copy(nickname = "Admin"))))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(400, adminNickRes.statusCode())
+
+        // Another user's nickname colliding with u1's nickname (case-insensitive) rejected
+        val u2 = User(id = "u-nick-2", name = "Clara", nickname = "bobby", isActive = true)
+        val dupNickRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/users"))
+                .header("Cookie", adminCookie)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(testJson.encodeToString(u2)))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(400, dupNickRes.statusCode())
+
+        // Another user's name colliding with u1's nickname rejected
+        val nameCollidesNickRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/users"))
+                .header("Cookie", adminCookie)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(testJson.encodeToString(User(id = "u-nick-3", name = "bobby", isActive = true))))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(400, nameCollidesNickRes.statusCode())
+
+        // Customer login with nickname (case-insensitive) succeeds
+        val loginRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/login"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"bobby","password":"4321"}"""))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(200, loginRes.statusCode())
+        assertTrue(loginRes.body().contains("CUSTOMER"))
+    }
 }
 

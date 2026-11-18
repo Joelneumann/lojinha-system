@@ -30,6 +30,7 @@ data class VeggieProduct(
     val unitTypeId: String,
     val deliveryUnitTypeId: String? = null,
     val imageFileName: String? = null,
+    val excludeFromBuyerPdf: Boolean = false,
     val isActive: Boolean = true,
     val isDeleted: Boolean = false,
     val updatedAt: Long = 0L

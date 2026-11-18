@@ -1008,6 +1008,15 @@ object EnglishStrings : AppStrings {
 
         Thank you!
     """.trimIndent()
+    override val userNicknameLabel = "Nickname (Optional)"
+    override val userNicknamePlaceholder = "e.g. Jo (max 10 chars)"
+    override val userNicknameHint = "Used on Veggie PDFs/Matrix & Veggie Web Login (max 10 chars, unique)"
+    override val userNicknameNotSet = "Not set"
+    override val userNicknameReservedError = "The nickname \"Admin\" is reserved."
+    override val userNicknameDuplicateError = "This nickname or name is already used by another user."
+    override val veggieExcludeFromBuyerPdfLabel = "Exclude from Buyer List"
+    override val veggieExcludeFromBuyerPdfHint = "Locally available — omitted from Buyer Shopping List PDF, still charged and shown on Worker Matrix."
+    override val veggieExcludeFromBuyerPdfBadge = "Not on Buyer PDF"
 }
 
 

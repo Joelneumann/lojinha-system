@@ -686,6 +686,7 @@ fun App(
                                             val round = effectiveVeggieRepo.getRoundById(roundId)
                                                 ?: throw IllegalStateException("Round $roundId not found")
                                             val entries = effectiveVeggieRepo.getEntriesForRound(roundId)
+                                            val products = effectiveVeggieRepo.getAllVeggieProducts()
                                             val weekInfo = de.joelneumann.lojinha.ui.utils.IsoWeekUtils.fromEpochMillis(round.openedAt)
                                             val finalFile = writeVeggiePdfWithFallback(
                                                 defaultSaveDir = defaultSaveDir,
@@ -697,7 +698,8 @@ fun App(
                                                     outputFile = outFile,
                                                     round = round,
                                                     entries = entries,
-                                                    language = language
+                                                    language = language,
+                                                    products = products
                                                 )
                                             }
                                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -726,6 +728,7 @@ fun App(
                                             val round = effectiveVeggieRepo.getRoundById(roundId)
                                                 ?: throw IllegalStateException("Round $roundId not found")
                                             val entries = effectiveVeggieRepo.getEntriesForRound(roundId)
+                                            val users = userRepository?.getAllUsers() ?: emptyList()
                                             val weekInfo = de.joelneumann.lojinha.ui.utils.IsoWeekUtils.fromEpochMillis(round.openedAt)
                                             val finalFile = writeVeggiePdfWithFallback(
                                                 defaultSaveDir = defaultSaveDir,
@@ -737,7 +740,8 @@ fun App(
                                                     outputFile = outFile,
                                                     round = round,
                                                     entries = entries,
-                                                    language = language
+                                                    language = language,
+                                                    users = users
                                                 )
                                             }
                                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {

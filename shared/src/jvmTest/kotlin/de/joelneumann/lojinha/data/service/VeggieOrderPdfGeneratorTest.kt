@@ -258,4 +258,91 @@ class VeggieOrderPdfGeneratorTest {
             reader.close()
         }
     }
+
+    @Test
+    fun testBuyerShoppingList_excludesProductsMarkedExcludeFromBuyerPdf() {
+        val round = VeggieOrderRound(id = "r-excl", openedAt = 1_743_465_600_000L)
+        val products = listOf(
+            VeggieProduct(id = "vp-buy", name = "Imported Avocado", unitTypeId = "u-kg", excludeFromBuyerPdf = false),
+            VeggieProduct(id = "vp-local", name = "Local Banana", unitTypeId = "u-kg", excludeFromBuyerPdf = true)
+        )
+        val entries = listOf(
+            VeggieOrderEntry(
+                id = "e-buy",
+                roundId = round.id,
+                userId = "u1",
+                userNameSnapshot = "Alice",
+                veggieProductId = "vp-buy",
+                veggieNameSnapshot = "Imported Avocado",
+                unitNameSnapshot = "kg",
+                allowDecimalsSnapshot = true,
+                orderedQuantityScaled = 2000L
+            ),
+            VeggieOrderEntry(
+                id = "e-local",
+                roundId = round.id,
+                userId = "u1",
+                userNameSnapshot = "Alice",
+                veggieProductId = "vp-local",
+                veggieNameSnapshot = "Local Banana",
+                unitNameSnapshot = "kg",
+                allowDecimalsSnapshot = true,
+                orderedQuantityScaled = 3000L
+            )
+        )
+
+        val bytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(round, entries, Language.EN, products)
+        val reader = com.lowagie.text.pdf.PdfReader(bytes)
+        try {
+            val text = com.lowagie.text.pdf.parser.PdfTextExtractor(reader).getTextFromPage(1)
+            assertTrue(text.contains("Imported Avocado"), "Included product should appear in Buyer PDF")
+            assertFalse(text.contains("Local Banana"), "Excluded product should NOT appear in Buyer PDF")
+        } finally {
+            reader.close()
+        }
+    }
+
+    @Test
+    fun testWorkerSortingMatrix_usesUserNicknameWhenSet() {
+        val round = VeggieOrderRound(id = "r-nick", openedAt = 1_743_465_600_000L)
+        val users = listOf(
+            de.joelneumann.lojinha.domain.model.User(id = "u1", name = "Very Long Customer Name", nickname = "Nick10"),
+            de.joelneumann.lojinha.domain.model.User(id = "u2", name = "Maria", nickname = null)
+        )
+        val entries = listOf(
+            VeggieOrderEntry(
+                id = "e1",
+                roundId = round.id,
+                userId = "u1",
+                userNameSnapshot = "Very Long Customer Name",
+                veggieProductId = "vp-tom",
+                veggieNameSnapshot = "Tomato",
+                unitNameSnapshot = "kg",
+                allowDecimalsSnapshot = true,
+                orderedQuantityScaled = 1000L
+            ),
+            VeggieOrderEntry(
+                id = "e2",
+                roundId = round.id,
+                userId = "u2",
+                userNameSnapshot = "Maria",
+                veggieProductId = "vp-tom",
+                veggieNameSnapshot = "Tomato",
+                unitNameSnapshot = "kg",
+                allowDecimalsSnapshot = true,
+                orderedQuantityScaled = 2000L
+            )
+        )
+
+        val bytes = VeggieOrderPdfGenerator.generateWorkerSortingMatrixBytes(round, entries, Language.EN, users)
+        val reader = com.lowagie.text.pdf.PdfReader(bytes)
+        try {
+            val text = com.lowagie.text.pdf.parser.PdfTextExtractor(reader).getTextFromPage(1)
+            assertTrue(text.contains("Nick10"), "Worker Matrix PDF should use user's nickname")
+            assertFalse(text.contains("Very Long Customer Name"), "Worker Matrix PDF should not show full name when nickname is set")
+            assertTrue(text.contains("Maria"), "Worker Matrix PDF should fall back to full name when nickname is null")
+        } finally {
+            reader.close()
+        }
+    }
 }

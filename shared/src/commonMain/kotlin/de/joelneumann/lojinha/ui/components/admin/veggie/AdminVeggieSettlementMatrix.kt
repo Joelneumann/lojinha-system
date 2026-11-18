@@ -134,9 +134,10 @@ fun AdminVeggieSettlementMatrix(
     )
 
     // Distinct customers and products in this round
-    val roundCustomers = remember(entries) {
+    val roundCustomers = remember(entries, users) {
+        val usersById = users.associateBy { it.id }
         entries
-            .map { it.userId to it.userNameSnapshot }
+            .map { it.userId to (usersById[it.userId]?.veggieDisplayName ?: it.userNameSnapshot) }
             .distinctBy { it.first }
             .sortedByAccentInsensitive { it.second }
     }

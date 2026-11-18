@@ -426,7 +426,10 @@ class LojinhaAdminServer(
                         emptyList()
                     } else {
                         userRepository.getAllUsers().filter {
-                            it.isActive && !it.isDeleted && it.name.normalizeUserName() == normalizedIdentifier
+                            it.isActive && !it.isDeleted && (
+                                it.name.normalizeUserName() == normalizedIdentifier ||
+                                    it.nickname?.normalizeUserName() == normalizedIdentifier
+                            )
                         }
                     }
                     val targetUser = if (matchingUsers.size == 1) matchingUsers.first() else null
@@ -546,7 +549,8 @@ class LojinhaAdminServer(
                     post("/users") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
                         val incoming = call.receive<User>()
-                        val trimmedUser = incoming.copy(name = incoming.name.trim())
+                        val trimmedNickname = incoming.nickname?.trim()?.ifBlank { null }
+                        val trimmedUser = incoming.copy(name = incoming.name.trim(), nickname = trimmedNickname)
                         if (trimmedUser.name.isBlank()) {
                             call.respond(HttpStatusCode.BadRequest, "User name cannot be blank")
                             return@post
@@ -555,14 +559,40 @@ class LojinhaAdminServer(
                             call.respond(HttpStatusCode.BadRequest, "The name \"Admin\" is reserved for administrator login")
                             return@post
                         }
+                        if (trimmedNickname != null) {
+                            if (trimmedNickname.length > MAX_USER_NICKNAME_LENGTH) {
+                                call.respond(HttpStatusCode.BadRequest, "Nickname cannot exceed $MAX_USER_NICKNAME_LENGTH characters")
+                                return@post
+                            }
+                            if (trimmedNickname.isReservedAdminName()) {
+                                call.respond(HttpStatusCode.BadRequest, "The nickname \"Admin\" is reserved for administrator login")
+                                return@post
+                            }
+                        }
                         val allUsers = userRepository.getAllUsers()
                         val normalized = trimmedUser.name.normalizeUserName()
                         val duplicate = allUsers.firstOrNull {
-                            it.id != trimmedUser.id && !it.isDeleted && it.name.normalizeUserName() == normalized
+                            it.id != trimmedUser.id && !it.isDeleted && (
+                                it.name.normalizeUserName() == normalized ||
+                                    it.nickname?.normalizeUserName() == normalized
+                            )
                         }
                         if (duplicate != null) {
-                            call.respond(HttpStatusCode.BadRequest, "A user named \"${duplicate.name}\" already exists")
+                            call.respond(HttpStatusCode.BadRequest, "A user or nickname matching \"${trimmedUser.name}\" already exists")
                             return@post
+                        }
+                        val normalizedNick = trimmedNickname?.normalizeUserName()
+                        if (normalizedNick != null) {
+                            val duplicateNick = allUsers.firstOrNull {
+                                it.id != trimmedUser.id && !it.isDeleted && (
+                                    it.name.normalizeUserName() == normalizedNick ||
+                                        it.nickname?.normalizeUserName() == normalizedNick
+                                )
+                            }
+                            if (duplicateNick != null) {
+                                call.respond(HttpStatusCode.BadRequest, "A user or nickname matching \"$trimmedNickname\" already exists")
+                                return@post
+                            }
                         }
                         val previousUser = allUsers.find { it.id == trimmedUser.id }
                         userRepository.saveUser(trimmedUser)
@@ -625,11 +655,31 @@ class LojinhaAdminServer(
                             }
                             val normalized = target.name.normalizeUserName()
                             val duplicate = allUsers.firstOrNull {
-                                it.id != id && !it.isDeleted && it.name.normalizeUserName() == normalized
+                                it.id != id && !it.isDeleted && (
+                                    it.name.normalizeUserName() == normalized ||
+                                        it.nickname?.normalizeUserName() == normalized
+                                )
                             }
                             if (duplicate != null) {
-                                call.respond(HttpStatusCode.BadRequest, "A user named \"${duplicate.name}\" already exists")
+                                call.respond(HttpStatusCode.BadRequest, "A user or nickname matching \"${target.name}\" already exists")
                                 return@post
+                            }
+                            val normalizedNick = target.nickname?.normalizeUserName()
+                            if (normalizedNick != null) {
+                                if (target.nickname?.isReservedAdminName() == true) {
+                                    call.respond(HttpStatusCode.BadRequest, "The nickname \"Admin\" is reserved for administrator login")
+                                    return@post
+                                }
+                                val duplicateNick = allUsers.firstOrNull {
+                                    it.id != id && !it.isDeleted && (
+                                        it.name.normalizeUserName() == normalizedNick ||
+                                            it.nickname?.normalizeUserName() == normalizedNick
+                                    )
+                                }
+                                if (duplicateNick != null) {
+                                    call.respond(HttpStatusCode.BadRequest, "A user or nickname matching \"${target.nickname}\" already exists")
+                                    return@post
+                                }
                             }
                         }
                         userRepository.restoreUser(id)
@@ -1299,9 +1349,10 @@ class LojinhaAdminServer(
                             val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
                             val round = repo.getRoundById(id) ?: return@get call.respond(HttpStatusCode.NotFound)
                             val entries = repo.getEntriesForRound(id)
+                            val products = repo.getAllVeggieProducts()
                             val language = call.parseLanguageParam()
                             try {
-                                val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(round, entries, language)
+                                val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(round, entries, language, products)
                                 repo.markBuyerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
                                 val filename = PdfFilenames.buyerShoppingListFilename(isoWeek.weekOfYear, isoWeek.isoYear, language)
@@ -1324,9 +1375,10 @@ class LojinhaAdminServer(
                             val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
                             val round = repo.getRoundById(id) ?: return@get call.respond(HttpStatusCode.NotFound)
                             val entries = repo.getEntriesForRound(id)
+                            val users = userRepository.getAllUsers()
                             val language = call.parseLanguageParam()
                             try {
-                                val pdfBytes = VeggieOrderPdfGenerator.generateWorkerSortingMatrixBytes(round, entries, language)
+                                val pdfBytes = VeggieOrderPdfGenerator.generateWorkerSortingMatrixBytes(round, entries, language, users)
                                 repo.markWorkerPdfExported(id, System.currentTimeMillis())
                                 val isoWeek = IsoWeekUtils.fromEpochMillis(round.openedAt)
                                 val filename = PdfFilenames.workerSortingMatrixFilename(isoWeek.weekOfYear, isoWeek.isoYear, language)

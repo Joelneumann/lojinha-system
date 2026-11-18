@@ -542,6 +542,12 @@ private fun VeggieCatalogProductRow(
                             type = if (unitType?.allowDecimals == true) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
                         )
                     }
+                    if (product.excludeFromBuyerPdf) {
+                        AdminStatusBadge(
+                            text = strings.veggieExcludeFromBuyerPdfBadge,
+                            type = AdminBadgeType.WARNING
+                        )
+                    }
                     if (!product.isActive) {
                         AdminStatusBadge(
                             text = strings.disabled,

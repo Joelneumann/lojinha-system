@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.repository
 
 import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.AppDatabase_Impl
 import de.joelneumann.lojinha.data.database.DatabaseFactory
@@ -874,5 +875,37 @@ class RoomVeggieOrderRepositoryTest {
             )
         }
         assertEquals(VeggieRoundStatus.OPEN, veggieRepo.getRoundById(round.id)?.status)
+    }
+
+    @Test
+    fun testMigration19To20_addsUserNicknameAndProductExcludeFromBuyerPdf() {
+        val driver = androidx.sqlite.driver.bundled.BundledSQLiteDriver()
+        val conn = driver.open(":memory:")
+        try {
+            conn.execSQL("CREATE TABLE `users` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `balance` INTEGER NOT NULL, `language` TEXT NOT NULL, `secondaryCurrency` TEXT NOT NULL, `pin` TEXT, `userBarcode` TEXT, `userBarcodeNumber` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL DEFAULT 0, `avatarType` TEXT NOT NULL DEFAULT 'INITIALS', `avatarEmoji` TEXT NOT NULL DEFAULT '😀', `avatarColor` TEXT NOT NULL DEFAULT '#1E293B', `requirePinOnKiosk` INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(`id`))")
+            conn.execSQL("CREATE TABLE `veggie_products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `estimatedPriceCents` INTEGER, `unitTypeId` TEXT NOT NULL, `deliveryUnitTypeId` TEXT DEFAULT NULL, `imageFileName` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            conn.execSQL("INSERT INTO `users` (`id`, `name`, `balance`, `language`, `secondaryCurrency`, `isActive`) VALUES ('u1', 'Alice', 0, 'BR', 'NONE', 1)")
+            conn.execSQL("INSERT INTO `veggie_products` (`id`, `name`, `unitTypeId`, `isActive`, `isDeleted`, `updatedAt`) VALUES ('vp1', 'Tomato', 'unit-kg', 1, 0, 1000)")
+
+            de.joelneumann.lojinha.data.database.DatabaseFactory.MIGRATION_19_20.migrate(conn)
+
+            val userStmt = conn.prepare("SELECT nickname FROM users WHERE id = 'u1'")
+            try {
+                assertTrue(userStmt.step())
+                assertTrue(userStmt.isNull(0), "Existing user nickname should default to NULL")
+            } finally {
+                userStmt.close()
+            }
+
+            val prodStmt = conn.prepare("SELECT excludeFromBuyerPdf FROM veggie_products WHERE id = 'vp1'")
+            try {
+                assertTrue(prodStmt.step())
+                assertEquals(0L, prodStmt.getLong(0), "Existing veggie product excludeFromBuyerPdf should default to 0")
+            } finally {
+                prodStmt.close()
+            }
+        } finally {
+            conn.close()
+        }
     }
 }

@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -52,6 +53,7 @@ data class VeggieProductEntity(
     val unitTypeId: String,
     val deliveryUnitTypeId: String? = null,
     val imageFileName: String?,
+    @ColumnInfo(defaultValue = "0") val excludeFromBuyerPdf: Boolean = false,
     val isActive: Boolean,
     val isDeleted: Boolean,
     val updatedAt: Long
@@ -64,6 +66,7 @@ data class VeggieProductEntity(
         unitTypeId = unitTypeId,
         deliveryUnitTypeId = deliveryUnitTypeId,
         imageFileName = imageFileName,
+        excludeFromBuyerPdf = excludeFromBuyerPdf,
         isActive = isActive,
         isDeleted = isDeleted,
         updatedAt = updatedAt
@@ -78,6 +81,7 @@ data class VeggieProductEntity(
             unitTypeId = product.unitTypeId,
             deliveryUnitTypeId = product.deliveryUnitTypeId,
             imageFileName = product.imageFileName,
+            excludeFromBuyerPdf = product.excludeFromBuyerPdf,
             isActive = product.isActive,
             isDeleted = product.isDeleted,
             updatedAt = product.updatedAt

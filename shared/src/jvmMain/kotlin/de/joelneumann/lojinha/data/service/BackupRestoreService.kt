@@ -197,11 +197,12 @@ class BackupRestoreService(
         // 2. Export Users
         val users = db.userDao().getAllUsers().map { it.toDomain() }
         val usersCsv = File(exportFolder, "users.csv")
-        val userLines = mutableListOf("id;name;balance;language;secondaryCurrency;pin;userBarcode;userBarcodeNumber;isActive;isDeleted;avatarType;avatarEmoji;avatarColor;requirePinOnKiosk")
+        val userLines = mutableListOf("id;name;nickname;balance;language;secondaryCurrency;pin;userBarcode;userBarcodeNumber;isActive;isDeleted;avatarType;avatarEmoji;avatarColor;requirePinOnKiosk")
         users.forEach { u ->
             val line = listOf(
                 escapeCsv(u.id),
                 escapeCsv(u.name),
+                escapeCsv(u.nickname ?: ""),
                 escapeCsv(Formatting.formatBrlCanonical(u.balance)),
                 u.language.code,
                 u.secondaryCurrency.name,
@@ -324,7 +325,7 @@ class BackupRestoreService(
         val veggieProducts = db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true)
         val veggieProductsCsv = File(exportFolder, "veggie_products.csv")
         val veggieProductLines = mutableListOf(
-            "id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;isActive;isDeleted;deliveryUnitTypeId"
+            "id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;excludeFromBuyerPdf;isActive;isDeleted;deliveryUnitTypeId"
         )
         veggieProducts.forEach { vp ->
             val unit = veggieUnitsById[vp.unitTypeId]
@@ -337,6 +338,7 @@ class BackupRestoreService(
                 escapeCsv(unit?.name ?: ""),
                 (unit?.allowDecimals ?: false).toString(),
                 escapeCsv(vp.imageFileName ?: ""),
+                vp.excludeFromBuyerPdf.toString(),
                 vp.isActive.toString(),
                 vp.isDeleted.toString(),
                 escapeCsv(vp.deliveryUnitTypeId ?: "")
@@ -511,6 +513,7 @@ class BackupRestoreService(
                 val hasAvatarEmoji = userColumns.contains("avataremoji")
                 val hasAvatarColor = userColumns.contains("avatarcolor")
                 val hasRequirePinOnKiosk = userColumns.contains("requirepinonkiosk")
+                val hasNickname = userColumns.contains("nickname")
 
                 val userQuery = buildString {
                     append("SELECT id, name, balance, language, secondaryCurrency, pin, userBarcode, userBarcodeNumber, isActive")
@@ -519,6 +522,7 @@ class BackupRestoreService(
                     if (hasAvatarEmoji) append(", avatarEmoji") else append(", '😀'")
                     if (hasAvatarColor) append(", avatarColor") else append(", '#1E293B'")
                     if (hasRequirePinOnKiosk) append(", requirePinOnKiosk") else append(", 1")
+                    if (hasNickname) append(", nickname") else append(", NULL")
                     append(" FROM users")
                 }
 
@@ -542,7 +546,8 @@ class BackupRestoreService(
                             avatarType = if (stmt.isNull(10)) "INITIALS" else stmt.getText(10),
                             avatarEmoji = if (stmt.isNull(11)) "😀" else stmt.getText(11),
                             avatarColor = if (stmt.isNull(12)) "#1E293B" else stmt.getText(12),
-                            requirePinOnKiosk = if (stmt.isNull(13)) true else stmt.getLong(13) != 0L
+                            requirePinOnKiosk = if (stmt.isNull(13)) true else stmt.getLong(13) != 0L,
+                            nickname = if (stmt.isNull(14)) null else stmt.getText(14).trim().ifBlank { null }
                         )
                         backupUsers.add(u)
                     }
@@ -877,10 +882,13 @@ class BackupRestoreService(
             if (tableNames.contains("veggie_products")) {
                 val vpCols = getTableColumns(connection, "veggie_products")
                 val hasDeliveryUnit = vpCols.contains("deliveryunittypeid")
+                val hasExcludeFromBuyerPdf = vpCols.contains("excludefrombuyerpdf")
                 val stmt = connection.prepare(
                     "SELECT id, name, description, estimatedPriceCents, unitTypeId, " +
                         (if (hasDeliveryUnit) "deliveryUnitTypeId" else "NULL") +
-                        ", imageFileName, isActive, isDeleted, updatedAt FROM veggie_products"
+                        ", imageFileName, " +
+                        (if (hasExcludeFromBuyerPdf) "excludeFromBuyerPdf" else "0") +
+                        ", isActive, isDeleted, updatedAt FROM veggie_products"
                 )
                 try {
                     while (stmt.step()) {
@@ -893,9 +901,10 @@ class BackupRestoreService(
                                 unitTypeId = stmt.getText(4),
                                 deliveryUnitTypeId = if (stmt.isNull(5)) null else stmt.getText(5),
                                 imageFileName = if (stmt.isNull(6)) null else stmt.getText(6),
-                                isActive = stmt.getLong(7) != 0L,
-                                isDeleted = stmt.getLong(8) != 0L,
-                                updatedAt = stmt.getLong(9)
+                                excludeFromBuyerPdf = stmt.getLong(7) != 0L,
+                                isActive = stmt.getLong(8) != 0L,
+                                isDeleted = stmt.getLong(9) != 0L,
+                                updatedAt = stmt.getLong(10)
                             )
                         )
                     }

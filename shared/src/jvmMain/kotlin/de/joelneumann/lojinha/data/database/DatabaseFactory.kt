@@ -157,6 +157,12 @@ object DatabaseFactory {
         connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-bunch', 'Bunch', 0, 1, $now)")
     }
 
+    internal val MIGRATION_19_20 = loggedMigration(19, 20, "adding user nickname and veggie product excludeFromBuyerPdf") { connection ->
+        connection.execSQL("ALTER TABLE `users` ADD COLUMN `nickname` TEXT DEFAULT NULL")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_users_nickname` ON `users` (`nickname`)")
+        connection.execSQL("ALTER TABLE `veggie_products` ADD COLUMN `excludeFromBuyerPdf` INTEGER NOT NULL DEFAULT 0")
+    }
+
     fun defaultVeggieUnitTypes(timestamp: Long = System.currentTimeMillis()): List<VeggieUnitTypeEntity> = listOf(
         VeggieUnitTypeEntity(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true, updatedAt = timestamp),
         VeggieUnitTypeEntity(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true, updatedAt = timestamp),
@@ -224,7 +230,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")
@@ -314,7 +320,8 @@ object DatabaseFactory {
                     avatarType = user.avatarType,
                     avatarEmoji = user.avatarEmoji,
                     avatarColor = user.avatarColor,
-                    requirePinOnKiosk = user.requirePinOnKiosk
+                    requirePinOnKiosk = user.requirePinOnKiosk,
+                    nickname = user.nickname
                 )
             }
         }

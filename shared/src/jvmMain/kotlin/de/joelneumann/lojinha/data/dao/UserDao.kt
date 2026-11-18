@@ -34,6 +34,7 @@ interface UserDao {
     @Query("""
         UPDATE users 
         SET name = :name, 
+            nickname = :nickname,
             language = :language, 
             secondaryCurrency = :secondaryCurrency, 
             pin = :pin, 
@@ -50,6 +51,7 @@ interface UserDao {
     suspend fun updateUserProfile(
         id: String,
         name: String,
+        nickname: String?,
         language: String,
         secondaryCurrency: String,
         pin: String?,

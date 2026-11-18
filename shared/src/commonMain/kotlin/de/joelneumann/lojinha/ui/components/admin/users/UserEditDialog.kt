@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
@@ -64,6 +65,7 @@ fun UserEditDialog(
     val isNewUser = remember(user.id, allUsers) { allUsers.none { it.id == user.id } }
 
     var name by remember(user.id) { mutableStateOf(user.name) }
+    var nickname by remember(user.id) { mutableStateOf(user.nickname ?: "") }
     var shouldResetPin by remember(user.id) { mutableStateOf(false) }
     var pin by remember(user.id) { mutableStateOf("") }
     var isPinVisible by remember(user.id) { mutableStateOf(false) }
@@ -106,7 +108,23 @@ fun UserEditDialog(
     val duplicateNameUser = remember(normalizedName, allUsers, user.id) {
         if (normalizedName.isEmpty()) null
         else allUsers.firstOrNull { u ->
-            u.id != user.id && !u.isDeleted && u.name.normalizeUserName() == normalizedName
+            u.id != user.id && !u.isDeleted && (
+                u.name.normalizeUserName() == normalizedName ||
+                    u.nickname?.normalizeUserName() == normalizedName
+            )
+        }
+    }
+
+    val trimmedNickname = remember(nickname) { nickname.trim() }
+    val normalizedNickname = remember(trimmedNickname) { trimmedNickname.normalizeUserName() }
+    val isReservedAdminNickname = remember(trimmedNickname) { trimmedNickname.isReservedAdminName() }
+    val duplicateNicknameUser = remember(normalizedNickname, allUsers, user.id) {
+        if (normalizedNickname.isEmpty()) null
+        else allUsers.firstOrNull { u ->
+            u.id != user.id && !u.isDeleted && (
+                u.name.normalizeUserName() == normalizedNickname ||
+                    u.nickname?.normalizeUserName() == normalizedNickname
+            )
         }
     }
 
@@ -116,6 +134,7 @@ fun UserEditDialog(
 
     val isPinChanged = if (isNewUser) pin.isNotBlank() else shouldResetPin
     val hasDialogChanges = name != user.name ||
+            trimmedNickname != (user.nickname ?: "") ||
             isPinChanged ||
             requirePinOnKiosk != user.requirePinOnKiosk ||
             selectedLang != user.language ||
@@ -125,7 +144,7 @@ fun UserEditDialog(
             barcodeNumber != (user.userBarcodeNumber ?: "")
 
     val isModified = if (isNewUser) {
-        name.isNotBlank() || pin.isNotBlank() || barcode.isNotBlank() || barcodeNumber.isNotBlank() ||
+        name.isNotBlank() || trimmedNickname.isNotEmpty() || pin.isNotBlank() || barcode.isNotBlank() || barcodeNumber.isNotBlank() ||
                 requirePinOnKiosk != user.requirePinOnKiosk ||
                 selectedLang != user.language || selectedSecondaryCurrency != user.secondaryCurrency || selectedAvatar != user.avatar
     } else {
@@ -151,7 +170,16 @@ fun UserEditDialog(
         }
     }
 
-    val canSave = !isSaving && name.isNotBlank() && !isReservedAdmin && duplicateNameUser == null && duplicateConflict == null && !isUserBarcodeIncomplete && (isNewUser || hasDialogChanges)
+    val canSave = !isSaving &&
+            name.isNotBlank() &&
+            !isReservedAdmin &&
+            duplicateNameUser == null &&
+            !isReservedAdminNickname &&
+            duplicateNicknameUser == null &&
+            trimmedNickname.length <= MAX_USER_NICKNAME_LENGTH &&
+            duplicateConflict == null &&
+            !isUserBarcodeIncomplete &&
+            (isNewUser || hasDialogChanges)
 
     val handleSave = {
         if (canSave) {
@@ -169,6 +197,7 @@ fun UserEditDialog(
 
             val updated = user.copy(
                 name = name.trim(),
+                nickname = trimmedNickname.ifBlank { null },
                 pin = finalPin,
                 requirePinOnKiosk = if (finalPin == null) true else requirePinOnKiosk,
                 userBarcode = if (bCode != null && bNum != null) bCode else null,
@@ -225,6 +254,7 @@ fun UserEditDialog(
                         IconButton(
                             onClick = {
                                 name = user.name
+                                nickname = user.nickname ?: ""
                                 selectedLang = user.language
                                 selectedSecondaryCurrency = user.secondaryCurrency
                                 selectedAvatar = user.avatar
@@ -247,167 +277,6 @@ fun UserEditDialog(
                 }
 
                 HorizontalDivider(color = DividerBorder)
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    AdminLabeledField(
-                        label = strings.userNameLabel,
-                        value = name,
-                        onValueChange = { name = it },
-                        placeholder = strings.userNamePlaceholder,
-                        focusRequester = nameFocusRequester,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        if (isNewUser) {
-                            Text(strings.initialPinOptional, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            OutlinedTextField(
-                                value = pin,
-                                onValueChange = { pin = it },
-                                placeholder = { Text(strings.noPinPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
-                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                                visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { isPinVisible = !isPinVisible }) {
-                                        Icon(
-                                            imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = strings.togglePinVisibility,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth().height(56.dp),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                        } else {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clickable { shouldResetPin = !shouldResetPin }
-                            ) {
-                                Checkbox(
-                                    checked = shouldResetPin,
-                                    onCheckedChange = { shouldResetPin = it }
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = strings.resetPin,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = PrimaryNavy
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            if (shouldResetPin) {
-                                OutlinedTextField(
-                                    value = pin,
-                                    onValueChange = { pin = it },
-                                    placeholder = { Text(strings.newPinOptionalPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
-                                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                                    visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                    trailingIcon = {
-                                        IconButton(onClick = { isPinVisible = !isPinVisible }) {
-                                            Icon(
-                                                imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                                contentDescription = strings.togglePinVisibility,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                            } else {
-                                OutlinedTextField(
-                                    value = if (user.pin != null) "••••••••" else strings.noPinSet,
-                                    onValueChange = {},
-                                    enabled = false,
-                                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        disabledContainerColor = SurfaceContainerHighLight,
-                                        disabledTextColor = TextSecondaryMuted,
-                                        disabledBorderColor = DividerBorder
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-
-                val hasEffectivePin = if (isNewUser) pin.isNotBlank() else (!shouldResetPin && user.pin != null) || (shouldResetPin && pin.isNotBlank())
-                if (hasEffectivePin) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { requirePinOnKiosk = !requirePinOnKiosk }
-                            .padding(vertical = 2.dp)
-                    ) {
-                        Checkbox(
-                            checked = requirePinOnKiosk,
-                            onCheckedChange = { requirePinOnKiosk = it }
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column {
-                            Text(
-                                text = strings.requirePinOnKioskLabel,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = PrimaryNavy
-                            )
-                            Text(
-                                text = strings.requirePinOnKioskDesc,
-                                fontSize = 11.5.sp,
-                                color = TextSecondaryMuted
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    AdminLabeledField(
-                        label = strings.barcodeSymbolLabel,
-                        value = barcode,
-                        onValueChange = {
-                            val prev = barcode
-                            barcode = it
-                            if (barcodeNumber.isBlank() || barcodeNumber == prev) {
-                                barcodeNumber = it
-                            }
-                        },
-                        placeholder = strings.barcodeSymbolPlaceholder,
-                        modifier = Modifier
-                            .weight(1f)
-                            .onPreviewKeyEvent {
-                                it.key == Key.Enter || it.key == Key.NumPadEnter
-                            }
-                    )
-
-                    AdminLabeledField(
-                        label = strings.barcodeNumberIdLabel,
-                        value = barcodeNumber,
-                        onValueChange = { barcodeNumber = it },
-                        placeholder = strings.barcodeNumberIdPlaceholder,
-                        modifier = Modifier
-                            .weight(1f)
-                            .onPreviewKeyEvent {
-                                it.key == Key.Enter || it.key == Key.NumPadEnter
-                            }
-                    )
-                }
 
                 // Profile Avatar & Color Customization
                 Text(strings.profileAvatarColorTitle, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
@@ -504,6 +373,223 @@ fun UserEditDialog(
                     }
                 }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    AdminLabeledField(
+                        label = strings.userNameLabel,
+                        value = name,
+                        onValueChange = { name = it },
+                        placeholder = strings.userNamePlaceholder,
+                        focusRequester = nameFocusRequester,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = strings.userNicknameLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            )
+                            Text(
+                                text = "${trimmedNickname.length}/$MAX_USER_NICKNAME_LENGTH",
+                                fontSize = 11.sp,
+                                color = if (trimmedNickname.length > MAX_USER_NICKNAME_LENGTH) ColorDangerCrimson else TextSecondaryMuted
+                            )
+                        }
+                        OutlinedTextField(
+                            value = nickname,
+                            onValueChange = { input ->
+                                if (input.length <= MAX_USER_NICKNAME_LENGTH) {
+                                    nickname = input
+                                }
+                            },
+                            placeholder = {
+                                Text(
+                                    text = strings.userNicknamePlaceholder,
+                                    fontSize = 13.sp,
+                                    color = TextSecondaryMuted
+                                )
+                            },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                            singleLine = true,
+                            isError = isReservedAdminNickname || duplicateNicknameUser != null,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().height(56.dp)
+                        )
+                    }
+                }
+
+                val nicknameError = when {
+                    isReservedAdminNickname -> strings.userNicknameReservedError
+                    duplicateNicknameUser != null -> strings.userNicknameDuplicateError
+                    else -> null
+                }
+                if (nicknameError != null) {
+                    Text(
+                        text = nicknameError,
+                        fontSize = 11.sp,
+                        color = ColorDangerCrimson
+                    )
+                }
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (isNewUser) {
+                        Text(strings.initialPinOptional, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = pin,
+                            onValueChange = { pin = it },
+                            placeholder = { Text(strings.noPinPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                            visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { isPinVisible = !isPinVisible }) {
+                                    Icon(
+                                        imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = strings.togglePinVisibility,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { shouldResetPin = !shouldResetPin }
+                        ) {
+                            Checkbox(
+                                checked = shouldResetPin,
+                                onCheckedChange = { shouldResetPin = it }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = strings.resetPin,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        if (shouldResetPin) {
+                            OutlinedTextField(
+                                value = pin,
+                                onValueChange = { pin = it },
+                                placeholder = { Text(strings.newPinOptionalPlaceholder, fontSize = 13.sp, color = TextSecondaryMuted) },
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { isPinVisible = !isPinVisible }) {
+                                        Icon(
+                                            imageVector = if (isPinVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = strings.togglePinVisibility,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        } else {
+                            OutlinedTextField(
+                                value = if (user.pin != null) "••••••••" else strings.noPinSet,
+                                onValueChange = {},
+                                enabled = false,
+                                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    disabledContainerColor = SurfaceContainerHighLight,
+                                    disabledTextColor = TextSecondaryMuted,
+                                    disabledBorderColor = DividerBorder
+                                )
+                            )
+                        }
+                    }
+                }
+
+                val hasEffectivePin = if (isNewUser) pin.isNotBlank() else (!shouldResetPin && user.pin != null) || (shouldResetPin && pin.isNotBlank())
+                if (hasEffectivePin) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { requirePinOnKiosk = !requirePinOnKiosk }
+                            .padding(vertical = 2.dp)
+                    ) {
+                        Checkbox(
+                            checked = requirePinOnKiosk,
+                            onCheckedChange = { requirePinOnKiosk = it }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column {
+                            Text(
+                                text = strings.requirePinOnKioskLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            )
+                            Text(
+                                text = strings.requirePinOnKioskDesc,
+                                fontSize = 11.5.sp,
+                                color = TextSecondaryMuted
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    AdminLabeledField(
+                        label = strings.barcodeSymbolLabel,
+                        value = barcode,
+                        onValueChange = {
+                            val prev = barcode
+                            barcode = it
+                            if (barcodeNumber.isBlank() || barcodeNumber == prev) {
+                                barcodeNumber = it
+                            }
+                        },
+                        placeholder = strings.barcodeSymbolPlaceholder,
+                        modifier = Modifier
+                            .weight(1f)
+                            .onPreviewKeyEvent {
+                                it.key == Key.Enter || it.key == Key.NumPadEnter
+                            }
+                    )
+
+                    AdminLabeledField(
+                        label = strings.barcodeNumberIdLabel,
+                        value = barcodeNumber,
+                        onValueChange = { barcodeNumber = it },
+                        placeholder = strings.barcodeNumberIdPlaceholder,
+                        modifier = Modifier
+                            .weight(1f)
+                            .onPreviewKeyEvent {
+                                it.key == Key.Enter || it.key == Key.NumPadEnter
+                            }
+                    )
+                }
+
                 AdminSegmentedOptionsRow(
                     label = strings.preferredLanguage,
                     options = Language.entries,
@@ -528,8 +614,8 @@ fun UserEditDialog(
                     optionLabel = { curr ->
                         when (curr) {
                             SecondaryCurrency.NONE -> strings.secondaryCurrencyNone
-                            SecondaryCurrency.USD -> strings.secondaryCurrencyUsd
-                            SecondaryCurrency.EUR -> strings.secondaryCurrencyEur
+                            SecondaryCurrency.USD -> curr.code
+                            SecondaryCurrency.EUR -> curr.code
                         }
                     }
                 )

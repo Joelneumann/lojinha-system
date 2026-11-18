@@ -42,7 +42,13 @@ class RoomUserRepositoryImpl(
     override suspend fun saveUser(user: User) {
         val trimmedName = user.name.trim()
         require(trimmedName.isNotBlank()) { "User name cannot be blank" }
-        val sanitizedUser = user.copy(name = trimmedName)
+        val sanitizedNickname = user.nickname?.trim()?.ifBlank { null }
+        if (sanitizedNickname != null) {
+            require(sanitizedNickname.length <= de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH) {
+                "User nickname cannot exceed ${de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH} characters"
+            }
+        }
+        val sanitizedUser = user.copy(name = trimmedName, nickname = sanitizedNickname)
 
         val existing = userDao.getUserById(sanitizedUser.id)
         if (existing != null) {
@@ -51,6 +57,7 @@ class RoomUserRepositoryImpl(
             userDao.updateUserProfile(
                 id = entity.id,
                 name = entity.name,
+                nickname = entity.nickname,
                 language = entity.language,
                 secondaryCurrency = entity.secondaryCurrency,
                 pin = resolvedPin,

@@ -969,6 +969,15 @@ interface AppStrings {
     fun statementPdfPagePrefix(pageNum: Int): String
     fun supportEmailSubject(dateStr: String): String
     fun supportEmailBody(fileName: String, filePath: String): String
+    val userNicknameLabel: String
+    val userNicknamePlaceholder: String
+    val userNicknameHint: String
+    val userNicknameNotSet: String
+    val userNicknameReservedError: String
+    val userNicknameDuplicateError: String
+    val veggieExcludeFromBuyerPdfLabel: String
+    val veggieExcludeFromBuyerPdfHint: String
+    val veggieExcludeFromBuyerPdfBadge: String
 }
 
 

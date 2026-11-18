@@ -3,6 +3,7 @@ package de.joelneumann.lojinha.data.service
 import com.lowagie.text.*
 import com.lowagie.text.pdf.*
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.VeggieOrderEntry
 import de.joelneumann.lojinha.domain.model.VeggieOrderRound
 import de.joelneumann.lojinha.domain.model.VeggieProduct
@@ -153,10 +154,11 @@ object VeggieOrderPdfGenerator {
     fun generateBuyerShoppingListBytes(
         round: VeggieOrderRound,
         entries: List<VeggieOrderEntry>,
-        language: Language = Language.BR
+        language: Language = Language.BR,
+        products: List<VeggieProduct> = emptyList()
     ): ByteArray {
         val out = ByteArrayOutputStream()
-        writeBuyerShoppingListPdf(out, round, entries, language)
+        writeBuyerShoppingListPdf(out, round, entries, language, products)
         return out.toByteArray()
     }
 
@@ -164,11 +166,12 @@ object VeggieOrderPdfGenerator {
         outputFile: File,
         round: VeggieOrderRound,
         entries: List<VeggieOrderEntry>,
-        language: Language = Language.BR
+        language: Language = Language.BR,
+        products: List<VeggieProduct> = emptyList()
     ): File {
         outputFile.parentFile?.mkdirs()
         FileOutputStream(outputFile).use { fos ->
-            writeBuyerShoppingListPdf(fos, round, entries, language)
+            writeBuyerShoppingListPdf(fos, round, entries, language, products)
         }
         AppLogger.info(TAG, "Generated Buyer Shopping List PDF at: ${outputFile.absolutePath} (${outputFile.length()} bytes)")
         return outputFile
@@ -178,11 +181,13 @@ object VeggieOrderPdfGenerator {
         outputStream: java.io.OutputStream,
         round: VeggieOrderRound,
         entries: List<VeggieOrderEntry>,
-        language: Language
+        language: Language,
+        products: List<VeggieProduct>
     ) {
         val labels = labelsFor(language)
         val weekInfo = IsoWeekUtils.fromEpochMillis(round.openedAt)
-        val positiveEntries = entries.filter { it.orderedQuantityScaled > 0L }
+        val excludedProductIds = products.filter { it.excludeFromBuyerPdf }.map { it.id }.toSet()
+        val positiveEntries = entries.filter { it.orderedQuantityScaled > 0L && it.veggieProductId !in excludedProductIds }
         val groupedByProduct = positiveEntries
             .groupBy { it.veggieProductId }
             .values
@@ -327,10 +332,11 @@ object VeggieOrderPdfGenerator {
     fun generateWorkerSortingMatrixBytes(
         round: VeggieOrderRound,
         entries: List<VeggieOrderEntry>,
-        language: Language = Language.BR
+        language: Language = Language.BR,
+        users: List<User> = emptyList()
     ): ByteArray {
         val out = ByteArrayOutputStream()
-        writeWorkerSortingMatrixPdf(out, round, entries, language)
+        writeWorkerSortingMatrixPdf(out, round, entries, language, users)
         return out.toByteArray()
     }
 
@@ -338,11 +344,12 @@ object VeggieOrderPdfGenerator {
         outputFile: File,
         round: VeggieOrderRound,
         entries: List<VeggieOrderEntry>,
-        language: Language = Language.BR
+        language: Language = Language.BR,
+        users: List<User> = emptyList()
     ): File {
         outputFile.parentFile?.mkdirs()
         FileOutputStream(outputFile).use { fos ->
-            writeWorkerSortingMatrixPdf(fos, round, entries, language)
+            writeWorkerSortingMatrixPdf(fos, round, entries, language, users)
         }
         AppLogger.info(TAG, "Generated Worker Sorting Matrix PDF at: ${outputFile.absolutePath} (${outputFile.length()} bytes)")
         return outputFile
@@ -352,16 +359,18 @@ object VeggieOrderPdfGenerator {
         outputStream: java.io.OutputStream,
         round: VeggieOrderRound,
         entries: List<VeggieOrderEntry>,
-        language: Language
+        language: Language,
+        users: List<User>
     ) {
         val labels = labelsFor(language)
         val weekInfo = IsoWeekUtils.fromEpochMillis(round.openedAt)
         val positiveEntries = entries.filter { it.orderedQuantityScaled > 0L }
         val decimalSep = Formatting.decimalSeparator(language)
 
+        val usersById = users.associateBy { it.id }
         val customers = positiveEntries
             .groupBy { it.userId }
-            .map { (userId, list) -> userId to list.first().userNameSnapshot }
+            .map { (userId, list) -> userId to (usersById[userId]?.veggieDisplayName ?: list.first().userNameSnapshot) }
             .sortedByAccentInsensitive { it.second }
 
         val products = positiveEntries

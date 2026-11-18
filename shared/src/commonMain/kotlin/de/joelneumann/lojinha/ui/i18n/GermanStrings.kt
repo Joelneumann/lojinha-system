@@ -1008,6 +1008,15 @@ object GermanStrings : AppStrings {
 
         Vielen Dank!
     """.trimIndent()
+    override val userNicknameLabel = "Spitzname (Optional)"
+    override val userNicknamePlaceholder = "z. B. Jo (max. 10 Zeichen)"
+    override val userNicknameHint = "Für Gemüse-PDFs/Matrix & Web-Login (max. 10 Zeichen, eindeutig)"
+    override val userNicknameNotSet = "Nicht festgelegt"
+    override val userNicknameReservedError = "Der Spitzname \"Admin\" ist reserviert."
+    override val userNicknameDuplicateError = "Dieser Spitzname oder Name wird bereits verwendet."
+    override val veggieExcludeFromBuyerPdfLabel = "Von Einkaufsliste ausschließen"
+    override val veggieExcludeFromBuyerPdfHint = "Lokal verfügbar — fehlt im Einkaufs-PDF für den Käufer, wird aber berechnet und in der Verteilmatrix angezeigt."
+    override val veggieExcludeFromBuyerPdfBadge = "Nicht im Einkaufs-PDF"
 }
 
 

@@ -607,6 +607,25 @@ fun UserSettingsModalDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Nickname (Read-Only)
+                Text(text = strings.userNicknameLabel, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SurfaceContainerHighLight, RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = user.nickname?.takeIf { it.isNotBlank() } ?: strings.userNicknameNotSet,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondarySubtle
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Assigned Barcode ID (Read-Only)
                 Text(text = strings.assignedBarcodeId, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(6.dp))

@@ -1008,6 +1008,15 @@ object PortugueseStrings : AppStrings {
 
         Obrigado!
     """.trimIndent()
+    override val userNicknameLabel = "Apelido (Opcional)"
+    override val userNicknamePlaceholder = "ex.: Jo (máx. 10 caracteres)"
+    override val userNicknameHint = "Usado nos PDFs/Matriz de Verduras e Login Web (máx. 10 caracteres, único)"
+    override val userNicknameNotSet = "Não definido"
+    override val userNicknameReservedError = "O apelido \"Admin\" é reservado."
+    override val userNicknameDuplicateError = "Este apelido ou nome já está em uso por outro usuário."
+    override val veggieExcludeFromBuyerPdfLabel = "Excluir da Lista de Compras"
+    override val veggieExcludeFromBuyerPdfHint = "Disponível localmente — omitido no PDF do comprador, mas cobrado e exibido na Matriz de Separação."
+    override val veggieExcludeFromBuyerPdfBadge = "Fora do PDF Compras"
 }
 
 
