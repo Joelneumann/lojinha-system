@@ -73,11 +73,21 @@ fun InlineVeggieQuantityField(
         )
     }
 
-    SelectAllOnFocusEffect(
-        state = selectAllState,
-        currentValue = { textFieldValue },
-        onUpdateValue = { textFieldValue = it }
-    )
+    if (isFocused) {
+        SelectAllOnFocusEffect(
+            state = selectAllState,
+            currentValue = { textFieldValue },
+            onUpdateValue = { textFieldValue = it }
+        )
+
+        LaunchedEffect(Unit) {
+            val formatted = formatCurrent(quantityScaled)
+            textFieldValue = TextFieldValue(
+                text = formatted,
+                selection = TextRange(0, formatted.length)
+            )
+        }
+    }
 
     LaunchedEffect(quantityScaled) {
         val currentParsed = VeggieQuantityScaling.parseQuantityScaled(textFieldValue.text, allowDecimals) ?: 0L
@@ -86,16 +96,6 @@ fun InlineVeggieQuantityField(
             textFieldValue = TextFieldValue(
                 text = formatted,
                 selection = if (isFocused) TextRange(0, formatted.length) else TextRange(formatted.length)
-            )
-        }
-    }
-
-    LaunchedEffect(isFocused) {
-        if (isFocused) {
-            val formatted = formatCurrent(quantityScaled)
-            textFieldValue = TextFieldValue(
-                text = formatted,
-                selection = TextRange(0, formatted.length)
             )
         }
     }

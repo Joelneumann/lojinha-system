@@ -10,6 +10,16 @@ import java.util.concurrent.ConcurrentHashMap
 private val defaultImageService by lazy { VeggieImageService() }
 private val imageBitmapCache = ConcurrentHashMap<String, ImageBitmap>()
 
+actual fun getCachedVeggieImageBitmap(
+    productId: String,
+    imageFileName: String?,
+    fullSize: Boolean
+): ImageBitmap? {
+    if (imageFileName.isNullOrBlank()) return null
+    val cacheKey = "$productId:$imageFileName:$fullSize"
+    return imageBitmapCache[cacheKey]
+}
+
 actual suspend fun loadVeggieImageBitmap(
     productId: String,
     imageFileName: String?,

@@ -2,6 +2,12 @@ package de.joelneumann.lojinha.ui.utils
 
 import androidx.compose.ui.graphics.ImageBitmap
 
+expect fun getCachedVeggieImageBitmap(
+    productId: String,
+    imageFileName: String?,
+    fullSize: Boolean = false
+): ImageBitmap?
+
 expect suspend fun loadVeggieImageBitmap(
     productId: String,
     imageFileName: String?,

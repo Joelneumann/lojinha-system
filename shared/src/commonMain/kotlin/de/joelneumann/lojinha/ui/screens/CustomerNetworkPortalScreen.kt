@@ -62,6 +62,7 @@ import de.joelneumann.lojinha.ui.utils.IsoWeekInfo
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
 import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
+import de.joelneumann.lojinha.ui.utils.loadVeggieImageBitmap
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 import de.joelneumann.lojinha.ui.utils.setBrowserBeforeUnloadWarning
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
@@ -69,6 +70,7 @@ import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import kotlin.math.roundToLong
 
 private enum class VeggieFocusZone {
@@ -674,6 +676,19 @@ private fun CustomerVeggieOrderTabContent(
         }
     }
 
+    LaunchedEffect(products, isMobile) {
+        if (!isMobile || products.isEmpty()) return@LaunchedEffect
+        // Let initial visible items compose and draw first before warming up remaining thumbnails.
+        delay(350L)
+        for (product in products) {
+            val fileName = product.imageFileName
+            if (!fileName.isNullOrBlank()) {
+                loadVeggieImageBitmap(product.id, fileName, fullSize = false)
+                yield()
+            }
+        }
+    }
+
     LaunchedEffect(isKeyboardOpenMobile, highlightedProductIndex, activeZone) {
         if (isMobile && activeZone == VeggieFocusZone.PRODUCTS && highlightedProductIndex in filteredProducts.indices) {
             delay(120L)
@@ -1083,7 +1098,8 @@ private fun VeggieCatalogPanel(
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = SurfaceWhite,
-            shadowElevation = 1.dp,
+            shadowElevation = if (isMobile) 0.dp else 1.dp,
+            border = if (isMobile) BorderStroke(1.dp, DividerBorder) else null,
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -1323,51 +1339,85 @@ private fun VeggieCatalogPanel(
                 contentPadding = PaddingValues(bottom = 8.dp)
             ) {
                 if (isMobile && !isKeyboardOpenMobile && searchQuery.isBlank()) {
-                    item(key = "user_round_header") {
+                    item(key = "user_round_header", contentType = "header") {
                         userRoundHeaderCard()
                     }
                 }
-                itemsIndexed(filteredProducts, key = { _, it -> it.id }) { index, product ->
+                val lastProductIndex = filteredProducts.lastIndex
+                itemsIndexed(
+                    items = filteredProducts,
+                    key = { _, it -> it.id },
+                    contentType = { _, _ -> "product" }
+                ) { index, product ->
                     val unitType = unitTypesById[product.unitTypeId]
                     val currentQtyScaled = draftQuantitiesScaled[product.id] ?: 0L
                     val prevQtyScaled = previousRoundQuantitiesScaled[product.id] ?: 0L
+                    val isFavorite = product.id in favoriteProductIds
+                    val isHighlighted = index == highlightedProductIndex
+                    val isFocused = isProductZoneActive && isHighlighted
+
+                    val openDetailCb = remember(product.id, onOpenDetail) { { onOpenDetail(product) } }
+                    val qtyChangeCb = remember(product.id, onUpdateProductQuantity) {
+                        { newScaled: Long -> onUpdateProductQuantity(product.id, newScaled) }
+                    }
+                    val toggleFavoriteCb = remember(product.id, onToggleFavorite) {
+                        { onToggleFavorite(product.id) }
+                    }
+                    val commitQtyCb = remember(index, lastProductIndex, onNavigateToProduct, onReturnToSearch) {
+                        {
+                            if (index < lastProductIndex) {
+                                onNavigateToProduct?.invoke(index + 1)
+                            } else {
+                                onReturnToSearch?.invoke()
+                            }
+                            Unit
+                        }
+                    }
+                    val commitPrevCb = remember(index, onNavigateToProduct, onReturnToSearch) {
+                        {
+                            if (index > 0) {
+                                onNavigateToProduct?.invoke(index - 1)
+                            } else {
+                                onReturnToSearch?.invoke()
+                            }
+                            Unit
+                        }
+                    }
+                    val focusedCb = remember(index, onCardFocused) {
+                        { onCardFocused?.invoke(index); Unit }
+                    }
+                    val cardFocusModifier = remember(index, onCardFocused) {
+                        if (onCardFocused == null) {
+                            Modifier
+                        } else {
+                            Modifier.onFocusChanged { focusState ->
+                                if (focusState.isFocused || focusState.hasFocus) {
+                                    onCardFocused(index)
+                                }
+                            }
+                        }
+                    }
 
                     CustomerVeggieProductCard(
                         product = product,
                         unitType = unitType,
                         quantityScaled = currentQtyScaled,
                         previousQuantityScaled = prevQtyScaled,
-                        isFavorite = product.id in favoriteProductIds,
-                        isHighlighted = (index == highlightedProductIndex),
-                        isFocused = (isProductZoneActive && index == highlightedProductIndex),
+                        isFavorite = isFavorite,
+                        isHighlighted = isHighlighted,
+                        isFocused = isFocused,
                         isDialogActive = isDialogActive,
                         isEditable = isRoundOpen,
                         decimalSeparator = decimalSep,
                         isMobile = isMobile,
-                        onOpenDetail = { onOpenDetail(product) },
-                        onQuantityChange = { newScaled -> onUpdateProductQuantity(product.id, newScaled) },
-                        onCommitQuantity = {
-                            if (index < filteredProducts.lastIndex) {
-                                onNavigateToProduct?.invoke(index + 1)
-                            } else {
-                                onReturnToSearch?.invoke()
-                            }
-                        },
-                        onCommitPrevious = {
-                            if (index > 0) {
-                                onNavigateToProduct?.invoke(index - 1)
-                            } else {
-                                onReturnToSearch?.invoke()
-                            }
-                        },
+                        onOpenDetail = openDetailCb,
+                        onQuantityChange = qtyChangeCb,
+                        onCommitQuantity = commitQtyCb,
+                        onCommitPrevious = commitPrevCb,
                         onReturnToSearch = onReturnToSearch,
-                        onFocused = { onCardFocused?.invoke(index) },
-                        onToggleFavorite = { onToggleFavorite(product.id) },
-                        modifier = Modifier.onFocusChanged { focusState ->
-                            if (focusState.isFocused || focusState.hasFocus) {
-                                onCardFocused?.invoke(index)
-                            }
-                        }
+                        onFocused = focusedCb,
+                        onToggleFavorite = toggleFavoriteCb,
+                        modifier = cardFocusModifier
                     )
                 }
             }
@@ -1817,8 +1867,8 @@ private fun CustomerVeggieProductCard(
     val cardFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    LaunchedEffect(isFocused, isDialogActive) {
-        if (isFocused && !isDialogActive) {
+    if (isFocused && !isDialogActive) {
+        LaunchedEffect(Unit) {
             cardFocusRequester.safeRequestFocus()
             keyboardController?.show()
         }
@@ -1833,7 +1883,7 @@ private fun CustomerVeggieProductCard(
     } else {
         BorderStroke(1.dp, DividerBorder)
     }
-    val cardElevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    val cardElevation = CardDefaults.cardElevation(defaultElevation = if (isMobile) 0.dp else 1.dp)
 
     val cardContent: @Composable ColumnScope.() -> Unit = {
         val lineTotalCents = if (isOrdered && product.estimatedPriceCents != null) {

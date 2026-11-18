@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import de.joelneumann.lojinha.ui.theme.ColorSuccessEmerald
 import de.joelneumann.lojinha.ui.theme.SurfaceContainerHighLight
+import de.joelneumann.lojinha.ui.utils.getCachedVeggieImageBitmap
 import de.joelneumann.lojinha.ui.utils.loadVeggieImageBitmap
 import org.jetbrains.compose.resources.decodeToImageBitmap
 
@@ -51,20 +52,31 @@ fun VeggieProductImage(
         }
     }
 
+    val cachedBitmap = remember(productId, imageFileName, fullSize, previewBytes) {
+        if (previewBytes == null && !imageFileName.isNullOrBlank()) {
+            getCachedVeggieImageBitmap(productId, imageFileName, fullSize)
+        } else {
+            null
+        }
+    }
+
     val loadedBitmap by produceState<ImageBitmap?>(
-        initialValue = null,
+        initialValue = cachedBitmap,
         productId,
         imageFileName,
-        fullSize
+        fullSize,
+        previewBytes
     ) {
-        value = if (previewBytes == null && !imageFileName.isNullOrBlank()) {
+        value = if (cachedBitmap != null) {
+            cachedBitmap
+        } else if (previewBytes == null && !imageFileName.isNullOrBlank()) {
             loadVeggieImageBitmap(productId, imageFileName, fullSize)
         } else {
             null
         }
     }
 
-    val bitmap = previewBitmap ?: loadedBitmap
+    val bitmap = previewBitmap ?: cachedBitmap ?: loadedBitmap
 
     val clickModifier = if (onClick != null) {
         Modifier
