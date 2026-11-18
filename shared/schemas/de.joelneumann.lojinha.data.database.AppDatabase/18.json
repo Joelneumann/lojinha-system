@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 18,
-    "identityHash": "8e95141c90064fb3ad60525ec65a0fba",
+    "identityHash": "5dda87de677495957e3eb1553e2c1483",
     "entities": [
       {
         "tableName": "users",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `balance` INTEGER NOT NULL, `language` TEXT NOT NULL, `secondaryCurrency` TEXT NOT NULL, `pin` TEXT, `userBarcode` TEXT, `userBarcodeNumber` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL DEFAULT 0, `avatarType` TEXT NOT NULL DEFAULT 'INITIALS', `avatarEmoji` TEXT NOT NULL DEFAULT '😀', `avatarColor` TEXT NOT NULL DEFAULT '#1E293B', `requirePinOnKiosk` INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `balance` INTEGER NOT NULL, `language` TEXT NOT NULL, `secondaryCurrency` TEXT NOT NULL, `pin` TEXT, `userBarcode` TEXT, `userBarcodeNumber` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL DEFAULT 0, `avatarType` TEXT NOT NULL DEFAULT 'INITIALS', `avatarEmoji` TEXT NOT NULL DEFAULT '😀', `avatarColor` TEXT NOT NULL DEFAULT '#1E293B', PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -86,13 +86,6 @@
             "affinity": "TEXT",
             "notNull": true,
             "defaultValue": "'#1E293B'"
-          },
-          {
-            "fieldPath": "requirePinOnKiosk",
-            "columnName": "requirePinOnKiosk",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "1"
           }
         ],
         "primaryKey": {
@@ -304,7 +297,7 @@
       },
       {
         "tableName": "settings",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `adminPasswordHash` TEXT NOT NULL, `globalMarkupPercent` REAL NOT NULL, `usdExchangeRate` REAL NOT NULL, `eurExchangeRate` REAL NOT NULL, `inactivityTimeoutMinutes` INTEGER NOT NULL, `backupLocationPath` TEXT NOT NULL, `autoBackupEnabled` INTEGER NOT NULL, `autoBackupFormat` TEXT NOT NULL, `autoBackupScheduleType` TEXT NOT NULL, `autoBackupTime` TEXT NOT NULL, `autoBackupIntervalHours` INTEGER NOT NULL, `lastBackupTimestamp` INTEGER, `oneDriveClientId` TEXT NOT NULL, `oneDriveRefreshToken` TEXT, `oneDriveAccountEmail` TEXT, `oneDriveAccountName` TEXT, `oneDriveDefaultFolder` TEXT NOT NULL, `oneDriveTenant` TEXT NOT NULL, `supportEmail` TEXT, `autoUpdateExchangeRates` INTEGER NOT NULL, `lastExchangeRateUpdateTimestamp` INTEGER, `yellowBalanceWarningThresholdCents` INTEGER NOT NULL, `redBalanceWarningThresholdCents` INTEGER NOT NULL, `veggieAutoOpenEnabled` INTEGER NOT NULL DEFAULT 0, `veggieAutoOpenDayOfWeek` INTEGER NOT NULL DEFAULT 1, `veggieAutoOpenTime` TEXT NOT NULL DEFAULT '08:00', `defaultVeggieBuyerFeeCents` INTEGER NOT NULL DEFAULT 0, `defaultVeggieTransportFeeCents` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `adminPasswordHash` TEXT NOT NULL, `globalMarkupPercent` REAL NOT NULL, `usdExchangeRate` REAL NOT NULL, `eurExchangeRate` REAL NOT NULL, `inactivityTimeoutMinutes` INTEGER NOT NULL, `backupLocationPath` TEXT NOT NULL, `autoBackupEnabled` INTEGER NOT NULL, `autoBackupFormat` TEXT NOT NULL, `autoBackupScheduleType` TEXT NOT NULL, `autoBackupTime` TEXT NOT NULL, `autoBackupIntervalHours` INTEGER NOT NULL, `lastBackupTimestamp` INTEGER, `oneDriveClientId` TEXT NOT NULL, `oneDriveRefreshToken` TEXT, `oneDriveAccountEmail` TEXT, `oneDriveAccountName` TEXT, `oneDriveDefaultFolder` TEXT NOT NULL, `oneDriveTenant` TEXT NOT NULL, `supportEmail` TEXT, `autoUpdateExchangeRates` INTEGER NOT NULL, `lastExchangeRateUpdateTimestamp` INTEGER, `yellowBalanceWarningThresholdCents` INTEGER NOT NULL, `redBalanceWarningThresholdCents` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -443,41 +436,6 @@
             "columnName": "redBalanceWarningThresholdCents",
             "affinity": "INTEGER",
             "notNull": true
-          },
-          {
-            "fieldPath": "veggieAutoOpenEnabled",
-            "columnName": "veggieAutoOpenEnabled",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
-          },
-          {
-            "fieldPath": "veggieAutoOpenDayOfWeek",
-            "columnName": "veggieAutoOpenDayOfWeek",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "1"
-          },
-          {
-            "fieldPath": "veggieAutoOpenTime",
-            "columnName": "veggieAutoOpenTime",
-            "affinity": "TEXT",
-            "notNull": true,
-            "defaultValue": "'08:00'"
-          },
-          {
-            "fieldPath": "defaultVeggieBuyerFeeCents",
-            "columnName": "defaultVeggieBuyerFeeCents",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
-          },
-          {
-            "fieldPath": "defaultVeggieTransportFeeCents",
-            "columnName": "defaultVeggieTransportFeeCents",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -804,14 +762,19 @@
         ]
       },
       {
-        "tableName": "veggie_unit_types",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `allowDecimals` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "tableName": "shopping_list_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `productId` TEXT, `name` TEXT NOT NULL, `quantity` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `lastExportedName` TEXT, `lastExportedQuantity` TEXT, `isConfirmedForCurrentExport` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
             "columnName": "id",
             "affinity": "TEXT",
             "notNull": true
+          },
+          {
+            "fieldPath": "productId",
+            "columnName": "productId",
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "name",
@@ -820,94 +783,36 @@
             "notNull": true
           },
           {
-            "fieldPath": "allowDecimals",
-            "columnName": "allowDecimals",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "isActive",
-            "columnName": "isActive",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "updatedAt",
-            "columnName": "updatedAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "id"
-          ]
-        },
-        "indices": [
-          {
-            "name": "index_veggie_unit_types_name",
-            "unique": false,
-            "columnNames": [
-              "name"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_veggie_unit_types_name` ON `${TABLE_NAME}` (`name`)"
-          }
-        ]
-      },
-      {
-        "tableName": "veggie_products",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `estimatedPriceCents` INTEGER, `unitTypeId` TEXT NOT NULL, `imageFileName` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
+            "fieldPath": "quantity",
+            "columnName": "quantity",
             "affinity": "TEXT",
             "notNull": true
           },
           {
-            "fieldPath": "name",
-            "columnName": "name",
-            "affinity": "TEXT",
+            "fieldPath": "sortOrder",
+            "columnName": "sortOrder",
+            "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "description",
-            "columnName": "description",
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastExportedName",
+            "columnName": "lastExportedName",
             "affinity": "TEXT"
           },
           {
-            "fieldPath": "estimatedPriceCents",
-            "columnName": "estimatedPriceCents",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "unitTypeId",
-            "columnName": "unitTypeId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "imageFileName",
-            "columnName": "imageFileName",
+            "fieldPath": "lastExportedQuantity",
+            "columnName": "lastExportedQuantity",
             "affinity": "TEXT"
           },
           {
-            "fieldPath": "isActive",
-            "columnName": "isActive",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "isDeleted",
-            "columnName": "isDeleted",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "updatedAt",
-            "columnName": "updatedAt",
+            "fieldPath": "isConfirmedForCurrentExport",
+            "columnName": "isConfirmedForCurrentExport",
             "affinity": "INTEGER",
             "notNull": true
           }
@@ -920,291 +825,20 @@
         },
         "indices": [
           {
-            "name": "index_veggie_products_name",
+            "name": "index_shopping_list_items_sortOrder",
             "unique": false,
             "columnNames": [
-              "name"
+              "sortOrder"
             ],
             "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_veggie_products_name` ON `${TABLE_NAME}` (`name`)"
-          },
-          {
-            "name": "index_veggie_products_unitTypeId",
-            "unique": false,
-            "columnNames": [
-              "unitTypeId"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_veggie_products_unitTypeId` ON `${TABLE_NAME}` (`unitTypeId`)"
-          }
-        ]
-      },
-      {
-        "tableName": "veggie_order_rounds",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `openedAt` INTEGER NOT NULL, `closedAt` INTEGER, `settledAt` INTEGER, `status` TEXT NOT NULL, `buyerOperationFeeCents` INTEGER NOT NULL, `transportFeeCents` INTEGER NOT NULL, `transporterUserId` TEXT, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "openedAt",
-            "columnName": "openedAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "closedAt",
-            "columnName": "closedAt",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "settledAt",
-            "columnName": "settledAt",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "status",
-            "columnName": "status",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "buyerOperationFeeCents",
-            "columnName": "buyerOperationFeeCents",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "transportFeeCents",
-            "columnName": "transportFeeCents",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "transporterUserId",
-            "columnName": "transporterUserId",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "updatedAt",
-            "columnName": "updatedAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "id"
-          ]
-        },
-        "indices": [
-          {
-            "name": "index_veggie_order_rounds_status",
-            "unique": false,
-            "columnNames": [
-              "status"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_veggie_order_rounds_status` ON `${TABLE_NAME}` (`status`)"
-          },
-          {
-            "name": "index_veggie_order_rounds_openedAt",
-            "unique": false,
-            "columnNames": [
-              "openedAt"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_veggie_order_rounds_openedAt` ON `${TABLE_NAME}` (`openedAt`)"
-          }
-        ]
-      },
-      {
-        "tableName": "veggie_round_product_settlements",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`roundId` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `marketUnitPriceCents` INTEGER, `totalSpentCents` INTEGER, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`roundId`, `veggieProductId`))",
-        "fields": [
-          {
-            "fieldPath": "roundId",
-            "columnName": "roundId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "veggieProductId",
-            "columnName": "veggieProductId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "marketUnitPriceCents",
-            "columnName": "marketUnitPriceCents",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "totalSpentCents",
-            "columnName": "totalSpentCents",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "updatedAt",
-            "columnName": "updatedAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "roundId",
-            "veggieProductId"
-          ]
-        },
-        "indices": [
-          {
-            "name": "index_veggie_round_product_settlements_roundId",
-            "unique": false,
-            "columnNames": [
-              "roundId"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_veggie_round_product_settlements_roundId` ON `${TABLE_NAME}` (`roundId`)"
-          }
-        ]
-      },
-      {
-        "tableName": "veggie_order_entries",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `roundId` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `veggieNameSnapshot` TEXT NOT NULL, `unitNameSnapshot` TEXT NOT NULL, `allowDecimalsSnapshot` INTEGER NOT NULL, `orderedQuantityScaled` INTEGER NOT NULL, `actualQuantityScaled` INTEGER, `effectiveUnitPriceCents` INTEGER, `finalItemTotalCents` INTEGER, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "roundId",
-            "columnName": "roundId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "userId",
-            "columnName": "userId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "userNameSnapshot",
-            "columnName": "userNameSnapshot",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "veggieProductId",
-            "columnName": "veggieProductId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "veggieNameSnapshot",
-            "columnName": "veggieNameSnapshot",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "unitNameSnapshot",
-            "columnName": "unitNameSnapshot",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "allowDecimalsSnapshot",
-            "columnName": "allowDecimalsSnapshot",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "orderedQuantityScaled",
-            "columnName": "orderedQuantityScaled",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "actualQuantityScaled",
-            "columnName": "actualQuantityScaled",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "effectiveUnitPriceCents",
-            "columnName": "effectiveUnitPriceCents",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "finalItemTotalCents",
-            "columnName": "finalItemTotalCents",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "updatedAt",
-            "columnName": "updatedAt",
-            "affinity": "INTEGER",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "id"
-          ]
-        },
-        "indices": [
-          {
-            "name": "index_veggie_order_entries_roundId_userId_veggieProductId",
-            "unique": true,
-            "columnNames": [
-              "roundId",
-              "userId",
-              "veggieProductId"
-            ],
-            "orders": [],
-            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_veggie_order_entries_roundId_userId_veggieProductId` ON `${TABLE_NAME}` (`roundId`, `userId`, `veggieProductId`)"
-          },
-          {
-            "name": "index_veggie_order_entries_roundId",
-            "unique": false,
-            "columnNames": [
-              "roundId"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_roundId` ON `${TABLE_NAME}` (`roundId`)"
-          },
-          {
-            "name": "index_veggie_order_entries_userId",
-            "unique": false,
-            "columnNames": [
-              "userId"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_userId` ON `${TABLE_NAME}` (`userId`)"
-          },
-          {
-            "name": "index_veggie_order_entries_veggieProductId",
-            "unique": false,
-            "columnNames": [
-              "veggieProductId"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_veggieProductId` ON `${TABLE_NAME}` (`veggieProductId`)"
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_shopping_list_items_sortOrder` ON `${TABLE_NAME}` (`sortOrder`)"
           }
         ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8e95141c90064fb3ad60525ec65a0fba')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5dda87de677495957e3eb1553e2c1483')"
     ]
   }
 }

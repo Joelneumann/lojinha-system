@@ -22,7 +22,9 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import de.joelneumann.lojinha.AppVersion
 import de.joelneumann.lojinha.data.database.AppDatabase
+import de.joelneumann.lojinha.data.repository.RoomShoppingListRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl
+import de.joelneumann.lojinha.data.service.ShoppingListPdfGenerator
 import de.joelneumann.lojinha.data.service.VeggieImageService
 import de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
@@ -33,6 +35,9 @@ import de.joelneumann.lojinha.util.AppLogger
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -45,6 +50,7 @@ class LojinhaAdminServer(
     private val billingListRepository: BillingListRepository,
     private val settingsRepository: SettingsRepository,
     private val adminNoteRepository: AdminNoteRepository? = null,
+    private val shoppingListRepository: ShoppingListRepository? = null,
     private val veggieOrderRepository: VeggieOrderRepository? = null,
     private val veggieImageService: VeggieImageService = VeggieImageService(),
     private val database: AppDatabase? = null,
@@ -839,6 +845,160 @@ class LojinhaAdminServer(
                             repo.deleteNote(id)
                         }
                         call.respond(HttpStatusCode.OK)
+                    }
+
+                    // Admin Shopping List
+                    route("/shopping-list") {
+                        fun resolveShoppingListRepo(): ShoppingListRepository? =
+                            shoppingListRepository ?: database?.let {
+                                RoomShoppingListRepositoryImpl(it.shoppingListItemDao()) {
+                                    DataChangeNotifier.notifyScopedDataChanged(
+                                        DataChangeNotifier.ChangeScope(adminOnly = true)
+                                    )
+                                }
+                            }
+
+                        suspend fun requireRepo(call: ApplicationCall): ShoppingListRepository? {
+                            val repo = resolveShoppingListRepo()
+                            if (repo == null) {
+                                AppLogger.warn("LojinhaAdminServer", "Shopping list repository unavailable for ${call.request.httpMethod.value} ${call.request.uri}")
+                                call.respond(HttpStatusCode.ServiceUnavailable, "Shopping list service unavailable")
+                            }
+                            return repo
+                        }
+
+                        suspend fun executeRoute(call: ApplicationCall, action: String, block: suspend () -> Unit) {
+                            try {
+                                block()
+                            } catch (e: io.ktor.server.plugins.CannotTransformContentToTypeException) {
+                                AppLogger.warn("LojinhaAdminServer", "Invalid request body for shopping list $action: ${e.message}")
+                                call.respond(HttpStatusCode.BadRequest, "Invalid shopping list payload")
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                AppLogger.error("LojinhaAdminServer", "Shopping list $action failed: ${e.message}", e)
+                                call.respond(HttpStatusCode.InternalServerError, "Failed to $action")
+                            }
+                        }
+
+                        get {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            executeRoute(call, "list items") {
+                                val repo = resolveShoppingListRepo()
+                                if (repo == null) {
+                                    AppLogger.warn("LojinhaAdminServer", "Shopping list repository unavailable for GET /api/admin/shopping-list; returning empty list")
+                                    call.respond(emptyList<ShoppingListItem>())
+                                    return@executeRoute
+                                }
+                                call.respond(repo.getAllItems())
+                            }
+                        }
+
+                        post {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            executeRoute(call, "add or update item") {
+                                val repo = requireRepo(call) ?: return@executeRoute
+                                val item = call.receive<ShoppingListItem>()
+                                if (item.name.isBlank() || item.quantity.isBlank()) {
+                                    AppLogger.warn("LojinhaAdminServer", "Rejected shopping list POST: blank name or quantity")
+                                    return@executeRoute call.respond(HttpStatusCode.BadRequest, "Name and quantity cannot be blank")
+                                }
+                                repo.addOrUpdateItem(item)
+                                call.respond(HttpStatusCode.OK)
+                            }
+                        }
+
+                        put("/item") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@put
+                            executeRoute(call, "update item") {
+                                val repo = requireRepo(call) ?: return@executeRoute
+                                val item = call.receive<ShoppingListItem>()
+                                if (item.id.isBlank() || item.name.isBlank() || item.quantity.isBlank()) {
+                                    AppLogger.warn("LojinhaAdminServer", "Rejected shopping list PUT /item: blank id, name, or quantity")
+                                    return@executeRoute call.respond(HttpStatusCode.BadRequest, "ID, name, and quantity cannot be blank")
+                                }
+                                repo.updateItem(item)
+                                call.respond(HttpStatusCode.OK)
+                            }
+                        }
+
+                        post("/{id}/confirm") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            executeRoute(call, "confirm item") {
+                                val repo = requireRepo(call) ?: return@executeRoute
+                                val id = call.parameters["id"] ?: return@executeRoute call.respond(HttpStatusCode.BadRequest)
+                                repo.confirmItem(id)
+                                call.respond(HttpStatusCode.OK)
+                            }
+                        }
+
+                        post("/{id}/unconfirm") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            executeRoute(call, "unconfirm item") {
+                                val repo = requireRepo(call) ?: return@executeRoute
+                                val id = call.parameters["id"] ?: return@executeRoute call.respond(HttpStatusCode.BadRequest)
+                                repo.unconfirmItem(id)
+                                call.respond(HttpStatusCode.OK)
+                            }
+                        }
+
+                        put("/reorder") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@put
+                            executeRoute(call, "reorder items") {
+                                val repo = requireRepo(call) ?: return@executeRoute
+                                val items = call.receive<List<ShoppingListItem>>()
+                                repo.updateItemsOrder(items)
+                                call.respond(HttpStatusCode.OK)
+                            }
+                        }
+
+                        delete("/{id}") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@delete
+                            executeRoute(call, "delete item") {
+                                val repo = requireRepo(call) ?: return@executeRoute
+                                val id = call.parameters["id"] ?: return@executeRoute call.respond(HttpStatusCode.BadRequest)
+                                repo.deleteItem(id)
+                                call.respond(HttpStatusCode.OK)
+                            }
+                        }
+
+                        delete {
+                            if (!call.checkAdminAuth(settingsRepository)) return@delete
+                            executeRoute(call, "clear items") {
+                                val repo = requireRepo(call) ?: return@executeRoute
+                                repo.clearAllItems()
+                                call.respond(HttpStatusCode.OK)
+                            }
+                        }
+
+                        post("/commit-export") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@post
+                            executeRoute(call, "commit export baseline") {
+                                val repo = requireRepo(call) ?: return@executeRoute
+                                repo.commitExportBaseline()
+                                call.respond(HttpStatusCode.OK)
+                            }
+                        }
+
+                        get("/pdf") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = requireRepo(call) ?: return@get
+                            val language = call.parseLanguageParam()
+                            try {
+                                val items = repo.getAllItems()
+                                val products = productRepository.getAllProducts()
+                                val pdfBytes = ShoppingListPdfGenerator.generateBytes(items, language, products)
+                                repo.commitExportBaseline()
+                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                val filename = PdfFilenames.shoppingListFilename(dateStr, language)
+                                call.respondPdf(pdfBytes, filename)
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                AppLogger.error("LojinhaAdminServer", "Failed to generate shopping list PDF: ${e.message}", e)
+                                call.respond(HttpStatusCode.InternalServerError, "Failed to generate shopping list PDF")
+                            }
+                        }
                     }
 
                     // Diagnostics Support Bundle

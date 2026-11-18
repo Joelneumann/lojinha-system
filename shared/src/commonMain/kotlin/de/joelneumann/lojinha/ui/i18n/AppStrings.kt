@@ -748,6 +748,46 @@ interface AppStrings {
     val stockAdjustmentManual: String
     val errFailedToLoadProductHistory: String
 
+    // --- Admin Shopping List Strings ---
+    val tabShoppingList: String
+    val shoppingListSearchOrAddPlaceholder: String
+    val shoppingListAddBtn: String
+    fun shoppingListAddCustomItem(name: String): String
+    val shoppingListAddToBtn: String
+    val shoppingListClearAllBtn: String
+    val shoppingListClearAllTitle: String
+    val shoppingListClearAllMsg: String
+    val shoppingListEmptyTitle: String
+    val shoppingListEmptyMsg: String
+    fun shoppingListCountText(count: Int): String
+    val shoppingListModalTitle: String
+    val shoppingListQuantityLabel: String
+    val shoppingListQuantityPlaceholderPiece: String
+    val shoppingListQuantityPlaceholderWeight: String
+    val shoppingListQuantityPlaceholderCustom: String
+    fun shoppingListAlreadyExistsWarning(existingQty: String): String
+    val shoppingListRemoveNoteCheckbox: String
+    val shoppingListOverwriteBtn: String
+    val shoppingListColName: String
+    val shoppingListColStock: String
+    val shoppingListColQuantity: String
+    val shoppingListConfirmUnchangedTooltip: String
+    val shoppingListMarkUnadjustedTooltip: String
+    val shoppingListStatusPending: String
+    val shoppingListStatusConfirmed: String
+    val shoppingListStatusEdited: String
+    val shoppingListStatusNew: String
+    val shoppingListExportPdfBtn: String
+    val shoppingListExportApprovalTitle: String
+    fun shoppingListExportSummary(count: Int): String
+    fun shoppingListExportUnreviewedWarning(count: Int): String
+    val shoppingListExportReviewItemsBtn: String
+    val shoppingListExportProceedAnywayBtn: String
+    fun shoppingListAddedToast(name: String): String
+    val shoppingListDeleteItemTooltip: String
+    val shoppingListDragHandleTooltip: String
+    val shoppingListInvalidQuantityError: String
+
     // Veggie Order System & Customer Network Portal
     fun sysNoteVeggieOrder(week: String, year: String): String
     fun sysNoteVeggieTransport(week: String, year: String): String

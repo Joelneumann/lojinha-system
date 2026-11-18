@@ -46,9 +46,11 @@ import de.joelneumann.lojinha.ui.components.userselection.PlatformEmoji
 import de.joelneumann.lojinha.ui.components.userselection.UserAvatar
 import de.joelneumann.lojinha.ui.components.userselection.parseHexColor
 
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 @Composable
 fun UserEditDialog(
@@ -131,6 +133,13 @@ fun UserEditDialog(
     }
 
     var showDiscardConfirm by remember { mutableStateOf(false) }
+    val nameFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isNewUser) {
+        if (isNewUser) {
+            nameFocusRequester.safeRequestFocus()
+        }
+    }
 
     val handleDismissRequest = {
         if (!isSaving) {
@@ -248,6 +257,7 @@ fun UserEditDialog(
                         value = name,
                         onValueChange = { name = it },
                         placeholder = strings.userNamePlaceholder,
+                        focusRequester = nameFocusRequester,
                         modifier = Modifier.weight(1f)
                     )
 

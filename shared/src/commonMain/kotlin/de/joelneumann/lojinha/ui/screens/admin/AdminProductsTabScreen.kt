@@ -37,7 +37,9 @@ import de.joelneumann.lojinha.ui.theme.PrimaryNavy
 import de.joelneumann.lojinha.ui.theme.SurfaceWhite
 import de.joelneumann.lojinha.ui.theme.TextSecondaryMuted
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.ui.utils.containsIgnoreAccents
+import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminProductsViewModel
 
 @Composable
@@ -47,7 +49,9 @@ fun AdminProductsTabScreen(
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandProduct: (String) -> Unit,
     onUnsavedStateChanged: (Boolean) -> Unit,
+    onAddToShoppingList: ((Product) -> Unit)? = null,
     onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
+    isExternalModalOpen: Boolean = false,
     focusTrigger: Int = 0
 ) {
     val products by viewModel.products.collectAsState()
@@ -69,9 +73,30 @@ fun AdminProductsTabScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val searchFocusRequester = remember { FocusRequester() }
+    var searchRefocusTrigger by remember { mutableStateOf(0) }
 
-    LaunchedEffect(showProductModal, expandedProductId, focusTrigger) {
-        if (!showProductModal && expandedProductId == null) {
+    val completeProductWorkflow: () -> Unit = {
+        onRequestToggleExpand(null)
+        viewModel.updateSearchQuery("")
+        searchRefocusTrigger++
+    }
+
+    LaunchedEffect(
+        showProductModal,
+        historyProduct,
+        productErrorMessage,
+        isExternalModalOpen,
+        expandedProductId,
+        focusTrigger,
+        searchRefocusTrigger
+    ) {
+        if (
+            !showProductModal &&
+            historyProduct == null &&
+            productErrorMessage == null &&
+            !isExternalModalOpen &&
+            expandedProductId == null
+        ) {
             searchFocusRequester.safeRequestFocus()
         }
     }
@@ -100,18 +125,12 @@ fun AdminProductsTabScreen(
 
     val filteredActiveProducts = remember(activeProducts, searchQuery) {
         if (searchQuery.isBlank()) activeProducts
-        else activeProducts.filter { p ->
-            p.name.containsIgnoreAccents(searchQuery) ||
-                    p.barcodes.any { b -> b.code.containsIgnoreAccents(searchQuery) || (b.description != null && b.description.containsIgnoreAccents(searchQuery)) }
-        }
+        else activeProducts.filterAndRankProducts(searchQuery)
     }
 
     val filteredDisabledProducts = remember(disabledProducts, searchQuery) {
         if (searchQuery.isBlank()) disabledProducts
-        else disabledProducts.filter { p ->
-            p.name.containsIgnoreAccents(searchQuery) ||
-                    p.barcodes.any { b -> b.code.containsIgnoreAccents(searchQuery) || (b.description != null && b.description.containsIgnoreAccents(searchQuery)) }
-        }
+        else disabledProducts.filterAndRankProducts(searchQuery)
     }
 
     val totalMatches = filteredActiveProducts.size + filteredDisabledProducts.size
@@ -193,10 +212,21 @@ fun AdminProductsTabScreen(
                             onAdjustStock = { id, delta, newPrice ->
                                 viewModel.adjustProductStock(id, delta, newPrice)
                             },
-
-                            onToggleActive = viewModel::toggleProductActive,
-                            onDeleteProduct = { viewModel.deleteProduct(it.id) },
-                            onViewHistory = { viewModel.openProductHistoryModal(it) }
+                            onStockAdjusted = completeProductWorkflow,
+                            onToggleActive = { prod ->
+                                viewModel.toggleProductActive(prod)
+                                if (expandedProductId == prod.id) {
+                                    completeProductWorkflow()
+                                }
+                            },
+                            onDeleteProduct = { prod ->
+                                viewModel.deleteProduct(prod.id)
+                                if (expandedProductId == prod.id) {
+                                    completeProductWorkflow()
+                                }
+                            },
+                            onViewHistory = { viewModel.openProductHistoryModal(it) },
+                            onAddToShoppingList = onAddToShoppingList
                         )
                     }
                 }
@@ -238,7 +268,7 @@ fun AdminProductsTabScreen(
             product = editProduct!!,
             allProducts = products,
             isSaving = isSavingProduct,
-            onSave = { viewModel.saveProduct(it) },
+            onSave = { viewModel.saveProduct(it, onSuccess = completeProductWorkflow) },
             onCancel = { viewModel.closeProductModal() }
         )
     }

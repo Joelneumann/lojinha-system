@@ -19,6 +19,7 @@ import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl
+import de.joelneumann.lojinha.data.repository.RoomShoppingListRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl
 import de.joelneumann.lojinha.data.service.DataChangeNotifier
 import de.joelneumann.lojinha.data.service.VeggieImageService
@@ -59,6 +60,10 @@ fun main() {
         val billingListRepository = RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged)
         val settingsRepository = RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged)
         val adminNoteRepository = RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged)
+        val onAdminOnlyDataChanged = {
+            DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(adminOnly = true))
+        }
+        val shoppingListRepository = RoomShoppingListRepositoryImpl(database.shoppingListItemDao(), onAdminOnlyDataChanged)
         val veggieOrderRepository = RoomVeggieOrderRepositoryImpl(
             veggieOrderDao = database.veggieOrderDao(),
             userDao = database.userDao(),
@@ -67,9 +72,7 @@ fun main() {
             onUserScopedDataChanged = { userId ->
                 DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(targetUserId = userId))
             },
-            onAdminOnlyDataChanged = {
-                DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(adminOnly = true))
-            },
+            onAdminOnlyDataChanged = onAdminOnlyDataChanged,
             runInTransaction = { block ->
                 DatabaseFactory.runImmediateTransaction(database, block)
             }
@@ -89,6 +92,7 @@ fun main() {
             billingListRepository = billingListRepository,
             settingsRepository = settingsRepository,
             adminNoteRepository = adminNoteRepository,
+            shoppingListRepository = shoppingListRepository,
             veggieOrderRepository = veggieOrderRepository,
             veggieImageService = veggieImageService,
             database = database,
@@ -161,6 +165,7 @@ fun main() {
                 billingListRepository = billingListRepository,
                 settingsRepository = settingsRepository,
                 adminNoteRepository = adminNoteRepository,
+                shoppingListRepository = shoppingListRepository,
                 veggieOrderRepository = veggieOrderRepository,
                 showExitAuthDialog = showExitAuthDialog,
                 onDismissExitAuthDialog = { showExitAuthDialog = false }

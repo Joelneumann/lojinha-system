@@ -17,6 +17,7 @@ import de.joelneumann.lojinha.data.entity.*
         BillingListUserEntity::class,
         AdminNoteEntity::class,
         ProductStockAdjustmentEntity::class,
+        ShoppingListItemEntity::class,
         VeggieUnitTypeEntity::class,
         VeggieProductEntity::class,
         VeggieOrderRoundEntity::class,
@@ -24,7 +25,7 @@ import de.joelneumann.lojinha.data.entity.*
         VeggieOrderEntryEntity::class,
         VeggieUserFavoriteEntity::class
     ],
-    version = 21,
+    version = 19,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -37,5 +38,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun billingListDao(): BillingListDao
     abstract fun adminNoteDao(): AdminNoteDao
     abstract fun productStockAdjustmentDao(): ProductStockAdjustmentDao
+    abstract fun shoppingListItemDao(): ShoppingListItemDao
     abstract fun veggieOrderDao(): VeggieOrderDao
 }

@@ -330,8 +330,62 @@ class LojinhaAdminServerTest {
         }
     }
 
+    private val fakeShoppingListItems = mutableListOf<ShoppingListItem>()
+    private val fakeShoppingListRepo = object : ShoppingListRepository {
+        override fun getItemsFlow(): Flow<List<ShoppingListItem>> = flowOf(fakeShoppingListItems.toList())
+        override suspend fun getAllItems(): List<ShoppingListItem> = fakeShoppingListItems.sortedBy { it.sortOrder }
+        override suspend fun addOrUpdateItem(item: ShoppingListItem) {
+            val id = item.id.ifBlank { "sl-${fakeShoppingListItems.size + 1}" }
+            val existingIdx = fakeShoppingListItems.indexOfFirst { it.id == id }
+            if (existingIdx >= 0) {
+                fakeShoppingListItems[existingIdx] = fakeShoppingListItems[existingIdx].copy(
+                    name = item.name,
+                    quantity = item.quantity,
+                    isConfirmedForCurrentExport = true
+                )
+            } else {
+                fakeShoppingListItems.add(item.copy(id = id, sortOrder = fakeShoppingListItems.size))
+            }
+        }
+        override suspend fun updateItem(item: ShoppingListItem) {
+            val idx = fakeShoppingListItems.indexOfFirst { it.id == item.id }
+            if (idx >= 0) fakeShoppingListItems[idx] = item
+        }
+        override suspend fun confirmItem(id: String) {
+            val idx = fakeShoppingListItems.indexOfFirst { it.id == id }
+            if (idx >= 0) fakeShoppingListItems[idx] = fakeShoppingListItems[idx].copy(isConfirmedForCurrentExport = true)
+        }
+        override suspend fun unconfirmItem(id: String) {
+            val idx = fakeShoppingListItems.indexOfFirst { it.id == id }
+            if (idx >= 0) fakeShoppingListItems[idx] = fakeShoppingListItems[idx].copy(isConfirmedForCurrentExport = false)
+        }
+        override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
+            items.forEachIndexed { idx, item ->
+                val pos = fakeShoppingListItems.indexOfFirst { it.id == item.id }
+                if (pos >= 0) fakeShoppingListItems[pos] = fakeShoppingListItems[pos].copy(sortOrder = idx)
+            }
+        }
+        override suspend fun deleteItem(id: String) {
+            fakeShoppingListItems.removeIf { it.id == id }
+        }
+        override suspend fun clearAllItems() {
+            fakeShoppingListItems.clear()
+        }
+        override suspend fun commitExportBaseline() {
+            for (i in fakeShoppingListItems.indices) {
+                val cur = fakeShoppingListItems[i]
+                fakeShoppingListItems[i] = cur.copy(
+                    lastExportedName = cur.name,
+                    lastExportedQuantity = cur.quantity,
+                    isConfirmedForCurrentExport = false
+                )
+            }
+        }
+    }
+
     @BeforeTest
     fun setUp() {
+        fakeShoppingListItems.clear()
         tempImageDir = Files.createTempDirectory("lojinha_server_veggie_imgs").toFile()
         server = LojinhaAdminServer(
             productRepository = fakeProductRepo,
@@ -340,6 +394,7 @@ class LojinhaAdminServerTest {
             billingListRepository = fakeBillingListRepo,
             settingsRepository = fakeSettingsRepo,
             adminNoteRepository = fakeAdminNoteRepo,
+            shoppingListRepository = fakeShoppingListRepo,
             veggieOrderRepository = fakeVeggieRepo,
             veggieImageService = VeggieImageService(tempImageDir),
             port = testPort
@@ -1385,6 +1440,69 @@ class LojinhaAdminServerTest {
             HttpResponse.BodyHandlers.ofString()
         )
         assertEquals("CUSTOMER", testJson.decodeFromString<SessionStatusResponse>(customerSessionRes.body()).role)
+    }
+
+    @Test
+    fun testAdminShoppingListEndpointsAndPdfExportWithCookieAuth() {
+        // 1. Unauthenticated requests must be rejected with 401
+        val unauthGet = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/shopping-list"))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(401, unauthGet.statusCode())
+
+        val unauthPdf = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/shopping-list/pdf?lang=EN"))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofByteArray()
+        )
+        assertEquals(401, unauthPdf.statusCode())
+
+        // 2. Cookie-authenticated CRUD + PDF download
+        val adminCookie = getValidAdminCookie()
+        val addRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/shopping-list"))
+                .header("Cookie", adminCookie)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(testJson.encodeToString(ShoppingListItem(id = "sl-test-1", name = "Oat Milk", quantity = "6 L"))))
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(200, addRes.statusCode())
+
+        val listRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/shopping-list"))
+                .header("Cookie", adminCookie)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(200, listRes.statusCode())
+        val items = testJson.decodeFromString<List<ShoppingListItem>>(listRes.body())
+        assertEquals(1, items.size)
+        assertEquals("Oat Milk", items.first().name)
+
+        val pdfRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/shopping-list/pdf?lang=EN"))
+                .header("Cookie", adminCookie)
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofByteArray()
+        )
+        assertEquals(200, pdfRes.statusCode())
+        assertEquals("%PDF-", String(pdfRes.body(), 0, 5, Charsets.US_ASCII))
+        assertTrue(
+            pdfRes.headers().firstValue("Content-Disposition").orElse("").contains("Shopping_List_"),
+            "Content-Disposition should use localized Shopping_List_ filename"
+        )
     }
 }
 

@@ -6,6 +6,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -34,8 +36,14 @@ fun AdminLabeledField(
     trailingIcon: @Composable (() -> Unit)? = null,
     enabled: Boolean = true,
     selectAllOnFocus: Boolean = false,
+    focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
+    val fieldModifier = Modifier
+        .fillMaxWidth()
+        .height(56.dp)
+        .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
+
     if (!selectAllOnFocus) {
         Column(modifier = modifier) {
             Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy, maxLines = 1)
@@ -49,7 +57,7 @@ fun AdminLabeledField(
                 trailingIcon = trailingIcon,
                 singleLine = singleLine,
                 enabled = enabled,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = fieldModifier,
                 shape = RoundedCornerShape(8.dp)
             )
         }
@@ -97,9 +105,7 @@ fun AdminLabeledField(
                 trailingIcon = trailingIcon,
                 singleLine = singleLine,
                 enabled = enabled,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
+                modifier = fieldModifier
                     .onFocusChanged { focusState ->
                         val wasFocused = selectAllState.isFocused
                         if (focusState.isFocused) {

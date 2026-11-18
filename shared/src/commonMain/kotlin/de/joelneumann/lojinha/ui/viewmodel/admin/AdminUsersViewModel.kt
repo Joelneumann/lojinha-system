@@ -144,7 +144,7 @@ class AdminUsersViewModel(
         _users.value = userRepository.getAllUsers()
     }
 
-    fun saveUser(user: User) {
+    fun saveUser(user: User, onSuccess: () -> Unit = {}) {
         if (_isSavingUser.value) return
         viewModelScope.launch {
             _isSavingUser.value = true
@@ -165,6 +165,7 @@ class AdminUsersViewModel(
                 userRepository.saveUser(trimmedUser)
                 refreshUsers()
                 closeUserModal()
+                onSuccess()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "saveUser error: ${e.message}", e)
                 _userErrorMessage.value = e.message ?: I18n.get().errFailedToSaveUser
@@ -242,7 +243,7 @@ class AdminUsersViewModel(
         _customExpenseUser.value = null
     }
 
-    fun submitCustomExpense(user: User, amountCents: Long, description: String) {
+    fun submitCustomExpense(user: User, amountCents: Long, description: String, onSuccess: () -> Unit = {}) {
         val absCents = kotlin.math.abs(amountCents)
         val deltaCents = -absCents
         val txType = TransactionType.ADMIN_WITHDRAWAL
@@ -280,6 +281,7 @@ class AdminUsersViewModel(
                 transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
                 refreshUsers()
                 closeCustomExpenseModal()
+                onSuccess()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "submitCustomExpense error: ${e.message}", e)
             }
@@ -294,7 +296,7 @@ class AdminUsersViewModel(
         _customIncomeUser.value = null
     }
 
-    fun submitCustomIncome(user: User, amountCents: Long, comment: String) {
+    fun submitCustomIncome(user: User, amountCents: Long, comment: String, onSuccess: () -> Unit = {}) {
         val absCents = kotlin.math.abs(amountCents)
         val deltaCents = absCents
         val txType = TransactionType.ADMIN_DEPOSIT
@@ -332,6 +334,7 @@ class AdminUsersViewModel(
                 transactionRepository.executeAtomicTransaction(tx, deltaCents, emptyMap())
                 refreshUsers()
                 closeCustomIncomeModal()
+                onSuccess()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "submitCustomIncome error: ${e.message}", e)
             }

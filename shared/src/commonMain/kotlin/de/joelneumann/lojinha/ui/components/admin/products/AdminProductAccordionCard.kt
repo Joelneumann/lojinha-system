@@ -10,6 +10,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import de.joelneumann.lojinha.ui.utils.safeRequestFocus
 
 private data class PendingStockAndPriceAdjustment(
     val delta: Long,
@@ -41,12 +44,21 @@ fun AdminProductAccordionCard(
     onExpandToggle: () -> Unit,
     onEditProduct: (Product) -> Unit,
     onAdjustStock: (String, Long, Long?) -> Unit,
+    onStockAdjusted: () -> Unit = {},
     onToggleActive: (Product) -> Unit,
     onDeleteProduct: (Product) -> Unit,
     onViewHistory: ((Product) -> Unit)? = null,
+    onAddToShoppingList: ((Product) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
+    val stockDeltaFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isExpanded) {
+        if (isExpanded) {
+            stockDeltaFocusRequester.safeRequestFocus()
+        }
+    }
 
     var stockDeltaInput by remember(product.id) { mutableStateOf("") }
     var newPriceInput by remember(product.id) { mutableStateOf("") }
@@ -191,6 +203,7 @@ fun AdminProductAccordionCard(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp)
+                                .focusRequester(stockDeltaFocusRequester)
                                 .onPreviewKeyEvent { event ->
                                     if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
                                         handleTriggerAdjustment()
@@ -286,6 +299,7 @@ fun AdminProductAccordionCard(
         AdminCardActionsRow(
             onEdit = { onEditProduct(product) },
             onHistory = onViewHistory?.let { { it(product) } },
+            onAddToShoppingList = onAddToShoppingList?.let { { it(product) } },
             toggleStatusText = if (product.isActive) strings.disable else strings.enable,
             onToggleStatus = { showToggleActiveConfirm = true },
             isStatusActive = product.isActive,
@@ -304,6 +318,7 @@ fun AdminProductAccordionCard(
             pendingStockAdjustment = null
             stockDeltaInput = ""
             newPriceInput = ""
+            onStockAdjusted()
         }
 
         AlertDialog(
@@ -358,6 +373,7 @@ fun AdminProductAccordionCard(
             pendingStockAndPriceAdjustment = null
             stockDeltaInput = ""
             newPriceInput = ""
+            onStockAdjusted()
         }
 
         AlertDialog(

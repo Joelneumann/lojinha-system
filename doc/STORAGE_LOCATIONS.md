@@ -40,9 +40,11 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 ---
 
 ### 1. Primary Database (`lojinha_room.db`)
-* **Format:** Standard SQLite 3 relational database managed by **AndroidX Room (KMP)** using the bundled C SQLite driver.
-* **Tables:** `users`, `products`, `transactions`, `billing_lists`, `billing_list_users`, `settings`, `backups`, `admin_notes`.
+* **Format:** Standard SQLite 3 relational database managed by **AndroidX Room (KMP)** using the bundled C SQLite driver (schema v19).
+* **Tables:** `users`, `products`, `transactions`, `billing_lists`, `billing_list_users`, `settings`, `backups`, `admin_notes`, `product_stock_adjustments`, `shopping_list_items`, `veggie_unit_types`, `veggie_products`, `veggie_order_rounds`, `veggie_round_product_settlements`, `veggie_order_entries`, `veggie_user_favorites`.
 * **WAL Mode:** Operates in Write-Ahead Logging (`PRAGMA journal_mode=WAL;`). When backing up manually, ensure you copy `lojinha_room.db`, `lojinha_room.db-wal`, and `lojinha_room.db-shm` together, or perform a checkpoint before copying.
+* **Backup & Restore Coverage:** All tables (including `product_stock_adjustments`, `shopping_list_items`, and all Veggie Order tables) are included in `.db` snapshots, table-level restore, and factory reset wipes via `BackupRestoreService`. Scheduled CSV backups export `products.csv`, `users.csv`, `transactions.csv`, `billing_lists.csv`, `admin_notes.csv`, `veggie_products.csv`, and `veggie_orders.csv`.
+* **Veggie Product Images (`veggie_images/`):** Stored under `~/.lojinha/veggie_images/` alongside `lojinha_room.db` and cleared on factory reset wipes.
 
 ### 2. Pre-Startup, Pre-Restore & Pre-Wipe Safety Backups
 * **Pre-Startup Snapshot (`lojinha_room.db.startup_backup`):** Before initializing Room and executing any database migrations on application launch, Lojinha automatically creates a point-in-time snapshot of the `.db`, `-wal`, and `-shm` files. If an unexpected power failure or migration error occurs, this file acts as an immediate fallback recovery point.

@@ -103,7 +103,12 @@ object DatabaseFactory {
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_product_stock_adjustments_timestamp` ON `product_stock_adjustments` (`timestamp`)")
     }
 
-    internal val MIGRATION_17_18 = loggedMigration(17, 18, "creating Veggie Order System tables and settings") { connection ->
+    internal val MIGRATION_17_18 = loggedMigration(17, 18, "creating shopping_list_items table") { connection ->
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `shopping_list_items` (`id` TEXT NOT NULL, `productId` TEXT, `name` TEXT NOT NULL, `quantity` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `lastExportedName` TEXT, `lastExportedQuantity` TEXT, `isConfirmedForCurrentExport` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_shopping_list_items_sortOrder` ON `shopping_list_items` (`sortOrder`)")
+    }
+
+    internal val MIGRATION_18_19 = loggedMigration(18, 19, "creating Veggie Order System tables and settings") { connection ->
         // 1. Add requirePinOnKiosk to users
         connection.execSQL("ALTER TABLE `users` ADD COLUMN `requirePinOnKiosk` INTEGER NOT NULL DEFAULT 1")
 
@@ -118,13 +123,13 @@ object DatabaseFactory {
         connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_unit_types` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `allowDecimals` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_unit_types_name` ON `veggie_unit_types` (`name`)")
 
-        // 4. Create veggie_products
-        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `estimatedPriceCents` INTEGER, `unitTypeId` TEXT NOT NULL, `imageFileName` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        // 4. Create veggie_products (including deliveryUnitTypeId)
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `estimatedPriceCents` INTEGER, `unitTypeId` TEXT NOT NULL, `deliveryUnitTypeId` TEXT DEFAULT NULL, `imageFileName` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_products_name` ON `veggie_products` (`name`)")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_products_unitTypeId` ON `veggie_products` (`unitTypeId`)")
 
-        // 5. Create veggie_order_rounds
-        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_order_rounds` (`id` TEXT NOT NULL, `openedAt` INTEGER NOT NULL, `closedAt` INTEGER, `settledAt` INTEGER, `status` TEXT NOT NULL, `buyerOperationFeeCents` INTEGER NOT NULL, `transportFeeCents` INTEGER NOT NULL, `transporterUserId` TEXT, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        // 5. Create veggie_order_rounds (including PDF export timestamps)
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_order_rounds` (`id` TEXT NOT NULL, `openedAt` INTEGER NOT NULL, `closedAt` INTEGER, `settledAt` INTEGER, `status` TEXT NOT NULL, `buyerOperationFeeCents` INTEGER NOT NULL, `transportFeeCents` INTEGER NOT NULL, `transporterUserId` TEXT, `buyerPdfExportedAt` INTEGER DEFAULT NULL, `workerPdfExportedAt` INTEGER DEFAULT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_rounds_status` ON `veggie_order_rounds` (`status`)")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_rounds_openedAt` ON `veggie_order_rounds` (`openedAt`)")
 
@@ -132,42 +137,24 @@ object DatabaseFactory {
         connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_round_product_settlements` (`roundId` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `marketUnitPriceCents` INTEGER, `totalSpentCents` INTEGER, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`roundId`, `veggieProductId`))")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_round_product_settlements_roundId` ON `veggie_round_product_settlements` (`roundId`)")
 
-        // 7. Create veggie_order_entries
-        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_order_entries` (`id` TEXT NOT NULL, `roundId` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `veggieNameSnapshot` TEXT NOT NULL, `unitNameSnapshot` TEXT NOT NULL, `allowDecimalsSnapshot` INTEGER NOT NULL, `orderedQuantityScaled` INTEGER NOT NULL, `actualQuantityScaled` INTEGER, `effectiveUnitPriceCents` INTEGER, `finalItemTotalCents` INTEGER, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        // 7. Create veggie_order_entries (including delivery unit snapshot fields)
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_order_entries` (`id` TEXT NOT NULL, `roundId` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `veggieNameSnapshot` TEXT NOT NULL, `unitNameSnapshot` TEXT NOT NULL, `allowDecimalsSnapshot` INTEGER NOT NULL, `deliveryUnitNameSnapshot` TEXT DEFAULT NULL, `deliveryAllowDecimalsSnapshot` INTEGER DEFAULT NULL, `orderedQuantityScaled` INTEGER NOT NULL, `actualQuantityScaled` INTEGER, `effectiveUnitPriceCents` INTEGER, `finalItemTotalCents` INTEGER, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
         connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_veggie_order_entries_roundId_userId_veggieProductId` ON `veggie_order_entries` (`roundId`, `userId`, `veggieProductId`)")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_roundId` ON `veggie_order_entries` (`roundId`)")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_userId` ON `veggie_order_entries` (`userId`)")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_veggieProductId` ON `veggie_order_entries` (`veggieProductId`)")
 
-        // 8. Seed default Veggie Unit Types
+        // 8. Create veggie_user_favorites
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_user_favorites` (`userId` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`userId`, `veggieProductId`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_userId` ON `veggie_user_favorites` (`userId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_veggieProductId` ON `veggie_user_favorites` (`veggieProductId`)")
+
+        // 9. Seed default Veggie Unit Types
         val now = System.currentTimeMillis()
         connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-kg', 'kg', 1, 1, $now)")
         connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-piece', 'Unit', 0, 1, $now)")
         connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-pack', 'Pack', 0, 1, $now)")
         connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-bunch', 'Bunch', 0, 1, $now)")
-    }
-
-    internal val MIGRATION_18_19 = loggedMigration(18, 19, "adding pdf export timestamps to veggie_order_rounds") { connection ->
-        connection.execSQL("ALTER TABLE `veggie_order_rounds` ADD COLUMN `buyerPdfExportedAt` INTEGER DEFAULT NULL")
-        connection.execSQL("ALTER TABLE `veggie_order_rounds` ADD COLUMN `workerPdfExportedAt` INTEGER DEFAULT NULL")
-    }
-
-    internal val MIGRATION_19_20 = loggedMigration(19, 20, "adding deliveryUnitTypeId and delivery snapshot fields") { connection ->
-        connection.execSQL("ALTER TABLE `veggie_products` ADD COLUMN `deliveryUnitTypeId` TEXT DEFAULT NULL")
-        connection.execSQL("ALTER TABLE `veggie_order_entries` ADD COLUMN `deliveryUnitNameSnapshot` TEXT DEFAULT NULL")
-        connection.execSQL("ALTER TABLE `veggie_order_entries` ADD COLUMN `deliveryAllowDecimalsSnapshot` INTEGER DEFAULT NULL")
-    }
-
-    internal val MIGRATION_20_21 = loggedMigration(20, 21, "adding veggie_user_favorites table") { connection ->
-        connection.execSQL(
-            "CREATE TABLE IF NOT EXISTS `veggie_user_favorites` (`userId` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`userId`, `veggieProductId`))"
-        )
-        connection.execSQL(
-            "CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_userId` ON `veggie_user_favorites` (`userId`)"
-        )
-        connection.execSQL(
-            "CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_veggieProductId` ON `veggie_user_favorites` (`veggieProductId`)"
-        )
     }
 
     fun defaultVeggieUnitTypes(timestamp: Long = System.currentTimeMillis()): List<VeggieUnitTypeEntity> = listOf(
@@ -176,7 +163,6 @@ object DatabaseFactory {
         VeggieUnitTypeEntity(id = "unit-pack", name = "Pack", allowDecimals = false, isActive = true, updatedAt = timestamp),
         VeggieUnitTypeEntity(id = "unit-bunch", name = "Bunch", allowDecimals = false, isActive = true, updatedAt = timestamp)
     )
-
 
     @Volatile
     private var instance: AppDatabase? = null
@@ -238,7 +224,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")

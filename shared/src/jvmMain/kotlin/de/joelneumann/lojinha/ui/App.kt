@@ -24,6 +24,7 @@ import de.joelneumann.lojinha.data.repository.RoomSettingsRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomTransactionRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomUserRepositoryImpl
 import de.joelneumann.lojinha.data.repository.RoomAdminNoteRepositoryImpl
+import de.joelneumann.lojinha.data.repository.RoomShoppingListRepositoryImpl
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
 import de.joelneumann.lojinha.ui.components.general.InactivityWarningDialog
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -61,6 +62,7 @@ fun App(
     billingListRepository: BillingListRepository? = null,
     settingsRepository: SettingsRepository? = null,
     adminNoteRepository: AdminNoteRepository? = null,
+    shoppingListRepository: ShoppingListRepository? = null,
     veggieOrderRepository: VeggieOrderRepository? = null,
     showExitAuthDialog: Boolean = false,
     onDismissExitAuthDialog: () -> Unit = {}
@@ -148,6 +150,13 @@ fun App(
     val effectiveTransactionRepo = transactionRepository ?: remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
     val effectiveBillingListRepo = billingListRepository ?: remember { de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged) }
     val effectiveAdminNoteRepo = adminNoteRepository ?: remember { RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged) }
+    val effectiveShoppingListRepo = shoppingListRepository ?: remember {
+        RoomShoppingListRepositoryImpl(database.shoppingListItemDao()) {
+            de.joelneumann.lojinha.data.service.DataChangeNotifier.notifyScopedDataChanged(
+                de.joelneumann.lojinha.data.service.DataChangeNotifier.ChangeScope(adminOnly = true)
+            )
+        }
+    }
     val effectiveVeggieRepo = veggieOrderRepository ?: remember {
         de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl(
             veggieOrderDao = database.veggieOrderDao(),
@@ -424,6 +433,9 @@ fun App(
                         val adminProductsViewModel = remember {
                             AdminProductsViewModel(effectiveProductRepo, effectiveSettingsRepo)
                         }
+                        val adminShoppingListViewModel = remember {
+                            AdminShoppingListViewModel(effectiveShoppingListRepo, effectiveProductRepo, effectiveAdminNoteRepo)
+                        }
                         val adminUsersViewModel = remember {
                             AdminUsersViewModel(effectiveUserRepo, effectiveTransactionRepo)
                         }
@@ -540,6 +552,7 @@ fun App(
                         DisposableEffect(
                             adminNotesViewModel,
                             adminProductsViewModel,
+                            adminShoppingListViewModel,
                             adminUsersViewModel,
                             adminTransactionsViewModel,
                             adminBulkBillingViewModel,
@@ -562,6 +575,7 @@ fun App(
                                 de.joelneumann.lojinha.data.service.DataChangeNotifier.removeListener(listener)
                                 adminNotesViewModel.viewModelScope.cancel()
                                 adminProductsViewModel.viewModelScope.cancel()
+                                adminShoppingListViewModel.viewModelScope.cancel()
                                 adminUsersViewModel.viewModelScope.cancel()
                                 adminTransactionsViewModel.viewModelScope.cancel()
                                 adminBulkBillingViewModel.viewModelScope.cancel()
@@ -575,17 +589,55 @@ fun App(
                             val downloads = java.io.File(userHome, "Downloads")
                             if (downloads.exists()) downloads.absolutePath else userHome
                         }
+                        var isExportingShoppingListPdf by remember { mutableStateOf(false) }
                         var isExportingVeggiePdf by remember { mutableStateOf(false) }
 
                         de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
                             notesViewModel = adminNotesViewModel,
                             productsViewModel = adminProductsViewModel,
+                            shoppingListViewModel = adminShoppingListViewModel,
                             usersViewModel = adminUsersViewModel,
                             transactionsViewModel = adminTransactionsViewModel,
                             bulkBillingViewModel = adminBulkBillingViewModel,
                             veggieViewModel = adminVeggieViewModel,
                             settingsViewModel = adminSettingsViewModel,
                             defaultSaveDirectory = defaultSaveDir,
+                            onExportShoppingListPdf = { language ->
+                                if (!isExportingShoppingListPdf) {
+                                    isExportingShoppingListPdf = true
+                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        try {
+                                            val items = effectiveShoppingListRepo.getAllItems()
+                                            val products = effectiveProductRepo.getAllProducts()
+                                            val targetDir = java.io.File(defaultSaveDir)
+                                            if (!targetDir.exists()) targetDir.mkdirs()
+                                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                            val targetFile = java.io.File(targetDir, PdfFilenames.shoppingListFilename(dateStr, language))
+                                            de.joelneumann.lojinha.data.service.ShoppingListPdfGenerator.generatePdf(
+                                                outputFile = targetFile,
+                                                items = items,
+                                                language = language,
+                                                products = products
+                                            )
+                                            effectiveShoppingListRepo.commitExportBaseline()
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminShoppingListViewModel.setExportResultPath(targetFile.absolutePath)
+                                            }
+                                        } catch (e: kotlinx.coroutines.CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            AppLogger.error("App", "Failed to export Shopping List PDF: ${e.message}", e)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminShoppingListViewModel.reportError(e.message ?: "Failed to export PDF")
+                                            }
+                                        } finally {
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                isExportingShoppingListPdf = false
+                                            }
+                                        }
+                                    }
+                                }
+                            },
                             onExecutePdfExport = { user, destinationFolder, fromTimestamp, toTimestamp, language ->
                                 if (!adminUsersViewModel.isExportingPdf.value) {
                                     adminUsersViewModel.setIsExportingPdf(true)

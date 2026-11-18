@@ -58,9 +58,16 @@ fun ProductEditDialog(
     var barcodeList by remember { mutableStateOf(product.barcodes) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
 
+    val nameFocusRequester = remember { FocusRequester() }
     val codeFocusRequester = remember { FocusRequester() }
     val descFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(isNewProduct) {
+        if (isNewProduct) {
+            nameFocusRequester.safeRequestFocus()
+        }
+    }
 
     val hasDialogChanges = name != product.name ||
             basePriceBrl != initialPriceBrl ||
@@ -241,6 +248,7 @@ fun ProductEditDialog(
                         value = name,
                         onValueChange = { name = it },
                         placeholder = strings.productNamePlaceholder,
+                        focusRequester = nameFocusRequester,
                         modifier = Modifier.weight(1.5f)
                     )
 

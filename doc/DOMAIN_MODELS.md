@@ -225,18 +225,72 @@ Configures automated and manual backup jobs.
 
 Defined in [`AdminNote.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/domain/model/AdminNote.kt).
 
-Stores customer wishlist requests, restock suggestions, or general notes submitted directly from the kiosk shopping screen or admin dashboard.
+Stores customer wishlist requests, restock suggestions, or system-generated stock alerts submitted from the kiosk shopping screen, purchase workflows, or admin dashboard.
 
 ### Fields
 | Field | Type | Description |
 |---|---|---|
 | `id` | `String` (UUID) | Unique primary key. |
-| `message` | `String` | Note or suggestion message (maximum 1000 characters). |
-| `userId` | `String` (UUID) | ID of the user submitting the note. |
-| `userNameSnapshot` | `String` | Snapshot of the user name at the time of submission. |
+| `message` | `String` | Note, suggestion message (maximum 1000 characters), or structured system note code (`SYSNOTE\|...`). |
+| `userId` | `String` (UUID or `"SYSTEM"`) | ID of the user submitting the note, or `AdminNote.SYSTEM_USER_ID` (`"SYSTEM"`) for automated alerts. |
+| `userNameSnapshot` | `String` | Snapshot of the user name at submission time (or `"System"`). |
 | `timestamp` | `Long` | Epoch milliseconds when the note was created. |
 
 ### Rules & Integration
 * Users can submit suggestions via the lightbulb button in the Shopping Screen header without requiring admin privileges.
+* **Stock-Zero System Alerts (`isSystem`):** When a `PURCHASE` transaction atomically depletes a product's stock from `> 0` to `0`, [`TransactionDao`](../shared/src/jvmMain/kotlin/de/joelneumann/lojinha/data/dao/TransactionDao.kt) inserts a system note formatted as `SYSNOTE|STOCK_ZERO|<productName>|<customerName>`, decoded dynamically into the active admin UI language via `SystemNoteHelper`.
 * All notes are persisted in the `admin_notes` table in SQLite Room and exported during CSV backups as `admin_notes.csv`.
-* The Admin Notes tab (`F6`) provides search, review, and deletion with instant reactive UI updates and LAN Server-Sent Events sync.
+* The Admin Notes tab (`F1`) provides search (including decoded system alerts), 1-click handoff of stock-zero alerts to the Shopping List, and deletion with instant reactive UI updates and LAN Server-Sent Events sync.
+
+---
+
+## 🛒 8. Shopping List Item
+
+Defined in [`ShoppingListItem.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/domain/model/ShoppingListItem.kt).
+
+Maintains a persistent, ordered restocking list in the `shopping_list_items` table with weekly export review tracking.
+
+### Fields
+| Field | Type | Description |
+|---|---|---|
+| `id` | `String` (UUID) | Unique primary key. |
+| `productId` | `String?` (UUID) | Optional reference to an existing catalog `Product` (`null` for custom non-catalog items). |
+| `name` | `String` | Display item or product name. |
+| `quantity` | `String` | Required restock quantity (formatted with unit suffix for catalog items, e.g., `10 pcs` or `2,5 kg`, or freeform text for custom items). |
+| `sortOrder` | `Int` | Persistent manual display order (updated via drag-and-drop). |
+| `createdAt` | `Long` | Epoch milliseconds when the entry was created. |
+| `lastExportedName` | `String?` | Item name captured during the previous PDF export (`null` for newly added items). |
+| `lastExportedQuantity` | `String?` | Item quantity captured during the previous PDF export (`null` for newly added items). |
+| `isConfirmedForCurrentExport` | `Boolean` | Whether an existing item has been explicitly confirmed or edited since the last PDF export. |
+
+### Weekly Review & Export Lifecycle Rules
+* **Computed Review States:**
+  * `isNewlyAdded` (`lastExportedQuantity == null`): Item was added after the last PDF export (**New**).
+  * `isContentChanged` (`lastExportedQuantity != null && (name != lastExportedName || quantity != lastExportedQuantity)`): Item name or quantity differs from the previous export (**Edited**).
+  * `isReviewedForExport` (`isNewlyAdded || isConfirmedForCurrentExport`): Item is ready for the next export.
+  * `isPendingReview` (`!isReviewedForExport`): Item was carried over from a prior export and has not yet been edited or confirmed (**Unadjusted**).
+* **Export Baseline Commit (`commitExportBaseline`):** Whenever the Shopping List PDF is exported (via Desktop or `/api/admin/shopping-list/pdf`), `lastExportedName` and `lastExportedQuantity` are updated to the current `name` and `quantity`, and `isConfirmedForCurrentExport` is reset to `false` so all remaining items begin the next cycle as `Unadjusted`.
+* **Conflict-Free Updates:** Adding a product or custom item that already exists on the list pre-fills and updates the existing row in place rather than creating duplicates.
+
+---
+
+## 📊 9. Product Stock Adjustment & History
+
+Defined in [`ProductHistoryEntry.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/domain/model/ProductHistoryEntry.kt).
+
+Tracks manual inventory changes and initial stock baselines in the `product_stock_adjustments` table, combined with `PURCHASE` and `CANCELLATION` transactions into a unified paginated timeline (`ProductHistoryEntry`).
+
+### `ProductStockAdjustment` Fields
+| Field | Type | Description |
+|---|---|---|
+| `id` | `String` (UUID) | Unique primary key. |
+| `productId` | `String` (UUID) | Foreign reference to the associated product. |
+| `timestamp` | `Long` | Epoch milliseconds when the adjustment occurred. |
+| `deltaQuantity` | `Long` | Signed stock change (units for `PIECE`, grams for `WEIGHT`). |
+| `resultingQuantity` | `Long?` | Optional recorded stock level immediately after the adjustment. |
+| `note` | `String?` | System note key or human-readable adjustment description (e.g., initial stock vs. manual restock). |
+
+### Rules & Integration
+* Creating a product or adjusting its stock records a corresponding `ProductStockAdjustment` entry.
+* When upgrading existing databases to Room v17+, migration seeding establishes an initial stock baseline so historical timelines remain consistent.
+* The Product History modal aggregates `STOCK_ADJUSTMENT`, `PURCHASE`, and `CANCELLATION` events in chronological pages (`25`, `50`, or `100` entries per page) with a computed `stockAfter` column.

@@ -111,4 +111,27 @@ object PdfFilenames {
             "${base}.pdf"
         }
     }
+
+    /**
+     * Returns a localized filename for the Admin Shopping List.
+     * Examples:
+     * - BR: Lista_de_Compras_2026-11-17.pdf
+     * - EN: Shopping_List_2026-11-17.pdf
+     * - DE: Einkaufsliste_2026-11-17.pdf
+     */
+    fun shoppingListFilename(
+        dateStamp: String? = null,
+        language: Language
+    ): String {
+        val prefix = when (language) {
+            Language.BR -> "Lista_de_Compras"
+            Language.EN -> "Shopping_List"
+            Language.DE -> "Einkaufsliste"
+        }
+        return if (!dateStamp.isNullOrBlank()) {
+            "${prefix}_${dateStamp}.pdf"
+        } else {
+            "${prefix}.pdf"
+        }
+    }
 }

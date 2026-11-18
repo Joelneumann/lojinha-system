@@ -57,6 +57,7 @@ fun main() {
         val transactionRepository = remember { HttpTransactionRepository(adminNetworkClient) }
         val billingListRepository = remember { HttpBillingListRepository(adminNetworkClient) }
         val adminNoteRepository = remember { HttpAdminNoteRepository(adminNetworkClient) }
+        val shoppingListRepository = remember { HttpShoppingListRepository(adminNetworkClient) }
         val veggieOrderRepository = remember { HttpVeggieOrderRepository(adminNetworkClient) }
         val settingsRepository = remember { HttpSettingsRepository(adminNetworkClient) }
 
@@ -237,6 +238,7 @@ fun main() {
                         WebPortalScreen.ADMIN_PANEL -> {
                             val notesViewModel = remember { AdminNotesViewModel(adminNoteRepository) }
                             val productsViewModel = remember { AdminProductsViewModel(productRepository, settingsRepository) }
+                            val shoppingListViewModel = remember { AdminShoppingListViewModel(shoppingListRepository, productRepository, adminNoteRepository) }
                             val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository) }
                             val transactionsViewModel = remember { AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
                             val bulkBillingViewModel = remember { AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository) }
@@ -269,6 +271,7 @@ fun main() {
                                     adminNetworkClient.onDataChanged.debounce(300).collect {
                                         notesViewModel.loadNotes()
                                         productsViewModel.loadData()
+                                        shoppingListViewModel.loadData()
                                         usersViewModel.loadData()
                                         transactionsViewModel.loadData()
                                         bulkBillingViewModel.loadData()
@@ -286,6 +289,7 @@ fun main() {
                                         if (adminNetworkClient.isAuthenticated) {
                                             notesViewModel.loadNotes()
                                             productsViewModel.loadData()
+                                            shoppingListViewModel.loadData()
                                             usersViewModel.loadData()
                                             transactionsViewModel.loadData()
                                             bulkBillingViewModel.loadData()
@@ -300,6 +304,7 @@ fun main() {
                                     adminNetworkClient.stopRealtimeSync()
                                     notesViewModel.viewModelScope.cancel()
                                     productsViewModel.viewModelScope.cancel()
+                                    shoppingListViewModel.viewModelScope.cancel()
                                     usersViewModel.viewModelScope.cancel()
                                     transactionsViewModel.viewModelScope.cancel()
                                     bulkBillingViewModel.viewModelScope.cancel()
@@ -310,12 +315,23 @@ fun main() {
                             AdminScreen(
                                 notesViewModel = notesViewModel,
                                 productsViewModel = productsViewModel,
+                                shoppingListViewModel = shoppingListViewModel,
                                 usersViewModel = usersViewModel,
                                 transactionsViewModel = transactionsViewModel,
                                 bulkBillingViewModel = bulkBillingViewModel,
                                 veggieViewModel = veggieViewModel,
                                 settingsViewModel = null,
                                 defaultSaveDirectory = "Downloads",
+                                onExportShoppingListPdf = { language ->
+                                    val url = adminNetworkClient.resolveUrl("/api/admin/shopping-list/pdf?lang=${language.name}")
+                                    val fallbackName = PdfFilenames.shoppingListFilename(dateStamp = null, language = language)
+                                    jsDownloadPdf(
+                                        url = url,
+                                        fallbackFilename = fallbackName,
+                                        onSuccess = { shoppingListViewModel.markExportedLocally() },
+                                        onError = { err -> shoppingListViewModel.reportError(err) }
+                                    )
+                                },
                                 onExecutePdfExport = { user, _, fromTimestamp, toTimestamp, language ->
                                     usersViewModel.setIsExportingPdf(true)
                                     usersViewModel.setExportPdfError(null)
