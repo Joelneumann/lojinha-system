@@ -550,8 +550,7 @@ fun AdminVeggieSettlementMatrix(
 
             if (allowCollapseSettingsCard) {
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Surface(
                         onClick = { showRoundSettings = !showRoundSettings },
@@ -559,7 +558,9 @@ fun AdminVeggieSettlementMatrix(
                         color = SurfaceWhite,
                         border = BorderStroke(1.dp, DividerBorder),
                         shadowElevation = 1.dp,
-                        modifier = Modifier.size(width = 48.dp, height = 20.dp)
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(width = 48.dp, height = 20.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
@@ -568,6 +569,58 @@ fun AdminVeggieSettlementMatrix(
                                 tint = PrimaryNavy,
                                 modifier = Modifier.size(16.dp)
                             )
+                        }
+                    }
+
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = !showRoundSettings && entries.isNotEmpty(),
+                        enter = fadeIn(animationSpec = tween(durationMillis = 180)),
+                        exit = fadeOut(animationSpec = tween(durationMillis = 120)),
+                        modifier = Modifier.align(Alignment.CenterEnd)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (onResetChanges != null) {
+                                MatrixCompactDraftActionButton(
+                                    label = strings.resetChangesBtn,
+                                    icon = Icons.Default.Restore,
+                                    enabled = hasUnsavedChanges && !isSaving,
+                                    activeColor = ColorDangerCrimson,
+                                    onClick = { showConfirmResetChanges = true }
+                                )
+                            }
+
+                            when (round.status) {
+                                VeggieRoundStatus.OPEN -> {
+                                    MatrixCompactDraftActionButton(
+                                        label = strings.saveChangesBtn,
+                                        icon = Icons.Default.Save,
+                                        enabled = hasUnsavedChanges && !isSaving,
+                                        activeColor = AccentNavy,
+                                        onClick = { onSaveDraft(null) }
+                                    )
+                                }
+                                VeggieRoundStatus.CLOSED -> {
+                                    MatrixCompactDraftActionButton(
+                                        label = strings.saveDraftBtn,
+                                        icon = Icons.Default.Save,
+                                        enabled = hasUnsavedChanges && !isSaving,
+                                        activeColor = AccentNavy,
+                                        onClick = { onSaveDraft(null) }
+                                    )
+                                }
+                                VeggieRoundStatus.SETTLED -> {
+                                    MatrixCompactDraftActionButton(
+                                        label = strings.updateSettledRoundBtn,
+                                        icon = Icons.Default.Edit,
+                                        enabled = !isSaving,
+                                        activeColor = AccentNavy,
+                                        onClick = { showConfirmSettle = true }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1307,6 +1360,49 @@ private fun MatrixDraftActionButton(
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = contentColor
+        )
+    }
+}
+
+@Composable
+private fun MatrixCompactDraftActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    activeColor: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    val contentColor = if (enabled) activeColor else TextSecondaryMuted.copy(alpha = 0.45f)
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(6.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+        modifier = Modifier.height(28.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = SurfaceWhite,
+            contentColor = if (enabled) activeColor else TextSecondaryMuted,
+            disabledContainerColor = SurfaceWhite,
+            disabledContentColor = TextSecondaryMuted.copy(alpha = 0.45f)
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (enabled) activeColor.copy(alpha = 0.55f) else DividerBorder.copy(alpha = 0.7f)
+        )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = contentColor
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = contentColor,
+            maxLines = 1
         )
     }
 }

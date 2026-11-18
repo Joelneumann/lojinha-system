@@ -526,27 +526,44 @@ fun UserSettingsModalDialog(
                 // Language Selection
                 Text(text = strings.preferredLanguage, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Language.entries.forEach { lang ->
-                        val isSel = selectedLanguage == lang
-                        OutlinedButton(
-                            onClick = {
-                                onUserInteracted(true)
-                                onLanguageSelect(lang)
-                            },
-                            modifier = Modifier.weight(1f).pointerHoverIcon(PointerIcon.Hand),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = if (isSel) AccentNavy else SurfaceWhite,
-                                contentColor = if (isSel) SurfaceWhite else PrimaryNavy
-                            ),
-                            border = BorderStroke(1.dp, if (isSel) AccentNavy else DividerBorder)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val isPhone = maxWidth < 390.dp
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Language.entries.forEach { lang ->
+                            val isSel = selectedLanguage == lang
+                            OutlinedButton(
+                                onClick = {
+                                    onUserInteracted(true)
+                                    onLanguageSelect(lang)
+                                },
+                                modifier = Modifier.weight(1f).pointerHoverIcon(PointerIcon.Hand),
+                                contentPadding = if (isPhone) {
+                                    PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                                } else {
+                                    ButtonDefaults.ContentPadding
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (isSel) AccentNavy else SurfaceWhite,
+                                    contentColor = if (isSel) SurfaceWhite else PrimaryNavy
+                                ),
+                                border = BorderStroke(1.dp, if (isSel) AccentNavy else DividerBorder)
                             ) {
-                                de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon(language = lang, width = 18.dp, height = 12.dp)
-                                Text(lang.code.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon(
+                                        language = lang,
+                                        width = if (isPhone) 22.dp else 18.dp,
+                                        height = if (isPhone) 15.dp else 12.dp
+                                    )
+                                    if (!isPhone) {
+                                        Text(lang.code.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
                             }
                         }
                     }
