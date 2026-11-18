@@ -251,7 +251,7 @@ fun AdminScreen(
     ) {
         val isMobile = maxWidth < MOBILE_BREAKPOINT
         val isNarrow = maxWidth < 750.dp
-        val isCompact = maxWidth < 950.dp
+        val isCompact = maxWidth < 1100.dp
 
         Column(modifier = Modifier.fillMaxSize()) {
             HeaderBar(
