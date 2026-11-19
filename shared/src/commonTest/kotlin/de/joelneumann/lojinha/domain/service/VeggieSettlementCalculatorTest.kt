@@ -264,4 +264,60 @@ class VeggieSettlementCalculatorTest {
         assertEquals(500L, deltas["bob"])
         assertTrue(deltas.size == 2)
     }
+
+    @Test
+    fun testUnitPriceOnlyFallback_usesOrderedQuantitySoDeliveredDoesNotAffectTotalPrice() {
+        // Ordered 5.0 kg at R$ 10,00/kg market unit price (totalSpentCents omitted = null).
+        // Delivered is only 4.0 kg (Alice 2.0 kg, Bob 2.0 kg).
+        // Total spent must remain R$ 50,00 (based on ordered 5.0 kg), and Effective Unit Price becomes R$ 12,50/kg.
+        val entries = listOf(
+            VeggieOrderEntry(
+                id = "e1",
+                roundId = "r1",
+                userId = "alice",
+                userNameSnapshot = "Alice",
+                veggieProductId = "tomato",
+                veggieNameSnapshot = "Tomato",
+                unitNameSnapshot = "kg",
+                allowDecimalsSnapshot = true,
+                orderedQuantityScaled = 3000L,
+                actualQuantityScaled = 2000L
+            ),
+            VeggieOrderEntry(
+                id = "e2",
+                roundId = "r1",
+                userId = "bob",
+                userNameSnapshot = "Bob",
+                veggieProductId = "tomato",
+                veggieNameSnapshot = "Tomato",
+                unitNameSnapshot = "kg",
+                allowDecimalsSnapshot = true,
+                orderedQuantityScaled = 2000L,
+                actualQuantityScaled = 2000L
+            )
+        )
+        val settlements = mapOf(
+            "tomato" to VeggieRoundProductSettlement(
+                roundId = "r1",
+                veggieProductId = "tomato",
+                marketUnitPriceCents = 1000L,
+                totalSpentCents = null
+            )
+        )
+
+        val result = VeggieSettlementCalculator.calculateRoundSettlement(
+            roundId = "r1",
+            entries = entries,
+            productSettlementInputs = settlements,
+            buyerOperationFeeCents = 0L,
+            transportFeeCents = 0L,
+            transporterUserId = null,
+            timestamp = 1000L
+        )
+
+        assertEquals(5000L, result.totalMarketProductsSpentCents)
+        assertEquals(1250L, result.updatedEntries.first().effectiveUnitPriceCents)
+        assertEquals(2500L, result.customerSummaries.first { it.userId == "alice" }.grandTotalCents)
+        assertEquals(2500L, result.customerSummaries.first { it.userId == "bob" }.grandTotalCents)
+    }
 }

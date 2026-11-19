@@ -198,11 +198,16 @@ object VeggieSettlementCalculator {
                 entry.id to entry.deliveredQuantityScaled.coerceAtLeast(0L)
             }
             val totalDeliveredQty = deliveredByEntryId.values.sum()
+            val totalOrderedQty = productEntries.sumOf { it.orderedQuantityScaled.coerceAtLeast(0L) }
+            // When totalSpentCents is omitted and derived from marketUnitPriceCents, base it on ordered
+            // quantity (falling back to delivered only if ordered is 0) so adjusting delivered quantities
+            // never alters the market total—only the effective unit price and customer shares.
+            val unitPriceBasisQty = if (totalOrderedQty > 0L) totalOrderedQty else totalDeliveredQty
 
             val authoritativeTotalSpent = resolveAuthoritativeTotalSpent(
                 marketUnitPriceCents = input?.marketUnitPriceCents,
                 totalSpentCents = input?.totalSpentCents,
-                totalDeliveredQtyScaled = totalDeliveredQty
+                totalDeliveredQtyScaled = unitPriceBasisQty
             )
             totalMarketSpent += authoritativeTotalSpent
 

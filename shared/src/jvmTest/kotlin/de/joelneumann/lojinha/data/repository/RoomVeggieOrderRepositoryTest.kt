@@ -795,6 +795,46 @@ class RoomVeggieOrderRepositoryTest {
     }
 
     @Test
+    fun testCustomerOrderUpdateInOpenRound_preservesCustomAdminActualQuantityScaled() = runTest {
+        userRepo.saveUser(User(id = "u-alice", name = "Alice", balance = 100_00L))
+        veggieRepo.saveUnitType(VeggieUnitType(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true))
+        veggieRepo.saveVeggieProduct(
+            VeggieProduct(id = "vp-tom", name = "Tomato", unitTypeId = "unit-kg", estimatedPriceCents = 10_00L, isActive = true)
+        )
+
+        val round = veggieRepo.openNewRound(0L, 0L, 1_776_700_000_000L)
+        val alice = userRepo.getUserById("u-alice")!!
+
+        // Alice orders 2 kg, and admin enters a custom delivered quantity of 1.5 kg
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, alice, mapOf("vp-tom" to 2000L)))
+        val initialEntry = veggieRepo.getEntriesForRound(round.id).single()
+        assertTrue(
+            veggieRepo.saveDraftSettlement(
+                roundId = round.id,
+                buyerOperationFeeCents = 0L,
+                transportFeeCents = 0L,
+                transporterUserId = null,
+                productSettlements = emptyList(),
+                actualQuantitiesByEntryId = mapOf(initialEntry.id to 1500L)
+            )
+        )
+
+        // Alice updates her order to 3.5 kg -> Admin's custom delivered quantity (1500L) MUST be preserved
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, alice, mapOf("vp-tom" to 3500L)))
+        val updatedEntry = veggieRepo.getEntriesForRound(round.id).single()
+        assertEquals(3500L, updatedEntry.orderedQuantityScaled)
+        assertEquals(1500L, updatedEntry.actualQuantityScaled)
+        assertEquals(1500L, updatedEntry.deliveredQuantityScaled)
+
+        // Alice removes Tomatoes from her order (empty map) -> Admin's custom positive delivered quantity MUST still be preserved with ordered = 0
+        assertTrue(veggieRepo.saveCustomerOrder(round.id, alice, emptyMap()))
+        val afterRemoval = veggieRepo.getEntriesForRound(round.id).single()
+        assertEquals(0L, afterRemoval.orderedQuantityScaled)
+        assertEquals(1500L, afterRemoval.actualQuantityScaled)
+        assertEquals(1500L, afterRemoval.deliveredQuantityScaled)
+    }
+
+    @Test
     fun testCanHardDeleteUser_blocksWhenUserIsTransporterInRound() = runTest {
         userRepo.saveUser(User(id = "u-transporter", name = "Transporter"))
         assertTrue(userRepo.canHardDeleteUser("u-transporter"))

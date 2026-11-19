@@ -175,8 +175,7 @@ fun AdminVeggieTabScreen(
                     if (currentRound != null) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.height(IntrinsicSize.Min)
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (onExportBuyerPdf != null) {
                                 OutlinedButton(
@@ -232,7 +231,7 @@ fun AdminVeggieTabScreen(
                                     shape = RoundedCornerShape(10.dp),
                                     color = buyerBadgeBg,
                                     border = BorderStroke(1.dp, buyerBadgeBorder),
-                                    modifier = Modifier.fillMaxHeight()
+                                    modifier = Modifier.height(ButtonDefaults.MinHeight)
                                 ) {
                                     Box(
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),

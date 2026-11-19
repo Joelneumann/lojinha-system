@@ -1144,7 +1144,7 @@ class AdminVeggieViewModelTest {
     }
 
     @Test
-    fun saveDraftSettlement_doesNotLockAutoCalculatedTotalSpentWhenQuantityLaterChanges() = runTest {
+    fun editingDeliveredQuantity_neverChangesTotalSpentOrMarketUnitPrice_onlyEffectiveUnitPrice() = runTest {
         val (veggieRepo, userRepo) = setupTestFixture()
         val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
         advanceUntilIdle()
@@ -1153,21 +1153,88 @@ class AdminVeggieViewModelTest {
         assertEquals("", vm.draftMarketPrices.value["prod-1"])
         assertEquals("", vm.draftTotalSpent.value["prod-1"])
 
-        // Enter unit price 5,00 (500 cents) for 1.0 kg ordered -> Total Spent auto-calculates to 5
-        vm.updateProductMarketUnitPrice("prod-1", "5")
-        assertEquals("5", vm.draftMarketPrices.value["prod-1"])
-        assertEquals("5", vm.draftTotalSpent.value["prod-1"])
+        // Enter unit price 10,00 (1000 cents) for 1.0 kg ordered -> Total Spent auto-calculates to 10 across keystrokes
+        vm.updateProductMarketUnitPrice("prod-1", "1")
+        assertEquals("1", vm.draftTotalSpent.value["prod-1"])
+        vm.updateProductMarketUnitPrice("prod-1", "10")
+        assertEquals("10", vm.draftMarketPrices.value["prod-1"])
+        assertEquals("10", vm.draftTotalSpent.value["prod-1"])
 
-        // Admin saves draft without manually overriding Total Spent
+        // Admin (or Buyer) saves draft
         vm.saveDraftSettlement()
         advanceUntilIdle()
 
-        // Now admin updates delivered quantity from 1.0 kg to 3.0 kg -> Total Spent must auto-recalculate to 15 (3 * 5,00)
-        vm.updateEntryActualQuantity("entry-act-1", "3")
+        // Now admin updates delivered quantity from 1.0 kg to 2.0 kg -> Total Spent and Unit Price MUST NOT change;
+        // only Effective Unit Price changes (R$ 10,00 / 2.0 kg = R$ 5,00/kg = 500 cents)
+        vm.updateEntryActualQuantity("entry-act-1", "2")
         advanceUntilIdle()
 
-        assertEquals("15", vm.draftTotalSpent.value["prod-1"])
-        assertEquals(1500L, vm.liveSettlementPreview.value?.totalMarketProductsSpentCents)
+        assertEquals("10", vm.draftMarketPrices.value["prod-1"])
+        assertEquals("10", vm.draftTotalSpent.value["prod-1"])
+        assertEquals(1000L, vm.liveSettlementPreview.value?.totalMarketProductsSpentCents)
+        val previewEntry = vm.liveSettlementPreview.value?.updatedEntries?.single { it.id == "entry-act-1" }
+        assertEquals(500L, previewEntry?.effectiveUnitPriceCents)
+        assertEquals(1000L, previewEntry?.finalItemTotalCents)
+
+        // Updating delivered quantity before saving (freshly auto-filled) also never changes Total Spent
+        vm.updateEntryActualQuantity("entry-act-1", "0,5")
+        advanceUntilIdle()
+        assertEquals("10", vm.draftTotalSpent.value["prod-1"])
+        assertEquals(1000L, vm.liveSettlementPreview.value?.totalMarketProductsSpentCents)
+        val previewEntryHalf = vm.liveSettlementPreview.value?.updatedEntries?.single { it.id == "entry-act-1" }
+        assertEquals(2000L, previewEntryHalf?.effectiveUnitPriceCents)
+    }
+
+    @Test
+    fun sseRefreshWithUnsavedEdits_updatesUntouchedDeliveredButPreservesCustomDelivered() = runTest {
+        val (veggieRepo, userRepo, alice) = setupTestFixture()
+        val bob = User(id = "user-2", name = "Bob", isActive = true)
+        userRepo.saveUser(bob)
+        veggieRepo.entries.add(
+            VeggieOrderEntry(
+                id = "entry-bob-1",
+                roundId = "round-active",
+                userId = bob.id,
+                userNameSnapshot = bob.name,
+                veggieProductId = "prod-1",
+                veggieNameSnapshot = "Batata",
+                unitNameSnapshot = "kg",
+                allowDecimalsSnapshot = true,
+                orderedQuantityScaled = 2000L,
+                actualQuantityScaled = null
+            )
+        )
+
+        val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
+        advanceUntilIdle()
+
+        assertEquals("1", vm.draftActualQuantities.value["entry-act-1"])
+        assertEquals("2", vm.draftActualQuantities.value["entry-bob-1"])
+
+        // Admin enters a custom delivered quantity for Bob (1,5 kg) and leaves Alice untouched
+        vm.updateEntryActualQuantity("entry-bob-1", "1,5")
+        assertTrue(vm.hasUnsavedSettlementChanges.value)
+
+        // Both Alice and Bob update their orders in the repository
+        val aliceIdx = veggieRepo.entries.indexOfFirst { it.id == "entry-act-1" }
+        veggieRepo.entries[aliceIdx] = veggieRepo.entries[aliceIdx].copy(
+            orderedQuantityScaled = 3000L,
+            actualQuantityScaled = null
+        )
+        val bobIdx = veggieRepo.entries.indexOfFirst { it.id == "entry-bob-1" }
+        veggieRepo.entries[bobIdx] = veggieRepo.entries[bobIdx].copy(
+            orderedQuantityScaled = 4000L,
+            actualQuantityScaled = null
+        )
+
+        // SSE triggers loadData(preserveDraftEdits = true)
+        vm.loadData(preserveDraftEdits = true)
+        advanceUntilIdle()
+
+        // Alice had no custom entry in the textfield -> updates to new order (3)
+        assertEquals("3", vm.draftActualQuantities.value["entry-act-1"])
+        // Bob had a custom entry (1,5) in the textfield -> preserved!
+        assertEquals("1,5", vm.draftActualQuantities.value["entry-bob-1"])
     }
 
     @Test

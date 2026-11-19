@@ -344,11 +344,24 @@ class RoomVeggieOrderRepositoryImpl(
         val entriesToUpsert = mutableListOf<VeggieOrderEntryEntity>()
         val entryIdsToDelete = mutableListOf<String>()
 
-        // Any existing entry not in productQuantitiesScaled or with quantity <= 0 is removed
+        // Any existing entry not in productQuantitiesScaled or with quantity <= 0 is removed,
+        // unless the Admin already entered a custom positive delivered quantity for it.
         for ((productId, existing) in existingEntries) {
             val newQty = productQuantitiesScaled[productId] ?: 0L
             if (newQty <= 0L) {
-                entryIdsToDelete.add(existing.id)
+                val hasCustomPositiveActual = existing.actualQuantityScaled != null &&
+                    existing.actualQuantityScaled != existing.orderedQuantityScaled &&
+                    existing.actualQuantityScaled > 0L
+                if (hasCustomPositiveActual) {
+                    entriesToUpsert.add(
+                        existing.copy(
+                            orderedQuantityScaled = 0L,
+                            updatedAt = now
+                        )
+                    )
+                } else {
+                    entryIdsToDelete.add(existing.id)
+                }
             }
         }
 
@@ -375,8 +388,31 @@ class RoomVeggieOrderRepositoryImpl(
                 roundedQty
             }
             if (normalizedQty <= 0L) {
-                if (existing != null) entryIdsToDelete.add(existing.id)
+                if (existing != null) {
+                    val hasCustomPositiveActual = existing.actualQuantityScaled != null &&
+                        existing.actualQuantityScaled != existing.orderedQuantityScaled &&
+                        existing.actualQuantityScaled > 0L
+                    if (hasCustomPositiveActual) {
+                        entriesToUpsert.add(
+                            existing.copy(
+                                orderedQuantityScaled = 0L,
+                                updatedAt = now
+                            )
+                        )
+                    } else {
+                        entryIdsToDelete.add(existing.id)
+                    }
+                }
                 continue
+            }
+
+            val hasCustomActual = existing?.actualQuantityScaled != null &&
+                existing.actualQuantityScaled != existing.orderedQuantityScaled
+            val preservedActual = when {
+                existing == null -> null
+                hasCustomActual -> existing.actualQuantityScaled
+                existing.orderedQuantityScaled == normalizedQty -> existing.actualQuantityScaled
+                else -> null
             }
 
             val entity = VeggieOrderEntryEntity(
@@ -391,7 +427,7 @@ class RoomVeggieOrderRepositoryImpl(
                 deliveryUnitNameSnapshot = deliveryUnit?.name ?: existing?.deliveryUnitNameSnapshot,
                 deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals ?: existing?.deliveryAllowDecimalsSnapshot,
                 orderedQuantityScaled = normalizedQty,
-                actualQuantityScaled = if (existing?.orderedQuantityScaled == normalizedQty) existing.actualQuantityScaled else null,
+                actualQuantityScaled = preservedActual,
                 effectiveUnitPriceCents = existing?.effectiveUnitPriceCents,
                 finalItemTotalCents = existing?.finalItemTotalCents,
                 updatedAt = now
