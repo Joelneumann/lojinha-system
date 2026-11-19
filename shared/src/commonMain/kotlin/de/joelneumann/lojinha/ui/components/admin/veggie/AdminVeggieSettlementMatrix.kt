@@ -37,6 +37,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -864,11 +865,17 @@ fun AdminVeggieSettlementMatrix(
                                                             color = TextSecondaryMuted,
                                                             maxLines = 1
                                                         )
+                                                        val isDifferentFromOrdered = isDeliveredDifferentFromOrdered(
+                                                            draftQtyStr = draftQtyStr,
+                                                            orderedQuantityScaled = entry.orderedQuantityScaled,
+                                                            deliveryAllowDecimals = rowInfo.deliveryAllowDecimals
+                                                        )
                                                         MatrixNumberInputField(
                                                             value = draftQtyStr,
                                                             onValueChange = { onUpdateActualQuantity(entry.id, it) },
                                                             allowDecimals = rowInfo.deliveryAllowDecimals,
                                                             isBold = true,
+                                                            isHighlighted = isDifferentFromOrdered,
                                                             fontSize = 12.5.sp,
                                                             focusRequester = matrixFocusRequesters[entry.id],
                                                             prevFocusRequester = prevReq,
@@ -2123,6 +2130,19 @@ private fun AddOrEditVeggieOrderDialog(
     }
 }
 
+/**
+ * Returns true when the current delivered quantity input differs from [orderedQuantityScaled].
+ * Empty or unparseable inputs are treated as 0 so cleared non-zero orders are highlighted.
+ */
+internal fun isDeliveredDifferentFromOrdered(
+    draftQtyStr: String,
+    orderedQuantityScaled: Long,
+    deliveryAllowDecimals: Boolean
+): Boolean {
+    val parsedDelivered = VeggieQuantityScaling.parseQuantityScaled(draftQtyStr, deliveryAllowDecimals) ?: 0L
+    return parsedDelivered != orderedQuantityScaled
+}
+
 @Composable
 private fun MatrixNumberInputField(
     value: String,
@@ -2130,6 +2150,7 @@ private fun MatrixNumberInputField(
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     isBold: Boolean = false,
+    isHighlighted: Boolean = false,
     fontSize: TextUnit = 13.sp,
     textAlign: TextAlign = TextAlign.Center,
     focusRequester: FocusRequester? = null,
@@ -2164,11 +2185,19 @@ private fun MatrixNumberInputField(
         onUpdateValue = { textFieldValue = it }
     )
 
+    // Use an opaque blend over SurfaceWhite so shadowElevation when focused doesn't bleed through
+    val containerColor = if (isHighlighted) lerp(SurfaceWhite, AccentBlue, 0.08f) else SurfaceWhite
+    val borderColor = when {
+        isFocused -> AccentNavy
+        isHighlighted -> AccentBlue
+        else -> DividerBorder
+    }
+
     Surface(
         shape = RoundedCornerShape(6.dp),
-        color = SurfaceWhite,
+        color = containerColor,
         border = CardDefaults.outlinedCardBorder().copy(
-            brush = SolidColor(if (isFocused) AccentNavy else DividerBorder)
+            brush = SolidColor(borderColor)
         ),
         shadowElevation = if (isFocused) 1.dp else 0.dp,
         modifier = modifier
