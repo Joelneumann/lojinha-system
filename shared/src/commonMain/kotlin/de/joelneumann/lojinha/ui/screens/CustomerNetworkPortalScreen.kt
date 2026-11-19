@@ -602,7 +602,7 @@ private fun CustomerVeggieOrderTabContent(
     fun navigateToProduct(index: Int) {
         if (filteredProducts.isEmpty()) return
         val targetIndex = index.coerceIn(0, filteredProducts.lastIndex)
-        val hasHeaderItem = isMobile && !isKeyboardOpenMobile && searchQuery.isBlank()
+        val hasHeaderItem = isMobile && searchQuery.isBlank()
         val listIndex = if (hasHeaderItem) targetIndex + 1 else targetIndex
         activeZone = VeggieFocusZone.PRODUCTS
         highlightedProductIndex = targetIndex
@@ -691,10 +691,19 @@ private fun CustomerVeggieOrderTabContent(
 
     LaunchedEffect(isKeyboardOpenMobile, highlightedProductIndex, activeZone) {
         if (isMobile && activeZone == VeggieFocusZone.PRODUCTS && highlightedProductIndex in filteredProducts.indices) {
-            delay(120L)
-            val hasHeaderItem = !isKeyboardOpenMobile && searchQuery.isBlank()
+            if (!isKeyboardOpenMobile) {
+                delay(120L)
+            }
+            val hasHeaderItem = searchQuery.isBlank()
             val listIndex = if (hasHeaderItem) highlightedProductIndex + 1 else highlightedProductIndex
-            productListState.scrollToItem(listIndex)
+            val visibleItem = productListState.layoutInfo.visibleItemsInfo.find { it.index == listIndex }
+            val viewportEnd = productListState.layoutInfo.viewportEndOffset
+            val isFullyVisible = visibleItem != null &&
+                visibleItem.offset >= 0 &&
+                (visibleItem.offset + visibleItem.size) <= viewportEnd
+            if (!isFullyVisible) {
+                productListState.scrollToItem(listIndex)
+            }
         }
     }
 
@@ -1336,9 +1345,9 @@ private fun VeggieCatalogPanel(
                     .weight(1f)
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
-                contentPadding = PaddingValues(bottom = 8.dp)
+                contentPadding = PaddingValues(bottom = if (isMobile && isKeyboardOpenMobile) 120.dp else 8.dp)
             ) {
-                if (isMobile && !isKeyboardOpenMobile && searchQuery.isBlank()) {
+                if (isMobile && searchQuery.isBlank()) {
                     item(key = "user_round_header", contentType = "header") {
                         userRoundHeaderCard()
                     }
@@ -1866,8 +1875,9 @@ private fun CustomerVeggieProductCard(
 
     val cardFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    var isFieldFocused by remember { mutableStateOf(false) }
 
-    if (isFocused && !isDialogActive) {
+    if (isFocused && !isDialogActive && !isFieldFocused) {
         LaunchedEffect(Unit) {
             cardFocusRequester.safeRequestFocus()
             keyboardController?.show()
@@ -2031,7 +2041,8 @@ private fun CustomerVeggieProductCard(
                             onReturnToSearch = onReturnToSearch,
                             onFocused = onFocused,
                             focusRequester = cardFocusRequester,
-                            isMobile = true
+                            isMobile = true,
+                            modifier = Modifier.onFocusChanged { isFieldFocused = it.hasFocus }
                         )
                     }
 
@@ -2189,7 +2200,8 @@ private fun CustomerVeggieProductCard(
                         onReturnToSearch = onReturnToSearch,
                         onFocused = onFocused,
                         focusRequester = cardFocusRequester,
-                        isMobile = false
+                        isMobile = false,
+                        modifier = Modifier.onFocusChanged { isFieldFocused = it.hasFocus }
                     )
                     favoriteButton()
                 }

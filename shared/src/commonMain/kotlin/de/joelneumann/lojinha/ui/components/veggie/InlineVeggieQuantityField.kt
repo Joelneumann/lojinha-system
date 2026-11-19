@@ -1,8 +1,6 @@
 package de.joelneumann.lojinha.ui.components.veggie
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -17,9 +15,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -32,7 +33,10 @@ import de.joelneumann.lojinha.domain.model.VEGGIE_QTY_SCALE
 import de.joelneumann.lojinha.domain.model.VeggieQuantityScaling
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.SelectAllOnFocusEffect
+import de.joelneumann.lojinha.ui.utils.ensureMobileKeyboardDismissHandlerInstalled
+import de.joelneumann.lojinha.ui.utils.notifyTextFieldTapGesture
 import de.joelneumann.lojinha.ui.utils.rememberSelectAllOnFocusState
+import de.joelneumann.lojinha.ui.utils.usesIosSafariKeyboardProxy
 
 @Composable
 fun InlineVeggieQuantityField(
@@ -53,7 +57,6 @@ fun InlineVeggieQuantityField(
     val selectAllState = rememberSelectAllOnFocusState()
     val isFocused = selectAllState.isFocused
     val effectiveFocusRequester = focusRequester ?: remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
 
     fun formatCurrent(qty: Long): String {
         return if (qty > 0L) {
@@ -132,32 +135,56 @@ fun InlineVeggieQuantityField(
         else -> TextSecondaryMuted
     }
 
+    val useSafariProxy = remember { usesIosSafariKeyboardProxy() }
+    LaunchedEffect(Unit) {
+        ensureMobileKeyboardDismissHandlerInstalled()
+    }
+
+    val surfaceModifier = modifier
+        .height(if (isMobile) 34.dp else 28.dp)
+        .widthIn(min = if (isMobile) 82.dp else 72.dp, max = if (isMobile) 104.dp else 92.dp)
+        .let { base ->
+            if (!useSafariProxy) {
+                base
+            } else {
+                base.pointerInput(enabled, allowDecimals) {
+                    if (!enabled) return@pointerInput
+                    awaitPointerEventScope {
+                        var downPos: Offset? = null
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            when (event.type) {
+                                PointerEventType.Press -> {
+                                    downPos = event.changes.firstOrNull()?.position
+                                }
+                                PointerEventType.Release -> {
+                                    val releaseChange = event.changes.firstOrNull()
+                                    val start = downPos
+                                    downPos = null
+                                    if (start != null && releaseChange != null) {
+                                        val distance = (releaseChange.position - start).getDistance()
+                                        if (distance <= viewConfiguration.touchSlop) {
+                                            notifyTextFieldTapGesture(allowDecimals = allowDecimals)
+                                            try {
+                                                effectiveFocusRequester.requestFocus()
+                                            } catch (_: Exception) {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = backgroundColor,
         border = BorderStroke(borderWidth, borderColor),
-        modifier = modifier
-            .height(if (isMobile) 34.dp else 28.dp)
-            .widthIn(min = if (isMobile) 82.dp else 72.dp, max = if (isMobile) 104.dp else 92.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                enabled = enabled
-            ) {
-                try {
-                    effectiveFocusRequester.requestFocus()
-                } catch (_: Exception) {}
-                keyboardController?.show()
-            }
+        modifier = surfaceModifier
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            BasicTextField(
+        BasicTextField(
                 value = textFieldValue,
                 onValueChange = { newValue ->
                     val filtered = filterVeggieAmountInput(newValue.text, allowDecimals)
@@ -200,15 +227,30 @@ fun InlineVeggieQuantityField(
                 ),
                 cursorBrush = SolidColor(if (isOrdered) ColorSuccessEmerald else AccentNavy),
                 decorationBox = { innerTextField ->
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.CenterEnd
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        innerTextField()
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            innerTextField()
+                        }
+                        Text(
+                            text = unitName,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = unitColor,
+                            maxLines = 1
+                        )
                     }
                 },
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxSize()
                     .focusRequester(effectiveFocusRequester)
                     .onFocusChanged { focusState ->
                         val wasFocused = selectAllState.isFocused
@@ -278,14 +320,5 @@ fun InlineVeggieQuantityField(
                         } else false
                     }
             )
-
-            Text(
-                text = unitName,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = unitColor,
-                maxLines = 1
-            )
-        }
     }
 }
