@@ -1026,6 +1026,10 @@ object EnglishStrings : AppStrings {
     override val veggieExcludeFromBuyerPdfLabel = "Exclude from Buyer List"
     override val veggieExcludeFromBuyerPdfHint = "Locally available — omitted from Buyer Shopping List PDF, still charged and shown on Worker Matrix."
     override val veggieExcludeFromBuyerPdfBadge = "Not on Buyer PDF"
+    override val exportCsv = "CSV Export"
+    override val csvExportSuccessTitle = "CSV Exported"
+    override val csvExportSavedTo = "Saved to:"
+    override val csvExportFailed = "CSV export failed"
 }
 
 

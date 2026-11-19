@@ -42,6 +42,7 @@ fun AdminTransactionsTabScreen(
     expandedTransactionId: String?,
     onRequestToggleExpand: (String?) -> Unit,
     onRequestExpandTransaction: (String) -> Unit,
+    onExportCsv: (() -> Unit)? = null,
     onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
     focusTrigger: Int = 0
 ) {
@@ -126,6 +127,7 @@ fun AdminTransactionsTabScreen(
             placeholder = strings.searchTransactionAdminPlaceholder,
             countText = if (searchQuery.isBlank()) strings.transactionsCountText(totalCount) else strings.transactionsCountText(transactions.size, totalCount),
             onSearchSubmitted = openFirstResult,
+            onExportCsv = onExportCsv,
             focusRequester = searchFocusRequester
         )
 

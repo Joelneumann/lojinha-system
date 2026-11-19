@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
@@ -96,6 +97,14 @@ fun AdminScreen(
     onExportVeggieOrderFormPdf: ((language: Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null,
+    onExportNotesCsv: (() -> Unit)? = null,
+    onExportProductsCsv: (() -> Unit)? = null,
+    onExportProductHistoryCsv: ((Product) -> Unit)? = null,
+    onExportUsersCsv: (() -> Unit)? = null,
+    onExportUserTransactionsCsv: ((User) -> Unit)? = null,
+    onExportTransactionsCsv: (() -> Unit)? = null,
+    onExportVeggieProductsCsv: (() -> Unit)? = null,
+    onExportVeggieOrdersCsv: (() -> Unit)? = null,
     onExitAdmin: () -> Unit
 ) {
     val strings = I18n.current
@@ -359,6 +368,7 @@ fun AdminScreen(
                                 onAddToShoppingListFromNote = shoppingListViewModel?.let { vm ->
                                     { productName, noteId -> vm.requestAddFromStockZeroNote(productName, noteId) }
                                 },
+                                onExportCsv = onExportNotesCsv,
                                 onRegisterPageScroller = { scroller -> activePageScroller = scroller },
                                 isExternalModalOpen = pendingShoppingModal != null,
                                 focusTrigger = tabFocusTrigger
@@ -378,6 +388,8 @@ fun AdminScreen(
                             onAddToShoppingList = shoppingListViewModel?.let { vm ->
                                 { product -> vm.requestAddProduct(product) }
                             },
+                            onExportCsv = onExportProductsCsv,
+                            onExportProductHistoryCsv = onExportProductHistoryCsv,
                             onRegisterPageScroller = { scroller -> activePageScroller = scroller },
                             isExternalModalOpen = pendingShoppingModal != null,
                             focusTrigger = tabFocusTrigger
@@ -411,6 +423,8 @@ fun AdminScreen(
                             onExecutePdfExport = onExecutePdfExport,
                             onOpenExportedPdf = onOpenExportedPdf,
                             onRevealExportedFolder = onRevealExportedFolder,
+                            onExportCsv = onExportUsersCsv,
+                            onExportUserTransactionsCsv = onExportUserTransactionsCsv,
                             focusTrigger = tabFocusTrigger
                         )
                     }
@@ -423,6 +437,7 @@ fun AdminScreen(
                                 expandedTransactionId = if (expandedTransactionId == id) null else id
                             },
                             onRequestExpandTransaction = { id -> expandedTransactionId = id },
+                            onExportCsv = onExportTransactionsCsv,
                             onRegisterPageScroller = { scroller -> activePageScroller = scroller },
                             focusTrigger = tabFocusTrigger
                         )
@@ -446,6 +461,8 @@ fun AdminScreen(
                                 onExportBuyerPdf = onExportVeggieBuyerPdf,
                                 onExportWorkerPdf = onExportVeggieWorkerPdf,
                                 onExportOrderFormPdf = onExportVeggieOrderFormPdf,
+                                onExportVeggieProductsCsv = onExportVeggieProductsCsv,
+                                onExportVeggieOrdersCsv = onExportVeggieOrdersCsv,
                                 onOpenExportedPdf = onOpenExportedPdf,
                                 onRevealExportedFolder = onRevealExportedFolder
                             )

@@ -1074,6 +1074,108 @@ class LojinhaAdminServer(
                         call.streamDataChangeEvents()
                     }
 
+                    // On-Demand CSV Exports (excluding soft-deleted items)
+                    route("/export") {
+                        get("/notes.csv") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val notes = adminNoteRepository?.getAllNotes() ?: emptyList()
+                            val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatAdminNotesCsv(notes)
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.notesFilename(dateStr))
+                        }
+
+                        get("/products.csv") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val products = productRepository.getAllProducts()
+                            val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductsCsv(products)
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.productsFilename(dateStr))
+                        }
+
+                        get("/products/{id}/history.csv") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                            val product = productRepository.getProductById(id)
+                            if (product == null) {
+                                call.respond(HttpStatusCode.NotFound, "Product not found")
+                                return@get
+                            }
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val entries = productRepository.getProductHistory(id, page = 0, pageSize = Int.MAX_VALUE).items
+                            val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductHistoryCsv(entries)
+                            call.respondCsv(
+                                csv,
+                                de.joelneumann.lojinha.data.service.CsvExportFilenames.productHistoryFilename(product.name, dateStr)
+                            )
+                        }
+
+                        get("/users.csv") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val users = userRepository.getAllUsers()
+                            val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatUsersCsv(users)
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.usersFilename(dateStr))
+                        }
+
+                        get("/users/{id}/transactions.csv") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                            val user = userRepository.getUserById(id)
+                            if (user == null || user.isDeleted) {
+                                call.respond(HttpStatusCode.NotFound, "User not found")
+                                return@get
+                            }
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val txs = transactionRepository.getTransactionsByUserId(id)
+                            val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
+                            call.respondCsv(
+                                csv,
+                                de.joelneumann.lojinha.data.service.CsvExportFilenames.userTransactionsFilename(user.name, dateStr)
+                            )
+                        }
+
+                        get("/transactions.csv") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val txs = transactionRepository.getAllTransactions()
+                            val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.transactionsFilename(dateStr))
+                        }
+
+                        get("/veggie-products.csv") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = veggieOrderRepository
+                            if (repo == null) {
+                                call.respond(HttpStatusCode.ServiceUnavailable, "Veggie order repository unavailable")
+                                return@get
+                            }
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val products = repo.getAllVeggieProducts()
+                            val unitTypes = repo.getAllUnitTypes()
+                            val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatVeggieProductsCsv(products, unitTypes)
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieProductsFilename(dateStr))
+                        }
+
+                        get("/veggie-orders.csv") {
+                            if (!call.checkAdminAuth(settingsRepository)) return@get
+                            val repo = veggieOrderRepository
+                            if (repo == null) {
+                                call.respond(HttpStatusCode.ServiceUnavailable, "Veggie order repository unavailable")
+                                return@get
+                            }
+                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            val rounds = repo.getAllRounds()
+                            val entriesByRoundId = rounds.associate { r -> r.id to repo.getEntriesForRound(r.id) }
+                            val settlementsByRoundId = rounds.associate { r -> r.id to repo.getProductSettlementsForRound(r.id) }
+                            val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatVeggieOrdersCsv(
+                                rounds = rounds,
+                                entriesByRoundId = entriesByRoundId,
+                                settlementsByRoundId = settlementsByRoundId
+                            )
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieOrdersFilename(dateStr))
+                        }
+                    }
+
                     // Veggie Order System Admin Endpoints
                     route("/veggie") {
                         get("/unit-types") {
@@ -1808,14 +1910,26 @@ class LojinhaAdminServer(
         return Language.fromCode(langStr, fallback = Language.DEFAULT)
     }
 
-    private suspend fun ApplicationCall.respondPdf(pdfBytes: ByteArray, filename: String) {
+    private suspend fun ApplicationCall.respondAttachment(bytes: ByteArray, contentType: ContentType, filename: String) {
         val asciiFallback = filename.replace(Regex("[^\\x20-\\x7E]"), "_").replace("\"", "_")
         val encodedUtf8 = java.net.URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
         response.header(
             HttpHeaders.ContentDisposition,
             "attachment; filename=\"$asciiFallback\"; filename*=UTF-8''$encodedUtf8"
         )
-        respondBytes(pdfBytes, ContentType.Application.Pdf)
+        respondBytes(bytes, contentType)
+    }
+
+    private suspend fun ApplicationCall.respondPdf(pdfBytes: ByteArray, filename: String) {
+        respondAttachment(pdfBytes, ContentType.Application.Pdf, filename)
+    }
+
+    private suspend fun ApplicationCall.respondCsv(csvContent: String, filename: String) {
+        respondAttachment(
+            csvContent.toByteArray(Charsets.UTF_8),
+            ContentType.Text.CSV.withCharset(Charsets.UTF_8),
+            filename
+        )
     }
 
     private fun ApplicationCall.resolveClientIp(): String {

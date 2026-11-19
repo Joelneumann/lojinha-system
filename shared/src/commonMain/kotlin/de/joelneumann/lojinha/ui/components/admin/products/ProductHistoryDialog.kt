@@ -32,6 +32,7 @@ import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.components.general.PaginationBar
 import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.components.admin.CompactCsvExportButton
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.Formatting
@@ -45,6 +46,7 @@ fun ProductHistoryDialog(
     isLoading: Boolean,
     onPageChange: (Int) -> Unit,
     onPageSizeChange: (Int) -> Unit,
+    onExportCsv: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val strings = I18n.current
@@ -133,12 +135,20 @@ fun ProductHistoryDialog(
                         }
                     }
 
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = strings.cancel,
-                            tint = TextSecondaryMuted
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (onExportCsv != null) {
+                            CompactCsvExportButton(onClick = onExportCsv)
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = strings.cancel,
+                                tint = TextSecondaryMuted
+                            )
+                        }
                     }
                 }
 

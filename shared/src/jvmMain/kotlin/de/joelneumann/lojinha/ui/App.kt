@@ -591,6 +591,41 @@ fun App(
                         }
                         var isExportingShoppingListPdf by remember { mutableStateOf(false) }
                         var isExportingVeggiePdf by remember { mutableStateOf(false) }
+                        var isExportingCsv by remember { mutableStateOf(false) }
+                        var csvExportResultPath by remember { mutableStateOf<String?>(null) }
+                        var csvExportError by remember { mutableStateOf<String?>(null) }
+
+                        fun exportCsvToDefaultDir(
+                            filename: String,
+                            fetchAndFormat: suspend () -> String
+                        ) {
+                            if (isExportingCsv) return
+                            isExportingCsv = true
+                            csvExportError = null
+                            coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    val csvContent = fetchAndFormat()
+                                    val targetDir = java.io.File(defaultSaveDir)
+                                    if (!targetDir.exists()) targetDir.mkdirs()
+                                    val targetFile = java.io.File(targetDir, filename)
+                                    targetFile.writeText(csvContent, Charsets.UTF_8)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        csvExportResultPath = targetFile.absolutePath
+                                    }
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    AppLogger.error("App", "Failed to export CSV ($filename): ${e.message}", e)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        csvExportError = e.message ?: strings.csvExportFailed
+                                    }
+                                } finally {
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        isExportingCsv = false
+                                    }
+                                }
+                            }
+                        }
 
                         de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
                             notesViewModel = adminNotesViewModel,
@@ -834,10 +869,141 @@ fun App(
                                     AppLogger.warn("App", "Failed to reveal PDF in folder: ${e.message}", e)
                                 }
                             },
+                            onExportNotesCsv = {
+                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                exportCsvToDefaultDir(
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.notesFilename(dateStr)
+                                ) {
+                                    val notes = effectiveAdminNoteRepo.getAllNotes()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatAdminNotesCsv(notes)
+                                }
+                            },
+                            onExportProductsCsv = {
+                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                exportCsvToDefaultDir(
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.productsFilename(dateStr)
+                                ) {
+                                    val products = effectiveProductRepo.getAllProducts()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductsCsv(products)
+                                }
+                            },
+                            onExportProductHistoryCsv = { product ->
+                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                exportCsvToDefaultDir(
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.productHistoryFilename(product.name, dateStr)
+                                ) {
+                                    val entries = effectiveProductRepo.getProductHistory(product.id, page = 0, pageSize = Int.MAX_VALUE).items
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductHistoryCsv(entries)
+                                }
+                            },
+                            onExportUsersCsv = {
+                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                exportCsvToDefaultDir(
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.usersFilename(dateStr)
+                                ) {
+                                    val users = effectiveUserRepo.getAllUsers()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatUsersCsv(users)
+                                }
+                            },
+                            onExportUserTransactionsCsv = { user ->
+                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                exportCsvToDefaultDir(
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.userTransactionsFilename(user.name, dateStr)
+                                ) {
+                                    val txs = effectiveTransactionRepo.getTransactionsByUserId(user.id)
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
+                                }
+                            },
+                            onExportTransactionsCsv = {
+                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                exportCsvToDefaultDir(
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.transactionsFilename(dateStr)
+                                ) {
+                                    val txs = effectiveTransactionRepo.getAllTransactions()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
+                                }
+                            },
+                            onExportVeggieProductsCsv = {
+                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                exportCsvToDefaultDir(
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieProductsFilename(dateStr)
+                                ) {
+                                    val products = effectiveVeggieRepo.getAllVeggieProducts()
+                                    val unitTypes = effectiveVeggieRepo.getAllUnitTypes()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatVeggieProductsCsv(products, unitTypes)
+                                }
+                            },
+                            onExportVeggieOrdersCsv = {
+                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                exportCsvToDefaultDir(
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieOrdersFilename(dateStr)
+                                ) {
+                                    val rounds = effectiveVeggieRepo.getAllRounds()
+                                    val entriesByRoundId = rounds.associate { r -> r.id to effectiveVeggieRepo.getEntriesForRound(r.id) }
+                                    val settlementsByRoundId = rounds.associate { r -> r.id to effectiveVeggieRepo.getProductSettlementsForRound(r.id) }
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatVeggieOrdersCsv(
+                                        rounds = rounds,
+                                        entriesByRoundId = entriesByRoundId,
+                                        settlementsByRoundId = settlementsByRoundId
+                                    )
+                                }
+                            },
                             onExitAdmin = {
                                 appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
                             }
                         )
+
+                        if (csvExportResultPath != null || csvExportError != null) {
+                            val savedPath = csvExportResultPath
+                            val err = csvExportError
+                            androidx.compose.material3.AlertDialog(
+                                onDismissRequest = {
+                                    csvExportResultPath = null
+                                    csvExportError = null
+                                },
+                                title = {
+                                    androidx.compose.material3.Text(
+                                        text = if (err != null) strings.csvExportFailed else strings.csvExportSuccessTitle,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                        color = if (err != null) ColorDangerCrimson else PrimaryNavy
+                                    )
+                                },
+                                text = {
+                                    androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                                        if (err != null) {
+                                            androidx.compose.material3.Text(err, color = ColorDangerCrimson, fontSize = 13.sp)
+                                        } else if (savedPath != null) {
+                                            androidx.compose.material3.Text(strings.csvExportSavedTo, fontSize = 12.sp, color = TextSecondaryMuted)
+                                            androidx.compose.material3.Text(savedPath, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = PrimaryNavy)
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                                        if (savedPath != null) {
+                                            androidx.compose.material3.OutlinedButton(
+                                                onClick = {
+                                                    try {
+                                                        diagnosticsService.revealInFileExplorer(java.io.File(savedPath))
+                                                    } catch (_: Exception) {}
+                                                }
+                                            ) {
+                                                androidx.compose.material3.Text(strings.revealInFolder)
+                                            }
+                                        }
+                                        androidx.compose.material3.Button(
+                                            onClick = {
+                                                csvExportResultPath = null
+                                                csvExportError = null
+                                            },
+                                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = AccentNavy)
+                                        ) {
+                                            androidx.compose.material3.Text(strings.confirm, color = SurfaceWhite)
+                                        }
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }

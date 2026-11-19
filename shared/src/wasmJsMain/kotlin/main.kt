@@ -379,6 +379,70 @@ fun main() {
                                         onError = { err -> veggieViewModel.setExportError(err) }
                                     )
                                 },
+                                onExportNotesCsv = {
+                                    jsDownloadPdf(
+                                        url = adminNetworkClient.resolveUrl("/api/admin/export/notes.csv"),
+                                        fallbackFilename = "admin_notes.csv",
+                                        onSuccess = {},
+                                        onError = { err -> println("CSV export failed: $err") }
+                                    )
+                                },
+                                onExportProductsCsv = {
+                                    jsDownloadPdf(
+                                        url = adminNetworkClient.resolveUrl("/api/admin/export/products.csv"),
+                                        fallbackFilename = "products.csv",
+                                        onSuccess = {},
+                                        onError = { err -> println("CSV export failed: $err") }
+                                    )
+                                },
+                                onExportProductHistoryCsv = { product ->
+                                    jsDownloadPdf(
+                                        url = adminNetworkClient.resolveUrl("/api/admin/export/products/${product.id}/history.csv"),
+                                        fallbackFilename = de.joelneumann.lojinha.data.service.CsvExportFilenames.productHistoryFilename(product.name),
+                                        onSuccess = {},
+                                        onError = { err -> println("CSV export failed: $err") }
+                                    )
+                                },
+                                onExportUsersCsv = {
+                                    jsDownloadPdf(
+                                        url = adminNetworkClient.resolveUrl("/api/admin/export/users.csv"),
+                                        fallbackFilename = "users.csv",
+                                        onSuccess = {},
+                                        onError = { err -> println("CSV export failed: $err") }
+                                    )
+                                },
+                                onExportUserTransactionsCsv = { user ->
+                                    jsDownloadPdf(
+                                        url = adminNetworkClient.resolveUrl("/api/admin/export/users/${user.id}/transactions.csv"),
+                                        fallbackFilename = de.joelneumann.lojinha.data.service.CsvExportFilenames.userTransactionsFilename(user.name),
+                                        onSuccess = {},
+                                        onError = { err -> println("CSV export failed: $err") }
+                                    )
+                                },
+                                onExportTransactionsCsv = {
+                                    jsDownloadPdf(
+                                        url = adminNetworkClient.resolveUrl("/api/admin/export/transactions.csv"),
+                                        fallbackFilename = "transactions.csv",
+                                        onSuccess = {},
+                                        onError = { err -> println("CSV export failed: $err") }
+                                    )
+                                },
+                                onExportVeggieProductsCsv = {
+                                    jsDownloadPdf(
+                                        url = adminNetworkClient.resolveUrl("/api/admin/export/veggie-products.csv"),
+                                        fallbackFilename = "veggie_products.csv",
+                                        onSuccess = {},
+                                        onError = { err -> veggieViewModel.setExportError(err) }
+                                    )
+                                },
+                                onExportVeggieOrdersCsv = {
+                                    jsDownloadPdf(
+                                        url = adminNetworkClient.resolveUrl("/api/admin/export/veggie-orders.csv"),
+                                        fallbackFilename = "veggie_orders.csv",
+                                        onSuccess = {},
+                                        onError = { err -> veggieViewModel.setExportError(err) }
+                                    )
+                                },
                                 onExitAdmin = {
                                     scope.launch {
                                         adminNetworkClient.logout()

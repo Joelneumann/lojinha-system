@@ -38,12 +38,16 @@ class LojinhaAdminServerTest {
         override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {}
     }
 
+    private val fakeProducts = mutableListOf<Product>()
     private val fakeProductRepo = object : ProductRepository {
-        override fun getProductsFlow(): Flow<List<Product>> = flowOf(emptyList())
-        override suspend fun getAllProducts(): List<Product> = emptyList()
-        override suspend fun getProductById(id: String): Product? = null
+        override fun getProductsFlow(): Flow<List<Product>> = flowOf(fakeProducts.toList())
+        override suspend fun getAllProducts(): List<Product> = fakeProducts.toList()
+        override suspend fun getProductById(id: String): Product? = fakeProducts.find { it.id == id }
         override suspend fun getProductByBarcode(barcode: String): Product? = null
-        override suspend fun saveProduct(product: Product) {}
+        override suspend fun saveProduct(product: Product) {
+            fakeProducts.removeAll { it.id == product.id }
+            fakeProducts.add(product)
+        }
         override suspend fun deactivateProduct(id: String) {}
         override suspend fun hardDeleteProduct(id: String) {}
         override suspend fun updateStock(productId: String, delta: Long) {}
@@ -92,12 +96,15 @@ class LojinhaAdminServerTest {
         override suspend fun updateBalance(userId: String, amountDelta: Long) {}
     }
 
+    private val fakeTransactions = mutableListOf<Transaction>()
     private val fakeTransactionRepo = object : TransactionRepository {
-        override fun getTransactionsFlow(): Flow<List<Transaction>> = flowOf(emptyList())
-        override suspend fun getAllTransactions(): List<Transaction> = emptyList()
-        override suspend fun getTransactionsByUserId(userId: String): List<Transaction> = emptyList()
-        override suspend fun getTransactionById(id: String): Transaction? = null
-        override suspend fun recordTransaction(transaction: Transaction) {}
+        override fun getTransactionsFlow(): Flow<List<Transaction>> = flowOf(fakeTransactions.toList())
+        override suspend fun getAllTransactions(): List<Transaction> = fakeTransactions.toList()
+        override suspend fun getTransactionsByUserId(userId: String): List<Transaction> = fakeTransactions.filter { it.userId == userId }
+        override suspend fun getTransactionById(id: String): Transaction? = fakeTransactions.find { it.id == id }
+        override suspend fun recordTransaction(transaction: Transaction) {
+            fakeTransactions.add(transaction)
+        }
         override suspend fun getTransactionCountForUser(userId: String): Int = 0
         override suspend fun getTransactionsPaged(page: Int, pageSize: Int, searchQuery: String?, typeFilter: TransactionType?): PagedResult<Transaction> =
             PagedResult(emptyList(), 0, page, pageSize, 0)
@@ -1587,6 +1594,90 @@ class LojinhaAdminServerTest {
         )
         assertEquals(200, loginRes.statusCode())
         assertTrue(loginRes.body().contains("CUSTOMER"))
+    }
+
+    @Test
+    fun testCsvExportEndpoints_excludeDeletedAndRequireAuth() {
+        val client = HttpClient.newHttpClient()
+
+        // 1. Unauthenticated request is rejected
+        val unauthRes = client.send(
+            HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:$testPort/api/admin/export/users.csv"))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+        assertEquals(401, unauthRes.statusCode())
+
+        val adminCookie = getValidAdminCookie()
+
+        // Seed data including soft-deleted user & soft-deleted veggie product
+        fakeUsers.add(User(id = "csv-u-active", name = "CSV Active User", isActive = true, isDeleted = false))
+        fakeUsers.add(User(id = "csv-u-deleted", name = "CSV Deleted User", isActive = false, isDeleted = true))
+        kotlinx.coroutines.runBlocking {
+            fakeProductRepo.saveProduct(Product(id = "csv-p-1", name = "CSV Soda", basePrice = 500, stockQuantity = 10))
+            fakeAdminNoteRepo.addNote(AdminNote(id = "csv-n-1", userId = "csv-u-active", userNameSnapshot = "CSV Active User", timestamp = 1000L, message = "Hello CSV"))
+            fakeTransactionRepo.recordTransaction(
+                Transaction(
+                    id = "csv-tx-1",
+                    userId = "csv-u-active",
+                    userNameSnapshot = "CSV Active User",
+                    timestamp = 2000L,
+                    type = TransactionType.PURCHASE,
+                    totalAmount = -500,
+                    items = listOf(TransactionItem("csv-p-1", "CSV Soda", UnitType.PIECE, 1, 500))
+                )
+            )
+        }
+        fakeVeggieUnitTypes.add(VeggieUnitType(id = "csv-vu-1", name = "kg", allowDecimals = true))
+        fakeVeggieProducts.add(VeggieProduct(id = "csv-vp-active", name = "CSV Carrots", unitTypeId = "csv-vu-1", isActive = true, isDeleted = false))
+        fakeVeggieProducts.add(VeggieProduct(id = "csv-vp-deleted", name = "CSV Deleted Kale", unitTypeId = "csv-vu-1", isActive = false, isDeleted = true))
+        fakeVeggieRounds.add(VeggieOrderRound(id = "csv-vr-1", openedAt = 3000L, status = VeggieRoundStatus.OPEN))
+
+        fun getCsv(path: String): String {
+            val res = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$testPort$path"))
+                    .header("Cookie", adminCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, res.statusCode(), "Expected 200 for $path")
+            val contentType = res.headers().firstValue("Content-Type").orElse("")
+            assertTrue(contentType.contains("text/csv", ignoreCase = true), "Expected text/csv for $path, got $contentType")
+            val disposition = res.headers().firstValue("Content-Disposition").orElse("")
+            assertTrue(disposition.contains("attachment", ignoreCase = true), "Expected attachment for $path, got $disposition")
+            assertTrue(res.body().startsWith("\uFEFF"), "Expected UTF-8 BOM for $path")
+            return res.body()
+        }
+
+        val notesCsv = getCsv("/api/admin/export/notes.csv")
+        assertTrue(notesCsv.contains("Hello CSV"))
+
+        val productsCsv = getCsv("/api/admin/export/products.csv")
+        assertTrue(productsCsv.contains("CSV Soda"))
+
+        val productHistoryCsv = getCsv("/api/admin/export/products/csv-p-1/history.csv")
+        assertTrue(productHistoryCsv.contains("id;productId;timestamp;type"))
+
+        val usersCsv = getCsv("/api/admin/export/users.csv")
+        assertTrue(usersCsv.contains("CSV Active User"))
+        assertFalse(usersCsv.contains("CSV Deleted User"))
+
+        val userTxCsv = getCsv("/api/admin/export/users/csv-u-active/transactions.csv")
+        assertTrue(userTxCsv.contains("csv-tx-1"))
+
+        val allTxCsv = getCsv("/api/admin/export/transactions.csv")
+        assertTrue(allTxCsv.contains("csv-tx-1"))
+
+        val veggieProductsCsv = getCsv("/api/admin/export/veggie-products.csv")
+        assertTrue(veggieProductsCsv.contains("CSV Carrots"))
+        assertFalse(veggieProductsCsv.contains("CSV Deleted Kale"))
+
+        val veggieOrdersCsv = getCsv("/api/admin/export/veggie-orders.csv")
+        assertTrue(veggieOrdersCsv.contains("csv-vr-1"))
     }
 }
 

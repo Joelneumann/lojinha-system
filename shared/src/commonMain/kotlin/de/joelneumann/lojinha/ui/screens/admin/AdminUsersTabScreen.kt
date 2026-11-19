@@ -52,6 +52,8 @@ fun AdminUsersTabScreen(
     onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null,
+    onExportCsv: (() -> Unit)? = null,
+    onExportUserTransactionsCsv: ((User) -> Unit)? = null,
     focusTrigger: Int = 0
 ) {
     val users by viewModel.users.collectAsState()
@@ -173,6 +175,7 @@ fun AdminUsersTabScreen(
             onSearchSubmitted = openFirstResult,
             actionButtonText = strings.addUser,
             onActionButtonClick = viewModel::openNewUserModal,
+            onExportCsv = onExportCsv,
             focusRequester = searchFocusRequester
         )
 
@@ -221,7 +224,8 @@ fun AdminUsersTabScreen(
                                     completeUserWorkflow()
                                 }
                             },
-                            onRequestExportPdf = { viewModel.openExportPdfModal(it) }
+                            onRequestExportPdf = { viewModel.openExportPdfModal(it) },
+                            onRequestExportCsv = onExportUserTransactionsCsv
                         )
                     }
                 }

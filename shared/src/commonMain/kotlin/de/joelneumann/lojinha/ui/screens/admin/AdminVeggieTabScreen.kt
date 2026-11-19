@@ -21,6 +21,7 @@ import de.joelneumann.lojinha.domain.model.VeggieOrderRound
 import de.joelneumann.lojinha.domain.model.VeggieRoundStatus
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
+import de.joelneumann.lojinha.ui.components.admin.CompactCsvExportButton
 import de.joelneumann.lojinha.ui.components.admin.veggie.AdminVeggieCatalogSection
 import de.joelneumann.lojinha.ui.components.admin.veggie.AdminVeggieSettlementMatrix
 import de.joelneumann.lojinha.ui.components.admin.veggie.ExportedBadgePill
@@ -51,6 +52,8 @@ fun AdminVeggieTabScreen(
     onExportBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onExportWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
     onExportOrderFormPdf: ((language: Language) -> Unit)? = null,
+    onExportVeggieProductsCsv: (() -> Unit)? = null,
+    onExportVeggieOrdersCsv: (() -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null
 ) {
@@ -219,22 +222,30 @@ fun AdminVeggieTabScreen(
                     }
                 }
                 AdminVeggieSubTab.CATALOG -> {
-                    if (onExportOrderFormPdf != null) {
-                        OutlinedButton(
-                            onClick = { pendingPdfConfirmation = VeggiePdfExportTarget.OrderForm },
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(strings.exportOrderFormPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (onExportVeggieProductsCsv != null) {
+                            CompactCsvExportButton(onClick = onExportVeggieProductsCsv)
+                        }
+                        if (onExportOrderFormPdf != null) {
+                            OutlinedButton(
+                                onClick = { pendingPdfConfirmation = VeggiePdfExportTarget.OrderForm },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = PrimaryNavy, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(strings.exportOrderFormPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
                 AdminVeggieSubTab.HISTORY -> {
                     val pastRound = editingPastRound
-                    if (pastRound != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (onExportVeggieOrdersCsv != null) {
+                            CompactCsvExportButton(onClick = onExportVeggieOrdersCsv)
+                        }
+                        if (pastRound != null) {
                             if (onExportBuyerPdf != null) {
                                 OutlinedButton(
                                     onClick = {

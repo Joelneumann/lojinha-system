@@ -986,6 +986,10 @@ interface AppStrings {
     val veggieExcludeFromBuyerPdfLabel: String
     val veggieExcludeFromBuyerPdfHint: String
     val veggieExcludeFromBuyerPdfBadge: String
+    val exportCsv: String
+    val csvExportSuccessTitle: String
+    val csvExportSavedTo: String
+    val csvExportFailed: String
 }
 
 
