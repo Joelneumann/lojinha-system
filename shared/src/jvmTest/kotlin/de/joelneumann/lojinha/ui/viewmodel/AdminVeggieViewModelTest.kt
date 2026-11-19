@@ -1149,7 +1149,12 @@ class AdminVeggieViewModelTest {
         val vm = AdminVeggieViewModel(veggieOrderRepository = veggieRepo, userRepository = userRepo, coroutineScope = this)
         advanceUntilIdle()
 
-        // Product has estimated price 5,00 (500 cents) and 1.0 kg ordered -> Total Spent is 5
+        // Initially empty in the Matrix until entered/saved
+        assertEquals("", vm.draftMarketPrices.value["prod-1"])
+        assertEquals("", vm.draftTotalSpent.value["prod-1"])
+
+        // Enter unit price 5,00 (500 cents) for 1.0 kg ordered -> Total Spent auto-calculates to 5
+        vm.updateProductMarketUnitPrice("prod-1", "5")
         assertEquals("5", vm.draftMarketPrices.value["prod-1"])
         assertEquals("5", vm.draftTotalSpent.value["prod-1"])
 

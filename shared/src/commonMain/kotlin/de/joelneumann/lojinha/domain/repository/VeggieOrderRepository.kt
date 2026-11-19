@@ -47,6 +47,7 @@ interface VeggieOrderRepository {
     suspend fun reopenRound(roundId: String): Boolean
     suspend fun deleteRound(roundId: String): Boolean
     suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean
+    suspend fun markBuyerPortalPdfExported(roundId: String, timestamp: Long): Boolean = false
     suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean
 
     // 4. Customer Order Entries & History
@@ -72,6 +73,22 @@ interface VeggieOrderRepository {
         productSettlements: List<VeggieRoundProductSettlement>,
         actualQuantitiesByEntryId: Map<String, Long>
     ): Boolean
+    suspend fun saveBuyerDraftPrices(
+        roundId: String,
+        buyerOperationFeeCents: Long,
+        productSettlements: List<VeggieRoundProductSettlement>
+    ): Boolean {
+        val round = getRoundById(roundId) ?: return false
+        if (round.status != VeggieRoundStatus.CLOSED) return false
+        return saveDraftSettlement(
+            roundId = roundId,
+            buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
+            transportFeeCents = round.transportFeeCents,
+            transporterUserId = round.transporterUserId,
+            productSettlements = productSettlements,
+            actualQuantitiesByEntryId = emptyMap()
+        )
+    }
     suspend fun executeRoundSettlement(
         roundId: String,
         buyerOperationFeeCents: Long,

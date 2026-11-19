@@ -65,7 +65,7 @@ import kotlinx.coroutines.flow.*
     connect();
 }
 """)
-private external fun jsStartSse(key: String, path: String, baseUrl: String)
+internal external fun jsStartSse(key: String, path: String, baseUrl: String)
 
 @JsFun("""
 (key) => {
@@ -77,13 +77,13 @@ private external fun jsStartSse(key: String, path: String, baseUrl: String)
     }
 }
 """)
-private external fun jsStopSse(key: String)
+internal external fun jsStopSse(key: String)
 
 @JsFun("(key) => { const s = window._lojinhaSse && window._lojinhaSse[key]; if (!s) return false; const f = s.hasNewData === true; s.hasNewData = false; return f; }")
-private external fun jsCheckAndClearSseDataChanged(key: String): Boolean
+internal external fun jsCheckAndClearSseDataChanged(key: String): Boolean
 
 @JsFun("(key) => { const s = window._lojinhaSse && window._lojinhaSse[key]; if (!s) return false; const e = s.syncError === true; s.syncError = false; return e; }")
-private external fun jsCheckAndClearSseSyncError(key: String): Boolean
+internal external fun jsCheckAndClearSseSyncError(key: String): Boolean
 
 object KioskConnectionMonitor {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

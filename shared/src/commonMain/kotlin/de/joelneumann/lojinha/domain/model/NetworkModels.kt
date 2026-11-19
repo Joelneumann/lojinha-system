@@ -111,4 +111,40 @@ data class VeggieSettlementRequest(
     val settledAt: Long = 0L
 )
 
+@Serializable
+data class BuyerVeggieProductRowDto(
+    val productId: String,
+    val name: String,
+    val imageFileName: String? = null,
+    val unitAbbreviation: String,
+    val allowDecimals: Boolean = true,
+    val deliveryUnitAbbreviation: String? = null,
+    val totalOrderedScaled: Long,
+    val marketUnitPriceCents: Long? = null,
+    val totalSpentCents: Long? = null
+)
+
+@Serializable
+data class BuyerVeggieRoundStateResponse(
+    val round: VeggieOrderRound? = null,
+    val items: List<BuyerVeggieProductRowDto> = emptyList(),
+    val buyerOperationFeeCents: Long = 0L,
+    val ordersChangedSinceLastPdf: Boolean = false
+)
+
+@Serializable
+data class BuyerProductPriceDraft(
+    val productId: String,
+    val marketUnitPriceCents: Long? = null,
+    val totalSpentCents: Long? = null
+)
+
+@Serializable
+data class BuyerSaveDraftSettlementRequest(
+    val roundId: String,
+    val buyerOperationFeeCents: Long = 0L,
+    val productSettlements: List<BuyerProductPriceDraft> = emptyList()
+)
+
+
 

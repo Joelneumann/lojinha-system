@@ -79,14 +79,21 @@ class LojinhaAdminServer(
         val lockedUntil: Long = 0L
     )
 
+    private data class BuyerSession(
+        val expiryTimestamp: Long,
+        val credentialHash: String
+    )
+
     // Token Session Management (keyed by SHA-256(token) so raw tokens are never stored in memory or on disk)
     private val activeTokens = ConcurrentHashMap<String, Long>() // tokenHash -> expiryTimestamp
     private val activeCustomerTokens = ConcurrentHashMap<String, CustomerSession>() // tokenHash -> CustomerSession
+    private val activeBuyerTokens = ConcurrentHashMap<String, BuyerSession>() // tokenHash -> BuyerSession
     private val sessionStoreLock = Any()
     private val sessionJson = Json { ignoreUnknownKeys = true }
     private val failedLoginAttempts = ConcurrentHashMap<String, LoginAttemptState>() // "ip:..." or "account:..." -> LoginAttemptState
     private val ADMIN_COOKIE_NAME = "lojinha_admin_session"
     private val CUSTOMER_COOKIE_NAME = "lojinha_customer_session"
+    private val BUYER_COOKIE_NAME = "lojinha_buyer_session"
     private val SESSION_DURATION_MS = 8 * 60 * 60 * 1000L // 8 hours
     private val PERSISTENT_CUSTOMER_SESSION_DURATION_MS = 90L * 24 * 60 * 60 * 1000L // 90 days
     private val SLIDING_RENEWAL_PERSIST_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
@@ -408,12 +415,46 @@ class LojinhaAdminServer(
                         if (matches) {
                             failedLoginAttempts.remove(ipKey)
                             accountKey?.let { failedLoginAttempts.remove(it) }
+                            call.clearOtherRoleSessions(keepCookieName = ADMIN_COOKIE_NAME)
                             activeTokens.entries.removeIf { now >= it.value }
                             val token = UUID.randomUUID().toString()
                             activeTokens[hashToken(token)] = now + SESSION_DURATION_MS
                             val cookieMaxAgeSec = if (req.keepLoggedIn) (SESSION_DURATION_MS / 1000L).toInt() else null
                             call.setSessionCookie(ADMIN_COOKIE_NAME, token, cookieMaxAgeSec)
                             call.respond(HttpStatusCode.OK, UnifiedLoginResponse(success = true, role = "ADMIN", message = "Authenticated"))
+                        } else {
+                            recordFailedLogin(ipKey, now)
+                            accountKey?.let { recordFailedLogin(it, now) }
+                            call.respond(HttpStatusCode.Unauthorized, UnifiedLoginResponse(success = false, message = "Invalid credentials"))
+                        }
+                        return@post
+                    }
+
+                    if (normalizedIdentifier == "buyer") {
+                        val hasBuyerHash = settings.buyerPasswordHash.isNotBlank()
+                        val matchedHash = when {
+                            cleanPassword.isBlank() -> null
+                            hasBuyerHash && de.joelneumann.lojinha.security.PasswordHasher.verify(cleanPassword, settings.buyerPasswordHash) ->
+                                settings.buyerPasswordHash
+                            hasCustomAdminHash && de.joelneumann.lojinha.security.PasswordHasher.verify(cleanPassword, settings.adminPasswordHash) ->
+                                settings.adminPasswordHash
+                            else -> null
+                        }
+                        val matches = matchedHash != null
+                        AppLogger.info("LojinhaAdminServer", "Buyer Login Attempt from $clientIp: success=$matches")
+                        if (matches) {
+                            failedLoginAttempts.remove(ipKey)
+                            accountKey?.let { failedLoginAttempts.remove(it) }
+                            call.clearOtherRoleSessions(keepCookieName = BUYER_COOKIE_NAME)
+                            activeBuyerTokens.entries.removeIf { now >= it.value.expiryTimestamp }
+                            val token = UUID.randomUUID().toString()
+                            activeBuyerTokens[hashToken(token)] = BuyerSession(
+                                expiryTimestamp = now + SESSION_DURATION_MS,
+                                credentialHash = matchedHash!!
+                            )
+                            val cookieMaxAgeSec = if (req.keepLoggedIn) (SESSION_DURATION_MS / 1000L).toInt() else null
+                            call.setSessionCookie(BUYER_COOKIE_NAME, token, cookieMaxAgeSec)
+                            call.respond(HttpStatusCode.OK, UnifiedLoginResponse(success = true, role = "BUYER", message = "Authenticated"))
                         } else {
                             recordFailedLogin(ipKey, now)
                             accountKey?.let { recordFailedLogin(it, now) }
@@ -445,6 +486,7 @@ class LojinhaAdminServer(
                     if (userMatches) {
                         failedLoginAttempts.remove(ipKey)
                         accountKey?.let { failedLoginAttempts.remove(it) }
+                        call.clearOtherRoleSessions(keepCookieName = CUSTOMER_COOKIE_NAME)
                         val token = UUID.randomUUID().toString()
                         val sessionTtl = if (req.keepLoggedIn) PERSISTENT_CUSTOMER_SESSION_DURATION_MS else SESSION_DURATION_MS
                         activeCustomerTokens[hashToken(token)] = CustomerSession(
@@ -484,6 +526,7 @@ class LojinhaAdminServer(
                         call.respond(
                             settingsRepository.getSettings().copy(
                                 adminPasswordHash = "",
+                                buyerPasswordHash = "",
                                 oneDriveRefreshToken = null,
                                 backupLocationPath = ""
                             )
@@ -556,7 +599,7 @@ class LojinhaAdminServer(
                             return@post
                         }
                         if (trimmedUser.name.isReservedAdminName()) {
-                            call.respond(HttpStatusCode.BadRequest, "The name \"Admin\" is reserved for administrator login")
+                            call.respond(HttpStatusCode.BadRequest, "The names \"Admin\" and \"Buyer\" are reserved for system login")
                             return@post
                         }
                         if (trimmedNickname != null) {
@@ -565,7 +608,7 @@ class LojinhaAdminServer(
                                 return@post
                             }
                             if (trimmedNickname.isReservedAdminName()) {
-                                call.respond(HttpStatusCode.BadRequest, "The nickname \"Admin\" is reserved for administrator login")
+                                call.respond(HttpStatusCode.BadRequest, "The nicknames \"Admin\" and \"Buyer\" are reserved for system login")
                                 return@post
                             }
                         }
@@ -650,7 +693,7 @@ class LojinhaAdminServer(
                         val target = allUsers.find { it.id == id }
                         if (target != null) {
                             if (target.name.isReservedAdminName()) {
-                                call.respond(HttpStatusCode.BadRequest, "The name \"Admin\" is reserved for administrator login")
+                                call.respond(HttpStatusCode.BadRequest, "The names \"Admin\" and \"Buyer\" are reserved for system login")
                                 return@post
                             }
                             val normalized = target.name.normalizeUserName()
@@ -667,7 +710,7 @@ class LojinhaAdminServer(
                             val normalizedNick = target.nickname?.normalizeUserName()
                             if (normalizedNick != null) {
                                 if (target.nickname?.isReservedAdminName() == true) {
-                                    call.respond(HttpStatusCode.BadRequest, "The nickname \"Admin\" is reserved for administrator login")
+                                    call.respond(HttpStatusCode.BadRequest, "The nicknames \"Admin\" and \"Buyer\" are reserved for system login")
                                     return@post
                                 }
                                 val duplicateNick = allUsers.firstOrNull {
@@ -1760,6 +1803,145 @@ class LojinhaAdminServer(
                     }
                 }
 
+                // 2c. Protected Buyer API Endpoints (Current-Week Veggie Round Only)
+                route("/api/buyer") {
+                    post("/logout") {
+                        val token = call.request.cookies[BUYER_COOKIE_NAME]
+                        if (!token.isNullOrBlank()) {
+                            activeBuyerTokens.remove(hashToken(token))
+                        }
+                        call.clearSessionCookie(BUYER_COOKIE_NAME)
+                        call.respond(HttpStatusCode.OK)
+                    }
+
+                    get("/veggie/state") {
+                        if (!call.checkBuyerAuth()) return@get
+                        val repo = resolveVeggieRepo() ?: return@get call.respond(BuyerVeggieRoundStateResponse())
+                        val activeRound = repo.getActiveOrLatestRound()
+                            ?.takeIf { it.status == VeggieRoundStatus.OPEN || it.status == VeggieRoundStatus.CLOSED }
+                        val sanitizedRound = activeRound?.copy(
+                            buyerPdfExportedAt = null,
+                            workerPdfExportedAt = null
+                        )
+                        if (activeRound == null || activeRound.status != VeggieRoundStatus.CLOSED) {
+                            call.respond(
+                                BuyerVeggieRoundStateResponse(
+                                    round = sanitizedRound,
+                                    items = emptyList(),
+                                    buyerOperationFeeCents = activeRound?.buyerOperationFeeCents ?: 0L,
+                                    ordersChangedSinceLastPdf = false
+                                )
+                            )
+                            return@get
+                        }
+
+                        val entries = repo.getEntriesForRound(activeRound.id)
+                        val productsById = repo.getAllVeggieProducts().associateBy { it.id }
+                        val unitTypesById = repo.getAllUnitTypes().associateBy { it.id }
+                        val settlementsByProductId = repo.getProductSettlementsForRound(activeRound.id).associateBy { it.veggieProductId }
+
+                        val rows = entries
+                            .filter { it.orderedQuantityScaled > 0L }
+                            .groupBy { it.veggieProductId }
+                            .mapNotNull { (productId, productEntries) ->
+                                val product = productsById[productId]
+                                if (product?.excludeFromBuyerPdf == true) return@mapNotNull null
+                                val firstEntry = productEntries.first()
+                                val totalOrderedScaled = productEntries.sumOf { it.orderedQuantityScaled }
+                                val settlement = settlementsByProductId[productId]
+                                val unitAbbrev = product?.unitTypeId?.let { unitTypesById[it]?.name }
+                                    ?: firstEntry.unitNameSnapshot
+                                val allowDecimals = product?.unitTypeId?.let { unitTypesById[it]?.allowDecimals } ?: true
+                                val deliveryAbbrev = product?.deliveryUnitTypeId?.let { unitTypesById[it]?.name }
+                                    ?: firstEntry.deliveryUnitNameSnapshot
+                                BuyerVeggieProductRowDto(
+                                    productId = productId,
+                                    name = product?.name ?: firstEntry.veggieNameSnapshot,
+                                    imageFileName = product?.imageFileName,
+                                    unitAbbreviation = unitAbbrev,
+                                    allowDecimals = allowDecimals,
+                                    deliveryUnitAbbreviation = deliveryAbbrev,
+                                    totalOrderedScaled = totalOrderedScaled,
+                                    marketUnitPriceCents = settlement?.marketUnitPriceCents,
+                                    totalSpentCents = settlement?.totalSpentCents
+                                )
+                            }
+                            .sortedBy { it.name.lowercase() }
+
+                        val ordersChangedSinceLastPdf = activeRound.isBuyerPortalPdfOutdated
+
+                        call.respond(
+                            BuyerVeggieRoundStateResponse(
+                                round = sanitizedRound,
+                                items = rows,
+                                buyerOperationFeeCents = activeRound.buyerOperationFeeCents,
+                                ordersChangedSinceLastPdf = ordersChangedSinceLastPdf
+                            )
+                        )
+                    }
+
+                    get("/veggie/round/buyer-pdf") {
+                        if (!call.checkBuyerAuth()) return@get
+                        val repo = resolveVeggieRepo() ?: return@get call.respond(HttpStatusCode.ServiceUnavailable)
+                        val activeRound = repo.getActiveOrLatestRound()
+                            ?.takeIf { it.status == VeggieRoundStatus.OPEN || it.status == VeggieRoundStatus.CLOSED }
+                        if (activeRound == null || activeRound.status != VeggieRoundStatus.CLOSED) {
+                            call.respond(HttpStatusCode.Conflict, "Buyer PDF is only available when the current round is closed")
+                            return@get
+                        }
+                        val entries = repo.getEntriesForRound(activeRound.id)
+                        val products = repo.getAllVeggieProducts()
+                        val language = call.parseLanguageParam()
+                        try {
+                            val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(activeRound, entries, language, products)
+                            repo.markBuyerPortalPdfExported(activeRound.id, System.currentTimeMillis())
+                            val isoWeek = IsoWeekUtils.fromEpochMillis(activeRound.openedAt)
+                            val filename = PdfFilenames.buyerShoppingListFilename(isoWeek.weekOfYear, isoWeek.isoYear, language)
+                            call.respondPdf(pdfBytes, filename)
+                        } catch (e: Exception) {
+                            AppLogger.error("LojinhaAdminServer", "Failed to generate buyer PDF: ${e.message}", e)
+                            call.respond(HttpStatusCode.InternalServerError, "Failed to generate buyer PDF")
+                        }
+                    }
+
+                    post("/veggie/round/draft-settlement") {
+                        if (!call.checkBuyerAuth()) return@post
+                        val repo = resolveVeggieRepo() ?: return@post call.respond(HttpStatusCode.ServiceUnavailable)
+                        val req = call.receive<BuyerSaveDraftSettlementRequest>()
+                        val activeRound = repo.getActiveOrLatestRound()
+                            ?.takeIf { it.status == VeggieRoundStatus.OPEN || it.status == VeggieRoundStatus.CLOSED }
+                        if (activeRound == null || activeRound.id != req.roundId || activeRound.status != VeggieRoundStatus.CLOSED) {
+                            call.respond(HttpStatusCode.Conflict, "Round is not closed; cannot save draft prices")
+                            return@post
+                        }
+                        val now = System.currentTimeMillis()
+                        val settlements = req.productSettlements.map { item ->
+                            VeggieRoundProductSettlement(
+                                roundId = activeRound.id,
+                                veggieProductId = item.productId,
+                                marketUnitPriceCents = item.marketUnitPriceCents?.coerceAtLeast(0L),
+                                totalSpentCents = item.totalSpentCents?.coerceAtLeast(0L),
+                                updatedAt = now
+                            )
+                        }
+                        val ok = repo.saveBuyerDraftPrices(
+                            roundId = activeRound.id,
+                            buyerOperationFeeCents = req.buyerOperationFeeCents.coerceAtLeast(0L),
+                            productSettlements = settlements
+                        )
+                        if (ok) {
+                            call.respond(HttpStatusCode.OK)
+                        } else {
+                            call.respond(HttpStatusCode.Conflict, "Failed to save draft prices")
+                        }
+                    }
+
+                    get("/events") {
+                        if (!call.checkBuyerAuth()) return@get
+                        call.streamDataChangeEvents()
+                    }
+                }
+
                 // 3. Serve static Wasm assets with HTTP Caching and Gzip Compression
                 suspend fun io.ktor.server.application.ApplicationCall.respondWasmAsset(
                     assetName: String,
@@ -1969,17 +2151,59 @@ class LojinhaAdminServer(
         )
     }
 
-    private fun ApplicationCall.hasValidSessionCookie(): Boolean {
-        val now = System.currentTimeMillis()
-        val adminToken = request.cookies[ADMIN_COOKIE_NAME]
-        if (!adminToken.isNullOrBlank()) {
-            val adminHash = hashToken(adminToken)
-            val expiry = activeTokens[adminHash]
-            if (expiry != null) {
-                if (now < expiry) return true
-                activeTokens.remove(adminHash)
-            }
+    private fun ApplicationCall.clearOtherRoleSessions(keepCookieName: String) {
+        if (keepCookieName != ADMIN_COOKIE_NAME) {
+            request.cookies[ADMIN_COOKIE_NAME]?.takeIf { it.isNotBlank() }?.let { activeTokens.remove(hashToken(it)) }
+            clearSessionCookie(ADMIN_COOKIE_NAME)
         }
+        if (keepCookieName != BUYER_COOKIE_NAME) {
+            request.cookies[BUYER_COOKIE_NAME]?.takeIf { it.isNotBlank() }?.let { activeBuyerTokens.remove(hashToken(it)) }
+            clearSessionCookie(BUYER_COOKIE_NAME)
+        }
+        if (keepCookieName != CUSTOMER_COOKIE_NAME) {
+            val custToken = request.cookies[CUSTOMER_COOKIE_NAME]
+            if (!custToken.isNullOrBlank() && activeCustomerTokens.remove(hashToken(custToken)) != null) {
+                savePersistedCustomerSessions()
+            }
+            clearSessionCookie(CUSTOMER_COOKIE_NAME)
+        }
+    }
+
+    private fun ApplicationCall.hasValidAdminSession(now: Long = System.currentTimeMillis()): Boolean {
+        val adminToken = request.cookies[ADMIN_COOKIE_NAME]
+        if (adminToken.isNullOrBlank()) return false
+        val adminHash = hashToken(adminToken)
+        val expiry = activeTokens[adminHash] ?: return false
+        if (now < expiry) return true
+        activeTokens.remove(adminHash)
+        return false
+    }
+
+    private suspend fun ApplicationCall.hasValidBuyerSession(now: Long = System.currentTimeMillis()): Boolean {
+        val buyerToken = request.cookies[BUYER_COOKIE_NAME]
+        if (buyerToken.isNullOrBlank()) return false
+        val buyerHash = hashToken(buyerToken)
+        val session = activeBuyerTokens[buyerHash] ?: return false
+        if (now >= session.expiryTimestamp) {
+            activeBuyerTokens.remove(buyerHash)
+            return false
+        }
+        val settings = settingsRepository.getSettings()
+        val defaultAdminHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin")
+        val hasCustomAdminHash = settings.adminPasswordHash.isNotBlank() &&
+            !safeEquals(settings.adminPasswordHash.lowercase(), defaultAdminHash)
+        val stillValid = (settings.buyerPasswordHash.isNotBlank() && safeEquals(session.credentialHash, settings.buyerPasswordHash)) ||
+            (hasCustomAdminHash && safeEquals(session.credentialHash, settings.adminPasswordHash))
+        if (!stillValid) {
+            activeBuyerTokens.remove(buyerHash)
+        }
+        return stillValid
+    }
+
+    private suspend fun ApplicationCall.hasValidSessionCookie(): Boolean {
+        val now = System.currentTimeMillis()
+        if (hasValidAdminSession(now)) return true
+        if (hasValidBuyerSession(now)) return true
         val customerToken = request.cookies[CUSTOMER_COOKIE_NAME]
         if (!customerToken.isNullOrBlank()) {
             val customerHash = hashToken(customerToken)
@@ -1995,15 +2219,8 @@ class LojinhaAdminServer(
 
     private suspend fun ApplicationCall.resolveSessionRole(): String? {
         val now = System.currentTimeMillis()
-        val adminToken = request.cookies[ADMIN_COOKIE_NAME]
-        if (!adminToken.isNullOrBlank()) {
-            val adminHash = hashToken(adminToken)
-            val expiry = activeTokens[adminHash]
-            if (expiry != null) {
-                if (now < expiry) return "ADMIN"
-                activeTokens.remove(adminHash)
-            }
-        }
+        if (hasValidAdminSession(now)) return "ADMIN"
+        if (hasValidBuyerSession(now)) return "BUYER"
         val customerToken = request.cookies[CUSTOMER_COOKIE_NAME]
         if (!customerToken.isNullOrBlank()) {
             val customerHash = hashToken(customerToken)
@@ -2023,20 +2240,14 @@ class LojinhaAdminServer(
     }
 
     private suspend fun ApplicationCall.checkAdminAuth(settingsRepository: SettingsRepository): Boolean {
-        val token = request.cookies[ADMIN_COOKIE_NAME]
-        if (!token.isNullOrBlank()) {
-            val tokenHash = hashToken(token)
-            val expiry = activeTokens[tokenHash]
-            if (expiry != null) {
-                if (System.currentTimeMillis() < expiry) {
-                    return true
-                } else {
-                    activeTokens.remove(tokenHash)
-                }
-            }
-        }
-
+        if (hasValidAdminSession()) return true
         respond(HttpStatusCode.Unauthorized, "Unauthorized access")
+        return false
+    }
+
+    private suspend fun ApplicationCall.checkBuyerAuth(): Boolean {
+        if (hasValidBuyerSession()) return true
+        respond(HttpStatusCode.Unauthorized, "Unauthorized buyer access")
         return false
     }
 

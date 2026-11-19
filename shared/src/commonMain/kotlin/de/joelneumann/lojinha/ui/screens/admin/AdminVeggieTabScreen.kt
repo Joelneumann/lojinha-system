@@ -173,7 +173,11 @@ fun AdminVeggieTabScreen(
                 AdminVeggieSubTab.ACTIVE_ROUND -> {
                     val currentRound = activeRound
                     if (currentRound != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.height(IntrinsicSize.Min)
+                        ) {
                             if (onExportBuyerPdf != null) {
                                 OutlinedButton(
                                     onClick = {
@@ -192,7 +196,55 @@ fun AdminVeggieTabScreen(
                                     Text(strings.exportBuyerPdfBtn, fontWeight = FontWeight.Bold, color = PrimaryNavy, fontSize = 12.sp)
                                     if (currentRound.buyerPdfExportedAt != null) {
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        ExportedBadgePill()
+                                        if (currentRound.isAdminBuyerPdfOutdated) {
+                                            AdminStatusBadge(
+                                                text = strings.buyerPdfOutdatedBadge,
+                                                type = AdminBadgeType.WARNING
+                                            )
+                                        } else {
+                                            ExportedBadgePill()
+                                        }
+                                    }
+                                }
+                                val buyerBadgeText = when {
+                                    currentRound.buyerPortalPdfExportedAt == null -> strings.adminBuyerPortalPdfNotExported
+                                    currentRound.isBuyerPortalPdfOutdated -> strings.adminBuyerPortalPdfOutdated
+                                    else -> strings.adminBuyerPortalPdfUpToDate
+                                }
+                                val (buyerBadgeBg, buyerBadgeBorder, buyerBadgeTextColor) = when {
+                                    currentRound.buyerPortalPdfExportedAt == null -> Triple(
+                                        PrimaryNavy.copy(alpha = 0.08f),
+                                        PrimaryNavy.copy(alpha = 0.25f),
+                                        PrimaryNavy
+                                    )
+                                    currentRound.isBuyerPortalPdfOutdated -> Triple(
+                                        ColorWarningAmber.copy(alpha = 0.14f),
+                                        ColorWarningAmber,
+                                        ColorWarningAmber
+                                    )
+                                    else -> Triple(
+                                        ColorSuccessEmerald.copy(alpha = 0.14f),
+                                        ColorSuccessEmerald,
+                                        ColorSuccessEmerald
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = buyerBadgeBg,
+                                    border = BorderStroke(1.dp, buyerBadgeBorder),
+                                    modifier = Modifier.fillMaxHeight()
+                                ) {
+                                    Box(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = buyerBadgeText,
+                                            fontWeight = FontWeight.Bold,
+                                            color = buyerBadgeTextColor,
+                                            fontSize = 12.sp,
+                                            maxLines = 1
+                                        )
                                     }
                                 }
                             }

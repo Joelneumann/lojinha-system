@@ -163,6 +163,15 @@ object DatabaseFactory {
         connection.execSQL("ALTER TABLE `veggie_products` ADD COLUMN `excludeFromBuyerPdf` INTEGER NOT NULL DEFAULT 0")
     }
 
+    internal val MIGRATION_20_21 = loggedMigration(20, 21, "adding buyerPasswordHash to settings") { connection ->
+        connection.execSQL("ALTER TABLE `settings` ADD COLUMN `buyerPasswordHash` TEXT NOT NULL DEFAULT ''")
+    }
+
+    internal val MIGRATION_21_22 = loggedMigration(21, 22, "adding buyerPortalPdfExportedAt and ordersUpdatedAt to veggie_order_rounds") { connection ->
+        connection.execSQL("ALTER TABLE `veggie_order_rounds` ADD COLUMN `buyerPortalPdfExportedAt` INTEGER DEFAULT NULL")
+        connection.execSQL("ALTER TABLE `veggie_order_rounds` ADD COLUMN `ordersUpdatedAt` INTEGER NOT NULL DEFAULT 0")
+    }
+
     fun defaultVeggieUnitTypes(timestamp: Long = System.currentTimeMillis()): List<VeggieUnitTypeEntity> = listOf(
         VeggieUnitTypeEntity(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true, updatedAt = timestamp),
         VeggieUnitTypeEntity(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true, updatedAt = timestamp),
@@ -230,7 +239,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")

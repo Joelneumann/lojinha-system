@@ -990,6 +990,43 @@ interface AppStrings {
     val csvExportSuccessTitle: String
     val csvExportSavedTo: String
     val csvExportFailed: String
+    // Buyer Portal & Buyer Password
+    val buyerPasswordTitle: String
+    val buyerPasswordSubtitle: String
+    val buyerPasswordPlaceholder: String
+    val buyerPasswordConfiguredBadge: String
+    val buyerPasswordNotConfiguredBadge: String
+    val clearBuyerPasswordBtn: String
+    val buyerPortalTitle: String
+    val buyerNoActiveRoundTitle: String
+    val buyerNoActiveRoundMessage: String
+    val buyerRoundOpenLockedTitle: String
+    val buyerRoundOpenLockedMessage: String
+    val buyerOrdersChangedSincePdfBanner: String
+    val buyerPdfOutdatedBadge: String
+    val buyerReopenExportedWarning: String
+    val buyerExportPdfBtn: String
+    val buyerSaveDraftBtn: String
+    val buyerDraftSavedSuccess: String
+    val buyerDraftSaveError: String
+    val buyerTotalOrderedLabel: String
+    val buyerMarketUnitPriceLabel: String
+    val buyerTotalSpentLabel: String
+    val buyerUnsavedChangesLogoutWarning: String
+    val buyerLogoutBtn: String
+    val buyerSearchPlaceholder: String
+    val buyerSubtotalLabel: String
+    val buyerGrandTotalLabel: String
+    fun settleMissingPricesWarning(count: Int): String
+    val buyerPdfUpToDateBadge: String
+    val buyerPdfNotExportedBadge: String
+    val adminBuyerPortalPdfNotExported: String
+    val adminBuyerPortalPdfUpToDate: String
+    val adminBuyerPortalPdfOutdated: String
+    val priceTotalMismatchBadge: String
+    val adminPriceMismatchEffectiveFromTotal: String
+    fun buyerPriceMismatchExpected(qty: String, unit: String, unitPrice: String, expectedTotal: String): String
+    fun effectiveUnitPriceShort(formattedPrice: String, unit: String): String
 }
 
 

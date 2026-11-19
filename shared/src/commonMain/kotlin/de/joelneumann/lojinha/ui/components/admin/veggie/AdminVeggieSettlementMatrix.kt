@@ -230,6 +230,20 @@ fun AdminVeggieSettlementMatrix(
 
     val horizontalScrollState = rememberScrollState()
     val verticalScrollState = rememberScrollState()
+    var showReopenExportedConfirmDialog by remember { mutableStateOf(false) }
+
+    if (showReopenExportedConfirmDialog) {
+        ConfirmationDialog(
+            title = strings.reopenRoundBtn,
+            message = strings.buyerReopenExportedWarning,
+            confirmText = strings.reopenRoundBtn,
+            onConfirm = {
+                showReopenExportedConfirmDialog = false
+                onReopenRound()
+            },
+            onDismiss = { showReopenExportedConfirmDialog = false }
+        )
+    }
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -395,7 +409,13 @@ fun AdminVeggieSettlementMatrix(
                                 }
 
                                 OutlinedButton(
-                                    onClick = onReopenRound,
+                                    onClick = {
+                                        if (round.buyerPortalPdfExportedAt != null || round.buyerPdfExportedAt != null) {
+                                            showReopenExportedConfirmDialog = true
+                                        } else {
+                                            onReopenRound()
+                                        }
+                                    },
                                     enabled = !isSaving,
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
@@ -942,7 +962,23 @@ fun AdminVeggieSettlementMatrix(
                                                         overflow = TextOverflow.Ellipsis
                                                     )
                                                 }
-                                                Spacer(modifier = Modifier.width(COL_MARKET_PRICE_WIDTH + COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER))
+                                                val savedCatalogPrice = products.firstOrNull { it.id == rowInfo.productId }?.estimatedPriceCents
+                                                Box(
+                                                    modifier = Modifier.width(COL_MARKET_PRICE_WIDTH).padding(horizontal = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (savedCatalogPrice != null && savedCatalogPrice > 0L) {
+                                                        Text(
+                                                            text = Formatting.formatBrl(savedCatalogPrice),
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = TextSecondaryMuted,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.width(COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER))
                                             }
 
                                             // Middle row: Delivered, Market Price input, Total Spent input, Effective Price
@@ -1022,36 +1058,77 @@ fun AdminVeggieSettlementMatrix(
                                                 }
 
                                                 // Effective Unit Price (Read-Only)
+                                                val draftPriceCents = draftMarketPrices[rowInfo.productId]
+                                                    ?.takeIf { it.isNotBlank() }
+                                                    ?.let { de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel.parseBrlInputToCents(it) }
+                                                val draftSpentCents = draftTotalSpent[rowInfo.productId]
+                                                    ?.takeIf { it.isNotBlank() }
+                                                    ?.let { de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel.parseBrlInputToCents(it) }
+                                                val priceMismatch = VeggieSettlementCalculator.detectPriceTotalMismatch(
+                                                    unitPriceCents = draftPriceCents,
+                                                    totalSpentCents = draftSpentCents,
+                                                    totalQtyScaled = totalDeliveredScaled
+                                                )
                                                 Box(
                                                     modifier = Modifier.width(COL_EFFECTIVE_PRICE_WIDTH).padding(horizontal = 4.dp),
                                                     contentAlignment = Alignment.CenterEnd
                                                 ) {
-                                                    Text(
-                                                        text = if (effectiveUnitPrice > 0L) {
-                                                            "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.deliveryUnitName}"
-                                                        } else "—",
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (effectiveUnitPrice > 0L) ColorSuccessEmerald else TextSecondaryMuted,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        if (priceMismatch != null) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Warning,
+                                                                contentDescription = strings.adminPriceMismatchEffectiveFromTotal,
+                                                                tint = ColorWarningAmber,
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                        }
+                                                        Text(
+                                                            text = if (effectiveUnitPrice > 0L) {
+                                                                "${Formatting.formatBrl(effectiveUnitPrice)}/${rowInfo.deliveryUnitName}"
+                                                            } else "—",
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = when {
+                                                                priceMismatch != null -> ColorWarningAmber
+                                                                effectiveUnitPrice > 0L -> ColorSuccessEmerald
+                                                                else -> TextSecondaryMuted
+                                                            },
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
                                                 }
 
                                                 Spacer(modifier = Modifier.width(COL_SCROLLBAR_GUTTER))
                                             }
 
-                                            // Bottom spacer matching customer cell's price line height
+                                            // Bottom row: mismatch warning label if Total Spent overrides Unit Price, otherwise spacer
+                                            val rowDraftPrice = draftMarketPrices[rowInfo.productId]
+                                                ?.takeIf { it.isNotBlank() }
+                                                ?.let { de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel.parseBrlInputToCents(it) }
+                                            val rowDraftSpent = draftTotalSpent[rowInfo.productId]
+                                                ?.takeIf { it.isNotBlank() }
+                                                ?.let { de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel.parseBrlInputToCents(it) }
+                                            val rowMismatch = VeggieSettlementCalculator.detectPriceTotalMismatch(
+                                                unitPriceCents = rowDraftPrice,
+                                                totalSpentCents = rowDraftSpent,
+                                                totalQtyScaled = totalDeliveredScaled
+                                            )
                                             Row(
-                                                modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH),
-                                                verticalAlignment = Alignment.CenterVertically
+                                                modifier = Modifier.width(OVERVIEW_TOTAL_WIDTH).padding(end = COL_SCROLLBAR_GUTTER + 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.End
                                             ) {
                                                 Text(
-                                                    text = " ",
-                                                    fontSize = 10.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = androidx.compose.ui.graphics.Color.Transparent,
-                                                    maxLines = 1
+                                                    text = if (rowMismatch != null) strings.adminPriceMismatchEffectiveFromTotal else " ",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = if (rowMismatch != null) ColorWarningAmber else androidx.compose.ui.graphics.Color.Transparent,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
                                         }
@@ -1282,16 +1359,38 @@ fun AdminVeggieSettlementMatrix(
         val totalAllCharged = (livePreview?.totalMarketProductsSpentCents ?: 0L) + (livePreview?.combinedFeeCents ?: 0L)
         val participantCount = livePreview?.customerSummaries?.size ?: 0
         val isSettledCorrection = round.status == VeggieRoundStatus.SETTLED
+        val missingPriceCount = roundProductRows.count { rowInfo ->
+            val deliveredTotal = rowInfo.entriesByUserId.values.sumOf { entry ->
+                val draftText = draftActualQuantities[entry.id]
+                val parsed = if (draftText != null) {
+                    VeggieQuantityScaling.parseQuantityScaled(draftText, rowInfo.deliveryAllowDecimals)
+                } else null
+                parsed ?: entry.deliveredQuantityScaled
+            }
+            deliveredTotal > 0L &&
+                draftMarketPrices[rowInfo.productId].isNullOrBlank() &&
+                draftTotalSpent[rowInfo.productId].isNullOrBlank()
+        }
+        val baseMessage = if (isSettledCorrection) {
+            strings.confirmUpdateSettledRoundMsg(Formatting.formatBrl(totalAllCharged))
+        } else {
+            strings.confirmExecuteChargesMsg(participantCount, Formatting.formatBrl(totalAllCharged))
+        }
+        val fullMessage = if (missingPriceCount > 0) {
+            "${strings.settleMissingPricesWarning(missingPriceCount)}\n\n$baseMessage"
+        } else {
+            baseMessage
+        }
         ConfirmationDialog(
             title = if (isSettledCorrection) strings.updateSettledRoundBtn else strings.settleAndChargeBtn,
-            message = if (isSettledCorrection) {
-                strings.confirmUpdateSettledRoundMsg(Formatting.formatBrl(totalAllCharged))
-            } else {
-                strings.confirmExecuteChargesMsg(participantCount, Formatting.formatBrl(totalAllCharged))
-            },
+            message = fullMessage,
             confirmText = strings.confirm,
             cancelText = strings.cancel,
-            confirmButtonColor = if (isSettledCorrection) AccentNavy else ColorSuccessEmerald,
+            confirmButtonColor = when {
+                missingPriceCount > 0 -> ColorWarningAmber
+                isSettledCorrection -> AccentNavy
+                else -> ColorSuccessEmerald
+            },
             onConfirm = {
                 showConfirmSettle = false
                 onExecuteSettlement()

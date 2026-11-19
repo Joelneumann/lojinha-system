@@ -107,6 +107,12 @@ interface VeggieOrderDao {
     @Query("UPDATE veggie_order_rounds SET buyerPdfExportedAt = :timestamp, updatedAt = :updatedAt WHERE id = :roundId")
     suspend fun markBuyerPdfExported(roundId: String, timestamp: Long, updatedAt: Long)
 
+    @Query("UPDATE veggie_order_rounds SET buyerPortalPdfExportedAt = :timestamp, updatedAt = :updatedAt WHERE id = :roundId")
+    suspend fun markBuyerPortalPdfExported(roundId: String, timestamp: Long, updatedAt: Long)
+
+    @Query("UPDATE veggie_order_rounds SET ordersUpdatedAt = :timestamp, updatedAt = :updatedAt WHERE id = :roundId")
+    suspend fun markOrdersUpdated(roundId: String, timestamp: Long, updatedAt: Long)
+
     @Query("UPDATE veggie_order_rounds SET workerPdfExportedAt = :timestamp, updatedAt = :updatedAt WHERE id = :roundId")
     suspend fun markWorkerPdfExported(roundId: String, timestamp: Long, updatedAt: Long)
 

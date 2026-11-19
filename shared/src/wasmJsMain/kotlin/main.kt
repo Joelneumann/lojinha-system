@@ -22,11 +22,15 @@ import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
+import de.joelneumann.lojinha.ui.screens.BuyerVeggiePortalScreen
 import de.joelneumann.lojinha.ui.screens.CustomerNetworkPortalScreen
 import de.joelneumann.lojinha.ui.screens.admin.AdminScreen
 import de.joelneumann.lojinha.ui.theme.LojinhaTheme
 import de.joelneumann.lojinha.ui.theme.WEB_UI_SCALE_FACTOR
 import de.joelneumann.lojinha.ui.utils.PdfFilenames
+import de.joelneumann.lojinha.ui.utils.setBrowserBeforeUnloadWarning
+import de.joelneumann.lojinha.ui.viewmodel.BuyerVeggiePriceDraft
+import de.joelneumann.lojinha.ui.viewmodel.BuyerVeggieViewModel
 import de.joelneumann.lojinha.ui.viewmodel.CustomerVeggieViewModel
 import de.joelneumann.lojinha.ui.viewmodel.TransactionHistoryViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.*
@@ -39,6 +43,7 @@ import kotlinx.serialization.json.Json
 
 private enum class WebPortalScreen {
     CUSTOMER_PORTAL,
+    BUYER_PORTAL,
     ADMIN_PANEL
 }
 
@@ -64,6 +69,8 @@ fun main() {
         val customerNetworkClient = remember { CustomerNetworkClient() }
         val customerUserRepository = remember { HttpCustomerUserRepository(customerNetworkClient) }
         val customerTransactionRepository = remember { HttpCustomerTransactionRepository(customerNetworkClient) }
+        val buyerNetworkClient = remember { BuyerNetworkClient() }
+        val buyerVeggieRepository = remember { HttpBuyerVeggieRepository(buyerNetworkClient) }
         val defaultSettings = remember { SystemSettings() }
 
         // Session restoration on startup (Admin or Customer); redirect to native login page if unauthenticated
@@ -87,6 +94,10 @@ fun main() {
                     } else {
                         jsRedirectToLogin(false)
                     }
+                }
+                "BUYER" -> {
+                    currentScreen = WebPortalScreen.BUYER_PORTAL
+                    isCheckingSession = false
                 }
                 else -> jsRedirectToLogin(false)
             }
@@ -233,6 +244,72 @@ fun main() {
                                     }
                                 )
                             }
+                        }
+
+                        WebPortalScreen.BUYER_PORTAL -> {
+                            val buyerViewModel = remember {
+                                BuyerVeggieViewModel(
+                                    repository = buyerVeggieRepository,
+                                    onLoadDraft = { roundId -> loadBuyerVeggieDraft(roundId) },
+                                    onSaveDraft = { roundId, draft -> saveBuyerVeggieDraft(roundId, draft) },
+                                    onClearDraft = { roundId -> clearBuyerVeggieDraft(roundId) }
+                                )
+                            }
+                            LaunchedEffect(buyerNetworkClient) {
+                                buyerNetworkClient.startRealtimeSync(this)
+                                launch {
+                                    buyerNetworkClient.onUnauthorized.collect {
+                                        setBrowserBeforeUnloadWarning(false)
+                                        jsRedirectToLogin(true)
+                                    }
+                                }
+                                launch {
+                                    KioskConnectionMonitor.onReconnected.collect {
+                                        buyerViewModel.loadState(forceSyncDrafts = false)
+                                    }
+                                }
+                            }
+                            DisposableEffect(buyerNetworkClient) {
+                                onDispose {
+                                    buyerNetworkClient.stopRealtimeSync()
+                                    buyerViewModel.viewModelScope.cancel()
+                                }
+                            }
+                            BuyerVeggiePortalScreen(
+                                viewModel = buyerViewModel,
+                                onExportPdf = { lang ->
+                                    if (buyerViewModel.isExportingPdf.value) return@BuyerVeggiePortalScreen
+                                    buyerViewModel.setIsExportingPdf(true)
+                                    val activeRound = buyerViewModel.roundState.value?.round
+                                    val isoWeek = de.joelneumann.lojinha.ui.utils.IsoWeekUtils.fromEpochMillis(
+                                        activeRound?.openedAt ?: de.joelneumann.lojinha.ui.utils.currentTimeMillis()
+                                    )
+                                    val fallback = PdfFilenames.buyerShoppingListFilename(isoWeek.weekOfYear, isoWeek.isoYear, lang)
+                                    jsDownloadFile(
+                                        url = buyerNetworkClient.resolveUrl("/api/buyer/veggie/round/buyer-pdf?lang=${lang.code}"),
+                                        fallbackFilename = fallback,
+                                        onSuccess = {
+                                            buyerViewModel.setIsExportingPdf(false)
+                                            buyerViewModel.loadState(forceSyncDrafts = false)
+                                        },
+                                        onError = { err ->
+                                            buyerViewModel.setIsExportingPdf(false)
+                                            if (err.contains("401")) {
+                                                buyerNetworkClient.notifyUnauthorized()
+                                            } else {
+                                                buyerViewModel.reportError(err)
+                                            }
+                                        }
+                                    )
+                                },
+                                onUnsavedChangesChanged = { hasUnsaved ->
+                                    setBrowserBeforeUnloadWarning(hasUnsaved)
+                                },
+                                onLoggedOut = {
+                                    setBrowserBeforeUnloadWarning(false)
+                                    jsRedirectToLogin(false)
+                                }
+                            )
                         }
 
                         WebPortalScreen.ADMIN_PANEL -> {
@@ -703,5 +780,29 @@ private fun saveAdminVeggieMatrixDraft(roundId: String, draft: AdminVeggieMatrix
 private fun clearAdminVeggieMatrixDraft(roundId: String) {
     try {
         jsRemoveLocalItem(adminMatrixDraftKey(roundId))
+    } catch (_: Exception) {}
+}
+
+private fun buyerVeggieDraftKey(roundId: String): String =
+    "lojinha_buyer_veggie_draft_$roundId"
+
+private fun loadBuyerVeggieDraft(roundId: String): BuyerVeggiePriceDraft? {
+    return try {
+        val raw = jsGetLocalItem(buyerVeggieDraftKey(roundId)) ?: return null
+        draftJson.decodeFromString<BuyerVeggiePriceDraft>(raw)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun saveBuyerVeggieDraft(roundId: String, draft: BuyerVeggiePriceDraft) {
+    try {
+        jsSetLocalItem(buyerVeggieDraftKey(roundId), draftJson.encodeToString(draft))
+    } catch (_: Exception) {}
+}
+
+private fun clearBuyerVeggieDraft(roundId: String) {
+    try {
+        jsRemoveLocalItem(buyerVeggieDraftKey(roundId))
     } catch (_: Exception) {}
 }

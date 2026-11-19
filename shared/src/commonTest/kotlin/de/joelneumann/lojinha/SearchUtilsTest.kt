@@ -346,6 +346,8 @@ class SearchUtilsTest {
         assertEquals("joao silva", "JOAO SILVA".normalizeUserName())
         assertTrue("Admin".isReservedAdminName())
         assertTrue("  ädmin  ".isReservedAdminName())
+        assertTrue("Buyer".isReservedAdminName())
+        assertTrue("  büyér  ".isReservedAdminName())
         assertFalse("Alice".isReservedAdminName())
     }
 

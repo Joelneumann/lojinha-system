@@ -47,11 +47,19 @@ data class VeggieOrderRound(
     val transportFeeCents: Long = 0L,
     val transporterUserId: String? = null,
     val buyerPdfExportedAt: Long? = null,
+    val buyerPortalPdfExportedAt: Long? = null,
     val workerPdfExportedAt: Long? = null,
+    val ordersUpdatedAt: Long = 0L,
     val updatedAt: Long = 0L
 ) {
     val combinedFeeCents: Long
         get() = buyerOperationFeeCents.coerceAtLeast(0L) + transportFeeCents.coerceAtLeast(0L)
+
+    val isAdminBuyerPdfOutdated: Boolean
+        get() = buyerPdfExportedAt != null && ordersUpdatedAt > buyerPdfExportedAt
+
+    val isBuyerPortalPdfOutdated: Boolean
+        get() = buyerPortalPdfExportedAt != null && ordersUpdatedAt > buyerPortalPdfExportedAt
 }
 
 @Serializable

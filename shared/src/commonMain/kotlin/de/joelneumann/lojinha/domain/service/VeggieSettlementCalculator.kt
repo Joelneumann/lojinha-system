@@ -17,6 +17,12 @@ data class VeggieCustomerSettlementSummary(
 )
 
 @Serializable
+data class PriceTotalMismatch(
+    val expectedTotalCents: Long,
+    val effectiveUnitPriceCents: Long
+)
+
+@Serializable
 data class VeggieRoundSettlementResult(
     val updatedEntries: List<VeggieOrderEntry>,
     val updatedProductSettlements: List<VeggieRoundProductSettlement>,
@@ -304,5 +310,29 @@ object VeggieSettlementCalculator {
             }
         }
         return deltas
+    }
+
+    fun calculateEffectiveUnitPriceCents(totalSpentCents: Long, totalQtyScaled: Long): Long {
+        if (totalSpentCents <= 0L || totalQtyScaled <= 0L) return 0L
+        return (totalSpentCents * VEGGIE_QTY_SCALE + totalQtyScaled / 2L) / totalQtyScaled
+    }
+
+    /**
+     * Detects when both [unitPriceCents] and [totalSpentCents] are entered for [totalQtyScaled] > 0
+     * and differ by more than [toleranceCents] (default 1 cent for rounding).
+     */
+    fun detectPriceTotalMismatch(
+        unitPriceCents: Long?,
+        totalSpentCents: Long?,
+        totalQtyScaled: Long,
+        toleranceCents: Long = 1L
+    ): PriceTotalMismatch? {
+        if (unitPriceCents == null || totalSpentCents == null || totalQtyScaled <= 0L) return null
+        val expectedTotal = calculateTotalSpentFromUnitPrice(unitPriceCents, totalQtyScaled)
+        if (kotlin.math.abs(totalSpentCents - expectedTotal) <= toleranceCents) return null
+        return PriceTotalMismatch(
+            expectedTotalCents = expectedTotal,
+            effectiveUnitPriceCents = calculateEffectiveUnitPriceCents(totalSpentCents, totalQtyScaled)
+        )
     }
 }

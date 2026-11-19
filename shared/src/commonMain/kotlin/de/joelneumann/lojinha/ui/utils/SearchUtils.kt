@@ -63,10 +63,10 @@ fun String.normalizeUserName(): String =
     this.trim().replace(Regex("\\s+"), " ").removeAccents().lowercase()
 
 /**
- * Returns true if the name collides with the reserved "Admin" login identifier.
+ * Returns true if the name collides with a reserved system login identifier ("admin" or "buyer").
  */
 fun String.isReservedAdminName(): Boolean =
-    normalizeUserName() == "admin"
+    normalizeUserName().let { it == "admin" || it == "buyer" }
 
 /**
  * Returns true if this string contains [query], ignoring diacritics/accents (e.g. 'a' matches 'á', 'Â', etc.)

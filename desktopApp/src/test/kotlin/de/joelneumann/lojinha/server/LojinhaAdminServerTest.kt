@@ -242,6 +242,12 @@ class LojinhaAdminServerTest {
             fakeVeggieRounds[idx] = fakeVeggieRounds[idx].copy(buyerPdfExportedAt = timestamp)
             return true
         }
+        override suspend fun markBuyerPortalPdfExported(roundId: String, timestamp: Long): Boolean {
+            val idx = fakeVeggieRounds.indexOfFirst { it.id == roundId }
+            if (idx < 0) return false
+            fakeVeggieRounds[idx] = fakeVeggieRounds[idx].copy(buyerPortalPdfExportedAt = timestamp)
+            return true
+        }
         override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean {
             val idx = fakeVeggieRounds.indexOfFirst { it.id == roundId }
             if (idx < 0) return false
@@ -300,7 +306,18 @@ class LojinhaAdminServerTest {
             transporterUserId: String?,
             productSettlements: List<VeggieRoundProductSettlement>,
             actualQuantitiesByEntryId: Map<String, Long>
-        ): Boolean = true
+        ): Boolean {
+            val idx = fakeVeggieRounds.indexOfFirst { it.id == roundId }
+            if (idx < 0) return false
+            fakeVeggieRounds[idx] = fakeVeggieRounds[idx].copy(
+                buyerOperationFeeCents = buyerOperationFeeCents,
+                transportFeeCents = transportFeeCents,
+                transporterUserId = transporterUserId
+            )
+            fakeVeggieSettlements.removeAll { it.roundId == roundId }
+            fakeVeggieSettlements.addAll(productSettlements)
+            return true
+        }
         override suspend fun executeRoundSettlement(
             roundId: String,
             buyerOperationFeeCents: Long,
@@ -1678,6 +1695,360 @@ class LojinhaAdminServerTest {
 
         val veggieOrdersCsv = getCsv("/api/admin/export/veggie-orders.csv")
         assertTrue(veggieOrdersCsv.contains("csv-vr-1"))
+    }
+
+    @Test
+    fun testBuyerLoginWithPasswordAndAdminBypass() {
+        var buyerSettings = SystemSettings(
+            adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("adminSecret99"),
+            buyerPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("buyerSecret42")
+        )
+        val buyerSettingsRepo = object : SettingsRepository {
+            override suspend fun getSettings(): SystemSettings = buyerSettings
+            override fun getSettingsFlow(): Flow<SystemSettings> = flowOf(buyerSettings)
+            override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {
+                buyerSettings = settings
+            }
+        }
+        val isolatedPort = 18088
+        val isolatedServer = LojinhaAdminServer(
+            productRepository = fakeProductRepo,
+            userRepository = fakeUserRepo,
+            transactionRepository = fakeTransactionRepo,
+            billingListRepository = fakeBillingListRepo,
+            settingsRepository = buyerSettingsRepo,
+            veggieOrderRepository = fakeVeggieRepo,
+            port = isolatedPort
+        )
+        isolatedServer.start()
+        Thread.sleep(300)
+        try {
+            // 1. Wrong password is rejected
+            val badRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"buyer","password":"wrong"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(401, badRes.statusCode())
+
+            // 2. Buyer password succeeds and sets lojinha_buyer_session cookie
+            val buyerRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"buyer","password":"buyerSecret42"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, buyerRes.statusCode())
+            val loginBody = testJson.decodeFromString<UnifiedLoginResponse>(buyerRes.body())
+            assertTrue(loginBody.success)
+            assertEquals("BUYER", loginBody.role)
+            val buyerCookie = buyerRes.headers().allValues("Set-Cookie")
+                .firstOrNull { it.startsWith("lojinha_buyer_session=") }
+                ?.substringBefore(";")
+            assertNotNull(buyerCookie)
+
+            // 3. /api/session reports BUYER
+            val sessionRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/session"))
+                    .header("Cookie", buyerCookie!!)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, sessionRes.statusCode())
+            assertEquals("BUYER", testJson.decodeFromString<SessionStatusResponse>(sessionRes.body()).role)
+
+            // 4. Buyer cannot access admin or customer endpoints
+            val adminForbidden = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/admin/users"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(401, adminForbidden.statusCode())
+
+            val customerForbidden = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/customer/me"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(401, customerForbidden.statusCode())
+
+            // 5. Admin password bypasses Buyer password
+            val adminBypassRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"buyer","password":"adminSecret99"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, adminBypassRes.statusCode())
+            assertEquals("BUYER", testJson.decodeFromString<UnifiedLoginResponse>(adminBypassRes.body()).role)
+
+            // 5b. Rotating or disabling buyer password immediately revokes active buyer token
+            buyerSettings = buyerSettings.copy(buyerPasswordHash = "")
+            val revokedSession = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/session"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertNull(testJson.decodeFromString<SessionStatusResponse>(revokedSession.body()).role)
+
+            val revokedApi = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/buyer/veggie/state"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(401, revokedApi.statusCode())
+
+            // 6. Logout clears BUYER session
+            val adminBuyerCookie = adminBypassRes.headers().allValues("Set-Cookie")
+                .firstOrNull { it.startsWith("lojinha_buyer_session=") }
+                ?.substringBefore(";")
+            assertNotNull(adminBuyerCookie)
+            val logoutRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/buyer/logout"))
+                    .header("Cookie", adminBuyerCookie!!)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, logoutRes.statusCode())
+
+            val afterLogoutSession = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/session"))
+                    .header("Cookie", adminBuyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertNull(testJson.decodeFromString<SessionStatusResponse>(afterLogoutSession.body()).role)
+        } finally {
+            isolatedServer.stop()
+            Thread.sleep(200)
+        }
+    }
+
+    @Test
+    fun testBuyerVeggieRoundLifecycleAndReopenGuard() {
+        var buyerSettings = SystemSettings(
+            adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("adminSecret99"),
+            buyerPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("buyerSecret42")
+        )
+        val buyerSettingsRepo = object : SettingsRepository {
+            override suspend fun getSettings(): SystemSettings = buyerSettings
+            override fun getSettingsFlow(): Flow<SystemSettings> = flowOf(buyerSettings)
+            override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {
+                buyerSettings = settings
+            }
+        }
+        val isolatedPort = 18089
+        val isolatedServer = LojinhaAdminServer(
+            productRepository = fakeProductRepo,
+            userRepository = fakeUserRepo,
+            transactionRepository = fakeTransactionRepo,
+            billingListRepository = fakeBillingListRepo,
+            settingsRepository = buyerSettingsRepo,
+            veggieOrderRepository = fakeVeggieRepo,
+            port = isolatedPort
+        )
+        isolatedServer.start()
+        Thread.sleep(300)
+        try {
+            fakeVeggieProducts.clear()
+            fakeVeggieProducts.add(
+                VeggieProduct(
+                    id = "vp-buyer-1",
+                    name = "Buyer Tomatoes",
+                    unitTypeId = "unit-kg",
+                    estimatedPriceCents = 800L,
+                    excludeFromBuyerPdf = false
+                )
+            )
+            fakeVeggieProducts.add(
+                VeggieProduct(
+                    id = "vp-buyer-excluded",
+                    name = "Local Honey",
+                    unitTypeId = "unit-piece",
+                    estimatedPriceCents = 1500L,
+                    excludeFromBuyerPdf = true
+                )
+            )
+            fakeVeggieRounds.clear()
+            fakeVeggieEntries.clear()
+            fakeVeggieSettlements.clear()
+
+            val round = VeggieOrderRound(
+                id = "vr-buyer-1",
+                openedAt = 1000L,
+                status = VeggieRoundStatus.OPEN,
+                buyerOperationFeeCents = 500L,
+                transportFeeCents = 1200L,
+                transporterUserId = "u1",
+                updatedAt = 1000L
+            )
+            fakeVeggieRounds.add(round)
+            fakeVeggieEntries.add(
+                VeggieOrderEntry(
+                    id = "ve-buyer-1",
+                    roundId = round.id,
+                    userId = "u1",
+                    userNameSnapshot = "Alice",
+                    veggieProductId = "vp-buyer-1",
+                    veggieNameSnapshot = "Buyer Tomatoes",
+                    unitNameSnapshot = "kg",
+                    allowDecimalsSnapshot = true,
+                    orderedQuantityScaled = 2500L,
+                    updatedAt = 1000L
+                )
+            )
+            fakeVeggieEntries.add(
+                VeggieOrderEntry(
+                    id = "ve-buyer-2",
+                    roundId = round.id,
+                    userId = "u1",
+                    userNameSnapshot = "Alice",
+                    veggieProductId = "vp-buyer-excluded",
+                    veggieNameSnapshot = "Local Honey",
+                    unitNameSnapshot = "Unit",
+                    allowDecimalsSnapshot = false,
+                    orderedQuantityScaled = 1000L,
+                    updatedAt = 1000L
+                )
+            )
+
+            val loginRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"buyer","password":"buyerSecret42"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            val buyerCookie = loginRes.headers().allValues("Set-Cookie")
+                .first { it.startsWith("lojinha_buyer_session=") }
+                .substringBefore(";")
+
+            // 1. While OPEN, state has empty items and PDF / draft save return 409 Conflict
+            val openStateRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/buyer/veggie/state"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, openStateRes.statusCode())
+            val openState = testJson.decodeFromString<BuyerVeggieRoundStateResponse>(openStateRes.body())
+            assertEquals(VeggieRoundStatus.OPEN, openState.round?.status)
+            assertTrue(openState.items.isEmpty())
+
+            val openPdfRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/buyer/veggie/round/buyer-pdf"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofByteArray()
+            )
+            assertEquals(409, openPdfRes.statusCode())
+
+            // 2. Close round -> Buyer sees aggregated items (excluding excludeFromBuyerPdf), exports PDF, saves draft
+            fakeVeggieRounds[0] = round.copy(status = VeggieRoundStatus.CLOSED, closedAt = 2000L, updatedAt = 2000L)
+
+            val closedStateRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/buyer/veggie/state"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, closedStateRes.statusCode())
+            val closedState = testJson.decodeFromString<BuyerVeggieRoundStateResponse>(closedStateRes.body())
+            assertEquals(1, closedState.items.size)
+            assertEquals("vp-buyer-1", closedState.items.first().productId)
+            assertEquals(2500L, closedState.items.first().totalOrderedScaled)
+            assertNull(closedState.items.first().marketUnitPriceCents)
+
+            val closedPdfRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/buyer/veggie/round/buyer-pdf"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofByteArray()
+            )
+            assertEquals(200, closedPdfRes.statusCode())
+            assertTrue(closedPdfRes.body().isNotEmpty())
+            assertNotNull(fakeVeggieRounds[0].buyerPortalPdfExportedAt)
+            assertNull(fakeVeggieRounds[0].buyerPdfExportedAt)
+
+            val saveReqJson = testJson.encodeToString(
+                BuyerSaveDraftSettlementRequest.serializer(),
+                BuyerSaveDraftSettlementRequest(
+                    roundId = round.id,
+                    buyerOperationFeeCents = 750L,
+                    productSettlements = listOf(
+                        BuyerProductPriceDraft(
+                            productId = "vp-buyer-1",
+                            marketUnitPriceCents = 900L,
+                            totalSpentCents = 2250L
+                        )
+                    )
+                )
+            )
+            val saveRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/buyer/veggie/round/draft-settlement"))
+                    .header("Cookie", buyerCookie)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(saveReqJson))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, saveRes.statusCode())
+            // Transport fee & transporter preserved, buyer fee updated
+            assertEquals(750L, fakeVeggieRounds[0].buyerOperationFeeCents)
+            assertEquals(1200L, fakeVeggieRounds[0].transportFeeCents)
+            assertEquals("u1", fakeVeggieRounds[0].transporterUserId)
+
+            // 3. Reopen round -> Buyer is locked out again (409 on draft save, empty items on state)
+            fakeVeggieRounds[0] = fakeVeggieRounds[0].copy(status = VeggieRoundStatus.OPEN, closedAt = null, updatedAt = 3000L)
+            val reopenedSaveRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/buyer/veggie/round/draft-settlement"))
+                    .header("Cookie", buyerCookie)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(saveReqJson))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(409, reopenedSaveRes.statusCode())
+        } finally {
+            isolatedServer.stop()
+            Thread.sleep(200)
+        }
     }
 }
 

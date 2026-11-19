@@ -31,7 +31,8 @@ data class SystemSettings(
     val veggieAutoOpenDayOfWeek: Int = 1,
     val veggieAutoOpenTime: String = "08:00",
     val defaultVeggieBuyerFeeCents: Long = 0L,
-    val defaultVeggieTransportFeeCents: Long = 0L
+    val defaultVeggieTransportFeeCents: Long = 0L,
+    val buyerPasswordHash: String = ""
 ) {
     fun exchangeRateFor(currency: SecondaryCurrency): Double {
         return when (currency) {

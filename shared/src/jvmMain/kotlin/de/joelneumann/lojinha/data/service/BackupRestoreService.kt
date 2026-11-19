@@ -657,6 +657,7 @@ class BackupRestoreService(
                     append(if (settingsColumns.contains("veggieautoopentime")) ", veggieAutoOpenTime" else ", '08:00'")
                     append(if (settingsColumns.contains("defaultveggiebuyerfeecents")) ", defaultVeggieBuyerFeeCents" else ", 0")
                     append(if (settingsColumns.contains("defaultveggietransportfeecents")) ", defaultVeggieTransportFeeCents" else ", 0")
+                    append(if (settingsColumns.contains("buyerpasswordhash")) ", buyerPasswordHash" else ", ''")
                     append(" FROM settings LIMIT 1")
                 }
 
@@ -695,7 +696,8 @@ class BackupRestoreService(
                             veggieAutoOpenDayOfWeek = if (stmt.isNull(25)) 1 else stmt.getLong(25).toInt(),
                             veggieAutoOpenTime = if (stmt.isNull(26)) "08:00" else stmt.getText(26),
                             defaultVeggieBuyerFeeCents = if (stmt.isNull(27)) 0L else stmt.getLong(27),
-                            defaultVeggieTransportFeeCents = if (stmt.isNull(28)) 0L else stmt.getLong(28)
+                            defaultVeggieTransportFeeCents = if (stmt.isNull(28)) 0L else stmt.getLong(28),
+                            buyerPasswordHash = if (stmt.isNull(29)) "" else stmt.getText(29)
                         )
                     }
                 } finally {
@@ -917,12 +919,17 @@ class BackupRestoreService(
             if (tableNames.contains("veggie_order_rounds")) {
                 val roundCols = getTableColumns(connection, "veggie_order_rounds")
                 val hasBuyerPdf = roundCols.contains("buyerpdfexportedat")
+                val hasBuyerPortalPdf = roundCols.contains("buyerportalpdfexportedat")
                 val hasWorkerPdf = roundCols.contains("workerpdfexportedat")
+                val hasOrdersUpdatedAt = roundCols.contains("ordersupdatedat")
                 val stmt = connection.prepare(
                     "SELECT id, openedAt, closedAt, settledAt, status, buyerOperationFeeCents, transportFeeCents, transporterUserId, " +
                         (if (hasBuyerPdf) "buyerPdfExportedAt" else "NULL") + ", " +
                         (if (hasWorkerPdf) "workerPdfExportedAt" else "NULL") +
-                        ", updatedAt FROM veggie_order_rounds"
+                        ", updatedAt, " +
+                        (if (hasBuyerPortalPdf) "buyerPortalPdfExportedAt" else "NULL") + ", " +
+                        (if (hasOrdersUpdatedAt) "ordersUpdatedAt" else "0") +
+                        " FROM veggie_order_rounds"
                 )
                 try {
                     while (stmt.step()) {
@@ -938,7 +945,9 @@ class BackupRestoreService(
                                 transporterUserId = if (stmt.isNull(7)) null else stmt.getText(7),
                                 buyerPdfExportedAt = if (stmt.isNull(8)) null else stmt.getLong(8),
                                 workerPdfExportedAt = if (stmt.isNull(9)) null else stmt.getLong(9),
-                                updatedAt = stmt.getLong(10)
+                                updatedAt = stmt.getLong(10),
+                                buyerPortalPdfExportedAt = if (stmt.isNull(11)) null else stmt.getLong(11),
+                                ordersUpdatedAt = if (stmt.isNull(12)) 0L else stmt.getLong(12)
                             )
                         )
                     }
@@ -1108,9 +1117,15 @@ class BackupRestoreService(
                         } else {
                             backupSettings.adminPasswordHash
                         }
+                        val finalBuyerPassword = if (preserveCurrentAdminPassword && currentSettings != null) {
+                            currentSettings.buyerPasswordHash
+                        } else {
+                            backupSettings.buyerPasswordHash
+                        }
                         val finalSettings = if (preserveExistingRoutines && currentSettings != null) {
                             backupSettings.copy(
                                 adminPasswordHash = finalPassword,
+                                buyerPasswordHash = finalBuyerPassword,
                                 backupLocationPath = currentSettings.backupLocationPath,
                                 autoBackupEnabled = currentSettings.autoBackupEnabled,
                                 autoBackupFormat = currentSettings.autoBackupFormat,
@@ -1125,7 +1140,10 @@ class BackupRestoreService(
                                 oneDriveTenant = currentSettings.oneDriveTenant
                             )
                         } else {
-                            backupSettings.copy(adminPasswordHash = finalPassword)
+                            backupSettings.copy(
+                                adminPasswordHash = finalPassword,
+                                buyerPasswordHash = finalBuyerPassword
+                            )
                         }
                         db.settingsDao().insertOrUpdateSettings(finalSettings)
                     }
@@ -1177,6 +1195,7 @@ class BackupRestoreService(
                     val defaultSettings = SettingsEntity(
                         id = 1,
                         adminPasswordHash = finalPasswordHash,
+                        buyerPasswordHash = if (preserveAdminPassword) existingSettings?.buyerPasswordHash ?: "" else "",
                         globalMarkupPercent = 0.0,
                         usdExchangeRate = 0.18,
                         eurExchangeRate = 0.16,

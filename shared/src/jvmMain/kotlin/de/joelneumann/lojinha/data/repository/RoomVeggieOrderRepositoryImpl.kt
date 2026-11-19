@@ -104,12 +104,13 @@ class RoomVeggieOrderRepositoryImpl(
         val round = roundEntity.toDomain()
         if (round.status != VeggieRoundStatus.OPEN) return@withLock false
 
+        val now = currentTimeMillis()
         veggieOrderDao.deleteEntriesForProductInRound(roundId, productId)
         veggieOrderDao.insertOrUpdateRound(
             roundEntity.copy(
-                buyerPdfExportedAt = null,
                 workerPdfExportedAt = null,
-                updatedAt = currentTimeMillis()
+                ordersUpdatedAt = now,
+                updatedAt = now
             )
         )
         onDataChanged?.invoke()
@@ -269,6 +270,15 @@ class RoomVeggieOrderRepositoryImpl(
         true
     }
 
+    override suspend fun markBuyerPortalPdfExported(roundId: String, timestamp: Long): Boolean = mutationMutex.withLock {
+        veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val now = currentTimeMillis()
+        val exportTime = if (timestamp > 0L) timestamp else now
+        veggieOrderDao.markBuyerPortalPdfExported(roundId, exportTime, now)
+        onAdminOnlyDataChanged?.invoke() ?: onDataChanged?.invoke()
+        true
+    }
+
     override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean = mutationMutex.withLock {
         veggieOrderDao.getRoundById(roundId) ?: return@withLock false
         val now = currentTimeMillis()
@@ -392,7 +402,7 @@ class RoomVeggieOrderRepositoryImpl(
         veggieOrderDao.replaceUserOrderEntriesForRound(entriesToUpsert, entryIdsToDelete)
         veggieOrderDao.getRoundById(roundId)?.let { roundEntity ->
             veggieOrderDao.insertOrUpdateRound(
-                roundEntity.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null, updatedAt = now)
+                roundEntity.copy(workerPdfExportedAt = null, ordersUpdatedAt = now, updatedAt = now)
             )
         }
         onUserScopedDataChanged?.invoke(user.id) ?: onDataChanged?.invoke()
@@ -470,7 +480,7 @@ class RoomVeggieOrderRepositoryImpl(
             updatedAt = now
         )
         veggieOrderDao.insertOrUpdateEntry(VeggieOrderEntryEntity.fromDomain(merged))
-        val updatedRound = round.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null, updatedAt = now)
+        val updatedRound = round.copy(workerPdfExportedAt = null, ordersUpdatedAt = now, updatedAt = now)
         veggieOrderDao.insertOrUpdateRound(
             VeggieOrderRoundEntity.fromDomain(updatedRound)
         )
@@ -482,7 +492,7 @@ class RoomVeggieOrderRepositoryImpl(
         val round = veggieOrderDao.getRoundById(roundId)?.toDomain() ?: return@withLock false
         val now = currentTimeMillis()
         veggieOrderDao.deleteEntryById(entryId)
-        val updatedRound = round.copy(buyerPdfExportedAt = null, workerPdfExportedAt = null, updatedAt = now)
+        val updatedRound = round.copy(workerPdfExportedAt = null, ordersUpdatedAt = now, updatedAt = now)
         veggieOrderDao.insertOrUpdateRound(
             VeggieOrderRoundEntity.fromDomain(updatedRound)
         )
@@ -536,6 +546,53 @@ class RoomVeggieOrderRepositoryImpl(
             round = VeggieOrderRoundEntity.fromDomain(updatedRound),
             updatedEntries = updatedEntries,
             updatedProductSettlements = settlementEntities,
+            catalogPriceUpdates = emptyMap(),
+            timestamp = now
+        )
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun saveBuyerDraftPrices(
+        roundId: String,
+        buyerOperationFeeCents: Long,
+        productSettlements: List<VeggieRoundProductSettlement>
+    ): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val round = roundEntity.toDomain()
+        if (round.status != VeggieRoundStatus.CLOSED) return@withLock false
+
+        val excludedProductIds = veggieOrderDao.getAllVeggieProducts(includeDeleted = true)
+            .filter { it.excludeFromBuyerPdf }
+            .map { it.id }
+            .toSet()
+        val allowedProductIds = veggieOrderDao.getRoundEntries(roundId)
+            .filter { it.orderedQuantityScaled > 0L && it.veggieProductId !in excludedProductIds }
+            .map { it.veggieProductId }
+            .toSet()
+
+        val now = currentTimeMillis()
+        val updatedRound = round.copy(
+            buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
+            updatedAt = now
+        )
+        val sanitizedSettlements = productSettlements
+            .filter { it.veggieProductId in allowedProductIds }
+            .map {
+                VeggieRoundProductSettlementEntity.fromDomain(
+                    it.copy(
+                        roundId = roundId,
+                        marketUnitPriceCents = it.marketUnitPriceCents?.coerceAtLeast(0L),
+                        totalSpentCents = it.totalSpentCents?.coerceAtLeast(0L),
+                        updatedAt = now
+                    )
+                )
+            }
+
+        veggieOrderDao.saveSettlementState(
+            round = VeggieOrderRoundEntity.fromDomain(updatedRound),
+            updatedEntries = emptyList(),
+            updatedProductSettlements = sanitizedSettlements,
             catalogPriceUpdates = emptyMap(),
             timestamp = now
         )

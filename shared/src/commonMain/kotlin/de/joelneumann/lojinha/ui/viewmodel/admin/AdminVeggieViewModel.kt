@@ -377,13 +377,13 @@ class AdminVeggieViewModel(
             val productIds = mergedEntries.map { it.veggieProductId }.distinct()
 
             _draftMarketPrices.value = productIds.associateWith { pid ->
-                val savedPrice = settlements[pid]?.marketUnitPriceCents ?: productCatalogMap[pid]?.estimatedPriceCents
+                val savedPrice = settlements[pid]?.marketUnitPriceCents
                 savedPrice?.let { formatCentsToInput(it) } ?: ""
             }
             val manuallyEditedIds = mutableSetOf<String>()
             _draftTotalSpent.value = productIds.associateWith { pid ->
                 val savedSpent = settlements[pid]?.totalSpentCents
-                val savedPrice = settlements[pid]?.marketUnitPriceCents ?: productCatalogMap[pid]?.estimatedPriceCents
+                val savedPrice = settlements[pid]?.marketUnitPriceCents
                 val totalDelivered = mergedEntries.filter { it.veggieProductId == pid }.sumOf { it.deliveredQuantityScaled }
                 val autoSpent = if (savedPrice != null && savedPrice > 0L && totalDelivered > 0L) {
                     VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(savedPrice, totalDelivered)
@@ -444,7 +444,7 @@ class AdminVeggieViewModel(
             val updatedSpent = _draftTotalSpent.value.toMutableMap()
             for (pid in productIds) {
                 if (!updatedPrices.containsKey(pid)) {
-                    val savedPrice = settlements[pid]?.marketUnitPriceCents ?: productCatalogMap[pid]?.estimatedPriceCents
+                    val savedPrice = settlements[pid]?.marketUnitPriceCents
                     updatedPrices[pid] = savedPrice?.let { formatCentsToInput(it) } ?: ""
                 }
                 if (pid !in _manuallyEditedTotalSpentProductIds.value) {
@@ -508,15 +508,13 @@ class AdminVeggieViewModel(
         _hasUnsavedSettlementChanges.value = true
 
         val unitPriceCents = parseBrlInputToCents(input)
-        if (unitPriceCents != null && unitPriceCents >= 0L) {
+        if (unitPriceCents != null && unitPriceCents >= 0L && _draftTotalSpent.value[productId].isNullOrBlank()) {
             val totalDelivered = calculateDraftTotalDeliveredForProduct(productId, _draftActualQuantities.value)
             val autoSpent = VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(unitPriceCents, totalDelivered)
             val newSpentMap = _draftTotalSpent.value.toMutableMap()
             newSpentMap[productId] = formatCentsToInput(autoSpent)
             _draftTotalSpent.value = newSpentMap
             _manuallyEditedTotalSpentProductIds.value = _manuallyEditedTotalSpentProductIds.value - productId
-        } else if (input.isBlank() && productId !in _manuallyEditedTotalSpentProductIds.value) {
-            _draftTotalSpent.value = _draftTotalSpent.value - productId
         }
         recomputeLivePreview()
         persistCurrentMatrixDraft()

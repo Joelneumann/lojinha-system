@@ -98,6 +98,9 @@ fun AdminSettingsTabScreen(
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    var newBuyerPassword by remember { mutableStateOf("") }
+    var clearBuyerPassword by remember { mutableStateOf(false) }
+    var showBuyerPassword by remember { mutableStateOf(false) }
 
     var globalMarkup by remember { mutableStateOf(Formatting.formatDecimal(settings.globalMarkupPercent)) }
     var usdRate by remember { mutableStateOf(Formatting.formatDecimal(settings.usdExchangeRate)) }
@@ -142,14 +145,14 @@ fun AdminSettingsTabScreen(
     val isVeggieTransportFeeValid = parsedVeggieTransportFee != null && parsedVeggieTransportFee in 0L..100_000_00L
 
     val hasFieldChanges = remember(
-        settings, newPassword, confirmPassword, globalMarkup, globalMarkupValue,
+        settings, newPassword, confirmPassword, newBuyerPassword, clearBuyerPassword, globalMarkup, globalMarkupValue,
         usdRate, parsedUsdRate, eurRate, parsedEurRate,
         autoUpdateExchangeRates, inactivityTimeout, supportEmail,
         yellowWarningThreshold, parsedYellow, redWarningThreshold, parsedRed,
         veggieAutoOpenEnabled, veggieAutoOpenDayOfWeek, veggieAutoOpenTime,
         veggieBuyerFeeInput, parsedVeggieBuyerFee, veggieTransportFeeInput, parsedVeggieTransportFee
     ) {
-        (newPassword.isNotEmpty() || confirmPassword.isNotEmpty()) ||
+        (newPassword.isNotEmpty() || confirmPassword.isNotEmpty() || newBuyerPassword.isNotEmpty() || clearBuyerPassword) ||
                 (if (globalMarkupValue != null) globalMarkupValue != settings.globalMarkupPercent else globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent)) ||
                 (if (parsedUsdRate != null) parsedUsdRate != settings.usdExchangeRate else usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate)) ||
                 (if (parsedEurRate != null) parsedEurRate != settings.eurExchangeRate else eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate)) ||
@@ -188,6 +191,7 @@ fun AdminSettingsTabScreen(
     val isPasswordEntered = newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
     val doPasswordsMatch = newPassword == confirmPassword
     val isPasswordValid = !isPasswordEntered || (newPassword.isNotBlank() && doPasswordsMatch)
+    val isBuyerPasswordValid = newBuyerPassword.isEmpty() || newBuyerPassword.isNotBlank()
 
     LaunchedEffect(hasFieldChanges) {
         onUnsavedStateChanged(hasFieldChanges)
@@ -252,6 +256,8 @@ fun AdminSettingsTabScreen(
                         onClick = {
                             newPassword = ""
                             confirmPassword = ""
+                            newBuyerPassword = ""
+                            clearBuyerPassword = false
                             globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
                             usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
                             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
@@ -286,7 +292,7 @@ fun AdminSettingsTabScreen(
                     }
                 }
 
-                val isAllSettingsValid = hasFieldChanges && isPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid && isVeggieTimeValid && isVeggieBuyerFeeValid && isVeggieTransportFeeValid
+                val isAllSettingsValid = hasFieldChanges && isPasswordValid && isBuyerPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid && isVeggieTimeValid && isVeggieBuyerFeeValid && isVeggieTransportFeeValid
 
                 Button(
                     onClick = {
@@ -314,11 +320,18 @@ fun AdminSettingsTabScreen(
                                 veggieAutoOpenDayOfWeek = veggieAutoOpenDayOfWeek.coerceIn(1, 7),
                                 veggieAutoOpenTime = normalizedVeggieTime,
                                 defaultVeggieBuyerFeeCents = newBuyerFee,
-                                defaultVeggieTransportFeeCents = newTransportFee
+                                defaultVeggieTransportFeeCents = newTransportFee,
+                                buyerPasswordHash = when {
+                                    clearBuyerPassword -> ""
+                                    newBuyerPassword.isNotBlank() -> de.joelneumann.lojinha.security.PasswordHasher.hash(newBuyerPassword.trim())
+                                    else -> settings.buyerPasswordHash
+                                }
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
                             confirmPassword = ""
+                            newBuyerPassword = ""
+                            clearBuyerPassword = false
                             usdRate = Formatting.formatDecimal(newUsd)
                             eurRate = Formatting.formatDecimal(newEur)
                             globalMarkup = Formatting.formatDecimal(updatedSettings.globalMarkupPercent)
@@ -597,6 +610,73 @@ fun AdminSettingsTabScreen(
                                     placeholder = "0",
                                     modifier = Modifier.fillMaxWidth()
                                 )
+                            }
+                        }
+
+                        HorizontalDivider(color = DividerBorder)
+
+                        // Veggie Buyer Login Password
+                        val isBuyerPasswordConfigured = settings.buyerPasswordHash.isNotBlank() && !clearBuyerPassword
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = strings.buyerPasswordTitle,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryNavy
+                                )
+                                AdminStatusBadge(
+                                    text = if (isBuyerPasswordConfigured) strings.buyerPasswordConfiguredBadge else strings.buyerPasswordNotConfiguredBadge,
+                                    type = if (isBuyerPasswordConfigured) AdminBadgeType.SUCCESS else AdminBadgeType.NAVY
+                                )
+                            }
+                            Text(
+                                text = strings.buyerPasswordSubtitle,
+                                fontSize = 12.sp,
+                                color = TextSecondaryMuted
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = newBuyerPassword,
+                                    onValueChange = {
+                                        newBuyerPassword = it
+                                        if (it.isNotBlank()) clearBuyerPassword = false
+                                    },
+                                    placeholder = { Text(strings.buyerPasswordPlaceholder, fontSize = 13.sp) },
+                                    singleLine = true,
+                                    visualTransformation = if (showBuyerPassword) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                    trailingIcon = {
+                                        IconButton(onClick = { showBuyerPassword = !showBuyerPassword }) {
+                                            Icon(
+                                                imageVector = if (showBuyerPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                contentDescription = null
+                                            )
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (isBuyerPasswordConfigured) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            newBuyerPassword = ""
+                                            clearBuyerPassword = true
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorDangerCrimson),
+                                        modifier = Modifier.height(56.dp)
+                                    ) {
+                                        Text(strings.clearBuyerPasswordBtn, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
                             }
                         }
                     }

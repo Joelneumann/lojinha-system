@@ -149,9 +149,16 @@ class AdminUsersViewModel(
         viewModelScope.launch {
             _isSavingUser.value = true
             try {
-                val trimmedUser = user.copy(name = user.name.trim())
+                val trimmedUser = user.copy(
+                    name = user.name.trim(),
+                    nickname = user.nickname?.trim()?.ifBlank { null }
+                )
                 if (trimmedUser.name.isReservedAdminName()) {
                     _userErrorMessage.value = I18n.get().userNameReservedAdmin
+                    return@launch
+                }
+                if (trimmedUser.nickname?.isReservedAdminName() == true) {
+                    _userErrorMessage.value = I18n.get().userNicknameReservedError
                     return@launch
                 }
                 val normalized = trimmedUser.name.normalizeUserName()
@@ -207,6 +214,10 @@ class AdminUsersViewModel(
                 if (target != null) {
                     if (target.name.isReservedAdminName()) {
                         _userErrorMessage.value = I18n.get().userNameReservedAdmin
+                        return@launch
+                    }
+                    if (target.nickname?.isReservedAdminName() == true) {
+                        _userErrorMessage.value = I18n.get().userNicknameReservedError
                         return@launch
                     }
                     val normalized = target.name.normalizeUserName()

@@ -106,7 +106,9 @@ data class VeggieOrderRoundEntity(
     val transportFeeCents: Long,
     val transporterUserId: String?,
     val buyerPdfExportedAt: Long? = null,
+    @ColumnInfo(defaultValue = "NULL") val buyerPortalPdfExportedAt: Long? = null,
     val workerPdfExportedAt: Long? = null,
+    @ColumnInfo(defaultValue = "0") val ordersUpdatedAt: Long = 0L,
     val updatedAt: Long
 ) {
     fun toDomain(): VeggieOrderRound = VeggieOrderRound(
@@ -119,7 +121,9 @@ data class VeggieOrderRoundEntity(
         transportFeeCents = transportFeeCents,
         transporterUserId = transporterUserId,
         buyerPdfExportedAt = buyerPdfExportedAt,
+        buyerPortalPdfExportedAt = buyerPortalPdfExportedAt,
         workerPdfExportedAt = workerPdfExportedAt,
+        ordersUpdatedAt = ordersUpdatedAt,
         updatedAt = updatedAt
     )
 
@@ -134,7 +138,9 @@ data class VeggieOrderRoundEntity(
             transportFeeCents = round.transportFeeCents,
             transporterUserId = round.transporterUserId,
             buyerPdfExportedAt = round.buyerPdfExportedAt,
+            buyerPortalPdfExportedAt = round.buyerPortalPdfExportedAt,
             workerPdfExportedAt = round.workerPdfExportedAt,
+            ordersUpdatedAt = round.ordersUpdatedAt,
             updatedAt = round.updatedAt
         )
     }
