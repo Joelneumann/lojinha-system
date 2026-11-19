@@ -286,7 +286,7 @@ object CsvExportFilenames {
     fun notesFilename(dateStamp: String? = null) = withDate("admin_notes", dateStamp)
     fun productsFilename(dateStamp: String? = null) = withDate("products", dateStamp)
     fun productHistoryFilename(productName: String, dateStamp: String? = null): String {
-        val clean = PdfFilenames.sanitizeName(productName).ifBlank { "Product" }
+        val clean = PdfFilenames.sanitizeName(productName, fallback = "Product")
         return withDate("product_${clean}_history", dateStamp)
     }
     fun usersFilename(dateStamp: String? = null) = withDate("users", dateStamp)

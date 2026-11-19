@@ -596,12 +596,14 @@ fun App(
                         var csvExportError by remember { mutableStateOf<String?>(null) }
 
                         fun exportCsvToDefaultDir(
-                            filename: String,
+                            filenameBuilder: (dateStr: String) -> String,
                             fetchAndFormat: suspend () -> String
                         ) {
                             if (isExportingCsv) return
                             isExportingCsv = true
+                            csvExportResultPath = null
                             csvExportError = null
+                            val filename = filenameBuilder(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()))
                             coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
                                     val csvContent = fetchAndFormat()
@@ -870,74 +872,54 @@ fun App(
                                 }
                             },
                             onExportNotesCsv = {
-                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                exportCsvToDefaultDir(
-                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.notesFilename(dateStr)
-                                ) {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::notesFilename) {
                                     val notes = effectiveAdminNoteRepo.getAllNotes()
                                     de.joelneumann.lojinha.data.service.CsvExportFormatter.formatAdminNotesCsv(notes)
                                 }
                             },
                             onExportProductsCsv = {
-                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                exportCsvToDefaultDir(
-                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.productsFilename(dateStr)
-                                ) {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::productsFilename) {
                                     val products = effectiveProductRepo.getAllProducts()
                                     de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductsCsv(products)
                                 }
                             },
                             onExportProductHistoryCsv = { product ->
-                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                exportCsvToDefaultDir(
+                                exportCsvToDefaultDir({ dateStr ->
                                     de.joelneumann.lojinha.data.service.CsvExportFilenames.productHistoryFilename(product.name, dateStr)
-                                ) {
+                                }) {
                                     val entries = effectiveProductRepo.getProductHistory(product.id, page = 0, pageSize = Int.MAX_VALUE).items
                                     de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductHistoryCsv(entries)
                                 }
                             },
                             onExportUsersCsv = {
-                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                exportCsvToDefaultDir(
-                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.usersFilename(dateStr)
-                                ) {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::usersFilename) {
                                     val users = effectiveUserRepo.getAllUsers()
                                     de.joelneumann.lojinha.data.service.CsvExportFormatter.formatUsersCsv(users)
                                 }
                             },
                             onExportUserTransactionsCsv = { user ->
-                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                exportCsvToDefaultDir(
+                                exportCsvToDefaultDir({ dateStr ->
                                     de.joelneumann.lojinha.data.service.CsvExportFilenames.userTransactionsFilename(user.name, dateStr)
-                                ) {
+                                }) {
                                     val txs = effectiveTransactionRepo.getTransactionsByUserId(user.id)
                                     de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
                                 }
                             },
                             onExportTransactionsCsv = {
-                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                exportCsvToDefaultDir(
-                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.transactionsFilename(dateStr)
-                                ) {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::transactionsFilename) {
                                     val txs = effectiveTransactionRepo.getAllTransactions()
                                     de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
                                 }
                             },
                             onExportVeggieProductsCsv = {
-                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                exportCsvToDefaultDir(
-                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieProductsFilename(dateStr)
-                                ) {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::veggieProductsFilename) {
                                     val products = effectiveVeggieRepo.getAllVeggieProducts()
                                     val unitTypes = effectiveVeggieRepo.getAllUnitTypes()
                                     de.joelneumann.lojinha.data.service.CsvExportFormatter.formatVeggieProductsCsv(products, unitTypes)
                                 }
                             },
                             onExportVeggieOrdersCsv = {
-                                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                exportCsvToDefaultDir(
-                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieOrdersFilename(dateStr)
-                                ) {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::veggieOrdersFilename) {
                                     val rounds = effectiveVeggieRepo.getAllRounds()
                                     val entriesByRoundId = rounds.associate { r -> r.id to effectiveVeggieRepo.getEntriesForRound(r.id) }
                                     val settlementsByRoundId = rounds.associate { r -> r.id to effectiveVeggieRepo.getProductSettlementsForRound(r.id) }

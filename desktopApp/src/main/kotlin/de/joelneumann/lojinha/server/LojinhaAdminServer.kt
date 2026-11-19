@@ -1078,18 +1078,16 @@ class LojinhaAdminServer(
                     route("/export") {
                         get("/notes.csv") {
                             if (!call.checkAdminAuth(settingsRepository)) return@get
-                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                             val notes = adminNoteRepository?.getAllNotes() ?: emptyList()
                             val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatAdminNotesCsv(notes)
-                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.notesFilename(dateStr))
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.notesFilename(todayDateStamp()))
                         }
 
                         get("/products.csv") {
                             if (!call.checkAdminAuth(settingsRepository)) return@get
-                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                             val products = productRepository.getAllProducts()
                             val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductsCsv(products)
-                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.productsFilename(dateStr))
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.productsFilename(todayDateStamp()))
                         }
 
                         get("/products/{id}/history.csv") {
@@ -1100,21 +1098,19 @@ class LojinhaAdminServer(
                                 call.respond(HttpStatusCode.NotFound, "Product not found")
                                 return@get
                             }
-                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                             val entries = productRepository.getProductHistory(id, page = 0, pageSize = Int.MAX_VALUE).items
                             val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductHistoryCsv(entries)
                             call.respondCsv(
                                 csv,
-                                de.joelneumann.lojinha.data.service.CsvExportFilenames.productHistoryFilename(product.name, dateStr)
+                                de.joelneumann.lojinha.data.service.CsvExportFilenames.productHistoryFilename(product.name, todayDateStamp())
                             )
                         }
 
                         get("/users.csv") {
                             if (!call.checkAdminAuth(settingsRepository)) return@get
-                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                             val users = userRepository.getAllUsers()
                             val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatUsersCsv(users)
-                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.usersFilename(dateStr))
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.usersFilename(todayDateStamp()))
                         }
 
                         get("/users/{id}/transactions.csv") {
@@ -1125,21 +1121,19 @@ class LojinhaAdminServer(
                                 call.respond(HttpStatusCode.NotFound, "User not found")
                                 return@get
                             }
-                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                             val txs = transactionRepository.getTransactionsByUserId(id)
                             val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
                             call.respondCsv(
                                 csv,
-                                de.joelneumann.lojinha.data.service.CsvExportFilenames.userTransactionsFilename(user.name, dateStr)
+                                de.joelneumann.lojinha.data.service.CsvExportFilenames.userTransactionsFilename(user.name, todayDateStamp())
                             )
                         }
 
                         get("/transactions.csv") {
                             if (!call.checkAdminAuth(settingsRepository)) return@get
-                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                             val txs = transactionRepository.getAllTransactions()
                             val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
-                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.transactionsFilename(dateStr))
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.transactionsFilename(todayDateStamp()))
                         }
 
                         get("/veggie-products.csv") {
@@ -1149,11 +1143,10 @@ class LojinhaAdminServer(
                                 call.respond(HttpStatusCode.ServiceUnavailable, "Veggie order repository unavailable")
                                 return@get
                             }
-                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                             val products = repo.getAllVeggieProducts()
                             val unitTypes = repo.getAllUnitTypes()
                             val csv = de.joelneumann.lojinha.data.service.CsvExportFormatter.formatVeggieProductsCsv(products, unitTypes)
-                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieProductsFilename(dateStr))
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieProductsFilename(todayDateStamp()))
                         }
 
                         get("/veggie-orders.csv") {
@@ -1163,7 +1156,6 @@ class LojinhaAdminServer(
                                 call.respond(HttpStatusCode.ServiceUnavailable, "Veggie order repository unavailable")
                                 return@get
                             }
-                            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                             val rounds = repo.getAllRounds()
                             val entriesByRoundId = rounds.associate { r -> r.id to repo.getEntriesForRound(r.id) }
                             val settlementsByRoundId = rounds.associate { r -> r.id to repo.getProductSettlementsForRound(r.id) }
@@ -1172,7 +1164,7 @@ class LojinhaAdminServer(
                                 entriesByRoundId = entriesByRoundId,
                                 settlementsByRoundId = settlementsByRoundId
                             )
-                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieOrdersFilename(dateStr))
+                            call.respondCsv(csv, de.joelneumann.lojinha.data.service.CsvExportFilenames.veggieOrdersFilename(todayDateStamp()))
                         }
                     }
 
@@ -1923,6 +1915,8 @@ class LojinhaAdminServer(
     private suspend fun ApplicationCall.respondPdf(pdfBytes: ByteArray, filename: String) {
         respondAttachment(pdfBytes, ContentType.Application.Pdf, filename)
     }
+
+    private fun todayDateStamp(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
     private suspend fun ApplicationCall.respondCsv(csvContent: String, filename: String) {
         respondAttachment(

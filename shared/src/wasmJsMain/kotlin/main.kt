@@ -218,7 +218,7 @@ fun main() {
                                         val toQuery = if (toTimestamp != null) "&to=$toTimestamp" else ""
                                         val url = customerNetworkClient.resolveUrl("/api/customer/transactions-pdf?lang=${language.name}$fromQuery$toQuery")
                                         val fallbackName = PdfFilenames.transactionStatementFilename(customer.name, language)
-                                        jsDownloadPdf(
+                                        jsDownloadFile(
                                             url = url,
                                             fallbackFilename = fallbackName,
                                             onSuccess = {
@@ -312,6 +312,27 @@ fun main() {
                                 }
                             }
 
+                            var isExportingCsv by remember { mutableStateOf(false) }
+                            var csvExportError by remember { mutableStateOf<String?>(null) }
+
+                            fun downloadAdminCsv(
+                                path: String,
+                                fallbackFilename: String,
+                                onError: (String) -> Unit = { err -> csvExportError = err }
+                            ) {
+                                if (isExportingCsv) return
+                                isExportingCsv = true
+                                jsDownloadFile(
+                                    url = adminNetworkClient.resolveUrl(path),
+                                    fallbackFilename = fallbackFilename,
+                                    onSuccess = { isExportingCsv = false },
+                                    onError = { err ->
+                                        isExportingCsv = false
+                                        onError(err)
+                                    }
+                                )
+                            }
+
                             AdminScreen(
                                 notesViewModel = notesViewModel,
                                 productsViewModel = productsViewModel,
@@ -325,7 +346,7 @@ fun main() {
                                 onExportShoppingListPdf = { language ->
                                     val url = adminNetworkClient.resolveUrl("/api/admin/shopping-list/pdf?lang=${language.name}")
                                     val fallbackName = PdfFilenames.shoppingListFilename(dateStamp = null, language = language)
-                                    jsDownloadPdf(
+                                    jsDownloadFile(
                                         url = url,
                                         fallbackFilename = fallbackName,
                                         onSuccess = { shoppingListViewModel.markExportedLocally() },
@@ -339,7 +360,7 @@ fun main() {
                                     val toQuery = if (toTimestamp != null) "&to=$toTimestamp" else ""
                                     val url = adminNetworkClient.resolveUrl("/api/admin/users/${user.id}/transactions-pdf?lang=${language.name}$fromQuery$toQuery")
                                     val fallbackName = PdfFilenames.transactionStatementFilename(user.name, language)
-                                    jsDownloadPdf(
+                                    jsDownloadFile(
                                         url = url,
                                         fallbackFilename = fallbackName,
                                         onSuccess = {
@@ -354,7 +375,7 @@ fun main() {
                                 },
                                 onExportVeggieBuyerPdf = { roundId, language ->
                                     val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf?lang=${language.name}")
-                                    jsDownloadPdf(
+                                    jsDownloadFile(
                                         url = url,
                                         fallbackFilename = "buyer_shopping_list.pdf",
                                         onSuccess = { veggieViewModel.loadData(preserveDraftEdits = true) },
@@ -363,7 +384,7 @@ fun main() {
                                 },
                                 onExportVeggieWorkerPdf = { roundId, language ->
                                     val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf?lang=${language.name}")
-                                    jsDownloadPdf(
+                                    jsDownloadFile(
                                         url = url,
                                         fallbackFilename = "worker_sorting_matrix.pdf",
                                         onSuccess = { veggieViewModel.loadData(preserveDraftEdits = true) },
@@ -372,7 +393,7 @@ fun main() {
                                 },
                                 onExportVeggieOrderFormPdf = { language ->
                                     val url = adminNetworkClient.resolveUrl("/api/admin/veggie/order-form-pdf?lang=${language.name}")
-                                    jsDownloadPdf(
+                                    jsDownloadFile(
                                         url = url,
                                         fallbackFilename = "customer_order_form.pdf",
                                         onSuccess = {},
@@ -380,66 +401,40 @@ fun main() {
                                     )
                                 },
                                 onExportNotesCsv = {
-                                    jsDownloadPdf(
-                                        url = adminNetworkClient.resolveUrl("/api/admin/export/notes.csv"),
-                                        fallbackFilename = "admin_notes.csv",
-                                        onSuccess = {},
-                                        onError = { err -> println("CSV export failed: $err") }
-                                    )
+                                    downloadAdminCsv("/api/admin/export/notes.csv", "admin_notes.csv")
                                 },
                                 onExportProductsCsv = {
-                                    jsDownloadPdf(
-                                        url = adminNetworkClient.resolveUrl("/api/admin/export/products.csv"),
-                                        fallbackFilename = "products.csv",
-                                        onSuccess = {},
-                                        onError = { err -> println("CSV export failed: $err") }
-                                    )
+                                    downloadAdminCsv("/api/admin/export/products.csv", "products.csv")
                                 },
                                 onExportProductHistoryCsv = { product ->
-                                    jsDownloadPdf(
-                                        url = adminNetworkClient.resolveUrl("/api/admin/export/products/${product.id}/history.csv"),
-                                        fallbackFilename = de.joelneumann.lojinha.data.service.CsvExportFilenames.productHistoryFilename(product.name),
-                                        onSuccess = {},
-                                        onError = { err -> println("CSV export failed: $err") }
+                                    downloadAdminCsv(
+                                        "/api/admin/export/products/${product.id}/history.csv",
+                                        de.joelneumann.lojinha.data.service.CsvExportFilenames.productHistoryFilename(product.name)
                                     )
                                 },
                                 onExportUsersCsv = {
-                                    jsDownloadPdf(
-                                        url = adminNetworkClient.resolveUrl("/api/admin/export/users.csv"),
-                                        fallbackFilename = "users.csv",
-                                        onSuccess = {},
-                                        onError = { err -> println("CSV export failed: $err") }
-                                    )
+                                    downloadAdminCsv("/api/admin/export/users.csv", "users.csv")
                                 },
                                 onExportUserTransactionsCsv = { user ->
-                                    jsDownloadPdf(
-                                        url = adminNetworkClient.resolveUrl("/api/admin/export/users/${user.id}/transactions.csv"),
-                                        fallbackFilename = de.joelneumann.lojinha.data.service.CsvExportFilenames.userTransactionsFilename(user.name),
-                                        onSuccess = {},
-                                        onError = { err -> println("CSV export failed: $err") }
+                                    downloadAdminCsv(
+                                        "/api/admin/export/users/${user.id}/transactions.csv",
+                                        de.joelneumann.lojinha.data.service.CsvExportFilenames.userTransactionsFilename(user.name)
                                     )
                                 },
                                 onExportTransactionsCsv = {
-                                    jsDownloadPdf(
-                                        url = adminNetworkClient.resolveUrl("/api/admin/export/transactions.csv"),
-                                        fallbackFilename = "transactions.csv",
-                                        onSuccess = {},
-                                        onError = { err -> println("CSV export failed: $err") }
-                                    )
+                                    downloadAdminCsv("/api/admin/export/transactions.csv", "transactions.csv")
                                 },
                                 onExportVeggieProductsCsv = {
-                                    jsDownloadPdf(
-                                        url = adminNetworkClient.resolveUrl("/api/admin/export/veggie-products.csv"),
-                                        fallbackFilename = "veggie_products.csv",
-                                        onSuccess = {},
+                                    downloadAdminCsv(
+                                        "/api/admin/export/veggie-products.csv",
+                                        "veggie_products.csv",
                                         onError = { err -> veggieViewModel.setExportError(err) }
                                     )
                                 },
                                 onExportVeggieOrdersCsv = {
-                                    jsDownloadPdf(
-                                        url = adminNetworkClient.resolveUrl("/api/admin/export/veggie-orders.csv"),
-                                        fallbackFilename = "veggie_orders.csv",
-                                        onSuccess = {},
+                                    downloadAdminCsv(
+                                        "/api/admin/export/veggie-orders.csv",
+                                        "veggie_orders.csv",
                                         onError = { err -> veggieViewModel.setExportError(err) }
                                     )
                                 },
@@ -450,6 +445,36 @@ fun main() {
                                     }
                                 }
                             )
+
+                            val err = csvExportError
+                            if (err != null) {
+                                val strings = I18n.current
+                                AlertDialog(
+                                    onDismissRequest = { csvExportError = null },
+                                    title = {
+                                        Text(
+                                            text = strings.csvExportFailed,
+                                            fontWeight = FontWeight.Bold,
+                                            color = de.joelneumann.lojinha.ui.theme.ColorDangerCrimson
+                                        )
+                                    },
+                                    text = {
+                                        Text(
+                                            text = err,
+                                            color = de.joelneumann.lojinha.ui.theme.ColorDangerCrimson,
+                                            fontSize = 13.sp
+                                        )
+                                    },
+                                    confirmButton = {
+                                        Button(
+                                            onClick = { csvExportError = null },
+                                            colors = ButtonDefaults.buttonColors(containerColor = de.joelneumann.lojinha.ui.theme.AccentNavy)
+                                        ) {
+                                            Text(strings.confirm, color = de.joelneumann.lojinha.ui.theme.SurfaceWhite)
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -575,7 +600,7 @@ private external fun jsRedirectToLogin(showAdminRestartNotice: Boolean)
     });
 }
 """)
-private external fun jsDownloadPdf(
+private external fun jsDownloadFile(
     url: String,
     fallbackFilename: String,
     onSuccess: () -> Unit,

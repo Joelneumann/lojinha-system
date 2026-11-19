@@ -128,14 +128,8 @@ fun AdminTopBar(
                                 modifier = Modifier.fillMaxHeight()
                             )
                         }
-                        if (onExportCsv != null) {
-                    CompactCsvExportButton(
-                        onClick = onExportCsv,
-                        modifier = Modifier.fillMaxHeight()
-                    )
-                }
 
-                if (actionButtonText != null && onActionButtonClick != null) {
+                        if (actionButtonText != null && onActionButtonClick != null) {
                             Button(
                                 onClick = onActionButtonClick,
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
