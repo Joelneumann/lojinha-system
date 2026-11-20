@@ -3,11 +3,13 @@ package de.joelneumann.lojinha.ui.viewmodel.admin
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -26,11 +28,15 @@ import kotlin.random.Random
 
 class AdminUsersViewModel(
     private val userRepository: UserRepository,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val settingsRepository: SettingsRepository? = null
 ) : ViewModel() {
 
     private val _users = MutableStateFlow<List<User>>(emptyList())
     val users: StateFlow<List<User>> = _users.asStateFlow()
+
+    private val _buyerLoginName = MutableStateFlow(SystemSettings.DEFAULT_BUYER_LOGIN_NAME)
+    val buyerLoginName: StateFlow<String> = _buyerLoginName.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -73,6 +79,7 @@ class AdminUsersViewModel(
     val userDeleteErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
 
     private var usersJob: Job? = null
+    private var settingsJob: Job? = null
 
     init {
         loadData()
@@ -82,6 +89,13 @@ class AdminUsersViewModel(
         usersJob?.cancel()
         usersJob = viewModelScope.launch {
             userRepository.getUsersFlow().collect { _users.value = it.sortedByAccentInsensitive { u -> u.name } }
+        }
+        val repo = settingsRepository ?: return
+        settingsJob?.cancel()
+        settingsJob = viewModelScope.launch {
+            repo.getSettingsFlow().collect { settings ->
+                _buyerLoginName.value = settings.effectiveBuyerLoginName
+            }
         }
     }
 
@@ -156,12 +170,15 @@ class AdminUsersViewModel(
                     name = user.name.trim(),
                     nickname = user.nickname?.trim()?.ifBlank { null }
                 )
-                if (trimmedUser.name.isReservedAdminName()) {
-                    _userErrorMessage.value = I18n.get().userNameReservedAdmin
+                val currentBuyerLoginName = settingsRepository?.getSettings()?.effectiveBuyerLoginName
+                    ?: _buyerLoginName.value
+                _buyerLoginName.value = currentBuyerLoginName
+                if (trimmedUser.name.isReservedAdminName(currentBuyerLoginName)) {
+                    _userErrorMessage.value = I18n.get().userNameReservedAdmin(currentBuyerLoginName)
                     return@launch
                 }
-                if (trimmedUser.nickname?.isReservedAdminName() == true) {
-                    _userErrorMessage.value = I18n.get().userNicknameReservedError
+                if (trimmedUser.nickname?.isReservedAdminName(currentBuyerLoginName) == true) {
+                    _userErrorMessage.value = I18n.get().userNicknameReservedError(currentBuyerLoginName)
                     return@launch
                 }
                 val allUsers = userRepository.getAllUsers()
@@ -221,12 +238,15 @@ class AdminUsersViewModel(
                 val allUsers = userRepository.getAllUsers()
                 val target = allUsers.find { it.id == userId }
                 if (target != null) {
-                    if (target.name.isReservedAdminName()) {
-                        _userErrorMessage.value = I18n.get().userNameReservedAdmin
+                    val currentBuyerLoginName = settingsRepository?.getSettings()?.effectiveBuyerLoginName
+                        ?: _buyerLoginName.value
+                    _buyerLoginName.value = currentBuyerLoginName
+                    if (target.name.isReservedAdminName(currentBuyerLoginName)) {
+                        _userErrorMessage.value = I18n.get().userNameReservedAdmin(currentBuyerLoginName)
                         return@launch
                     }
-                    if (target.nickname?.isReservedAdminName() == true) {
-                        _userErrorMessage.value = I18n.get().userNicknameReservedError
+                    if (target.nickname?.isReservedAdminName(currentBuyerLoginName) == true) {
+                        _userErrorMessage.value = I18n.get().userNicknameReservedError(currentBuyerLoginName)
                         return@launch
                     }
                     val nameConflict = findUserIdentifierConflict(target.name, userId, allUsers)

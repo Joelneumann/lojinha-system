@@ -172,6 +172,10 @@ object DatabaseFactory {
         connection.execSQL("ALTER TABLE `veggie_order_rounds` ADD COLUMN `ordersUpdatedAt` INTEGER NOT NULL DEFAULT 0")
     }
 
+    internal val MIGRATION_22_23 = loggedMigration(22, 23, "adding buyerLoginName to settings") { connection ->
+        connection.execSQL("ALTER TABLE `settings` ADD COLUMN `buyerLoginName` TEXT NOT NULL DEFAULT 'Buyer'")
+    }
+
     fun defaultVeggieUnitTypes(timestamp: Long = System.currentTimeMillis()): List<VeggieUnitTypeEntity> = listOf(
         VeggieUnitTypeEntity(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true, updatedAt = timestamp),
         VeggieUnitTypeEntity(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true, updatedAt = timestamp),
@@ -239,7 +243,7 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")

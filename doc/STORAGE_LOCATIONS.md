@@ -43,7 +43,7 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 ---
 
 ### 1. Primary Database (`lojinha_room.db`)
-* **Format:** Standard SQLite 3 relational database managed by **AndroidX Room (KMP)** using the bundled C SQLite driver (schema v22).
+* **Format:** Standard SQLite 3 relational database managed by **AndroidX Room (KMP)** using the bundled C SQLite driver (schema v23).
 * **Tables:** `users`, `products`, `transactions`, `billing_lists`, `billing_list_users`, `settings`, `backups`, `admin_notes`, `product_stock_adjustments`, `shopping_list_items`, `veggie_unit_types`, `veggie_products`, `veggie_order_rounds`, `veggie_round_product_settlements`, `veggie_order_entries`, `veggie_user_favorites`.
 * **WAL Mode:** Operates in Write-Ahead Logging (`PRAGMA journal_mode=WAL;`). When backing up manually, ensure you copy `lojinha_room.db`, `lojinha_room.db-wal`, and `lojinha_room.db-shm` together, or perform a checkpoint before copying.
 * **Backup & Restore Coverage:** All tables (including `product_stock_adjustments`, `shopping_list_items`, and all Veggie Order tables) are included in `.db` snapshots, table-level restore, and factory reset wipes via `BackupRestoreService`. Scheduled CSV backups export `products.csv`, `users.csv`, `transactions.csv`, `billing_lists.csv`, `admin_notes.csv`, `veggie_products.csv`, and `veggie_orders.csv`.

@@ -212,7 +212,7 @@ Lojinha's business logic, relational schemas, and financial rules are strictly m
 * **Non-Purchase Storno:** 1-click reversal of admin deposits and withdrawals.
 
 #### 8. Settings Tab (`F8`)
-* **Admin & Buyer Security:** Update the master admin password and optional **Buyer Portal** password (`buyerPasswordHash`) with confirmation prompts.
+* **Admin & Buyer Security:** Update the master admin password and the dynamic **Buyer Portal** login name (`buyerLoginName`, reserved against user names/nicknames) & password (`buyerPasswordHash`) with validation and confirmation prompts.
 * **Veggie Orders Schedule & Defaults:** Configure automated weekly round opening (`veggieAutoOpenEnabled`, day of week, local time) and default Buyer/Transport fees.
 * **Pricing & Currency Exchange Rates:**
   * Configure Global Markup %, USD exchange rate, and EUR exchange rate.

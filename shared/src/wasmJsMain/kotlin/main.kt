@@ -322,7 +322,7 @@ fun main() {
                             val notesViewModel = remember { AdminNotesViewModel(adminNoteRepository) }
                             val productsViewModel = remember { AdminProductsViewModel(productRepository, settingsRepository) }
                             val shoppingListViewModel = remember { AdminShoppingListViewModel(shoppingListRepository, productRepository, adminNoteRepository) }
-                            val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository) }
+                            val usersViewModel = remember { AdminUsersViewModel(userRepository, transactionRepository, settingsRepository) }
                             val transactionsViewModel = remember { AdminTransactionsViewModel(transactionRepository, userRepository, productRepository) }
                             val bulkBillingViewModel = remember { AdminBulkBillingViewModel(billingListRepository, userRepository, transactionRepository) }
                             val veggieViewModel = remember {

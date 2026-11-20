@@ -57,6 +57,7 @@ fun AdminUsersTabScreen(
     focusTrigger: Int = 0
 ) {
     val users by viewModel.users.collectAsState()
+    val buyerLoginName by viewModel.buyerLoginName.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
 
     val showUserModal by viewModel.showUserModal.collectAsState()
@@ -286,6 +287,7 @@ fun AdminUsersTabScreen(
         UserEditDialog(
             user = editUser!!,
             allUsers = users,
+            buyerLoginName = buyerLoginName,
             onSave = { viewModel.saveUser(it, onSuccess = completeUserWorkflow) },
             onCancel = { viewModel.closeUserModal() },
             isSaving = isSavingUser

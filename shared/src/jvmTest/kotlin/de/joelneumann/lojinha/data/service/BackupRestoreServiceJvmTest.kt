@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.service
 
 import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.AppDatabase_Impl
 import de.joelneumann.lojinha.data.database.DatabaseFactory
@@ -1819,6 +1820,83 @@ class BackupRestoreServiceJvmTest {
         val kale = allProducts.first { it.name == "Kale" }
         assertTrue(kale.isDeleted)
         assertFalse(kale.isActive, "isDeleted = true must force isActive = false")
+    }
+
+    @Test
+    fun testDynamicBuyerLoginName_migrationRestoreWipeAndCsvImport() = runTest {
+        // 1. Verify MIGRATION_22_23 adds buyerLoginName defaulting to 'Buyer'
+        val migDbFile = File(tempDir, "mig_22_23.db")
+        val rawConn = BundledSQLiteDriver().open(migDbFile.absolutePath)
+        try {
+            rawConn.execSQL("CREATE TABLE `settings` (`id` INTEGER NOT NULL, `adminPasswordHash` TEXT NOT NULL, `buyerPasswordHash` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`id`))")
+            rawConn.execSQL("INSERT INTO `settings` (`id`, `adminPasswordHash`, `buyerPasswordHash`) VALUES (1, 'hash', 'buyerHash')")
+            DatabaseFactory.MIGRATION_22_23.migrate(rawConn)
+            val stmt = rawConn.prepare("SELECT buyerLoginName FROM settings WHERE id = 1")
+            try {
+                assertTrue(stmt.step())
+                assertEquals("Buyer", stmt.getText(0))
+            } finally {
+                stmt.close()
+            }
+        } finally {
+            rawConn.close()
+        }
+
+        // 2. Configure custom buyerLoginName = "Comprador"
+        val customSettings = SettingsEntity(
+            id = 1,
+            adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin123"),
+            globalMarkupPercent = 0.0,
+            usdExchangeRate = 0.18,
+            eurExchangeRate = 0.16,
+            inactivityTimeoutMinutes = 3,
+            buyerPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("buyerPass"),
+            buyerLoginName = "Comprador"
+        )
+        db.settingsDao().insertOrUpdateSettings(customSettings)
+
+        // 3. CSV user import skips "Comprador" as name, clears "Comprador" as nickname, and allows "Buyer"
+        val usersCsv = File(tempDir, "dynamic_buyer_users.csv")
+        usersCsv.writeText(
+            """
+            name;nickname;balance;isActive
+            Comprador;;0;true
+            Maria;COMPRADOR;10,00;true
+            Buyer;Buy;5,00;true
+            """.trimIndent()
+        )
+        val csvRes = service.importUsersFromCsv(usersCsv, dryRun = false)
+        assertEquals(2, csvRes.addedCount, "Maria + Buyer added; Comprador skipped")
+        assertTrue(csvRes.warnings.any { it.contains("Comprador") && it.contains("reserved") })
+        val importedUsers = db.userDao().getAllUsers()
+        assertTrue(importedUsers.none { it.name.equals("Comprador", ignoreCase = true) })
+        val maria = importedUsers.first { it.name == "Maria" }
+        assertNull(maria.nickname, "Reserved nickname matching dynamic buyerLoginName must be cleared")
+        val buyerUser = importedUsers.first { it.name == "Buyer" }
+        assertEquals("Buy", buyerUser.nickname)
+
+        // 4. Snapshot and verify restore preserves/restores buyerLoginName
+        val backupSnap = File(tempDir, "custom_buyer_backup.db")
+        service.performDbSnapshot(backupSnap)
+
+        // Change current live DB buyerLoginName to "MarketRun"
+        db.settingsDao().insertOrUpdateSettings(customSettings.copy(buyerLoginName = "MarketRun"))
+
+        // Restore with preserveCurrentAdminPassword = true -> keeps "MarketRun"
+        service.restoreDbFromBackup(backupSnap, preserveExistingRoutines = true, preserveCurrentAdminPassword = true)
+        assertEquals("MarketRun", db.settingsDao().getSettings()?.buyerLoginName)
+
+        // Restore with preserveCurrentAdminPassword = false -> restores "Comprador" from backup
+        service.restoreDbFromBackup(backupSnap, preserveExistingRoutines = true, preserveCurrentAdminPassword = false)
+        assertEquals("Comprador", db.settingsDao().getSettings()?.buyerLoginName)
+
+        // 5. Wipe with preserveAdminPassword = true -> preserves "Comprador"
+        service.wipeAllData(preserveBackupRoutines = true, preserveAdminPassword = true)
+        assertEquals("Comprador", db.settingsDao().getSettings()?.buyerLoginName)
+
+        // 6. Wipe with preserveAdminPassword = false -> resets to "Buyer"
+        service.wipeAllData(preserveBackupRoutines = true, preserveAdminPassword = false)
+        assertEquals("Buyer", db.settingsDao().getSettings()?.buyerLoginName)
     }
 }
 

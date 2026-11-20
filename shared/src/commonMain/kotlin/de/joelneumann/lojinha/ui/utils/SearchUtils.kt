@@ -1,6 +1,7 @@
 package de.joelneumann.lojinha.ui.utils
 
 import de.joelneumann.lojinha.domain.model.Product
+import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.VeggieProduct
 import de.joelneumann.lojinha.domain.model.VeggieUnitType
@@ -63,10 +64,25 @@ fun String.normalizeUserName(): String =
     this.trim().replace(Regex("\\s+"), " ").removeAccents().lowercase()
 
 /**
- * Returns true if the name collides with a reserved system login identifier ("admin" or "buyer").
+ * Returns true if the name collides strictly with the hardcoded "admin" system login identifier.
  */
-fun String.isReservedAdminName(): Boolean =
-    normalizeUserName().let { it == "admin" || it == "buyer" }
+fun String.isReservedAdminOnlyName(): Boolean =
+    normalizeUserName() == "admin"
+
+/**
+ * Returns true if the name collides with a reserved system login identifier
+ * ("admin" or the configured [buyerLoginName], defaulting to "Buyer").
+ */
+fun String.isReservedAdminName(
+    buyerLoginName: String = SystemSettings.DEFAULT_BUYER_LOGIN_NAME
+): Boolean {
+    val normalized = normalizeUserName()
+    if (normalized == "admin") return true
+    val normalizedBuyer = buyerLoginName.trim()
+        .ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
+        .normalizeUserName()
+    return normalized == normalizedBuyer
+}
 
 /**
  * Checks whether [candidateIdentifier] (a user's name or nickname) collides with any other

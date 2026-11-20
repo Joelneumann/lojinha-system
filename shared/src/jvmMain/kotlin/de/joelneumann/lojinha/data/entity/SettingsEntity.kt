@@ -36,7 +36,8 @@ data class SettingsEntity(
     @ColumnInfo(defaultValue = "'08:00'") val veggieAutoOpenTime: String = "08:00",
     @ColumnInfo(defaultValue = "0") val defaultVeggieBuyerFeeCents: Long = 0L,
     @ColumnInfo(defaultValue = "0") val defaultVeggieTransportFeeCents: Long = 0L,
-    @ColumnInfo(defaultValue = "''") val buyerPasswordHash: String = ""
+    @ColumnInfo(defaultValue = "''") val buyerPasswordHash: String = "",
+    @ColumnInfo(defaultValue = "'Buyer'") val buyerLoginName: String = SystemSettings.DEFAULT_BUYER_LOGIN_NAME
 ) {
     fun toDomain(): SystemSettings = SystemSettings(
         adminPasswordHash = adminPasswordHash,
@@ -67,7 +68,8 @@ data class SettingsEntity(
         veggieAutoOpenTime = veggieAutoOpenTime,
         defaultVeggieBuyerFeeCents = defaultVeggieBuyerFeeCents,
         defaultVeggieTransportFeeCents = defaultVeggieTransportFeeCents,
-        buyerPasswordHash = buyerPasswordHash
+        buyerPasswordHash = buyerPasswordHash,
+        buyerLoginName = buyerLoginName.trim().ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
     )
 
     companion object {
@@ -101,7 +103,8 @@ data class SettingsEntity(
             veggieAutoOpenTime = settings.veggieAutoOpenTime,
             defaultVeggieBuyerFeeCents = settings.defaultVeggieBuyerFeeCents,
             defaultVeggieTransportFeeCents = settings.defaultVeggieTransportFeeCents,
-            buyerPasswordHash = settings.buyerPasswordHash
+            buyerPasswordHash = settings.buyerPasswordHash,
+            buyerLoginName = settings.effectiveBuyerLoginName
         )
     }
 }

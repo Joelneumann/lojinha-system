@@ -114,9 +114,9 @@ The embedded Ktor server serves a mobile-first **Customer Network Portal** along
 
 ## 🧺 Buyer Portal (Market Run Interface)
 
-For the dedicated market buyer role (configured with `buyerPasswordHash` in `SystemSettings`), Lojinha provides a scoped **Buyer Portal** accessible from `/login.html`:
+For the dedicated market buyer role (configured with `buyerLoginName` — defaulting to `"Buyer"` — and `buyerPasswordHash` in `SystemSettings`), Lojinha provides a scoped **Buyer Portal** accessible from `/login.html`:
 
-* **Authentication:** Issues an `HttpOnly` session cookie (`lojinha_buyer_session`) via `POST /api/login` (`role = "buyer"`) and logs out via `POST /api/buyer/logout`. Buyer sessions cannot access Admin or Customer data (transport fees, transporter user, and customer identities are stripped from buyer payloads).
+* **Authentication:** Issues an `HttpOnly` session cookie (`lojinha_buyer_session`) via `POST /api/login` using the configured `buyerLoginName` (case/accent-insensitive; reserved alongside `"Admin"` against all user names and nicknames) and logs out via `POST /api/buyer/logout`. Changing either `buyerLoginName` or `buyerPasswordHash` immediately revokes active Buyer sessions. Buyer sessions cannot access Admin or Customer data (transport fees, transporter user, and customer identities are stripped from buyer payloads).
 * **Closed-Round Shopping View (`GET /api/buyer/veggie/state`):**
   * Shows aggregated item quantities when the current round is `CLOSED` (excluding items with `excludeFromBuyerPdf = true`).
   * Displays an outdated-PDF banner whenever orders change after the buyer's last PDF download (`ordersUpdatedAt > buyerPortalPdfExportedAt`).

@@ -2052,5 +2052,201 @@ class LojinhaAdminServerTest {
             Thread.sleep(200)
         }
     }
+
+    @Test
+    fun testDynamicBuyerLoginName_authRevocationUiSettingsAndReservedChecks() {
+        var dynamicSettings = SystemSettings(
+            adminPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("adminSecret99"),
+            buyerPasswordHash = de.joelneumann.lojinha.security.PasswordHasher.hash("buyerSecret42"),
+            buyerLoginName = "Comprador"
+        )
+        val dynamicSettingsRepo = object : SettingsRepository {
+            override suspend fun getSettings(): SystemSettings = dynamicSettings
+            override fun getSettingsFlow(): Flow<SystemSettings> = flowOf(dynamicSettings)
+            override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {
+                dynamicSettings = settings
+            }
+        }
+        val localUsers = mutableListOf(
+            User(id = "u-del-comp", name = "Comprador", isDeleted = true),
+            User(id = "u-del-nick-comp", name = "Pedro", nickname = "Comprador", isDeleted = true)
+        )
+        val localUserRepo = object : UserRepository {
+            override fun getUsersFlow(): Flow<List<User>> = flowOf(localUsers.toList())
+            override suspend fun getAllUsers(): List<User> = localUsers.toList()
+            override suspend fun getUserById(id: String): User? = localUsers.find { it.id == id }
+            override suspend fun getUserByBarcode(barcode: String): User? = null
+            override suspend fun saveUser(user: User) {
+                val idx = localUsers.indexOfFirst { it.id == user.id }
+                if (idx >= 0) localUsers[idx] = user else localUsers.add(user)
+            }
+            override suspend fun updateBalance(userId: String, deltaCents: Long) {}
+            override suspend fun deactivateUser(userId: String) {}
+            override suspend fun softDeleteUser(userId: String) {}
+            override suspend fun restoreUser(userId: String) {
+                val idx = localUsers.indexOfFirst { it.id == userId }
+                if (idx >= 0) localUsers[idx] = localUsers[idx].copy(isDeleted = false)
+            }
+            override suspend fun hardDeleteUser(userId: String): Boolean = true
+            override suspend fun canHardDeleteUser(userId: String): Boolean = true
+            override suspend fun updateCustomerSettings(
+                userId: String,
+                language: Language,
+                secondaryCurrency: SecondaryCurrency,
+                avatar: UserAvatarConfig,
+                pinHash: String?,
+                requirePinOnKiosk: Boolean
+            ): User? = null
+        }
+
+        val isolatedPort = 18090
+        val isolatedServer = LojinhaAdminServer(
+            productRepository = fakeProductRepo,
+            userRepository = localUserRepo,
+            transactionRepository = fakeTransactionRepo,
+            billingListRepository = fakeBillingListRepo,
+            settingsRepository = dynamicSettingsRepo,
+            veggieOrderRepository = fakeVeggieRepo,
+            port = isolatedPort
+        )
+        isolatedServer.start()
+        Thread.sleep(300)
+        try {
+            // 1. Old default "buyer" login is rejected when buyerLoginName is "Comprador"
+            val oldBuyerRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"buyer","password":"buyerSecret42"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(401, oldBuyerRes.statusCode())
+
+            // 2. Custom buyerLoginName succeeds (case & accent insensitive)
+            val customBuyerRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"  cómpradór ","password":"buyerSecret42"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, customBuyerRes.statusCode())
+            assertEquals("BUYER", testJson.decodeFromString<UnifiedLoginResponse>(customBuyerRes.body()).role)
+            val buyerCookie = customBuyerRes.headers().allValues("Set-Cookie")
+                .first { it.startsWith("lojinha_buyer_session=") }
+                .substringBefore(";")
+
+            // 3. Admin login & /api/admin/ui-settings exposes buyerLoginName without buyerPasswordHash
+            val adminLoginRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/login"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"identifier":"Admin","password":"adminSecret99"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, adminLoginRes.statusCode())
+            val adminCookie = adminLoginRes.headers().allValues("Set-Cookie")
+                .first { it.startsWith("lojinha_admin_session=") }
+                .substringBefore(";")
+
+            val uiSettingsRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/admin/ui-settings"))
+                    .header("Cookie", adminCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, uiSettingsRes.statusCode())
+            val uiSettings = testJson.decodeFromString<SystemSettings>(uiSettingsRes.body())
+            assertEquals("Comprador", uiSettings.buyerLoginName)
+            assertEquals("", uiSettings.buyerPasswordHash)
+
+            // 4. POST /api/admin/users rejects dynamic buyerLoginName as name or nickname, allows "Buyer"
+            val rejectNameRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/admin/users"))
+                    .header("Cookie", adminCookie)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(testJson.encodeToString(User(id = "u-1", name = "comprador"))))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(400, rejectNameRes.statusCode())
+            assertTrue(rejectNameRes.body().contains("Comprador"))
+
+            val rejectNickRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/admin/users"))
+                    .header("Cookie", adminCookie)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(testJson.encodeToString(User(id = "u-2", name = "Ana", nickname = "COMPRADOR"))))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(400, rejectNickRes.statusCode())
+            assertTrue(rejectNickRes.body().contains("Comprador"))
+
+            val allowOldBuyerRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/admin/users"))
+                    .header("Cookie", adminCookie)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(testJson.encodeToString(User(id = "u-3", name = "Buyer", nickname = "Buy"))))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(200, allowOldBuyerRes.statusCode())
+
+            // 5. POST /api/admin/users/restore/{id} rejects deleted users matching dynamic buyerLoginName
+            val restoreNameRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/admin/users/restore/u-del-comp"))
+                    .header("Cookie", adminCookie)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(400, restoreNameRes.statusCode())
+
+            val restoreNickRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/admin/users/restore/u-del-nick-comp"))
+                    .header("Cookie", adminCookie)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(400, restoreNickRes.statusCode())
+
+            // 6. Renaming buyerLoginName immediately revokes active buyer session
+            dynamicSettings = dynamicSettings.copy(buyerLoginName = "Mercado")
+            val revokedSessionRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/session"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertNull(testJson.decodeFromString<SessionStatusResponse>(revokedSessionRes.body()).role)
+
+            val revokedApiRes = client.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:$isolatedPort/api/buyer/veggie/state"))
+                    .header("Cookie", buyerCookie)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+            assertEquals(401, revokedApiRes.statusCode())
+        } finally {
+            isolatedServer.stop()
+            Thread.sleep(200)
+        }
+    }
 }
 

@@ -25,7 +25,7 @@ import de.joelneumann.lojinha.data.entity.*
         VeggieOrderEntryEntity::class,
         VeggieUserFavoriteEntity::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

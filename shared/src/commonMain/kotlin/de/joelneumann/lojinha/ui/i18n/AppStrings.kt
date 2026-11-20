@@ -796,7 +796,7 @@ interface AppStrings {
     val requirePinOnKioskLabel: String
     val requirePinOnKioskDesc: String
     fun userNameAlreadyExists(existingName: String): String
-    val userNameReservedAdmin: String
+    fun userNameReservedAdmin(buyerLoginName: String): String
 
     val veggieSettingsCardTitle: String
     val veggieSettingsCardSubtitle: String
@@ -981,7 +981,7 @@ interface AppStrings {
     val userNicknamePlaceholder: String
     val userNicknameHint: String
     val userNicknameNotSet: String
-    val userNicknameReservedError: String
+    fun userNicknameReservedError(buyerLoginName: String): String
     val userNicknameDuplicateError: String
     val veggieExcludeFromBuyerPdfLabel: String
     val veggieExcludeFromBuyerPdfHint: String
@@ -990,9 +990,15 @@ interface AppStrings {
     val csvExportSuccessTitle: String
     val csvExportSavedTo: String
     val csvExportFailed: String
-    // Buyer Portal & Buyer Password
+    // Buyer Portal & Buyer Login Credentials
     val buyerPasswordTitle: String
-    val buyerPasswordSubtitle: String
+    fun buyerPasswordSubtitle(buyerLoginName: String): String
+    val buyerLoginNameLabel: String
+    val buyerLoginNamePlaceholder: String
+    val buyerLoginNameEmptyError: String
+    val buyerLoginNameTooLongError: String
+    val buyerLoginNameReservedAdminError: String
+    fun buyerLoginNameDuplicateUserError(userName: String): String
     val buyerPasswordPlaceholder: String
     val buyerPasswordConfiguredBadge: String
     val buyerPasswordNotConfiguredBadge: String

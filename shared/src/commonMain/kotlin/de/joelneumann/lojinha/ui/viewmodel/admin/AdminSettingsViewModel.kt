@@ -10,10 +10,14 @@ import de.joelneumann.lojinha.domain.model.BackupFileType
 import de.joelneumann.lojinha.domain.model.BackupWriteMode
 import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.SystemSettings
+import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.BackupRepository
 import de.joelneumann.lojinha.domain.repository.SettingsRepository
+import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.PlatformFile
+import de.joelneumann.lojinha.ui.utils.findUserIdentifierConflict
+import de.joelneumann.lojinha.ui.utils.isReservedAdminOnlyName
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,11 +42,15 @@ class AdminSettingsViewModel(
     private val onOpenVeggieImagesFolder: (() -> Unit)? = null,
     val veggieImagesDirectoryPath: String = "",
     val serverUrls: List<String> = emptyList(),
-    private val onExitApplication: (() -> Unit)? = null
+    private val onExitApplication: (() -> Unit)? = null,
+    private val userRepository: UserRepository? = null
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(SystemSettings())
     val settings: StateFlow<SystemSettings> = _settings.asStateFlow()
+
+    private val _users = MutableStateFlow<List<User>>(emptyList())
+    val users: StateFlow<List<User>> = _users.asStateFlow()
 
     private val _isFetchingRates = MutableStateFlow(false)
     val isFetchingRates: StateFlow<Boolean> = _isFetchingRates.asStateFlow()
@@ -118,6 +126,7 @@ class AdminSettingsViewModel(
     init {
         loadSettings()
         loadRoutines()
+        loadUsers()
         refreshLogSize()
     }
 
@@ -175,6 +184,7 @@ class AdminSettingsViewModel(
 
     private var settingsJob: Job? = null
     private var routinesJob: Job? = null
+    private var usersJob: Job? = null
 
     fun loadSettings() {
         settingsJob?.cancel()
@@ -195,9 +205,44 @@ class AdminSettingsViewModel(
         }
     }
 
+    fun loadUsers() {
+        val repo = userRepository ?: return
+        usersJob?.cancel()
+        usersJob = viewModelScope.launch {
+            repo.getUsersFlow().collect {
+                _users.value = it
+            }
+        }
+    }
+
     fun updateSystemSettings(newSettings: SystemSettings) {
         viewModelScope.launch {
-            settingsRepository.updateSettings(newSettings)
+            _statusMessage.value = null
+            _errorMessage.value = null
+            val cleanBuyerName = newSettings.buyerLoginName.trim()
+            if (cleanBuyerName.isBlank()) {
+                _errorMessage.value = I18n.get().buyerLoginNameEmptyError
+                return@launch
+            }
+            if (cleanBuyerName.length > SystemSettings.MAX_BUYER_LOGIN_NAME_LENGTH) {
+                _errorMessage.value = I18n.get().buyerLoginNameTooLongError
+                return@launch
+            }
+            if (cleanBuyerName.isReservedAdminOnlyName()) {
+                _errorMessage.value = I18n.get().buyerLoginNameReservedAdminError
+                return@launch
+            }
+            val currentUsers = userRepository?.getAllUsers() ?: _users.value
+            val conflictUser = findUserIdentifierConflict(
+                candidateIdentifier = cleanBuyerName,
+                excludeUserId = "",
+                allUsers = currentUsers
+            )
+            if (conflictUser != null) {
+                _errorMessage.value = I18n.get().buyerLoginNameDuplicateUserError(conflictUser.name)
+                return@launch
+            }
+            settingsRepository.updateSettings(newSettings.copy(buyerLoginName = cleanBuyerName))
             _statusMessage.value = I18n.get().statusSystemSettingsUpdated
         }
     }

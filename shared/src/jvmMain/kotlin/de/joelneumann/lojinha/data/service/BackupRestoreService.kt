@@ -28,6 +28,7 @@ import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
+import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
@@ -660,6 +661,7 @@ class BackupRestoreService(
                     append(if (settingsColumns.contains("defaultveggiebuyerfeecents")) ", defaultVeggieBuyerFeeCents" else ", 0")
                     append(if (settingsColumns.contains("defaultveggietransportfeecents")) ", defaultVeggieTransportFeeCents" else ", 0")
                     append(if (settingsColumns.contains("buyerpasswordhash")) ", buyerPasswordHash" else ", ''")
+                    append(if (settingsColumns.contains("buyerloginname")) ", buyerLoginName" else ", 'Buyer'")
                     append(" FROM settings LIMIT 1")
                 }
 
@@ -699,7 +701,8 @@ class BackupRestoreService(
                             veggieAutoOpenTime = if (stmt.isNull(26)) "08:00" else stmt.getText(26),
                             defaultVeggieBuyerFeeCents = if (stmt.isNull(27)) 0L else stmt.getLong(27),
                             defaultVeggieTransportFeeCents = if (stmt.isNull(28)) 0L else stmt.getLong(28),
-                            buyerPasswordHash = if (stmt.isNull(29)) "" else stmt.getText(29)
+                            buyerPasswordHash = if (stmt.isNull(29)) "" else stmt.getText(29),
+                            buyerLoginName = if (stmt.isNull(30)) SystemSettings.DEFAULT_BUYER_LOGIN_NAME else stmt.getText(30).trim().ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
                         )
                     }
                 } finally {
@@ -1124,10 +1127,16 @@ class BackupRestoreService(
                         } else {
                             backupSettings.buyerPasswordHash
                         }
+                        val finalBuyerLoginName = if (preserveCurrentAdminPassword && currentSettings != null) {
+                            currentSettings.buyerLoginName.trim().ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
+                        } else {
+                            backupSettings.buyerLoginName.trim().ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
+                        }
                         val finalSettings = if (preserveExistingRoutines && currentSettings != null) {
                             backupSettings.copy(
                                 adminPasswordHash = finalPassword,
                                 buyerPasswordHash = finalBuyerPassword,
+                                buyerLoginName = finalBuyerLoginName,
                                 backupLocationPath = currentSettings.backupLocationPath,
                                 autoBackupEnabled = currentSettings.autoBackupEnabled,
                                 autoBackupFormat = currentSettings.autoBackupFormat,
@@ -1144,7 +1153,8 @@ class BackupRestoreService(
                         } else {
                             backupSettings.copy(
                                 adminPasswordHash = finalPassword,
-                                buyerPasswordHash = finalBuyerPassword
+                                buyerPasswordHash = finalBuyerPassword,
+                                buyerLoginName = finalBuyerLoginName
                             )
                         }
                         db.settingsDao().insertOrUpdateSettings(finalSettings)
@@ -1198,6 +1208,12 @@ class BackupRestoreService(
                         id = 1,
                         adminPasswordHash = finalPasswordHash,
                         buyerPasswordHash = if (preserveAdminPassword) existingSettings?.buyerPasswordHash ?: "" else "",
+                        buyerLoginName = if (preserveAdminPassword) {
+                            existingSettings?.buyerLoginName?.trim()?.ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
+                                ?: SystemSettings.DEFAULT_BUYER_LOGIN_NAME
+                        } else {
+                            SystemSettings.DEFAULT_BUYER_LOGIN_NAME
+                        },
                         globalMarkupPercent = 0.0,
                         usdExchangeRate = 0.18,
                         eurExchangeRate = 0.16,
@@ -1565,6 +1581,8 @@ class BackupRestoreService(
             return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvMissingNameHeaderError))
         }
 
+        val buyerLoginName = db.settingsDao().getSettings()?.toDomain()?.effectiveBuyerLoginName
+            ?: SystemSettings.DEFAULT_BUYER_LOGIN_NAME
         val existingUsers = db.userDao().getAllUsers().associateBy { it.id }
         val allExistingUserBarcodesMap = mutableMapOf<String, String>() // barcode string -> userId
         val activeIdentifiersToUserId = mutableMapOf<String, String>() // normalized name/nickname -> userId
@@ -1601,7 +1619,7 @@ class BackupRestoreService(
                 warnings.add("Row ${i + 1}: Skipped user because name is blank.")
                 continue
             }
-            if (name.isReservedAdminName()) {
+            if (name.isReservedAdminName(buyerLoginName)) {
                 warnings.add("Row ${i + 1} ('$name'): Skipped because name is reserved for system login.")
                 continue
             }
@@ -1791,7 +1809,7 @@ class BackupRestoreService(
 
                 if (finalNickname != null) {
                     val normNick = finalNickname.normalizeUserName()
-                    if (finalNickname.isReservedAdminName()) {
+                    if (finalNickname.isReservedAdminName(buyerLoginName)) {
                         warnings.add("Row ${i + 1} ('$name'): Reserved nickname '$finalNickname' cleared.")
                         finalNickname = null
                     } else {

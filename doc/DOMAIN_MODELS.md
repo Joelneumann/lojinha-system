@@ -181,6 +181,7 @@ Single-row configuration entity persisted in Room SQLite.
 |---|---|---|---|
 | `adminPasswordHash` | `String` | SHA-256 of `"admin"` | Master admin password hash. |
 | `buyerPasswordHash` | `String` | `""` | Optional Buyer Portal password hash (enables the scoped Buyer Portal role when non-blank). |
+| `buyerLoginName` | `String` | `"Buyer"` | Dynamic login identifier for the Buyer Portal (case/accent-insensitive, reserved alongside `"Admin"` against all user names and nicknames). |
 | `globalMarkupPercent` | `Double` | `0.0` | Default markup percentage applied to catalog items without custom markup. |
 | `usdExchangeRate` | `Double` | `0.18` | Conversion rate: 1 BRL = X USD (manual or via API). |
 | `eurExchangeRate` | `Double` | `0.16` | Conversion rate: 1 BRL = X EUR (manual or via API). |

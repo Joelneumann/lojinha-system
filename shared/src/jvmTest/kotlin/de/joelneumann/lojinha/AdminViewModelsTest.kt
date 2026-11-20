@@ -1391,5 +1391,84 @@ class AdminViewModelsTest {
         viewModel.openVeggieImagesFolder()
         assertTrue(folderOpened)
     }
+
+    @Test
+    fun testAdminSettingsViewModel_validatesDynamicBuyerLoginName() = runTest {
+        val alice = User(id = "u1", name = "Alice Silva", nickname = "Ali", isActive = true)
+        val userRepo = TestUserRepository(listOf(alice))
+        val settingsRepo = TestSettingsRepository(SystemSettings(buyerLoginName = "Buyer"))
+        val viewModel = AdminSettingsViewModel(
+            settingsRepository = settingsRepo,
+            userRepository = userRepo
+        )
+
+        // Blank rejected
+        viewModel.updateSystemSettings(settingsRepo.getSettings().copy(buyerLoginName = "   "))
+        assertEquals("Buyer", settingsRepo.getSettings().buyerLoginName)
+        assertNotNull(viewModel.errorMessage.value)
+
+        // "Admin" rejected (accent/case-insensitive)
+        viewModel.updateSystemSettings(settingsRepo.getSettings().copy(buyerLoginName = "  Ädmin "))
+        assertEquals("Buyer", settingsRepo.getSettings().buyerLoginName)
+        assertNotNull(viewModel.errorMessage.value)
+
+        // Colliding with existing user name rejected
+        viewModel.updateSystemSettings(settingsRepo.getSettings().copy(buyerLoginName = "alice silva"))
+        assertEquals("Buyer", settingsRepo.getSettings().buyerLoginName)
+        assertNotNull(viewModel.errorMessage.value)
+
+        // Colliding with existing user nickname rejected
+        viewModel.updateSystemSettings(settingsRepo.getSettings().copy(buyerLoginName = "ALI"))
+        assertEquals("Buyer", settingsRepo.getSettings().buyerLoginName)
+        assertNotNull(viewModel.errorMessage.value)
+
+        // Valid custom name succeeds and trims whitespace
+        viewModel.updateSystemSettings(settingsRepo.getSettings().copy(buyerLoginName = "  Comprador  "))
+        assertEquals("Comprador", settingsRepo.getSettings().buyerLoginName)
+        assertNull(viewModel.errorMessage.value)
+        assertNotNull(viewModel.statusMessage.value)
+    }
+
+    @Test
+    fun testAdminUsersViewModel_enforcesDynamicBuyerLoginNameOnSaveAndRestore() = runTest {
+        val deletedConflict = User(id = "u-del", name = "Comprador", isDeleted = true)
+        val deletedNickConflict = User(id = "u-del-nick", name = "Carlos", nickname = "Comprador", isDeleted = true)
+        val userRepo = TestUserRepository(listOf(deletedConflict, deletedNickConflict))
+        val txRepo = TestTransactionRepository()
+        val settingsRepo = TestSettingsRepository(SystemSettings(buyerLoginName = "Comprador"))
+        val viewModel = AdminUsersViewModel(userRepo, txRepo, settingsRepo)
+
+        assertEquals("Comprador", viewModel.buyerLoginName.value)
+
+        // Saving user with dynamic buyerLoginName as name is rejected
+        var saved = 0
+        viewModel.saveUser(User(id = "u-new-1", name = "cómpradór")) { saved++ }
+        assertEquals(0, saved)
+        assertNotNull(viewModel.userErrorMessage.value)
+        assertTrue(viewModel.userErrorMessage.value!!.contains("Comprador"))
+
+        // Saving user with dynamic buyerLoginName as nickname is rejected
+        viewModel.clearUserError()
+        viewModel.saveUser(User(id = "u-new-2", name = "Maria", nickname = "COMPRADOR")) { saved++ }
+        assertEquals(0, saved)
+        assertNotNull(viewModel.userErrorMessage.value)
+        assertTrue(viewModel.userErrorMessage.value!!.contains("Comprador"))
+
+        // Saving user named "Buyer" is now ALLOWED because buyerLoginName was changed to "Comprador"
+        viewModel.clearUserError()
+        viewModel.saveUser(User(id = "u-buyer-ok", name = "Buyer", nickname = "Buy")) { saved++ }
+        assertEquals(1, saved)
+        assertNull(viewModel.userErrorMessage.value)
+
+        // Restoring deleted user whose name or nickname matches dynamic buyerLoginName is rejected
+        viewModel.restoreUser("u-del")
+        assertTrue(userRepo.getUserById("u-del")!!.isDeleted)
+        assertNotNull(viewModel.userErrorMessage.value)
+
+        viewModel.clearUserError()
+        viewModel.restoreUser("u-del-nick")
+        assertTrue(userRepo.getUserById("u-del-nick")!!.isDeleted)
+        assertNotNull(viewModel.userErrorMessage.value)
+    }
 }
 

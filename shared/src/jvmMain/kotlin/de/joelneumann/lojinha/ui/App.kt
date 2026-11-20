@@ -437,7 +437,7 @@ fun App(
                             AdminShoppingListViewModel(effectiveShoppingListRepo, effectiveProductRepo, effectiveAdminNoteRepo)
                         }
                         val adminUsersViewModel = remember {
-                            AdminUsersViewModel(effectiveUserRepo, effectiveTransactionRepo)
+                            AdminUsersViewModel(effectiveUserRepo, effectiveTransactionRepo, effectiveSettingsRepo)
                         }
                         val adminTransactionsViewModel = remember {
                             AdminTransactionsViewModel(effectiveTransactionRepo, effectiveUserRepo, effectiveProductRepo)
@@ -545,7 +545,8 @@ fun App(
                                 },
                                 veggieImagesDirectoryPath = veggieImageService.getImageDirectory().absolutePath,
                                 serverUrls = candidateUrls,
-                                onExitApplication = onExitApplication
+                                onExitApplication = onExitApplication,
+                                userRepository = effectiveUserRepo
                             )
                         }
 

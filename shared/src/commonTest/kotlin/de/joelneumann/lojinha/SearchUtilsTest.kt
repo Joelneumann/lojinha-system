@@ -10,6 +10,7 @@ import de.joelneumann.lojinha.ui.utils.filterAndRankProducts
 import de.joelneumann.lojinha.ui.utils.filterAndRankUsers
 import de.joelneumann.lojinha.ui.utils.filterAndRankVeggieProducts
 import de.joelneumann.lojinha.ui.utils.isReservedAdminName
+import de.joelneumann.lojinha.ui.utils.isReservedAdminOnlyName
 import de.joelneumann.lojinha.ui.utils.normalizeUserName
 import de.joelneumann.lojinha.ui.utils.removeAccents
 import kotlin.test.Test
@@ -349,6 +350,14 @@ class SearchUtilsTest {
         assertTrue("Buyer".isReservedAdminName())
         assertTrue("  büyér  ".isReservedAdminName())
         assertFalse("Alice".isReservedAdminName())
+
+        // Dynamic buyer login name overrides "Buyer" reservation while keeping "Admin" reserved
+        assertTrue("Admin".isReservedAdminName("Comprador"))
+        assertTrue("comprador".isReservedAdminName("Comprador"))
+        assertTrue("  Cómpradór  ".isReservedAdminName("Comprador"))
+        assertFalse("Buyer".isReservedAdminName("Comprador"))
+        assertTrue("  ädmin  ".isReservedAdminOnlyName())
+        assertFalse("Buyer".isReservedAdminOnlyName())
     }
 
     @Test

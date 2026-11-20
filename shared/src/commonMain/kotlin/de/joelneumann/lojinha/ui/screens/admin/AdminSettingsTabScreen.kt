@@ -36,8 +36,11 @@ import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.pickFile
 import de.joelneumann.lojinha.ui.utils.pickFolder
+import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
+import de.joelneumann.lojinha.ui.utils.findUserIdentifierConflict
+import de.joelneumann.lojinha.ui.utils.isReservedAdminOnlyName
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminSettingsViewModel
 
@@ -71,6 +74,7 @@ fun AdminSettingsTabScreen(
     val clipboardManager = LocalClipboardManager.current
     var copiedUrl by remember { mutableStateOf<String?>(null) }
     val settings by viewModel.settings.collectAsState()
+    val existingUsers by viewModel.users.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val isFetchingRates by viewModel.isFetchingRates.collectAsState()
@@ -98,6 +102,7 @@ fun AdminSettingsTabScreen(
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    var buyerLoginName by remember { mutableStateOf(settings.effectiveBuyerLoginName) }
     var newBuyerPassword by remember { mutableStateOf("") }
     var clearBuyerPassword by remember { mutableStateOf(false) }
     var showBuyerPassword by remember { mutableStateOf(false) }
@@ -144,15 +149,32 @@ fun AdminSettingsTabScreen(
     val parsedVeggieTransportFee = remember(veggieTransportFeeInput) { parseBrlInputToCents(veggieTransportFeeInput) }
     val isVeggieTransportFeeValid = parsedVeggieTransportFee != null && parsedVeggieTransportFee in 0L..100_000_00L
 
+    val trimmedBuyerLoginName = remember(buyerLoginName) { buyerLoginName.trim() }
+    val isBuyerLoginNameBlank = trimmedBuyerLoginName.isBlank()
+    val isBuyerLoginNameTooLong = trimmedBuyerLoginName.length > SystemSettings.MAX_BUYER_LOGIN_NAME_LENGTH
+    val isBuyerLoginNameReservedAdmin = remember(trimmedBuyerLoginName) { trimmedBuyerLoginName.isReservedAdminOnlyName() }
+    val buyerLoginNameConflictUser = remember(trimmedBuyerLoginName, existingUsers) {
+        if (trimmedBuyerLoginName.isBlank()) null
+        else findUserIdentifierConflict(
+            candidateIdentifier = trimmedBuyerLoginName,
+            excludeUserId = "",
+            allUsers = existingUsers
+        )
+    }
+    val isBuyerLoginNameValid = !isBuyerLoginNameBlank &&
+        !isBuyerLoginNameTooLong &&
+        !isBuyerLoginNameReservedAdmin &&
+        buyerLoginNameConflictUser == null
+
     val hasFieldChanges = remember(
-        settings, newPassword, confirmPassword, newBuyerPassword, clearBuyerPassword, globalMarkup, globalMarkupValue,
+        settings, newPassword, confirmPassword, buyerLoginName, newBuyerPassword, clearBuyerPassword, globalMarkup, globalMarkupValue,
         usdRate, parsedUsdRate, eurRate, parsedEurRate,
         autoUpdateExchangeRates, inactivityTimeout, supportEmail,
         yellowWarningThreshold, parsedYellow, redWarningThreshold, parsedRed,
         veggieAutoOpenEnabled, veggieAutoOpenDayOfWeek, veggieAutoOpenTime,
         veggieBuyerFeeInput, parsedVeggieBuyerFee, veggieTransportFeeInput, parsedVeggieTransportFee
     ) {
-        (newPassword.isNotEmpty() || confirmPassword.isNotEmpty() || newBuyerPassword.isNotEmpty() || clearBuyerPassword) ||
+        (newPassword.isNotEmpty() || confirmPassword.isNotEmpty() || buyerLoginName.trim() != settings.effectiveBuyerLoginName || newBuyerPassword.isNotEmpty() || clearBuyerPassword) ||
                 (if (globalMarkupValue != null) globalMarkupValue != settings.globalMarkupPercent else globalMarkup.trim() != Formatting.formatDecimal(settings.globalMarkupPercent)) ||
                 (if (parsedUsdRate != null) parsedUsdRate != settings.usdExchangeRate else usdRate.trim() != Formatting.formatDecimal(settings.usdExchangeRate)) ||
                 (if (parsedEurRate != null) parsedEurRate != settings.eurExchangeRate else eurRate.trim() != Formatting.formatDecimal(settings.eurExchangeRate)) ||
@@ -171,6 +193,7 @@ fun AdminSettingsTabScreen(
     // Only synchronize baseline fields when the user has NO uncommitted changes
     LaunchedEffect(settings) {
         if (!hasFieldChanges) {
+            buyerLoginName = settings.effectiveBuyerLoginName
             globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
             usdRate = Formatting.formatDecimal(settings.usdExchangeRate)
             eurRate = Formatting.formatDecimal(settings.eurExchangeRate)
@@ -256,6 +279,7 @@ fun AdminSettingsTabScreen(
                         onClick = {
                             newPassword = ""
                             confirmPassword = ""
+                            buyerLoginName = settings.effectiveBuyerLoginName
                             newBuyerPassword = ""
                             clearBuyerPassword = false
                             globalMarkup = Formatting.formatDecimal(settings.globalMarkupPercent)
@@ -292,7 +316,7 @@ fun AdminSettingsTabScreen(
                     }
                 }
 
-                val isAllSettingsValid = hasFieldChanges && isPasswordValid && isBuyerPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid && isVeggieTimeValid && isVeggieBuyerFeeValid && isVeggieTransportFeeValid
+                val isAllSettingsValid = hasFieldChanges && isPasswordValid && isBuyerLoginNameValid && isBuyerPasswordValid && isInactivityTimeoutValid && isGlobalMarkupValid && isUsdRateValid && isEurRateValid && isYellowThresholdValid && isRedThresholdValid && isThresholdOrderValid && isVeggieTimeValid && isVeggieBuyerFeeValid && isVeggieTransportFeeValid
 
                 Button(
                     onClick = {
@@ -325,11 +349,13 @@ fun AdminSettingsTabScreen(
                                     clearBuyerPassword -> ""
                                     newBuyerPassword.isNotBlank() -> de.joelneumann.lojinha.security.PasswordHasher.hash(newBuyerPassword.trim())
                                     else -> settings.buyerPasswordHash
-                                }
+                                },
+                                buyerLoginName = trimmedBuyerLoginName
                             )
                             viewModel.updateSystemSettings(updatedSettings)
                             newPassword = ""
                             confirmPassword = ""
+                            buyerLoginName = trimmedBuyerLoginName
                             newBuyerPassword = ""
                             clearBuyerPassword = false
                             usdRate = Formatting.formatDecimal(newUsd)
@@ -615,8 +641,16 @@ fun AdminSettingsTabScreen(
 
                         HorizontalDivider(color = DividerBorder)
 
-                        // Veggie Buyer Login Password
+                        // Veggie Buyer Login Credentials (Dynamic Name + Password)
                         val isBuyerPasswordConfigured = settings.buyerPasswordHash.isNotBlank() && !clearBuyerPassword
+                        val buyerLoginNamePreview = trimmedBuyerLoginName.ifBlank { settings.effectiveBuyerLoginName }
+                        val buyerLoginNameError = when {
+                            isBuyerLoginNameBlank -> strings.buyerLoginNameEmptyError
+                            isBuyerLoginNameTooLong -> strings.buyerLoginNameTooLongError
+                            isBuyerLoginNameReservedAdmin -> strings.buyerLoginNameReservedAdminError
+                            buyerLoginNameConflictUser != null -> strings.buyerLoginNameDuplicateUserError(buyerLoginNameConflictUser.name)
+                            else -> null
+                        }
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -635,10 +669,35 @@ fun AdminSettingsTabScreen(
                                 )
                             }
                             Text(
-                                text = strings.buyerPasswordSubtitle,
+                                text = strings.buyerPasswordSubtitle(buyerLoginNamePreview),
                                 fontSize = 12.sp,
                                 color = TextSecondaryMuted
                             )
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = strings.buyerLoginNameLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryNavy
+                                )
+                                OutlinedTextField(
+                                    value = buyerLoginName,
+                                    onValueChange = { buyerLoginName = it },
+                                    placeholder = { Text(strings.buyerLoginNamePlaceholder, fontSize = 13.sp) },
+                                    singleLine = true,
+                                    isError = buyerLoginNameError != null,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (buyerLoginNameError != null) {
+                                    Text(
+                                        text = buyerLoginNameError,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = ColorDangerCrimson
+                                    )
+                                }
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),

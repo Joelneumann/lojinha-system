@@ -89,7 +89,8 @@ class LojinhaAdminServer(
 
     private data class BuyerSession(
         val expiryTimestamp: Long,
-        val credentialHash: String
+        val credentialHash: String,
+        val loginNameNormalized: String
     )
 
     // Token Session Management (keyed by SHA-256(token) so raw tokens are never stored in memory or on disk)
@@ -447,7 +448,8 @@ class LojinhaAdminServer(
                         return@post
                     }
 
-                    if (normalizedIdentifier == "buyer") {
+                    val normalizedBuyerLoginName = settings.effectiveBuyerLoginName.normalizeUserName()
+                    if (normalizedIdentifier == normalizedBuyerLoginName) {
                         val hasBuyerHash = settings.buyerPasswordHash.isNotBlank()
                         val matchedHash = when {
                             cleanPassword.isBlank() -> null
@@ -467,7 +469,8 @@ class LojinhaAdminServer(
                             val token = UUID.randomUUID().toString()
                             activeBuyerTokens[hashToken(token)] = BuyerSession(
                                 expiryTimestamp = now + SESSION_DURATION_MS,
-                                credentialHash = matchedHash!!
+                                credentialHash = matchedHash!!,
+                                loginNameNormalized = normalizedBuyerLoginName
                             )
                             val cookieMaxAgeSec = if (req.keepLoggedIn) (SESSION_DURATION_MS / 1000L).toInt() else null
                             call.setSessionCookie(BUYER_COOKIE_NAME, token, cookieMaxAgeSec)
@@ -619,8 +622,9 @@ class LojinhaAdminServer(
                             call.respond(HttpStatusCode.BadRequest, "User name cannot be blank")
                             return@post
                         }
-                        if (trimmedUser.name.isReservedAdminName()) {
-                            call.respond(HttpStatusCode.BadRequest, "The names \"Admin\" and \"Buyer\" are reserved for system login")
+                        val buyerLoginName = settingsRepository.getSettings().effectiveBuyerLoginName
+                        if (trimmedUser.name.isReservedAdminName(buyerLoginName)) {
+                            call.respond(HttpStatusCode.BadRequest, "The names \"Admin\" and \"$buyerLoginName\" are reserved for system login")
                             return@post
                         }
                         if (trimmedNickname != null) {
@@ -628,8 +632,8 @@ class LojinhaAdminServer(
                                 call.respond(HttpStatusCode.BadRequest, "Nickname cannot exceed $MAX_USER_NICKNAME_LENGTH characters")
                                 return@post
                             }
-                            if (trimmedNickname.isReservedAdminName()) {
-                                call.respond(HttpStatusCode.BadRequest, "The nicknames \"Admin\" and \"Buyer\" are reserved for system login")
+                            if (trimmedNickname.isReservedAdminName(buyerLoginName)) {
+                                call.respond(HttpStatusCode.BadRequest, "The nicknames \"Admin\" and \"$buyerLoginName\" are reserved for system login")
                                 return@post
                             }
                         }
@@ -716,8 +720,9 @@ class LojinhaAdminServer(
                         val allUsers = userRepository.getAllUsers()
                         val target = allUsers.find { it.id == id }
                         if (target != null) {
-                            if (target.name.isReservedAdminName()) {
-                                call.respond(HttpStatusCode.BadRequest, "The names \"Admin\" and \"Buyer\" are reserved for system login")
+                            val buyerLoginName = settingsRepository.getSettings().effectiveBuyerLoginName
+                            if (target.name.isReservedAdminName(buyerLoginName)) {
+                                call.respond(HttpStatusCode.BadRequest, "The names \"Admin\" and \"$buyerLoginName\" are reserved for system login")
                                 return@post
                             }
                             val normalized = target.name.normalizeUserName()
@@ -733,8 +738,8 @@ class LojinhaAdminServer(
                             }
                             val normalizedNick = target.nickname?.normalizeUserName()
                             if (normalizedNick != null) {
-                                if (target.nickname?.isReservedAdminName() == true) {
-                                    call.respond(HttpStatusCode.BadRequest, "The nicknames \"Admin\" and \"Buyer\" are reserved for system login")
+                                if (target.nickname?.isReservedAdminName(buyerLoginName) == true) {
+                                    call.respond(HttpStatusCode.BadRequest, "The nicknames \"Admin\" and \"$buyerLoginName\" are reserved for system login")
                                     return@post
                                 }
                                 val duplicateNick = allUsers.firstOrNull {
@@ -2304,8 +2309,11 @@ class LojinhaAdminServer(
         val defaultAdminHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin")
         val hasCustomAdminHash = settings.adminPasswordHash.isNotBlank() &&
             !safeEquals(settings.adminPasswordHash.lowercase(), defaultAdminHash)
-        val stillValid = (settings.buyerPasswordHash.isNotBlank() && safeEquals(session.credentialHash, settings.buyerPasswordHash)) ||
+        val currentBuyerLoginNormalized = settings.effectiveBuyerLoginName.normalizeUserName()
+        val loginNameMatches = safeEquals(session.loginNameNormalized, currentBuyerLoginNormalized)
+        val passwordMatches = (settings.buyerPasswordHash.isNotBlank() && safeEquals(session.credentialHash, settings.buyerPasswordHash)) ||
             (hasCustomAdminHash && safeEquals(session.credentialHash, settings.adminPasswordHash))
+        val stillValid = loginNameMatches && passwordMatches
         if (!stillValid) {
             activeBuyerTokens.remove(buyerHash)
         }

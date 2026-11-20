@@ -59,7 +59,8 @@ fun UserEditDialog(
     allUsers: List<User>,
     onSave: (User) -> Unit,
     onCancel: () -> Unit,
-    isSaving: Boolean = false
+    isSaving: Boolean = false,
+    buyerLoginName: String = de.joelneumann.lojinha.domain.model.SystemSettings.DEFAULT_BUYER_LOGIN_NAME
 ) {
     val strings = I18n.current
     val isNewUser = remember(user.id, allUsers) { allUsers.none { it.id == user.id } }
@@ -104,7 +105,7 @@ fun UserEditDialog(
         ?: duplicateNumberUser?.let { trimmedBarcodeNumber to it }
 
     val normalizedName = remember(name) { name.normalizeUserName() }
-    val isReservedAdmin = remember(name) { name.isReservedAdminName() }
+    val isReservedAdmin = remember(name, buyerLoginName) { name.isReservedAdminName(buyerLoginName) }
     val duplicateNameUser = remember(normalizedName, allUsers, user.id) {
         if (normalizedName.isEmpty()) null
         else allUsers.firstOrNull { u ->
@@ -117,7 +118,7 @@ fun UserEditDialog(
 
     val trimmedNickname = remember(nickname) { nickname.trim() }
     val normalizedNickname = remember(trimmedNickname) { trimmedNickname.normalizeUserName() }
-    val isReservedAdminNickname = remember(trimmedNickname) { trimmedNickname.isReservedAdminName() }
+    val isReservedAdminNickname = remember(trimmedNickname, buyerLoginName) { trimmedNickname.isReservedAdminName(buyerLoginName) }
     val duplicateNicknameUser = remember(normalizedNickname, allUsers, user.id) {
         if (normalizedNickname.isEmpty()) null
         else allUsers.firstOrNull { u ->
@@ -431,7 +432,7 @@ fun UserEditDialog(
                 }
 
                 val nicknameError = when {
-                    isReservedAdminNickname -> strings.userNicknameReservedError
+                    isReservedAdminNickname -> strings.userNicknameReservedError(buyerLoginName)
                     duplicateNicknameUser != null -> strings.userNicknameDuplicateError
                     else -> null
                 }
@@ -654,7 +655,7 @@ fun UserEditDialog(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = if (isReservedAdmin) strings.userNameReservedAdmin else strings.userNameAlreadyExists(duplicateNameUser!!.name),
+                            text = if (isReservedAdmin) strings.userNameReservedAdmin(buyerLoginName) else strings.userNameAlreadyExists(duplicateNameUser!!.name),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ColorDangerCrimson
