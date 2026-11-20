@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
@@ -33,6 +34,7 @@ import de.joelneumann.lojinha.ui.viewmodel.admin.AdminShoppingListViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminTransactionsViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminUsersViewModel
 import de.joelneumann.lojinha.ui.viewmodel.admin.AdminBulkBillingViewModel
+import de.joelneumann.lojinha.ui.viewmodel.admin.AdminVeggieViewModel
 import de.joelneumann.lojinha.ui.components.admin.shoppinglist.ShoppingListQuantityDialog
 import kotlinx.coroutines.delay
 
@@ -44,6 +46,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.safeRequestFocus
+import de.joelneumann.lojinha.ui.utils.setBrowserBeforeUnloadWarning
 
 enum class AdminTab {
     NOTES,
@@ -51,6 +54,7 @@ enum class AdminTab {
     SHOPPING_LIST,
     USERS,
     BULK_BILLING,
+    VEGGIE_ORDERS,
     TRANSACTIONS,
     SETTINGS
 }
@@ -83,12 +87,24 @@ fun AdminScreen(
     usersViewModel: AdminUsersViewModel,
     transactionsViewModel: AdminTransactionsViewModel,
     bulkBillingViewModel: AdminBulkBillingViewModel? = null,
+    veggieViewModel: AdminVeggieViewModel? = null,
     settingsViewModel: AdminSettingsViewModel? = null,
     defaultSaveDirectory: String = "",
     onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
     onExportShoppingListPdf: ((Language) -> Unit)? = null,
+    onExportVeggieBuyerPdf: ((roundId: String, language: Language) -> Unit)? = null,
+    onExportVeggieWorkerPdf: ((roundId: String, language: Language) -> Unit)? = null,
+    onExportVeggieOrderFormPdf: ((language: Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null,
+    onExportNotesCsv: (() -> Unit)? = null,
+    onExportProductsCsv: (() -> Unit)? = null,
+    onExportProductHistoryCsv: ((Product) -> Unit)? = null,
+    onExportUsersCsv: (() -> Unit)? = null,
+    onExportUserTransactionsCsv: ((User) -> Unit)? = null,
+    onExportTransactionsCsv: (() -> Unit)? = null,
+    onExportVeggieProductsCsv: (() -> Unit)? = null,
+    onExportVeggieOrdersCsv: (() -> Unit)? = null,
     onExitAdmin: () -> Unit
 ) {
     val strings = I18n.current
@@ -98,7 +114,7 @@ fun AdminScreen(
     var tabFocusTrigger by remember { mutableStateOf(0) }
 
     LaunchedEffect(currentTab) {
-        if (currentTab == AdminTab.BULK_BILLING || currentTab == AdminTab.SETTINGS) {
+        if (currentTab == AdminTab.BULK_BILLING || currentTab == AdminTab.VEGGIE_ORDERS || currentTab == AdminTab.SETTINGS) {
             focusRequester.safeRequestFocus()
         }
     }
@@ -120,11 +136,19 @@ fun AdminScreen(
     var expandedTransactionId by remember { mutableStateOf<String?>(null) }
 
     var hasUnsavedChanges by remember { mutableStateOf(false) }
+
+    DisposableEffect(hasUnsavedChanges) {
+        setBrowserBeforeUnloadWarning(hasUnsavedChanges)
+        onDispose {
+            setBrowserBeforeUnloadWarning(false)
+        }
+    }
+
     var pendingTabSwitch by remember { mutableStateOf<AdminTab?>(null) }
     var isExitAdminPending by remember { mutableStateOf(false) }
     var activePageScroller by remember { mutableStateOf<((Boolean) -> Boolean)?>(null) }
 
-    val tabItems = remember(strings, notes, shoppingListItems, shoppingListViewModel, bulkBillingViewModel, settingsViewModel, notesViewModel) {
+    val tabItems = remember(strings, notes, shoppingListItems, shoppingListViewModel, bulkBillingViewModel, veggieViewModel, settingsViewModel, notesViewModel) {
         buildList {
             var fKeyIndex = 1
             if (notesViewModel != null) {
@@ -159,6 +183,10 @@ fun AdminScreen(
             fKeyIndex++
             if (bulkBillingViewModel != null) {
                 add(AdminTabDefinition(AdminTab.BULK_BILLING, Icons.AutoMirrored.Filled.ReceiptLong, strings.tabBulkBilling, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
+                fKeyIndex++
+            }
+            if (veggieViewModel != null) {
+                add(AdminTabDefinition(AdminTab.VEGGIE_ORDERS, Icons.Default.Eco, strings.tabVeggieOrders, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
                 fKeyIndex++
             }
             add(AdminTabDefinition(AdminTab.TRANSACTIONS, Icons.Default.CreditCard, strings.tabTransactions, fKeyForIndex(fKeyIndex), "F$fKeyIndex"))
@@ -239,9 +267,9 @@ fun AdminScreen(
                 } else false
             }
     ) {
-        val isMobile = maxWidth < 600.dp
+        val isMobile = maxWidth < MOBILE_BREAKPOINT
         val isNarrow = maxWidth < 750.dp
-        val isCompact = maxWidth < 950.dp
+        val isCompact = maxWidth < 1100.dp
 
         Column(modifier = Modifier.fillMaxSize()) {
             HeaderBar(
@@ -320,13 +348,6 @@ fun AdminScreen(
                                     softWrap = false
                                 )
                             }
-                            if (isSelected && hasUnsavedChanges) {
-                                Text(
-                                    text = "●",
-                                    fontSize = 10.sp,
-                                    color = ColorWarningAmber
-                                )
-                            }
                         }
                     }
                 }
@@ -347,6 +368,7 @@ fun AdminScreen(
                                 onAddToShoppingListFromNote = shoppingListViewModel?.let { vm ->
                                     { productName, noteId -> vm.requestAddFromStockZeroNote(productName, noteId) }
                                 },
+                                onExportCsv = onExportNotesCsv,
                                 onRegisterPageScroller = { scroller -> activePageScroller = scroller },
                                 isExternalModalOpen = pendingShoppingModal != null,
                                 focusTrigger = tabFocusTrigger
@@ -366,6 +388,8 @@ fun AdminScreen(
                             onAddToShoppingList = shoppingListViewModel?.let { vm ->
                                 { product -> vm.requestAddProduct(product) }
                             },
+                            onExportCsv = onExportProductsCsv,
+                            onExportProductHistoryCsv = onExportProductHistoryCsv,
                             onRegisterPageScroller = { scroller -> activePageScroller = scroller },
                             isExternalModalOpen = pendingShoppingModal != null,
                             focusTrigger = tabFocusTrigger
@@ -399,6 +423,8 @@ fun AdminScreen(
                             onExecutePdfExport = onExecutePdfExport,
                             onOpenExportedPdf = onOpenExportedPdf,
                             onRevealExportedFolder = onRevealExportedFolder,
+                            onExportCsv = onExportUsersCsv,
+                            onExportUserTransactionsCsv = onExportUserTransactionsCsv,
                             focusTrigger = tabFocusTrigger
                         )
                     }
@@ -411,6 +437,7 @@ fun AdminScreen(
                                 expandedTransactionId = if (expandedTransactionId == id) null else id
                             },
                             onRequestExpandTransaction = { id -> expandedTransactionId = id },
+                            onExportCsv = onExportTransactionsCsv,
                             onRegisterPageScroller = { scroller -> activePageScroller = scroller },
                             focusTrigger = tabFocusTrigger
                         )
@@ -422,6 +449,22 @@ fun AdminScreen(
                                 viewModel = bulkBillingViewModel,
                                 onNavigateToTransactions = { handleTabSwitchRequest(AdminTab.TRANSACTIONS) },
                                 onRegisterPageScroller = { scroller -> activePageScroller = scroller }
+                            )
+                        }
+                    }
+
+                    AdminTab.VEGGIE_ORDERS -> {
+                        if (veggieViewModel != null) {
+                            AdminVeggieTabScreen(
+                                viewModel = veggieViewModel,
+                                onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
+                                onExportBuyerPdf = onExportVeggieBuyerPdf,
+                                onExportWorkerPdf = onExportVeggieWorkerPdf,
+                                onExportOrderFormPdf = onExportVeggieOrderFormPdf,
+                                onExportVeggieProductsCsv = onExportVeggieProductsCsv,
+                                onExportVeggieOrdersCsv = onExportVeggieOrdersCsv,
+                                onOpenExportedPdf = onOpenExportedPdf,
+                                onRevealExportedFolder = onRevealExportedFolder
                             )
                         }
                     }
@@ -452,15 +495,26 @@ fun AdminScreen(
         }
         val confirmDiscard = {
             hasUnsavedChanges = false
+            if (currentTab == AdminTab.VEGGIE_ORDERS) {
+                veggieViewModel?.let { vm ->
+                    if (vm.editingPastRound.value != null) {
+                        vm.closePastRoundEditor()
+                    } else {
+                        vm.discardDraft()
+                    }
+                }
+            }
             if (isExitAdminPending) {
                 isExitAdminPending = false
                 onExitAdmin()
             } else if (pendingTabSwitch != null) {
+                activePageScroller = null
                 currentTab = pendingTabSwitch!!
                 pendingTabSwitch = null
                 expandedProductId = null
                 expandedUserId = null
                 expandedTransactionId = null
+                tabFocusTrigger++
             }
         }
 

@@ -79,6 +79,10 @@ fun ShoppingScreen(
     val noteSubmitError by viewModel.noteSubmitError.collectAsState()
     var showNoteDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(LanguageManager.currentLanguage) {
+        viewModel.clearTransientMessages()
+    }
+
     ShoppingContent(
         user = user,
         settings = settings,
@@ -443,12 +447,13 @@ fun ShoppingContent(
                 coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
             },
             actions = {
+                val isCompact = LocalHeaderCompact.current
                 Button(
                     onClick = onOpenNoteDialog,
                     modifier = Modifier.focusProperties { canFocus = false },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    contentPadding = if (isCompact) PaddingValues(horizontal = 10.dp, vertical = 8.dp) else PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -456,16 +461,18 @@ fun ShoppingContent(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Lightbulb,
-                            contentDescription = null,
+                            contentDescription = strings.suggestProductOrNoteBtn,
                             tint = SurfaceWhite,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text(
-                            text = strings.suggestProductOrNoteBtn,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SurfaceWhite
-                        )
+                        if (!isCompact) {
+                            Text(
+                                text = strings.suggestProductOrNoteBtn,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SurfaceWhite
+                            )
+                        }
                     }
                 }
 
@@ -474,7 +481,7 @@ fun ShoppingContent(
                     modifier = Modifier.focusProperties { canFocus = false },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    contentPadding = if (isCompact) PaddingValues(horizontal = 10.dp, vertical = 8.dp) else PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -482,16 +489,18 @@ fun ShoppingContent(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Person,
-                            contentDescription = null,
+                            contentDescription = strings.account,
                             tint = SurfaceWhite,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text(
-                            text = strings.account,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SurfaceWhite
-                        )
+                        if (!isCompact) {
+                            Text(
+                                text = strings.account,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SurfaceWhite
+                            )
+                        }
                     }
                 }
 

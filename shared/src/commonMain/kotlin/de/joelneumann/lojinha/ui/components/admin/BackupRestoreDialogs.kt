@@ -520,8 +520,13 @@ fun CsvImportMultiApprovalDialog(
                     tint = PrimaryNavy,
                     modifier = Modifier.size(20.dp)
                 )
+                val importTypeLabel = when (importType.lowercase()) {
+                    "products" -> strings.products
+                    "veggieproducts" -> strings.csvTypeVeggieProducts
+                    else -> strings.tabUsers
+                }
                 Text(
-                    text = if (step == 1) strings.step1CsvImportTitle(if (importType == "Products") strings.products else strings.tabUsers) else strings.step2AdminApprovalTitle,
+                    text = if (step == 1) strings.step1CsvImportTitle(importTypeLabel) else strings.step2AdminApprovalTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp,
                     color = PrimaryNavy

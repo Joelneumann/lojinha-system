@@ -3,11 +3,13 @@ package de.joelneumann.lojinha.ui.viewmodel.admin
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.Transaction
 import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.repository.SettingsRepository
 import de.joelneumann.lojinha.domain.repository.TransactionRepository
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.i18n.I18n
@@ -18,17 +20,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import de.joelneumann.lojinha.ui.utils.findUserIdentifierConflict
 import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.ui.utils.isReservedAdminName
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlin.random.Random
 
 class AdminUsersViewModel(
     private val userRepository: UserRepository,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val settingsRepository: SettingsRepository? = null
 ) : ViewModel() {
 
     private val _users = MutableStateFlow<List<User>>(emptyList())
     val users: StateFlow<List<User>> = _users.asStateFlow()
+
+    private val _buyerLoginName = MutableStateFlow(SystemSettings.DEFAULT_BUYER_LOGIN_NAME)
+    val buyerLoginName: StateFlow<String> = _buyerLoginName.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -41,6 +49,9 @@ class AdminUsersViewModel(
 
     private val _isSavingUser = MutableStateFlow(false)
     val isSavingUser: StateFlow<Boolean> = _isSavingUser.asStateFlow()
+
+    private val _isMutatingBalance = MutableStateFlow(false)
+    val isMutatingBalance: StateFlow<Boolean> = _isMutatingBalance.asStateFlow()
 
     private val _customExpenseUser = MutableStateFlow<User?>(null)
     val customExpenseUser: StateFlow<User?> = _customExpenseUser.asStateFlow()
@@ -68,6 +79,7 @@ class AdminUsersViewModel(
     val userDeleteErrorMessage: StateFlow<String?> = _userErrorMessage.asStateFlow()
 
     private var usersJob: Job? = null
+    private var settingsJob: Job? = null
 
     init {
         loadData()
@@ -77,6 +89,13 @@ class AdminUsersViewModel(
         usersJob?.cancel()
         usersJob = viewModelScope.launch {
             userRepository.getUsersFlow().collect { _users.value = it.sortedByAccentInsensitive { u -> u.name } }
+        }
+        val repo = settingsRepository ?: return
+        settingsJob?.cancel()
+        settingsJob = viewModelScope.launch {
+            repo.getSettingsFlow().collect { settings ->
+                _buyerLoginName.value = settings.effectiveBuyerLoginName
+            }
         }
     }
 
@@ -139,15 +158,44 @@ class AdminUsersViewModel(
     }
 
     private suspend fun refreshUsers() {
-        _users.value = userRepository.getAllUsers()
+        _users.value = userRepository.getAllUsers().sortedByAccentInsensitive { it.name }
     }
 
     fun saveUser(user: User, onSuccess: () -> Unit = {}) {
         if (_isSavingUser.value) return
+        _isSavingUser.value = true
         viewModelScope.launch {
-            _isSavingUser.value = true
             try {
-                userRepository.saveUser(user)
+                val trimmedUser = user.copy(
+                    name = user.name.trim(),
+                    nickname = user.nickname?.trim()?.ifBlank { null }
+                )
+                val currentBuyerLoginName = settingsRepository?.getSettings()?.effectiveBuyerLoginName
+                    ?: _buyerLoginName.value
+                _buyerLoginName.value = currentBuyerLoginName
+                if (trimmedUser.name.isReservedAdminName(currentBuyerLoginName)) {
+                    _userErrorMessage.value = I18n.get().userNameReservedAdmin(currentBuyerLoginName)
+                    return@launch
+                }
+                if (trimmedUser.nickname?.isReservedAdminName(currentBuyerLoginName) == true) {
+                    _userErrorMessage.value = I18n.get().userNicknameReservedError(currentBuyerLoginName)
+                    return@launch
+                }
+                val allUsers = userRepository.getAllUsers()
+                val nameConflict = findUserIdentifierConflict(trimmedUser.name, trimmedUser.id, allUsers)
+                if (nameConflict != null) {
+                    _userErrorMessage.value = I18n.get().userNameAlreadyExists(nameConflict.name)
+                    return@launch
+                }
+                val nick = trimmedUser.nickname
+                if (nick != null) {
+                    val nickConflict = findUserIdentifierConflict(nick, trimmedUser.id, allUsers)
+                    if (nickConflict != null) {
+                        _userErrorMessage.value = I18n.get().userNicknameDuplicateError
+                        return@launch
+                    }
+                }
+                userRepository.saveUser(trimmedUser)
                 refreshUsers()
                 closeUserModal()
                 onSuccess()
@@ -187,6 +235,34 @@ class AdminUsersViewModel(
     fun restoreUser(userId: String) {
         viewModelScope.launch {
             try {
+                val allUsers = userRepository.getAllUsers()
+                val target = allUsers.find { it.id == userId }
+                if (target != null) {
+                    val currentBuyerLoginName = settingsRepository?.getSettings()?.effectiveBuyerLoginName
+                        ?: _buyerLoginName.value
+                    _buyerLoginName.value = currentBuyerLoginName
+                    if (target.name.isReservedAdminName(currentBuyerLoginName)) {
+                        _userErrorMessage.value = I18n.get().userNameReservedAdmin(currentBuyerLoginName)
+                        return@launch
+                    }
+                    if (target.nickname?.isReservedAdminName(currentBuyerLoginName) == true) {
+                        _userErrorMessage.value = I18n.get().userNicknameReservedError(currentBuyerLoginName)
+                        return@launch
+                    }
+                    val nameConflict = findUserIdentifierConflict(target.name, userId, allUsers)
+                    if (nameConflict != null) {
+                        _userErrorMessage.value = I18n.get().userNameAlreadyExists(nameConflict.name)
+                        return@launch
+                    }
+                    val nick = target.nickname
+                    if (nick != null) {
+                        val nickConflict = findUserIdentifierConflict(nick, userId, allUsers)
+                        if (nickConflict != null) {
+                            _userErrorMessage.value = I18n.get().userNicknameDuplicateError
+                            return@launch
+                        }
+                    }
+                }
                 userRepository.restoreUser(userId)
                 refreshUsers()
             } catch (e: Exception) {
@@ -213,6 +289,8 @@ class AdminUsersViewModel(
     }
 
     fun submitCustomExpense(user: User, amountCents: Long, description: String, onSuccess: () -> Unit = {}) {
+        if (_isMutatingBalance.value) return
+        _isMutatingBalance.value = true
         val absCents = kotlin.math.abs(amountCents)
         val deltaCents = -absCents
         val txType = TransactionType.ADMIN_WITHDRAWAL
@@ -253,6 +331,9 @@ class AdminUsersViewModel(
                 onSuccess()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "submitCustomExpense error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToSaveUser
+            } finally {
+                _isMutatingBalance.value = false
             }
         }
     }
@@ -266,6 +347,8 @@ class AdminUsersViewModel(
     }
 
     fun submitCustomIncome(user: User, amountCents: Long, comment: String, onSuccess: () -> Unit = {}) {
+        if (_isMutatingBalance.value) return
+        _isMutatingBalance.value = true
         val absCents = kotlin.math.abs(amountCents)
         val deltaCents = absCents
         val txType = TransactionType.ADMIN_DEPOSIT
@@ -306,11 +389,16 @@ class AdminUsersViewModel(
                 onSuccess()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "submitCustomIncome error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToSaveUser
+            } finally {
+                _isMutatingBalance.value = false
             }
         }
     }
 
     fun adjustUserBalance(userId: String, userName: String, centsDelta: Long, note: String) {
+        if (_isMutatingBalance.value) return
+        _isMutatingBalance.value = true
         val isDeposit = centsDelta > 0
         val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
@@ -339,6 +427,9 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "adjustUserBalance error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToSaveUser
+            } finally {
+                _isMutatingBalance.value = false
             }
         }
     }

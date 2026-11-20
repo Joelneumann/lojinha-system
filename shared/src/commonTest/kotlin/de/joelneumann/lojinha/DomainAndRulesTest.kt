@@ -1033,6 +1033,7 @@ class DomainAndRulesTest {
         assertEquals("0", Formatting.formatDecimal(0.0))
         assertEquals("10", Formatting.formatDecimal(10.0))
         assertEquals("10,5", Formatting.formatDecimal(10.5))
+        assertEquals("10.5", Formatting.formatDecimal(10.5, Language.EN))
         assertEquals("0,18", Formatting.formatDecimal(0.18))
         assertEquals("0,16", Formatting.formatDecimal(0.16))
         assertEquals("5,75", Formatting.formatDecimal(5.75))
@@ -1040,6 +1041,7 @@ class DomainAndRulesTest {
         assertEquals("+0%", Formatting.formatMarkupPercent(0.0))
         assertEquals("+10%", Formatting.formatMarkupPercent(10.0))
         assertEquals("+10,5%", Formatting.formatMarkupPercent(10.5))
+        assertEquals("+10.5%", Formatting.formatMarkupPercent(10.5, Language.EN))
         assertEquals("+12,75%", Formatting.formatMarkupPercent(12.75))
 
         assertEquals(10.5, Formatting.parsePercentageInput("10,5"))
@@ -1096,7 +1098,31 @@ class DomainAndRulesTest {
             assertTrue(s.csvEmptyError.isNotBlank())
             assertTrue(s.csvMissingHeadersError.isNotBlank())
             assertTrue(s.csvMissingNameHeaderError.isNotBlank())
+            assertTrue(s.statementPdfPagePrefix(1).contains("1"))
+            assertTrue(s.supportEmailSubject("2026-11-17").contains("2026-11-17"))
+            assertTrue(s.supportEmailBody("bundle.zip", "/tmp/bundle.zip").contains("bundle.zip"))
         }
+        assertEquals("300.00", I18n.get(Language.EN).balanceWarningYellowPlaceholder)
+    }
+
+    @Test
+    fun testLanguageFromCodeAndLocaleFormatting() {
+        assertEquals(Language.BR, Language.fromCode("pt-BR"))
+        assertEquals(Language.BR, Language.fromCode("pt_BR"))
+        assertEquals(Language.EN, Language.fromCode("en"))
+        assertEquals(Language.DE, Language.fromCode("DE"))
+        assertEquals(Language.DEFAULT, Language.fromCode("unknown"))
+
+        assertEquals('.', Formatting.decimalSeparator(Language.EN))
+        assertEquals(',', Formatting.decimalSeparator(Language.BR))
+        assertEquals(',', Formatting.decimalSeparator(Language.DE))
+
+        assertEquals("1.5", Formatting.formatWeightForInput(1500L, Language.EN))
+        assertEquals("2.5", Formatting.formatStockForAdmin(2500L, UnitType.WEIGHT, Language.EN))
+        assertEquals(1_000_500L, Formatting.parseAdminStockToDb("1.000,5", UnitType.WEIGHT))
+        assertEquals(1_000_500L, Formatting.parseAdminStockToDb("1,000.5", UnitType.WEIGHT))
+        assertEquals(1250L, Formatting.parseWeightInputToGrams("1.250,5g"))
+        assertEquals(1250L, Formatting.parseWeightInputToGrams("1,250.5g"))
     }
 }
 

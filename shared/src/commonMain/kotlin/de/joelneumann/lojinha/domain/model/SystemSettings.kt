@@ -26,13 +26,28 @@ data class SystemSettings(
     val autoUpdateExchangeRates: Boolean = true,
     val lastExchangeRateUpdateTimestamp: Long? = null,
     val yellowBalanceWarningThresholdCents: Long = 300_00L,
-    val redBalanceWarningThresholdCents: Long = 0L
+    val redBalanceWarningThresholdCents: Long = 0L,
+    val veggieAutoOpenEnabled: Boolean = false,
+    val veggieAutoOpenDayOfWeek: Int = 1,
+    val veggieAutoOpenTime: String = "08:00",
+    val defaultVeggieBuyerFeeCents: Long = 0L,
+    val defaultVeggieTransportFeeCents: Long = 0L,
+    val buyerPasswordHash: String = "",
+    val buyerLoginName: String = DEFAULT_BUYER_LOGIN_NAME
 ) {
+    val effectiveBuyerLoginName: String
+        get() = buyerLoginName.trim().ifBlank { DEFAULT_BUYER_LOGIN_NAME }
+
     fun exchangeRateFor(currency: SecondaryCurrency): Double {
         return when (currency) {
             SecondaryCurrency.USD -> usdExchangeRate
             SecondaryCurrency.EUR -> eurExchangeRate
             SecondaryCurrency.NONE -> 0.0
         }
+    }
+
+    companion object {
+        const val DEFAULT_BUYER_LOGIN_NAME = "Buyer"
+        const val MAX_BUYER_LOGIN_NAME_LENGTH = 50
     }
 }

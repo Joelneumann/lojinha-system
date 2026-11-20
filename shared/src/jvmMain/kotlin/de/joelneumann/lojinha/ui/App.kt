@@ -32,6 +32,7 @@ import de.joelneumann.lojinha.ui.screens.ShoppingScreen
 import de.joelneumann.lojinha.ui.screens.TransactionHistoryScreen
 import de.joelneumann.lojinha.ui.screens.UserSelectionScreen
 import de.joelneumann.lojinha.ui.theme.*
+import de.joelneumann.lojinha.ui.utils.PdfFilenames
 import de.joelneumann.lojinha.ui.utils.currentTimeMillis
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import androidx.compose.ui.input.pointer.pointerInput
@@ -62,6 +63,7 @@ fun App(
     settingsRepository: SettingsRepository? = null,
     adminNoteRepository: AdminNoteRepository? = null,
     shoppingListRepository: ShoppingListRepository? = null,
+    veggieOrderRepository: VeggieOrderRepository? = null,
     showExitAuthDialog: Boolean = false,
     onDismissExitAuthDialog: () -> Unit = {}
 ) {
@@ -144,11 +146,34 @@ fun App(
     }
 
     val effectiveProductRepo = productRepository ?: remember { RoomProductRepositoryImpl(database.productDao(), database.transactionDao(), database.productStockAdjustmentDao(), onDataChanged) }
-    val effectiveUserRepo = userRepository ?: remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged) }
+    val effectiveUserRepo = userRepository ?: remember { RoomUserRepositoryImpl(database.userDao(), database.transactionDao(), onDataChanged, database.veggieOrderDao()) }
     val effectiveTransactionRepo = transactionRepository ?: remember { RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged) }
     val effectiveBillingListRepo = billingListRepository ?: remember { de.joelneumann.lojinha.data.repository.RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged) }
     val effectiveAdminNoteRepo = adminNoteRepository ?: remember { RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged) }
-    val effectiveShoppingListRepo = shoppingListRepository ?: remember { RoomShoppingListRepositoryImpl(database.shoppingListItemDao(), onDataChanged) }
+    val effectiveShoppingListRepo = shoppingListRepository ?: remember {
+        RoomShoppingListRepositoryImpl(database.shoppingListItemDao()) {
+            de.joelneumann.lojinha.data.service.DataChangeNotifier.notifyScopedDataChanged(
+                de.joelneumann.lojinha.data.service.DataChangeNotifier.ChangeScope(adminOnly = true)
+            )
+        }
+    }
+    val effectiveVeggieRepo = veggieOrderRepository ?: remember {
+        de.joelneumann.lojinha.data.repository.RoomVeggieOrderRepositoryImpl(
+            veggieOrderDao = database.veggieOrderDao(),
+            userDao = database.userDao(),
+            transactionDao = database.transactionDao(),
+            onDataChanged = onDataChanged,
+            onAdminOnlyDataChanged = {
+                de.joelneumann.lojinha.data.service.DataChangeNotifier.notifyScopedDataChanged(
+                    de.joelneumann.lojinha.data.service.DataChangeNotifier.ChangeScope(adminOnly = true)
+                )
+            },
+            runInTransaction = { block ->
+                DatabaseFactory.runImmediateTransaction(database, block)
+            }
+        )
+    }
+    val veggieImageService = remember { de.joelneumann.lojinha.data.service.VeggieImageService() }
 
     val appViewModel: AppViewModel = viewModel(
         factory = LojinhaViewModelFactory.createAppViewModelFactory(effectiveUserRepo, effectiveSettingsRepo)
@@ -412,7 +437,7 @@ fun App(
                             AdminShoppingListViewModel(effectiveShoppingListRepo, effectiveProductRepo, effectiveAdminNoteRepo)
                         }
                         val adminUsersViewModel = remember {
-                            AdminUsersViewModel(effectiveUserRepo, effectiveTransactionRepo)
+                            AdminUsersViewModel(effectiveUserRepo, effectiveTransactionRepo, effectiveSettingsRepo)
                         }
                         val adminTransactionsViewModel = remember {
                             AdminTransactionsViewModel(effectiveTransactionRepo, effectiveUserRepo, effectiveProductRepo)
@@ -420,6 +445,36 @@ fun App(
                         
                         val adminBulkBillingViewModel = remember {
                             AdminBulkBillingViewModel(effectiveBillingListRepo, effectiveUserRepo, effectiveTransactionRepo)
+                        }
+
+                        val adminVeggieViewModel = remember {
+                            AdminVeggieViewModel(
+                                veggieOrderRepository = effectiveVeggieRepo,
+                                userRepository = effectiveUserRepo,
+                                settingsRepository = effectiveSettingsRepo,
+                                onSaveProductImage = { productId, productName, bytes, previousFileName ->
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        val otherKeys = effectiveVeggieRepo.getAllVeggieProducts()
+                                            .filter { it.id != productId }
+                                            .mapNotNull { it.imageFileName }
+                                        veggieImageService.saveProductImage(
+                                            productId = productId,
+                                            productName = productName,
+                                            rawImageBytes = bytes,
+                                            previousImageFileName = previousFileName,
+                                            existingImageKeys = otherKeys
+                                        )
+                                    }
+                                },
+                                onDeleteProductImage = { productId, previousFileName ->
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        val otherKeys = effectiveVeggieRepo.getAllVeggieProducts()
+                                            .filter { it.id != productId }
+                                            .mapNotNull { it.imageFileName }
+                                        veggieImageService.deleteProductImages(previousFileName ?: productId, otherKeys)
+                                    }
+                                }
+                            )
                         }
                         
                         val adminSettingsViewModel = remember {
@@ -438,18 +493,24 @@ fun App(
                                 currencyRateService = currencyRateService,
                                 onPreviewCsvImport = { platformFile, type ->
                                     val file = java.io.File(platformFile.absolutePath)
-                                    if (type.equals("Products", ignoreCase = true)) {
-                                        backupRestoreService.importProductsFromCsv(file, dryRun = true)
-                                    } else {
-                                        backupRestoreService.importUsersFromCsv(file, dryRun = true)
+                                    when {
+                                        type.equals("Products", ignoreCase = true) ->
+                                            backupRestoreService.importProductsFromCsv(file, dryRun = true)
+                                        type.equals("VeggieProducts", ignoreCase = true) ->
+                                            backupRestoreService.importVeggieProductsFromCsv(file, dryRun = true)
+                                        else ->
+                                            backupRestoreService.importUsersFromCsv(file, dryRun = true)
                                     }
                                 },
                                 onExecuteCsvImport = { platformFile, type ->
                                     val file = java.io.File(platformFile.absolutePath)
-                                    val result = if (type.equals("Products", ignoreCase = true)) {
-                                        backupRestoreService.importProductsFromCsv(file, dryRun = false)
-                                    } else {
-                                        backupRestoreService.importUsersFromCsv(file, dryRun = false)
+                                    val result = when {
+                                        type.equals("Products", ignoreCase = true) ->
+                                            backupRestoreService.importProductsFromCsv(file, dryRun = false)
+                                        type.equals("VeggieProducts", ignoreCase = true) ->
+                                            backupRestoreService.importVeggieProductsFromCsv(file, dryRun = false)
+                                        else ->
+                                            backupRestoreService.importUsersFromCsv(file, dryRun = false)
                                     }
                                     onDataChanged()
                                     result
@@ -479,8 +540,13 @@ fun App(
                                         de.joelneumann.lojinha.util.FileRollingLogger.getTotalLogSizeBytes()
                                     )
                                 },
+                                onOpenVeggieImagesFolder = {
+                                    diagnosticsService.openFolder(veggieImageService.getImageDirectory())
+                                },
+                                veggieImagesDirectoryPath = veggieImageService.getImageDirectory().absolutePath,
                                 serverUrls = candidateUrls,
-                                onExitApplication = onExitApplication
+                                onExitApplication = onExitApplication,
+                                userRepository = effectiveUserRepo
                             )
                         }
 
@@ -491,6 +557,7 @@ fun App(
                             adminUsersViewModel,
                             adminTransactionsViewModel,
                             adminBulkBillingViewModel,
+                            adminVeggieViewModel,
                             adminSettingsViewModel
                         ) {
                             val listener = {
@@ -499,6 +566,7 @@ fun App(
                                 adminUsersViewModel.loadData()
                                 adminTransactionsViewModel.loadData()
                                 adminBulkBillingViewModel.loadData()
+                                adminVeggieViewModel.loadData()
                                 adminSettingsViewModel.loadSettings()
                                 adminSettingsViewModel.loadRoutines()
                                 adminSettingsViewModel.refreshLogSize()
@@ -512,6 +580,7 @@ fun App(
                                 adminUsersViewModel.viewModelScope.cancel()
                                 adminTransactionsViewModel.viewModelScope.cancel()
                                 adminBulkBillingViewModel.viewModelScope.cancel()
+                                adminVeggieViewModel.viewModelScope.cancel()
                                 adminSettingsViewModel.viewModelScope.cancel()
                             }
                         }
@@ -522,6 +591,44 @@ fun App(
                             if (downloads.exists()) downloads.absolutePath else userHome
                         }
                         var isExportingShoppingListPdf by remember { mutableStateOf(false) }
+                        var isExportingVeggiePdf by remember { mutableStateOf(false) }
+                        var isExportingCsv by remember { mutableStateOf(false) }
+                        var csvExportResultPath by remember { mutableStateOf<String?>(null) }
+                        var csvExportError by remember { mutableStateOf<String?>(null) }
+
+                        fun exportCsvToDefaultDir(
+                            filenameBuilder: (dateStr: String) -> String,
+                            fetchAndFormat: suspend () -> String
+                        ) {
+                            if (isExportingCsv) return
+                            isExportingCsv = true
+                            csvExportResultPath = null
+                            csvExportError = null
+                            val filename = filenameBuilder(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()))
+                            coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    val csvContent = fetchAndFormat()
+                                    val targetDir = java.io.File(defaultSaveDir)
+                                    if (!targetDir.exists()) targetDir.mkdirs()
+                                    val targetFile = java.io.File(targetDir, filename)
+                                    targetFile.writeText(csvContent, Charsets.UTF_8)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        csvExportResultPath = targetFile.absolutePath
+                                    }
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    AppLogger.error("App", "Failed to export CSV ($filename): ${e.message}", e)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        csvExportError = e.message ?: strings.csvExportFailed
+                                    }
+                                } finally {
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        isExportingCsv = false
+                                    }
+                                }
+                            }
+                        }
 
                         de.joelneumann.lojinha.ui.screens.admin.AdminScreen(
                             notesViewModel = adminNotesViewModel,
@@ -530,6 +637,7 @@ fun App(
                             usersViewModel = adminUsersViewModel,
                             transactionsViewModel = adminTransactionsViewModel,
                             bulkBillingViewModel = adminBulkBillingViewModel,
+                            veggieViewModel = adminVeggieViewModel,
                             settingsViewModel = adminSettingsViewModel,
                             defaultSaveDirectory = defaultSaveDir,
                             onExportShoppingListPdf = { language ->
@@ -542,7 +650,7 @@ fun App(
                                             val targetDir = java.io.File(defaultSaveDir)
                                             if (!targetDir.exists()) targetDir.mkdirs()
                                             val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                            val targetFile = java.io.File(targetDir, "ShoppingList_$dateStr.pdf")
+                                            val targetFile = java.io.File(targetDir, PdfFilenames.shoppingListFilename(dateStr, language))
                                             de.joelneumann.lojinha.data.service.ShoppingListPdfGenerator.generatePdf(
                                                 outputFile = targetFile,
                                                 items = items,
@@ -570,18 +678,18 @@ fun App(
                             },
                             onExecutePdfExport = { user, destinationFolder, fromTimestamp, toTimestamp, language ->
                                 if (!adminUsersViewModel.isExportingPdf.value) {
-                                    coroutineScope.launch {
-                                        adminUsersViewModel.setIsExportingPdf(true)
-                                        adminUsersViewModel.setExportPdfError(null)
+                                    adminUsersViewModel.setIsExportingPdf(true)
+                                    adminUsersViewModel.setExportPdfError(null)
+                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                         try {
                                             val transactions = effectiveTransactionRepo.getTransactionsByUserId(user.id)
-                                            val cleanUserName = user.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "User" }
                                             val dateSuffix = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
                                             val targetDir = java.io.File(destinationFolder)
                                             if (!targetDir.exists()) {
                                                 targetDir.mkdirs()
                                             }
-                                            val targetFile = java.io.File(targetDir, "Extrato_${cleanUserName}_$dateSuffix.pdf")
+                                            val targetFileName = PdfFilenames.transactionStatementFilename(user.name, language, dateSuffix)
+                                            val targetFile = java.io.File(targetDir, targetFileName)
                                             de.joelneumann.lojinha.data.service.TransactionPdfGenerator.generateStatementPdf(
                                                 outputFile = targetFile,
                                                 user = user,
@@ -590,13 +698,141 @@ fun App(
                                                 toTimestamp = toTimestamp,
                                                 language = language
                                             )
-                                            adminUsersViewModel.setExportResultPath(targetFile.absolutePath)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminUsersViewModel.setExportResultPath(targetFile.absolutePath)
+                                            }
                                         } catch (e: Exception) {
                                             AppLogger.error("App", "Failed to export PDF statement: ${e.message}", e)
-                                            adminUsersViewModel.setExportResultPath(null)
-                                            adminUsersViewModel.setExportPdfError(e.message ?: "Failed to export PDF statement")
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminUsersViewModel.setExportResultPath(null)
+                                                adminUsersViewModel.setExportPdfError(e.message ?: "Failed to export PDF statement")
+                                            }
                                         } finally {
-                                            adminUsersViewModel.setIsExportingPdf(false)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminUsersViewModel.setIsExportingPdf(false)
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            onExportVeggieBuyerPdf = { roundId, language ->
+                                if (!isExportingVeggiePdf) {
+                                    isExportingVeggiePdf = true
+                                    adminVeggieViewModel.setExportError(null)
+                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        try {
+                                            val round = effectiveVeggieRepo.getRoundById(roundId)
+                                                ?: throw IllegalStateException("Round $roundId not found")
+                                            val entries = effectiveVeggieRepo.getEntriesForRound(roundId)
+                                            val products = effectiveVeggieRepo.getAllVeggieProducts()
+                                            val weekInfo = de.joelneumann.lojinha.ui.utils.IsoWeekUtils.fromEpochMillis(round.openedAt)
+                                            val finalFile = writeVeggiePdfWithFallback(
+                                                defaultSaveDir = defaultSaveDir,
+                                                label = "Veggie Buyer Shopping List PDF",
+                                                primaryFilename = PdfFilenames.buyerShoppingListFilename(weekInfo.weekOfYear, weekInfo.isoYear, language),
+                                                fallbackFilename = { ts -> PdfFilenames.buyerShoppingListFilename(weekInfo.weekOfYear, weekInfo.isoYear, language, ts) }
+                                            ) { outFile ->
+                                                de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator.generateBuyerShoppingListPdf(
+                                                    outputFile = outFile,
+                                                    round = round,
+                                                    entries = entries,
+                                                    language = language,
+                                                    products = products
+                                                )
+                                            }
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminVeggieViewModel.markPdfExported(roundId, isBuyer = true)
+                                                adminVeggieViewModel.setExportResultPath(finalFile.absolutePath)
+                                            }
+                                        } catch (e: Exception) {
+                                            AppLogger.error("App", "Failed to export Veggie Buyer Shopping List PDF: ${e.message}", e)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminVeggieViewModel.setExportError(e.message ?: "Failed to export Veggie Buyer Shopping List PDF")
+                                            }
+                                        } finally {
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                isExportingVeggiePdf = false
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            onExportVeggieWorkerPdf = { roundId, language ->
+                                if (!isExportingVeggiePdf) {
+                                    isExportingVeggiePdf = true
+                                    adminVeggieViewModel.setExportError(null)
+                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        try {
+                                            val round = effectiveVeggieRepo.getRoundById(roundId)
+                                                ?: throw IllegalStateException("Round $roundId not found")
+                                            val entries = effectiveVeggieRepo.getEntriesForRound(roundId)
+                                            val users = userRepository?.getAllUsers() ?: emptyList()
+                                            val weekInfo = de.joelneumann.lojinha.ui.utils.IsoWeekUtils.fromEpochMillis(round.openedAt)
+                                            val finalFile = writeVeggiePdfWithFallback(
+                                                defaultSaveDir = defaultSaveDir,
+                                                label = "Veggie Worker Sorting Matrix PDF",
+                                                primaryFilename = PdfFilenames.workerSortingMatrixFilename(weekInfo.weekOfYear, weekInfo.isoYear, language),
+                                                fallbackFilename = { ts -> PdfFilenames.workerSortingMatrixFilename(weekInfo.weekOfYear, weekInfo.isoYear, language, ts) }
+                                            ) { outFile ->
+                                                de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator.generateWorkerSortingMatrixPdf(
+                                                    outputFile = outFile,
+                                                    round = round,
+                                                    entries = entries,
+                                                    language = language,
+                                                    users = users
+                                                )
+                                            }
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminVeggieViewModel.markPdfExported(roundId, isBuyer = false)
+                                                adminVeggieViewModel.setExportResultPath(finalFile.absolutePath)
+                                            }
+                                        } catch (e: Exception) {
+                                            AppLogger.error("App", "Failed to export Veggie Worker Sorting Matrix PDF: ${e.message}", e)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminVeggieViewModel.setExportError(e.message ?: "Failed to export Veggie Worker Sorting Matrix PDF")
+                                            }
+                                        } finally {
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                isExportingVeggiePdf = false
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            onExportVeggieOrderFormPdf = { language ->
+                                if (!isExportingVeggiePdf) {
+                                    isExportingVeggiePdf = true
+                                    adminVeggieViewModel.setExportError(null)
+                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        try {
+                                            val products = effectiveVeggieRepo.getAllVeggieProducts()
+                                            val unitTypes = effectiveVeggieRepo.getAllUnitTypes().associateBy { it.id }
+                                            val dateStamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                            val finalFile = writeVeggiePdfWithFallback(
+                                                defaultSaveDir = defaultSaveDir,
+                                                label = "Veggie Customer Order Form PDF",
+                                                primaryFilename = PdfFilenames.customerOrderFormFilename(dateStamp, language),
+                                                fallbackFilename = { ts -> PdfFilenames.customerOrderFormFilename(dateStamp, language, ts) }
+                                            ) { outFile ->
+                                                de.joelneumann.lojinha.data.service.VeggieOrderPdfGenerator.generateCustomerOrderFormPdf(
+                                                    outputFile = outFile,
+                                                    products = products,
+                                                    unitMap = unitTypes,
+                                                    language = language
+                                                )
+                                            }
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminVeggieViewModel.setExportResultPath(finalFile.absolutePath)
+                                            }
+                                        } catch (e: Exception) {
+                                            AppLogger.error("App", "Failed to export Veggie Customer Order Form PDF: ${e.message}", e)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                adminVeggieViewModel.setExportError(e.message ?: "Failed to export Veggie Customer Order Form PDF")
+                                            }
+                                        } finally {
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                isExportingVeggiePdf = false
+                                            }
                                         }
                                     }
                                 }
@@ -604,11 +840,28 @@ fun App(
                             onOpenExportedPdf = { filePath ->
                                 try {
                                     val file = java.io.File(filePath)
-                                    if (file.exists() && java.awt.Desktop.isDesktopSupported()) {
-                                        java.awt.Desktop.getDesktop().open(file)
+                                    if (file.exists()) {
+                                        val os = System.getProperty("os.name").lowercase(java.util.Locale.US)
+                                        when {
+                                            os.contains("mac") -> {
+                                                ProcessBuilder("open", file.absolutePath).start()
+                                            }
+                                            os.contains("win") -> {
+                                                ProcessBuilder("cmd.exe", "/c", "start", "\"\"", file.absolutePath).start()
+                                            }
+                                            else -> {
+                                                ProcessBuilder("xdg-open", file.absolutePath).start()
+                                            }
+                                        }
                                     }
                                 } catch (e: Exception) {
                                     AppLogger.warn("App", "Failed to open PDF in system viewer: ${e.message}", e)
+                                    try {
+                                        val file = java.io.File(filePath)
+                                        if (file.exists() && java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.OPEN)) {
+                                            java.awt.Desktop.getDesktop().open(file)
+                                        }
+                                    } catch (_: Exception) {}
                                 }
                             },
                             onRevealExportedFolder = { filePath ->
@@ -619,10 +872,121 @@ fun App(
                                     AppLogger.warn("App", "Failed to reveal PDF in folder: ${e.message}", e)
                                 }
                             },
+                            onExportNotesCsv = {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::notesFilename) {
+                                    val notes = effectiveAdminNoteRepo.getAllNotes()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatAdminNotesCsv(notes)
+                                }
+                            },
+                            onExportProductsCsv = {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::productsFilename) {
+                                    val products = effectiveProductRepo.getAllProducts()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductsCsv(products)
+                                }
+                            },
+                            onExportProductHistoryCsv = { product ->
+                                exportCsvToDefaultDir({ dateStr ->
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.productHistoryFilename(product.name, dateStr)
+                                }) {
+                                    val entries = effectiveProductRepo.getProductHistory(product.id, page = 0, pageSize = Int.MAX_VALUE).items
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatProductHistoryCsv(entries)
+                                }
+                            },
+                            onExportUsersCsv = {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::usersFilename) {
+                                    val users = effectiveUserRepo.getAllUsers()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatUsersCsv(users)
+                                }
+                            },
+                            onExportUserTransactionsCsv = { user ->
+                                exportCsvToDefaultDir({ dateStr ->
+                                    de.joelneumann.lojinha.data.service.CsvExportFilenames.userTransactionsFilename(user.name, dateStr)
+                                }) {
+                                    val txs = effectiveTransactionRepo.getTransactionsByUserId(user.id)
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
+                                }
+                            },
+                            onExportTransactionsCsv = {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::transactionsFilename) {
+                                    val txs = effectiveTransactionRepo.getAllTransactions()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatTransactionsCsv(txs)
+                                }
+                            },
+                            onExportVeggieProductsCsv = {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::veggieProductsFilename) {
+                                    val products = effectiveVeggieRepo.getAllVeggieProducts()
+                                    val unitTypes = effectiveVeggieRepo.getAllUnitTypes()
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatVeggieProductsCsv(products, unitTypes)
+                                }
+                            },
+                            onExportVeggieOrdersCsv = {
+                                exportCsvToDefaultDir(de.joelneumann.lojinha.data.service.CsvExportFilenames::veggieOrdersFilename) {
+                                    val rounds = effectiveVeggieRepo.getAllRounds()
+                                    val entriesByRoundId = rounds.associate { r -> r.id to effectiveVeggieRepo.getEntriesForRound(r.id) }
+                                    val settlementsByRoundId = rounds.associate { r -> r.id to effectiveVeggieRepo.getProductSettlementsForRound(r.id) }
+                                    de.joelneumann.lojinha.data.service.CsvExportFormatter.formatVeggieOrdersCsv(
+                                        rounds = rounds,
+                                        entriesByRoundId = entriesByRoundId,
+                                        settlementsByRoundId = settlementsByRoundId
+                                    )
+                                }
+                            },
                             onExitAdmin = {
                                 appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
                             }
                         )
+
+                        if (csvExportResultPath != null || csvExportError != null) {
+                            val savedPath = csvExportResultPath
+                            val err = csvExportError
+                            androidx.compose.material3.AlertDialog(
+                                onDismissRequest = {
+                                    csvExportResultPath = null
+                                    csvExportError = null
+                                },
+                                title = {
+                                    androidx.compose.material3.Text(
+                                        text = if (err != null) strings.csvExportFailed else strings.csvExportSuccessTitle,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                        color = if (err != null) ColorDangerCrimson else PrimaryNavy
+                                    )
+                                },
+                                text = {
+                                    androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                                        if (err != null) {
+                                            androidx.compose.material3.Text(err, color = ColorDangerCrimson, fontSize = 13.sp)
+                                        } else if (savedPath != null) {
+                                            androidx.compose.material3.Text(strings.csvExportSavedTo, fontSize = 12.sp, color = TextSecondaryMuted)
+                                            androidx.compose.material3.Text(savedPath, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = PrimaryNavy)
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                                        if (savedPath != null) {
+                                            androidx.compose.material3.OutlinedButton(
+                                                onClick = {
+                                                    try {
+                                                        diagnosticsService.revealInFileExplorer(java.io.File(savedPath))
+                                                    } catch (_: Exception) {}
+                                                }
+                                            ) {
+                                                androidx.compose.material3.Text(strings.revealInFolder)
+                                            }
+                                        }
+                                        androidx.compose.material3.Button(
+                                            onClick = {
+                                                csvExportResultPath = null
+                                                csvExportError = null
+                                            },
+                                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = AccentNavy)
+                                        ) {
+                                            androidx.compose.material3.Text(strings.confirm, color = SurfaceWhite)
+                                        }
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -680,5 +1044,32 @@ fun App(
                 )
             }
         }
+    }
+}
+
+private fun writeVeggiePdfWithFallback(
+    defaultSaveDir: String,
+    label: String,
+    primaryFilename: String,
+    fallbackFilename: (String) -> String,
+    writePdf: (java.io.File) -> Unit
+): java.io.File {
+    val targetDir = java.io.File(defaultSaveDir)
+    if (!targetDir.exists()) targetDir.mkdirs()
+    val targetFile = java.io.File(targetDir, primaryFilename)
+    return try {
+        writePdf(targetFile)
+        targetFile
+    } catch (e: Exception) {
+        AppLogger.warn("App", "Primary $label export to ${targetFile.absolutePath} failed (${e.message}), trying fallback", e)
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val fallbackName = fallbackFilename(timeStamp)
+        val fallbackFile = if (targetDir.canWrite()) {
+            java.io.File(targetDir, fallbackName)
+        } else {
+            java.io.File(System.getProperty("user.home"), fallbackName)
+        }
+        writePdf(fallbackFile)
+        fallbackFile
     }
 }

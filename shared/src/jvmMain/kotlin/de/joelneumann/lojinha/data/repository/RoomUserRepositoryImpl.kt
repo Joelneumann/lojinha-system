@@ -2,18 +2,24 @@ package de.joelneumann.lojinha.data.repository
 
 import de.joelneumann.lojinha.data.dao.TransactionDao
 import de.joelneumann.lojinha.data.dao.UserDao
+import de.joelneumann.lojinha.data.dao.VeggieOrderDao
 import de.joelneumann.lojinha.data.entity.UserEntity
 import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.repository.UserRepository
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class RoomUserRepositoryImpl(
     private val userDao: UserDao,
     private val transactionDao: TransactionDao,
-    private val onDataChanged: (() -> Unit)? = null
+    private val onDataChanged: (() -> Unit)? = null,
+    private val veggieOrderDao: VeggieOrderDao? = null
 ) : UserRepository {
+
+    private val deleteMutex = Mutex()
 
     override fun getUsersFlow(): Flow<List<User>> {
         return userDao.getUsersFlow().map { entities ->
@@ -36,31 +42,65 @@ class RoomUserRepositoryImpl(
     override suspend fun saveUser(user: User) {
         val trimmedName = user.name.trim()
         require(trimmedName.isNotBlank()) { "User name cannot be blank" }
-        val sanitizedUser = user.copy(name = trimmedName)
+        val sanitizedNickname = user.nickname?.trim()?.ifBlank { null }
+        if (sanitizedNickname != null) {
+            require(sanitizedNickname.length <= de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH) {
+                "User nickname cannot exceed ${de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH} characters"
+            }
+        }
+        val sanitizedUser = user.copy(name = trimmedName, nickname = sanitizedNickname)
 
         val existing = userDao.getUserById(sanitizedUser.id)
         if (existing != null) {
             val entity = UserEntity.fromDomain(sanitizedUser)
+            val resolvedPin = if (sanitizedUser.pin == "PROTECTED") existing.pin else entity.pin
             userDao.updateUserProfile(
                 id = entity.id,
                 name = entity.name,
+                nickname = entity.nickname,
                 language = entity.language,
                 secondaryCurrency = entity.secondaryCurrency,
-                pin = entity.pin,
+                pin = resolvedPin,
                 userBarcode = entity.userBarcode,
                 userBarcodeNumber = entity.userBarcodeNumber,
                 isActive = entity.isActive,
                 isDeleted = entity.isDeleted,
                 avatarType = entity.avatarType,
                 avatarEmoji = entity.avatarEmoji,
-                avatarColor = entity.avatarColor
+                avatarColor = entity.avatarColor,
+                requirePinOnKiosk = entity.requirePinOnKiosk
             )
+            if (existing.name != entity.name) {
+                veggieOrderDao?.updateUserNameSnapshotInUnsettledRounds(entity.id, entity.name)
+            }
         } else {
             // New user must always start with 0L balance
             val newUser = sanitizedUser.copy(balance = 0L)
             userDao.insertOrUpdateUser(UserEntity.fromDomain(newUser))
         }
         onDataChanged?.invoke()
+    }
+
+    override suspend fun updateCustomerSettings(
+        userId: String,
+        language: de.joelneumann.lojinha.domain.model.Language,
+        secondaryCurrency: de.joelneumann.lojinha.domain.model.SecondaryCurrency,
+        avatar: de.joelneumann.lojinha.domain.model.UserAvatarConfig,
+        pinHash: String?,
+        requirePinOnKiosk: Boolean
+    ): User? {
+        userDao.updateCustomerSettings(
+            id = userId,
+            language = language.name,
+            secondaryCurrency = secondaryCurrency.name,
+            pin = pinHash,
+            avatarType = avatar.type.name,
+            avatarEmoji = avatar.emoji,
+            avatarColor = avatar.colorHex,
+            requirePinOnKiosk = requirePinOnKiosk
+        )
+        onDataChanged?.invoke()
+        return userDao.getUserById(userId)?.toDomain()
     }
 
     override suspend fun deactivateUser(id: String) {
@@ -97,11 +137,14 @@ class RoomUserRepositoryImpl(
 
     override suspend fun canHardDeleteUser(id: String): Boolean {
         val txCount = transactionDao.getTransactionCountForUser(id)
-        return txCount == 0
+        val veggieCount = veggieOrderDao?.getEntryCountForUser(id) ?: 0
+        val transporterCount = veggieOrderDao?.getRoundCountForTransporter(id) ?: 0
+        return txCount == 0 && veggieCount == 0 && transporterCount == 0
     }
 
-    override suspend fun hardDeleteUser(id: String): Boolean {
+    override suspend fun hardDeleteUser(id: String): Boolean = deleteMutex.withLock {
         val res = if (canHardDeleteUser(id)) {
+            veggieOrderDao?.deleteFavoritesForUser(id)
             userDao.deleteUser(id)
             true
         } else {
@@ -109,7 +152,7 @@ class RoomUserRepositoryImpl(
             false
         }
         onDataChanged?.invoke()
-        return res
+        res
     }
 
     override suspend fun updateBalance(userId: String, amountDelta: Long) {

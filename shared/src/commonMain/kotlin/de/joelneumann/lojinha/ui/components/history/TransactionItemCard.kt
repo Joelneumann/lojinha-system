@@ -80,6 +80,7 @@ fun TransactionItemCard(
                     TransactionType.ADMIN_WITHDRAWAL -> if (refTx.items.isNotEmpty()) strings.historyTypeCustomExpense else strings.historyTypeDebit
                     TransactionType.CANCELLATION -> strings.historyTypeCancellation
                     TransactionType.CORRECTION -> strings.historyTypeCorrection
+                    TransactionType.VEGGIE -> strings.historyTypeVeggie
                 }
                 strings.cancellationNote(refTypeStr, refDateStr)
             } else {
@@ -110,6 +111,7 @@ fun TransactionItemCard(
         }
         TransactionType.CANCELLATION -> Icons.AutoMirrored.Filled.Undo to strings.historyTypeCancellation
         TransactionType.CORRECTION -> Icons.Default.Edit to strings.historyTypeCorrection
+        TransactionType.VEGGIE -> Icons.Default.Eco to strings.historyTypeVeggie
     }
     val typeIcon = typePair.first
     val typeText = typePair.second
@@ -336,7 +338,7 @@ fun TransactionItemCard(
                     tx.items
                 }
                 val nonZeroItems = displayedItems.filter { it.quantity > 0 }
-                if (nonZeroItems.isNotEmpty() && tx.type != TransactionType.CANCELLATION && tx.type != TransactionType.ADMIN_WITHDRAWAL && tx.type != TransactionType.ADMIN_DEPOSIT) {
+                if (nonZeroItems.isNotEmpty() && tx.type != TransactionType.CANCELLATION && tx.type != TransactionType.ADMIN_WITHDRAWAL && tx.type != TransactionType.ADMIN_DEPOSIT && tx.type != TransactionType.VEGGIE) {
                     Spacer(modifier = Modifier.height(10.dp))
                     HorizontalDivider(color = DividerBorder)
                     Spacer(modifier = Modifier.height(8.dp))

@@ -12,6 +12,8 @@ import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class RoomProductRepositoryImpl(
     private val productDao: ProductDao,
@@ -19,6 +21,8 @@ class RoomProductRepositoryImpl(
     private val productStockAdjustmentDao: ProductStockAdjustmentDao? = null,
     private val onDataChanged: (() -> Unit)? = null
 ) : ProductRepository {
+
+    private val stockMutex = Mutex()
 
     override fun getProductsFlow(): Flow<List<Product>> {
         return productDao.getProductsFlow().map { entities ->
@@ -98,6 +102,7 @@ class RoomProductRepositoryImpl(
     }
 
     override suspend fun updateStock(productId: String, delta: Long) {
+        stockMutex.withLock {
         val beforeStock = productDao.getProductById(productId)?.stockQuantity ?: 0L
         productDao.updateStock(productId, delta)
         val updated = productDao.getProductById(productId)
@@ -116,6 +121,7 @@ class RoomProductRepositoryImpl(
             )
         }
         onDataChanged?.invoke()
+        }
     }
 
     override suspend fun recordStockAdjustment(adjustment: ProductStockAdjustment) {

@@ -52,9 +52,12 @@ fun AdminUsersTabScreen(
     onExecutePdfExport: ((user: User, destinationFolder: String, fromTimestamp: Long?, toTimestamp: Long?, language: Language) -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
     onRevealExportedFolder: ((String) -> Unit)? = null,
+    onExportCsv: (() -> Unit)? = null,
+    onExportUserTransactionsCsv: ((User) -> Unit)? = null,
     focusTrigger: Int = 0
 ) {
     val users by viewModel.users.collectAsState()
+    val buyerLoginName by viewModel.buyerLoginName.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
 
     val showUserModal by viewModel.showUserModal.collectAsState()
@@ -173,6 +176,7 @@ fun AdminUsersTabScreen(
             onSearchSubmitted = openFirstResult,
             actionButtonText = strings.addUser,
             onActionButtonClick = viewModel::openNewUserModal,
+            onExportCsv = onExportCsv,
             focusRequester = searchFocusRequester
         )
 
@@ -221,7 +225,8 @@ fun AdminUsersTabScreen(
                                     completeUserWorkflow()
                                 }
                             },
-                            onRequestExportPdf = { viewModel.openExportPdfModal(it) }
+                            onRequestExportPdf = { viewModel.openExportPdfModal(it) },
+                            onRequestExportCsv = onExportUserTransactionsCsv
                         )
                     }
                 }
@@ -282,6 +287,7 @@ fun AdminUsersTabScreen(
         UserEditDialog(
             user = editUser!!,
             allUsers = users,
+            buyerLoginName = buyerLoginName,
             onSave = { viewModel.saveUser(it, onSuccess = completeUserWorkflow) },
             onCancel = { viewModel.closeUserModal() },
             isSaving = isSavingUser
@@ -319,6 +325,7 @@ fun AdminUsersTabScreen(
             isExporting = isExportingPdf,
             exportResultPath = exportResultPath,
             errorMessage = exportPdfError,
+            hideFolderPicker = onOpenExportedPdf == null,
             onExportPdf = { folder, from, to, lang ->
                 onExecutePdfExport?.invoke(targetUser, folder, from, to, lang)
             },

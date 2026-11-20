@@ -181,7 +181,7 @@ class UserSelectionViewModel(
     fun onUserCardClicked(user: User, onLoginSuccess: (User) -> Unit) {
         if (isLoggingIn) return
         dismissFeedback()
-        if (user.pin.isNullOrBlank()) {
+        if (user.pin.isNullOrBlank() || !user.requirePinOnKiosk) {
             isLoggingIn = true
             _searchQuery.value = ""
             onLoginSuccess(user)

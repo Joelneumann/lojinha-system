@@ -2,12 +2,15 @@ package de.joelneumann.lojinha.data.database
 
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.immediateTransaction
 import androidx.room.migration.Migration
+import androidx.room.useWriterConnection
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import de.joelneumann.lojinha.data.entity.ProductStockAdjustmentEntity
 import de.joelneumann.lojinha.data.entity.SettingsEntity
+import de.joelneumann.lojinha.data.entity.VeggieUnitTypeEntity
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.util.AppLogger
 import kotlinx.coroutines.Dispatchers
@@ -17,179 +20,179 @@ import java.io.File
 
 object DatabaseFactory {
     private const val TAG = "DatabaseFactory"
-    private val MIGRATION_7_8 = object : Migration(7, 8) {
+
+    private fun loggedMigration(
+        startVersion: Int,
+        endVersion: Int,
+        description: String,
+        block: (SQLiteConnection) -> Unit
+    ): Migration = object : Migration(startVersion, endVersion) {
         override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v7 -> v8 (adding balance tracking to transactions)...")
+            AppLogger.info(TAG, "Starting database migration: v$startVersion -> v$endVersion ($description)...")
             try {
-                connection.execSQL("ALTER TABLE transactions ADD COLUMN userBalanceBefore INTEGER DEFAULT NULL")
-                connection.execSQL("ALTER TABLE transactions ADD COLUMN userBalanceAfter INTEGER DEFAULT NULL")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_referenceTransactionId ON transactions(referenceTransactionId)")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_userId ON transactions(userId)")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_timestamp ON transactions(timestamp)")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_type ON transactions(type)")
-                AppLogger.info(TAG, "Database migration v7 -> v8 completed successfully.")
+                block(connection)
+                AppLogger.info(TAG, "Database migration v$startVersion -> v$endVersion completed successfully.")
             } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v7 -> v8 failed: ${e.message}", e)
+                AppLogger.error(TAG, "Database migration v$startVersion -> v$endVersion failed: ${e.message}", e)
                 throw e
             }
         }
     }
 
-    private val MIGRATION_8_9 = object : Migration(8, 9) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v8 -> v9 (creating billing_lists tables)...")
-            try {
-                connection.execSQL("CREATE TABLE IF NOT EXISTS `billing_lists` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `basePrice` INTEGER, `isDeleted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
-                connection.execSQL("CREATE TABLE IF NOT EXISTS `billing_list_users` (`id` TEXT NOT NULL, `listId` TEXT NOT NULL, `userId` TEXT NOT NULL, `quantity` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`listId`) REFERENCES `billing_lists`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`userId`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_billing_list_users_listId` ON `billing_list_users` (`listId`)")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_billing_list_users_userId` ON `billing_list_users` (`userId`)")
-                AppLogger.info(TAG, "Database migration v8 -> v9 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v8 -> v9 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_7_8 = loggedMigration(7, 8, "adding balance tracking to transactions") { connection ->
+        connection.execSQL("ALTER TABLE transactions ADD COLUMN userBalanceBefore INTEGER DEFAULT NULL")
+        connection.execSQL("ALTER TABLE transactions ADD COLUMN userBalanceAfter INTEGER DEFAULT NULL")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_referenceTransactionId ON transactions(referenceTransactionId)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_userId ON transactions(userId)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_timestamp ON transactions(timestamp)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_type ON transactions(type)")
     }
 
-    private val MIGRATION_9_10 = object : Migration(9, 10) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v9 -> v10 (adding comment column to billing_lists)...")
-            try {
-                connection.execSQL("ALTER TABLE `billing_lists` ADD COLUMN `comment` TEXT")
-                AppLogger.info(TAG, "Database migration v9 -> v10 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v9 -> v10 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_8_9 = loggedMigration(8, 9, "creating billing_lists tables") { connection ->
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `billing_lists` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `basePrice` INTEGER, `isDeleted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `billing_list_users` (`id` TEXT NOT NULL, `listId` TEXT NOT NULL, `userId` TEXT NOT NULL, `quantity` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`listId`) REFERENCES `billing_lists`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`userId`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_billing_list_users_listId` ON `billing_list_users` (`listId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_billing_list_users_userId` ON `billing_list_users` (`userId`)")
     }
 
-    private val MIGRATION_10_11 = object : Migration(10, 11) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v10 -> v11 (adding supportEmail to settings)...")
-            try {
-                connection.execSQL("ALTER TABLE settings ADD COLUMN supportEmail TEXT DEFAULT NULL")
-                AppLogger.info(TAG, "Database migration v10 -> v11 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v10 -> v11 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_9_10 = loggedMigration(9, 10, "adding comment column to billing_lists") { connection ->
+        connection.execSQL("ALTER TABLE `billing_lists` ADD COLUMN `comment` TEXT")
     }
 
-    private val MIGRATION_11_12 = object : Migration(11, 12) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v11 -> v12 (adding lastExecutionTime to billing_lists)...")
-            try {
-                connection.execSQL("ALTER TABLE billing_lists ADD COLUMN lastExecutionTime INTEGER DEFAULT NULL")
-                AppLogger.info(TAG, "Database migration v11 -> v12 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v11 -> v12 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_10_11 = loggedMigration(10, 11, "adding supportEmail to settings") { connection ->
+        connection.execSQL("ALTER TABLE settings ADD COLUMN supportEmail TEXT DEFAULT NULL")
     }
 
-    private val MIGRATION_12_13 = object : Migration(12, 13) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v12 -> v13 (deduplicating members and adding indices)...")
-            try {
-                // Deduplicate any historical duplicate members before enforcing uniqueness
-                connection.execSQL("DELETE FROM billing_list_users WHERE id NOT IN (SELECT MIN(id) FROM billing_list_users GROUP BY listId, userId);")
-                // Ensure no rogue partial cancellation index exists that would fail Room's TableInfo validation
-                connection.execSQL("DROP INDEX IF EXISTS index_transactions_unique_cancellation")
-                // Drop old listId index superseded by composite (listId, userId) index
-                connection.execSQL("DROP INDEX IF EXISTS index_billing_list_users_listId")
-                // 1. Composite unique index on billing_list_users to prevent duplicate member entries
-                connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_billing_list_users_listId_userId ON billing_list_users(listId, userId)")
-                // 2. User table indices for fast name sorting and barcode scanning
-                connection.execSQL("CREATE INDEX IF NOT EXISTS index_users_name ON users(name)")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS index_users_userBarcode ON users(userBarcode)")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS index_users_userBarcodeNumber ON users(userBarcodeNumber)")
-                AppLogger.info(TAG, "Database migration v12 -> v13 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v12 -> v13 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_11_12 = loggedMigration(11, 12, "adding lastExecutionTime to billing_lists") { connection ->
+        connection.execSQL("ALTER TABLE billing_lists ADD COLUMN lastExecutionTime INTEGER DEFAULT NULL")
     }
 
-    private val MIGRATION_13_14 = object : Migration(13, 14) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v13 -> v14 (adding autoUpdateExchangeRates and lastExchangeRateUpdateTimestamp to settings)...")
-            try {
-                connection.execSQL("ALTER TABLE settings ADD COLUMN autoUpdateExchangeRates INTEGER NOT NULL DEFAULT 1")
-                connection.execSQL("ALTER TABLE settings ADD COLUMN lastExchangeRateUpdateTimestamp INTEGER DEFAULT NULL")
-                AppLogger.info(TAG, "Database migration v13 -> v14 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v13 -> v14 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_12_13 = loggedMigration(12, 13, "deduplicating members and adding indices") { connection ->
+        // Deduplicate any historical duplicate members before enforcing uniqueness
+        connection.execSQL("DELETE FROM billing_list_users WHERE id NOT IN (SELECT MIN(id) FROM billing_list_users GROUP BY listId, userId);")
+        // Ensure no rogue partial cancellation index exists that would fail Room's TableInfo validation
+        connection.execSQL("DROP INDEX IF EXISTS index_transactions_unique_cancellation")
+        // Drop old listId index superseded by composite (listId, userId) index
+        connection.execSQL("DROP INDEX IF EXISTS index_billing_list_users_listId")
+        // 1. Composite unique index on billing_list_users to prevent duplicate member entries
+        connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_billing_list_users_listId_userId ON billing_list_users(listId, userId)")
+        // 2. User table indices for fast name sorting and barcode scanning
+        connection.execSQL("CREATE INDEX IF NOT EXISTS index_users_name ON users(name)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS index_users_userBarcode ON users(userBarcode)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS index_users_userBarcodeNumber ON users(userBarcodeNumber)")
     }
 
-    private val MIGRATION_14_15 = object : Migration(14, 15) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v14 -> v15 (creating admin_notes table)...")
-            try {
-                connection.execSQL("CREATE TABLE IF NOT EXISTS `admin_notes` (`id` TEXT NOT NULL, `message` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, PRIMARY KEY(`id`))")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_admin_notes_timestamp` ON `admin_notes` (`timestamp`)")
-                AppLogger.info(TAG, "Database migration v14 -> v15 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v14 -> v15 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_13_14 = loggedMigration(13, 14, "adding autoUpdateExchangeRates and lastExchangeRateUpdateTimestamp to settings") { connection ->
+        connection.execSQL("ALTER TABLE settings ADD COLUMN autoUpdateExchangeRates INTEGER NOT NULL DEFAULT 1")
+        connection.execSQL("ALTER TABLE settings ADD COLUMN lastExchangeRateUpdateTimestamp INTEGER DEFAULT NULL")
     }
 
-    private val MIGRATION_15_16 = object : Migration(15, 16) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v15 -> v16 (adding balance warning thresholds to settings)...")
-            try {
-                connection.execSQL("ALTER TABLE settings ADD COLUMN yellowBalanceWarningThresholdCents INTEGER NOT NULL DEFAULT 30000")
-                connection.execSQL("ALTER TABLE settings ADD COLUMN redBalanceWarningThresholdCents INTEGER NOT NULL DEFAULT 0")
-                AppLogger.info(TAG, "Database migration v15 -> v16 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v15 -> v16 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_14_15 = loggedMigration(14, 15, "creating admin_notes table") { connection ->
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `admin_notes` (`id` TEXT NOT NULL, `message` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_admin_notes_timestamp` ON `admin_notes` (`timestamp`)")
     }
 
-    private val MIGRATION_16_17 = object : Migration(16, 17) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v16 -> v17 (creating product_stock_adjustments table)...")
-            try {
-                connection.execSQL("CREATE TABLE IF NOT EXISTS `product_stock_adjustments` (`id` TEXT NOT NULL, `productId` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `deltaQuantity` INTEGER NOT NULL, `resultingQuantity` INTEGER, `note` TEXT, PRIMARY KEY(`id`))")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_product_stock_adjustments_productId` ON `product_stock_adjustments` (`productId`)")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_product_stock_adjustments_timestamp` ON `product_stock_adjustments` (`timestamp`)")
-                AppLogger.info(TAG, "Database migration v16 -> v17 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v16 -> v17 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_15_16 = loggedMigration(15, 16, "adding balance warning thresholds to settings") { connection ->
+        connection.execSQL("ALTER TABLE settings ADD COLUMN yellowBalanceWarningThresholdCents INTEGER NOT NULL DEFAULT 30000")
+        connection.execSQL("ALTER TABLE settings ADD COLUMN redBalanceWarningThresholdCents INTEGER NOT NULL DEFAULT 0")
     }
 
-    internal val MIGRATION_17_18 = object : Migration(17, 18) {
-        override fun migrate(connection: SQLiteConnection) {
-            AppLogger.info(TAG, "Starting database migration: v17 -> v18 (creating shopping_list_items table)...")
-            try {
-                connection.execSQL("CREATE TABLE IF NOT EXISTS `shopping_list_items` (`id` TEXT NOT NULL, `productId` TEXT, `name` TEXT NOT NULL, `quantity` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `lastExportedName` TEXT, `lastExportedQuantity` TEXT, `isConfirmedForCurrentExport` INTEGER NOT NULL, PRIMARY KEY(`id`))")
-                connection.execSQL("CREATE INDEX IF NOT EXISTS `index_shopping_list_items_sortOrder` ON `shopping_list_items` (`sortOrder`)")
-                AppLogger.info(TAG, "Database migration v17 -> v18 completed successfully.")
-            } catch (e: Exception) {
-                AppLogger.error(TAG, "Database migration v17 -> v18 failed: ${e.message}", e)
-                throw e
-            }
-        }
+    private val MIGRATION_16_17 = loggedMigration(16, 17, "creating product_stock_adjustments table") { connection ->
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `product_stock_adjustments` (`id` TEXT NOT NULL, `productId` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `deltaQuantity` INTEGER NOT NULL, `resultingQuantity` INTEGER, `note` TEXT, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_product_stock_adjustments_productId` ON `product_stock_adjustments` (`productId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_product_stock_adjustments_timestamp` ON `product_stock_adjustments` (`timestamp`)")
     }
 
+    internal val MIGRATION_17_18 = loggedMigration(17, 18, "creating shopping_list_items table") { connection ->
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `shopping_list_items` (`id` TEXT NOT NULL, `productId` TEXT, `name` TEXT NOT NULL, `quantity` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `lastExportedName` TEXT, `lastExportedQuantity` TEXT, `isConfirmedForCurrentExport` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_shopping_list_items_sortOrder` ON `shopping_list_items` (`sortOrder`)")
+    }
+
+    internal val MIGRATION_18_19 = loggedMigration(18, 19, "creating Veggie Order System tables and settings") { connection ->
+        // 1. Add requirePinOnKiosk to users
+        connection.execSQL("ALTER TABLE `users` ADD COLUMN `requirePinOnKiosk` INTEGER NOT NULL DEFAULT 1")
+
+        // 2. Add Veggie settings columns to settings
+        connection.execSQL("ALTER TABLE `settings` ADD COLUMN `veggieAutoOpenEnabled` INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("ALTER TABLE `settings` ADD COLUMN `veggieAutoOpenDayOfWeek` INTEGER NOT NULL DEFAULT 1")
+        connection.execSQL("ALTER TABLE `settings` ADD COLUMN `veggieAutoOpenTime` TEXT NOT NULL DEFAULT '08:00'")
+        connection.execSQL("ALTER TABLE `settings` ADD COLUMN `defaultVeggieBuyerFeeCents` INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("ALTER TABLE `settings` ADD COLUMN `defaultVeggieTransportFeeCents` INTEGER NOT NULL DEFAULT 0")
+
+        // 3. Create veggie_unit_types
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_unit_types` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `allowDecimals` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_unit_types_name` ON `veggie_unit_types` (`name`)")
+
+        // 4. Create veggie_products (including deliveryUnitTypeId)
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `estimatedPriceCents` INTEGER, `unitTypeId` TEXT NOT NULL, `deliveryUnitTypeId` TEXT DEFAULT NULL, `imageFileName` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_products_name` ON `veggie_products` (`name`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_products_unitTypeId` ON `veggie_products` (`unitTypeId`)")
+
+        // 5. Create veggie_order_rounds (including PDF export timestamps)
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_order_rounds` (`id` TEXT NOT NULL, `openedAt` INTEGER NOT NULL, `closedAt` INTEGER, `settledAt` INTEGER, `status` TEXT NOT NULL, `buyerOperationFeeCents` INTEGER NOT NULL, `transportFeeCents` INTEGER NOT NULL, `transporterUserId` TEXT, `buyerPdfExportedAt` INTEGER DEFAULT NULL, `workerPdfExportedAt` INTEGER DEFAULT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_rounds_status` ON `veggie_order_rounds` (`status`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_rounds_openedAt` ON `veggie_order_rounds` (`openedAt`)")
+
+        // 6. Create veggie_round_product_settlements
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_round_product_settlements` (`roundId` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `marketUnitPriceCents` INTEGER, `totalSpentCents` INTEGER, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`roundId`, `veggieProductId`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_round_product_settlements_roundId` ON `veggie_round_product_settlements` (`roundId`)")
+
+        // 7. Create veggie_order_entries (including delivery unit snapshot fields)
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_order_entries` (`id` TEXT NOT NULL, `roundId` TEXT NOT NULL, `userId` TEXT NOT NULL, `userNameSnapshot` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `veggieNameSnapshot` TEXT NOT NULL, `unitNameSnapshot` TEXT NOT NULL, `allowDecimalsSnapshot` INTEGER NOT NULL, `deliveryUnitNameSnapshot` TEXT DEFAULT NULL, `deliveryAllowDecimalsSnapshot` INTEGER DEFAULT NULL, `orderedQuantityScaled` INTEGER NOT NULL, `actualQuantityScaled` INTEGER, `effectiveUnitPriceCents` INTEGER, `finalItemTotalCents` INTEGER, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_veggie_order_entries_roundId_userId_veggieProductId` ON `veggie_order_entries` (`roundId`, `userId`, `veggieProductId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_roundId` ON `veggie_order_entries` (`roundId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_userId` ON `veggie_order_entries` (`userId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_order_entries_veggieProductId` ON `veggie_order_entries` (`veggieProductId`)")
+
+        // 8. Create veggie_user_favorites
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `veggie_user_favorites` (`userId` TEXT NOT NULL, `veggieProductId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`userId`, `veggieProductId`))")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_userId` ON `veggie_user_favorites` (`userId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_veggie_user_favorites_veggieProductId` ON `veggie_user_favorites` (`veggieProductId`)")
+
+        // 9. Seed default Veggie Unit Types
+        val now = System.currentTimeMillis()
+        connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-kg', 'kg', 1, 1, $now)")
+        connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-piece', 'Unit', 0, 1, $now)")
+        connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-pack', 'Pack', 0, 1, $now)")
+        connection.execSQL("INSERT OR IGNORE INTO `veggie_unit_types` (`id`, `name`, `allowDecimals`, `isActive`, `updatedAt`) VALUES ('unit-bunch', 'Bunch', 0, 1, $now)")
+    }
+
+    internal val MIGRATION_19_20 = loggedMigration(19, 20, "adding user nickname and veggie product excludeFromBuyerPdf") { connection ->
+        connection.execSQL("ALTER TABLE `users` ADD COLUMN `nickname` TEXT DEFAULT NULL")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_users_nickname` ON `users` (`nickname`)")
+        connection.execSQL("ALTER TABLE `veggie_products` ADD COLUMN `excludeFromBuyerPdf` INTEGER NOT NULL DEFAULT 0")
+    }
+
+    internal val MIGRATION_20_21 = loggedMigration(20, 21, "adding buyerPasswordHash to settings") { connection ->
+        connection.execSQL("ALTER TABLE `settings` ADD COLUMN `buyerPasswordHash` TEXT NOT NULL DEFAULT ''")
+    }
+
+    internal val MIGRATION_21_22 = loggedMigration(21, 22, "adding buyerPortalPdfExportedAt and ordersUpdatedAt to veggie_order_rounds") { connection ->
+        connection.execSQL("ALTER TABLE `veggie_order_rounds` ADD COLUMN `buyerPortalPdfExportedAt` INTEGER DEFAULT NULL")
+        connection.execSQL("ALTER TABLE `veggie_order_rounds` ADD COLUMN `ordersUpdatedAt` INTEGER NOT NULL DEFAULT 0")
+    }
+
+    internal val MIGRATION_22_23 = loggedMigration(22, 23, "adding buyerLoginName to settings") { connection ->
+        connection.execSQL("ALTER TABLE `settings` ADD COLUMN `buyerLoginName` TEXT NOT NULL DEFAULT 'Buyer'")
+    }
+
+    fun defaultVeggieUnitTypes(timestamp: Long = System.currentTimeMillis()): List<VeggieUnitTypeEntity> = listOf(
+        VeggieUnitTypeEntity(id = "unit-kg", name = "kg", allowDecimals = true, isActive = true, updatedAt = timestamp),
+        VeggieUnitTypeEntity(id = "unit-piece", name = "Unit", allowDecimals = false, isActive = true, updatedAt = timestamp),
+        VeggieUnitTypeEntity(id = "unit-pack", name = "Pack", allowDecimals = false, isActive = true, updatedAt = timestamp),
+        VeggieUnitTypeEntity(id = "unit-bunch", name = "Bunch", allowDecimals = false, isActive = true, updatedAt = timestamp)
+    )
 
     @Volatile
     private var instance: AppDatabase? = null
 
     fun getDatabaseFile(): File = File(System.getProperty("user.home"), ".lojinha/lojinha_room.db")
+
+    suspend fun runImmediateTransaction(db: AppDatabase, block: suspend () -> Unit) {
+        db.useWriterConnection { transactor ->
+            transactor.immediateTransaction { block() }
+        }
+    }
 
     fun createDatabase(): AppDatabase {
         return instance ?: synchronized(this) {
@@ -240,18 +243,22 @@ object DatabaseFactory {
         )
         builder.setDriver(BundledSQLiteDriver())
         builder.setQueryCoroutineContext(Dispatchers.IO)
-        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
+        builder.addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23)
         builder.addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(connection: SQLiteConnection) {
                 AppLogger.info(TAG, "Room onCreate: Fresh database created from scratch (initial install).")
             }
 
             override fun onOpen(connection: SQLiteConnection) {
-                connection.execSQL("PRAGMA foreign_keys = ON;")
                 connection.execSQL("PRAGMA busy_timeout = 5000;")
+                connection.execSQL("PRAGMA journal_mode = WAL;")
+                connection.execSQL("PRAGMA foreign_keys = ON;")
                 connection.execSQL("PRAGMA synchronous = NORMAL;")
                 try {
                     connection.execSQL("UPDATE products SET stockQuantity = 0 WHERE stockQuantity < 0;")
+                    connection.execSQL("DROP INDEX IF EXISTS index_transactions_unique_cancellation;")
+                    connection.execSQL("DROP INDEX IF EXISTS index_billing_list_users_listId;")
+                    connection.execSQL("DELETE FROM billing_list_users WHERE userId NOT IN (SELECT id FROM users WHERE isDeleted = 0);")
                 } catch (_: Exception) {}
                 val version = try {
                     val stmt = connection.prepare("PRAGMA user_version;")
@@ -274,24 +281,7 @@ object DatabaseFactory {
         builder.fallbackToDestructiveMigration(false)
         val db = builder.build()
 
-        // 2. Ensure SQLite WAL Mode is set in database header
         runBlocking(Dispatchers.IO) {
-            try {
-                val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
-                try {
-                    connection.execSQL("PRAGMA journal_mode = WAL;")
-                    try {
-                        connection.execSQL("DROP INDEX IF EXISTS index_transactions_unique_cancellation;")
-                        connection.execSQL("DROP INDEX IF EXISTS index_billing_list_users_listId;")
-                        connection.execSQL("DELETE FROM billing_list_users WHERE userId NOT IN (SELECT id FROM users WHERE isDeleted = 0);")
-                    } catch (_: Exception) {}
-                } finally {
-                    connection.close()
-                }
-            } catch (e: Exception) {
-                AppLogger.warn(TAG, "Failed to configure WAL header: ${e.message}", e)
-            }
-
             seedInitialData(db)
         }
 
@@ -342,9 +332,34 @@ object DatabaseFactory {
                     isDeleted = user.isDeleted,
                     avatarType = user.avatarType,
                     avatarEmoji = user.avatarEmoji,
-                    avatarColor = user.avatarColor
+                    avatarColor = user.avatarColor,
+                    requirePinOnKiosk = user.requirePinOnKiosk,
+                    nickname = user.nickname
                 )
             }
+        }
+
+        // Seed default Veggie Unit Types if none exist (e.g. fresh v18 database install)
+        try {
+            val veggieDao = db.veggieOrderDao()
+            if (veggieDao.getAllUnitTypes().isEmpty()) {
+                veggieDao.insertOrUpdateUnitTypes(defaultVeggieUnitTypes())
+                AppLogger.info(TAG, "Seeded default Veggie Unit Types (kg, Unit, Pack, Bunch).")
+            }
+            // Ensure any unit type in active use by catalog products is active
+            val usedUnitIds = veggieDao.getAllVeggieProducts(includeDeleted = false)
+                .flatMap { listOfNotNull(it.unitTypeId, it.deliveryUnitTypeId) }
+                .toSet()
+            if (usedUnitIds.isNotEmpty()) {
+                val allUnits = veggieDao.getAllUnitTypes()
+                val unitsToReactivate = allUnits.filter { it.id in usedUnitIds && !it.isActive }
+                if (unitsToReactivate.isNotEmpty()) {
+                    veggieDao.insertOrUpdateUnitTypes(unitsToReactivate.map { it.copy(isActive = true, updatedAt = System.currentTimeMillis()) })
+                    AppLogger.info(TAG, "Reactivated unit types in use by catalog products: ${unitsToReactivate.map { it.name }}")
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.warn(TAG, "Failed to seed or heal default Veggie Unit Types: ${e.message}", e)
         }
 
         // Seed a default automated local backup routine if no routines currently exist

@@ -54,6 +54,7 @@ fun AdminTransactionAccordionCard(
         TransactionType.ADMIN_WITHDRAWAL -> AdminBadgeType.WARNING
         TransactionType.CANCELLATION -> AdminBadgeType.DANGER
         TransactionType.CORRECTION -> AdminBadgeType.WARNING
+        TransactionType.VEGGIE -> AdminBadgeType.SUCCESS
     }
 
     val typeText = when (transaction.type) {
@@ -74,6 +75,7 @@ fun AdminTransactionAccordionCard(
         }
         TransactionType.CANCELLATION -> strings.historyTypeCancellation.uppercase()
         TransactionType.CORRECTION -> strings.historyTypeCorrection.uppercase()
+        TransactionType.VEGGIE -> strings.historyTypeVeggie.uppercase()
     }
 
     AdminAccordionCard(
@@ -200,6 +202,7 @@ fun AdminTransactionAccordionCard(
                             TransactionType.ADMIN_WITHDRAWAL -> if (referencedTransaction.items.isNotEmpty()) strings.historyTypeCustomExpense else strings.historyTypeDebit
                             TransactionType.CANCELLATION -> strings.historyTypeCancellation
                             TransactionType.CORRECTION -> strings.historyTypeCorrection
+                            TransactionType.VEGGIE -> strings.historyTypeVeggie
                         }
                         Text(
                             text = "🔗 ${strings.referenceLabel}: $refTypeStr ($refDate, $refAmount)",
@@ -260,7 +263,9 @@ fun AdminTransactionAccordionCard(
                         }
                     }
                 }
-            } else if (transaction.type == TransactionType.ADMIN_DEPOSIT || transaction.type == TransactionType.ADMIN_WITHDRAWAL) {
+            } else if ((transaction.type == TransactionType.ADMIN_DEPOSIT || transaction.type == TransactionType.ADMIN_WITHDRAWAL) &&
+                transaction.note?.startsWith("SYSNOTE|VEGGIE_TRANSPORT|") != true
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,

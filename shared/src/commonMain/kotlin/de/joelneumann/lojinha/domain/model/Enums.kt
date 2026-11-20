@@ -9,13 +9,15 @@ enum class Language(val code: String, val label: String) {
     DE("de", "Deutsch");
 
     companion object {
-        fun fromCode(code: String): Language {
+        val DEFAULT = BR
+
+        fun fromCode(code: String, fallback: Language = DEFAULT): Language {
             val cleanCode = code.trim().replace('_', '-')
             return entries.firstOrNull {
                 it.code.equals(cleanCode, ignoreCase = true) ||
                 it.name.equals(cleanCode, ignoreCase = true) ||
                 (it == BR && cleanCode.startsWith("pt", ignoreCase = true))
-            } ?: DE
+            } ?: fallback
         }
     }
 }
@@ -39,7 +41,8 @@ enum class TransactionType {
     ADMIN_DEPOSIT,
     ADMIN_WITHDRAWAL,
     CANCELLATION,
-    CORRECTION
+    CORRECTION,
+    VEGGIE
 }
 
 @Serializable

@@ -1,0 +1,914 @@
+package de.joelneumann.lojinha.data.repository
+
+import de.joelneumann.lojinha.data.dao.TransactionDao
+import de.joelneumann.lojinha.data.dao.UserDao
+import de.joelneumann.lojinha.data.dao.VeggieOrderDao
+import de.joelneumann.lojinha.data.entity.*
+import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.domain.repository.CustomerVeggieRoundHistoryItem
+import de.joelneumann.lojinha.domain.repository.VeggieOrderRepository
+import de.joelneumann.lojinha.domain.service.VeggieRoundSettlementResult
+import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
+import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
+import de.joelneumann.lojinha.ui.utils.currentTimeMillis
+import de.joelneumann.lojinha.ui.utils.generateUuid
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
+import de.joelneumann.lojinha.util.AppLogger
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+class RoomVeggieOrderRepositoryImpl(
+    private val veggieOrderDao: VeggieOrderDao,
+    private val userDao: UserDao,
+    private val transactionDao: TransactionDao,
+    private val onDataChanged: (() -> Unit)? = null,
+    private val onUserScopedDataChanged: ((String) -> Unit)? = null,
+    private val onAdminOnlyDataChanged: (() -> Unit)? = null,
+    private val runInTransaction: (suspend (suspend () -> Unit) -> Unit)? = null
+) : VeggieOrderRepository {
+
+    companion object {
+        private const val TAG = "VeggieOrderRepository"
+    }
+
+    private val mutationMutex = Mutex()
+
+    // -------------------------------------------------------------------------
+    // 1. Unit Types
+    // -------------------------------------------------------------------------
+    override fun getUnitTypesFlow(): Flow<List<VeggieUnitType>> {
+        return veggieOrderDao.getUnitTypesFlow().map { entities ->
+            entities.map { it.toDomain() }.sortedByAccentInsensitive { it.name }
+        }
+    }
+
+    override suspend fun getAllUnitTypes(): List<VeggieUnitType> {
+        return veggieOrderDao.getAllUnitTypes().map { it.toDomain() }.sortedByAccentInsensitive { it.name }
+    }
+
+    override suspend fun saveUnitType(unitType: VeggieUnitType) {
+        val trimmedName = unitType.name.trim()
+        require(trimmedName.isNotBlank()) { "Unit type name cannot be blank" }
+        val now = if (unitType.updatedAt > 0L) unitType.updatedAt else currentTimeMillis()
+        val sanitized = unitType.copy(name = trimmedName, updatedAt = now)
+        veggieOrderDao.insertOrUpdateUnitType(VeggieUnitTypeEntity.fromDomain(sanitized))
+        onDataChanged?.invoke()
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. Veggie Catalog Products
+    // -------------------------------------------------------------------------
+    override fun getVeggieProductsFlow(): Flow<List<VeggieProduct>> {
+        return veggieOrderDao.getVeggieProductsFlow().map { entities ->
+            entities.map { it.toDomain() }.sortedByAccentInsensitive { it.name }
+        }
+    }
+
+    override suspend fun getAllVeggieProducts(): List<VeggieProduct> {
+        return veggieOrderDao.getAllVeggieProducts(includeDeleted = false)
+            .map { it.toDomain() }
+            .sortedByAccentInsensitive { it.name }
+    }
+
+    override suspend fun getAllVeggieProductsIncludingDeleted(): List<VeggieProduct> {
+        return veggieOrderDao.getAllVeggieProducts(includeDeleted = true)
+            .map { it.toDomain() }
+            .sortedByAccentInsensitive { it.name }
+    }
+
+    override suspend fun getVeggieProductById(id: String): VeggieProduct? {
+        return veggieOrderDao.getVeggieProductById(id)?.toDomain()
+    }
+
+    override suspend fun saveVeggieProduct(product: VeggieProduct) {
+        val trimmedName = product.name.trim()
+        require(trimmedName.isNotBlank()) { "Veggie product name cannot be blank" }
+        val now = if (product.updatedAt > 0L) product.updatedAt else currentTimeMillis()
+        val sanitized = product.copy(
+            name = trimmedName,
+            description = product.description?.trim()?.takeIf { it.isNotEmpty() },
+            updatedAt = now
+        )
+        veggieOrderDao.insertOrUpdateVeggieProduct(VeggieProductEntity.fromDomain(sanitized))
+        onDataChanged?.invoke()
+    }
+
+    override suspend fun updateVeggieProductImage(productId: String, imageFileName: String?, updatedAt: Long) {
+        veggieOrderDao.updateProductImage(productId, imageFileName, updatedAt)
+        onDataChanged?.invoke()
+    }
+
+    override suspend fun deactivateVeggieProduct(id: String) {
+        veggieOrderDao.deactivateVeggieProduct(id, currentTimeMillis())
+        onDataChanged?.invoke()
+    }
+
+    override suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val round = roundEntity.toDomain()
+        if (round.status != VeggieRoundStatus.OPEN) return@withLock false
+
+        val now = currentTimeMillis()
+        veggieOrderDao.deleteEntriesForProductInRound(roundId, productId)
+        veggieOrderDao.insertOrUpdateRound(
+            roundEntity.copy(
+                workerPdfExportedAt = null,
+                ordersUpdatedAt = now,
+                updatedAt = now
+            )
+        )
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun hardDeleteVeggieProduct(id: String) {
+        veggieOrderDao.deleteFavoritesForProduct(id)
+        val entryCount = veggieOrderDao.getEntryCountForProduct(id)
+        if (entryCount == 0) {
+            veggieOrderDao.hardDeleteVeggieProduct(id)
+        } else {
+            val now = currentTimeMillis()
+            veggieOrderDao.updateProductImage(id, null, now)
+            veggieOrderDao.softDeleteVeggieProduct(id, now)
+        }
+        onDataChanged?.invoke()
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. Order Rounds
+    // -------------------------------------------------------------------------
+    override fun getRoundsFlow(): Flow<List<VeggieOrderRound>> {
+        return veggieOrderDao.getAllRoundsFlow().map { entities ->
+            entities.map { it.toDomain() }
+        }
+    }
+
+    override suspend fun getAllRounds(): List<VeggieOrderRound> {
+        return veggieOrderDao.getAllRounds().map { it.toDomain() }
+    }
+
+    override suspend fun getActiveOrLatestRound(): VeggieOrderRound? {
+        val active = veggieOrderDao.getActiveRound()?.toDomain()
+        if (active != null) return active
+        return veggieOrderDao.getAllRounds().firstOrNull()?.toDomain()
+    }
+
+    override suspend fun getRoundById(roundId: String): VeggieOrderRound? {
+        return veggieOrderDao.getRoundById(roundId)?.toDomain()
+    }
+
+    override suspend fun openNewRound(
+        buyerOperationFeeCents: Long,
+        transportFeeCents: Long,
+        openedAt: Long
+    ): VeggieOrderRound = mutationMutex.withLock {
+        val existingActive = veggieOrderDao.getActiveRound()
+        if (existingActive != null) {
+            return@withLock existingActive.toDomain()
+        }
+
+        val now = if (openedAt > 0L) openedAt else currentTimeMillis()
+        val newRound = VeggieOrderRound(
+            id = generateUuid(),
+            openedAt = now,
+            closedAt = null,
+            settledAt = null,
+            status = VeggieRoundStatus.OPEN,
+            buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
+            transportFeeCents = transportFeeCents.coerceAtLeast(0L),
+            transporterUserId = null,
+            updatedAt = now
+        )
+        veggieOrderDao.insertOrUpdateRound(VeggieOrderRoundEntity.fromDomain(newRound))
+        AppLogger.info(TAG, "Opened veggie round '${newRound.id}' (buyerFee=${newRound.buyerOperationFeeCents}, transportFee=${newRound.transportFeeCents})")
+        onDataChanged?.invoke()
+        newRound
+    }
+
+    override suspend fun closeRound(roundId: String, closedAt: Long): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: run {
+            AppLogger.warn(TAG, "Cannot close veggie round '$roundId': not found")
+            return@withLock false
+        }
+        val round = roundEntity.toDomain()
+        if (round.status != VeggieRoundStatus.OPEN) {
+            AppLogger.warn(TAG, "Cannot close veggie round '$roundId': status is ${round.status}")
+            return@withLock false
+        }
+
+        val now = if (closedAt > 0L) closedAt else currentTimeMillis()
+        val updated = round.copy(
+            status = VeggieRoundStatus.CLOSED,
+            closedAt = now,
+            updatedAt = now
+        )
+        veggieOrderDao.insertOrUpdateRound(VeggieOrderRoundEntity.fromDomain(updated))
+        AppLogger.info(TAG, "Closed veggie round '$roundId'")
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun reopenRound(roundId: String): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: run {
+            AppLogger.warn(TAG, "Cannot reopen veggie round '$roundId': not found")
+            return@withLock false
+        }
+        val round = roundEntity.toDomain()
+        if (round.status != VeggieRoundStatus.CLOSED) {
+            AppLogger.warn(TAG, "Cannot reopen veggie round '$roundId': status is ${round.status}")
+            return@withLock false
+        }
+
+        // Ensure no other round is currently active
+        val active = veggieOrderDao.getActiveRound()
+        if (active != null && active.id != roundId) {
+            AppLogger.warn(TAG, "Cannot reopen veggie round '$roundId': active round '${active.id}' already exists")
+            return@withLock false
+        }
+
+        val now = currentTimeMillis()
+        val updated = round.copy(
+            status = VeggieRoundStatus.OPEN,
+            closedAt = null,
+            updatedAt = now
+        )
+        veggieOrderDao.insertOrUpdateRound(VeggieOrderRoundEntity.fromDomain(updated))
+        AppLogger.info(TAG, "Reopened veggie round '$roundId'")
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun deleteRound(roundId: String): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: run {
+            AppLogger.warn(TAG, "Cannot delete veggie round '$roundId': not found")
+            return@withLock false
+        }
+        // Disallow deletion if round has recorded financial transactions
+        val existingTxs = transactionDao.getTransactionsForRound(roundId)
+        if (existingTxs.isNotEmpty()) {
+            AppLogger.warn(TAG, "Cannot delete veggie round '$roundId': ${existingTxs.size} recorded transaction(s) exist")
+            return@withLock false
+        }
+
+        val performDelete: suspend () -> Unit = {
+            veggieOrderDao.deleteEntriesForRound(roundId)
+            veggieOrderDao.deleteProductSettlementsForRound(roundId)
+            veggieOrderDao.deleteRound(roundId)
+        }
+        if (runInTransaction != null) {
+            runInTransaction.invoke(performDelete)
+        } else {
+            performDelete()
+        }
+        AppLogger.info(TAG, "Deleted veggie round '$roundId'")
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean = mutationMutex.withLock {
+        veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val now = currentTimeMillis()
+        val exportTime = if (timestamp > 0L) timestamp else now
+        veggieOrderDao.markBuyerPdfExported(roundId, exportTime, now)
+        onAdminOnlyDataChanged?.invoke() ?: onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun markBuyerPortalPdfExported(roundId: String, timestamp: Long): Boolean = mutationMutex.withLock {
+        veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val now = currentTimeMillis()
+        val exportTime = if (timestamp > 0L) timestamp else now
+        veggieOrderDao.markBuyerPortalPdfExported(roundId, exportTime, now)
+        onAdminOnlyDataChanged?.invoke() ?: onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean = mutationMutex.withLock {
+        veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val now = currentTimeMillis()
+        val exportTime = if (timestamp > 0L) timestamp else now
+        veggieOrderDao.markWorkerPdfExported(roundId, exportTime, now)
+        onAdminOnlyDataChanged?.invoke() ?: onDataChanged?.invoke()
+        true
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. Customer Order Entries & History
+    // -------------------------------------------------------------------------
+    override suspend fun getEntriesForRound(roundId: String): List<VeggieOrderEntry> {
+        return veggieOrderDao.getRoundEntries(roundId).map { it.toDomain() }
+    }
+
+    override suspend fun getEntriesForUserInRound(roundId: String, userId: String): List<VeggieOrderEntry> {
+        return veggieOrderDao.getEntriesForUserInRound(roundId, userId).map { it.toDomain() }
+    }
+
+    override suspend fun getPreviousRoundQuantitiesForUser(
+        currentRoundId: String,
+        userId: String
+    ): Map<String, Long> {
+        val allRounds = veggieOrderDao.getAllRounds()
+        val currentRound = allRounds.firstOrNull { it.id == currentRoundId }
+        val candidateRounds = allRounds.filter { round ->
+            round.id != currentRoundId && (currentRound == null || round.openedAt <= currentRound.openedAt)
+        }.sortedByDescending { it.openedAt }
+
+        for (round in candidateRounds) {
+            val entries = veggieOrderDao.getEntriesForUserInRound(round.id, userId)
+            val positive = entries.filter { it.orderedQuantityScaled > 0L }
+            if (positive.isNotEmpty()) {
+                return positive.associate { it.veggieProductId to it.orderedQuantityScaled }
+            }
+        }
+        return emptyMap()
+    }
+
+    override suspend fun saveCustomerOrder(
+        roundId: String,
+        user: User,
+        productQuantitiesScaled: Map<String, Long>
+    ): Boolean = mutationMutex.withLock {
+        val round = veggieOrderDao.getRoundById(roundId)?.toDomain() ?: run {
+            AppLogger.warn(TAG, "Rejected customer order for user '${user.id}': round '$roundId' not found")
+            return@withLock false
+        }
+        if (round.status != VeggieRoundStatus.OPEN) {
+            AppLogger.warn(TAG, "Rejected customer order for user '${user.id}': round '$roundId' status is ${round.status}")
+            return@withLock false
+        }
+
+        val existingEntries = veggieOrderDao.getEntriesForUserInRound(roundId, user.id)
+            .associateBy { it.veggieProductId }
+        val allProducts = veggieOrderDao.getAllVeggieProducts(includeDeleted = true)
+            .associateBy { it.id }
+        val allUnits = veggieOrderDao.getAllUnitTypes()
+            .associateBy { it.id }
+
+        val now = currentTimeMillis()
+        val entriesToUpsert = mutableListOf<VeggieOrderEntryEntity>()
+        val entryIdsToDelete = mutableListOf<String>()
+
+        // Any existing entry not in productQuantitiesScaled or with quantity <= 0 is removed,
+        // unless the Admin already entered a custom positive delivered quantity for it.
+        for ((productId, existing) in existingEntries) {
+            val newQty = productQuantitiesScaled[productId] ?: 0L
+            if (newQty <= 0L) {
+                val hasCustomPositiveActual = existing.actualQuantityScaled != null &&
+                    existing.actualQuantityScaled != existing.orderedQuantityScaled &&
+                    existing.actualQuantityScaled > 0L
+                if (hasCustomPositiveActual) {
+                    entriesToUpsert.add(
+                        existing.copy(
+                            orderedQuantityScaled = 0L,
+                            updatedAt = now
+                        )
+                    )
+                } else {
+                    entryIdsToDelete.add(existing.id)
+                }
+            }
+        }
+
+        for ((productId, rawQty) in productQuantitiesScaled) {
+            if (rawQty <= 0L) continue
+            val existing = existingEntries[productId]
+            val product = allProducts[productId]
+            if (existing == null && (product == null || !product.isActive || product.isDeleted)) {
+                continue
+            }
+            val unit = product?.let { allUnits[it.unitTypeId] }
+            val deliveryUnit = product?.deliveryUnitTypeId?.let { allUnits[it] }
+            val allowDecimals = unit?.allowDecimals ?: existing?.allowDecimalsSnapshot ?: false
+            val clampedRawQty = rawQty.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED)
+            // Round to nearest whole unit if decimals are disallowed
+            val roundedQty = if (allowDecimals) {
+                clampedRawQty
+            } else {
+                (clampedRawQty / VEGGIE_QTY_SCALE) * VEGGIE_QTY_SCALE
+            }
+            val isProductInactive = product == null || !product.isActive || product.isDeleted
+            val normalizedQty = if (existing != null && isProductInactive) {
+                roundedQty.coerceAtMost(existing.orderedQuantityScaled)
+            } else {
+                roundedQty
+            }
+            if (normalizedQty <= 0L) {
+                if (existing != null) {
+                    val hasCustomPositiveActual = existing.actualQuantityScaled != null &&
+                        existing.actualQuantityScaled != existing.orderedQuantityScaled &&
+                        existing.actualQuantityScaled > 0L
+                    if (hasCustomPositiveActual) {
+                        entriesToUpsert.add(
+                            existing.copy(
+                                orderedQuantityScaled = 0L,
+                                updatedAt = now
+                            )
+                        )
+                    } else {
+                        entryIdsToDelete.add(existing.id)
+                    }
+                }
+                continue
+            }
+
+            val hasCustomActual = existing?.actualQuantityScaled != null &&
+                existing.actualQuantityScaled != existing.orderedQuantityScaled
+            val preservedActual = when {
+                existing == null -> null
+                hasCustomActual -> existing.actualQuantityScaled
+                existing.orderedQuantityScaled == normalizedQty -> existing.actualQuantityScaled
+                else -> null
+            }
+
+            val entity = VeggieOrderEntryEntity(
+                id = existing?.id ?: generateUuid(),
+                roundId = roundId,
+                userId = user.id,
+                userNameSnapshot = user.name,
+                veggieProductId = productId,
+                veggieNameSnapshot = product?.name ?: existing?.veggieNameSnapshot ?: productId,
+                unitNameSnapshot = unit?.name ?: existing?.unitNameSnapshot ?: "",
+                allowDecimalsSnapshot = allowDecimals,
+                deliveryUnitNameSnapshot = deliveryUnit?.name ?: existing?.deliveryUnitNameSnapshot,
+                deliveryAllowDecimalsSnapshot = deliveryUnit?.allowDecimals ?: existing?.deliveryAllowDecimalsSnapshot,
+                orderedQuantityScaled = normalizedQty,
+                actualQuantityScaled = preservedActual,
+                effectiveUnitPriceCents = existing?.effectiveUnitPriceCents,
+                finalItemTotalCents = existing?.finalItemTotalCents,
+                updatedAt = now
+            )
+            entriesToUpsert.add(entity)
+        }
+
+        veggieOrderDao.replaceUserOrderEntriesForRound(entriesToUpsert, entryIdsToDelete)
+        veggieOrderDao.getRoundById(roundId)?.let { roundEntity ->
+            veggieOrderDao.insertOrUpdateRound(
+                roundEntity.copy(workerPdfExportedAt = null, ordersUpdatedAt = now, updatedAt = now)
+            )
+        }
+        onUserScopedDataChanged?.invoke(user.id) ?: onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun getCustomerOrderHistory(userId: String): List<CustomerVeggieRoundHistoryItem> {
+        val userEntriesAllRounds = veggieOrderDao.getEntriesForUserAcrossRounds(userId)
+        if (userEntriesAllRounds.isEmpty()) return emptyList()
+
+        val entriesByRoundId = userEntriesAllRounds.groupBy { it.roundId }
+        val productsById = veggieOrderDao.getAllVeggieProducts(includeDeleted = true).associateBy { it.id }
+
+        val historyItems = mutableListOf<CustomerVeggieRoundHistoryItem>()
+        for ((roundId, rawUserEntries) in entriesByRoundId) {
+            val round = veggieOrderDao.getRoundById(roundId)?.toDomain() ?: continue
+            val allRoundEntries = veggieOrderDao.getRoundEntries(roundId).map { it.toDomain() }
+            val userEntries = rawUserEntries.map { raw ->
+                val domain = raw.toDomain()
+                if (round.status != VeggieRoundStatus.SETTLED && domain.effectiveUnitPriceCents == null) {
+                    val estPrice = productsById[domain.veggieProductId]?.estimatedPriceCents
+                    if (estPrice != null && estPrice > 0L) {
+                        val total = VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(
+                            unitPriceCents = estPrice,
+                            totalDeliveredQtyScaled = domain.deliveredQuantityScaled
+                        )
+                        domain.copy(
+                            effectiveUnitPriceCents = estPrice,
+                            finalItemTotalCents = total
+                        )
+                    } else {
+                        domain
+                    }
+                } else {
+                    domain
+                }
+            }.sortedByAccentInsensitive { it.veggieNameSnapshot }
+
+            val participatingUserIds = allRoundEntries
+                .filter { it.deliveredQuantityScaled > 0L }
+                .map { it.userId }
+                .toSet()
+
+            val feeShares = VeggieSettlementCalculator.distributeCombinedFeesEqually(
+                combinedFeeCents = round.combinedFeeCents,
+                participatingUserIds = participatingUserIds
+            )
+            val userFeeShare = feeShares[userId] ?: 0L
+
+            val itemsSubtotal = userEntries.sumOf { it.finalItemTotalCents ?: 0L }
+
+            historyItems.add(
+                CustomerVeggieRoundHistoryItem(
+                    round = round,
+                    entries = userEntries,
+                    itemsSubtotalCents = itemsSubtotal,
+                    combinedFeeShareCents = userFeeShare,
+                    grandTotalCents = itemsSubtotal + userFeeShare
+                )
+            )
+        }
+
+        return historyItems.sortedByDescending { it.round.openedAt }
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. Settlement & Corrections
+    // -------------------------------------------------------------------------
+    override suspend fun upsertAdminOrderEntry(entry: VeggieOrderEntry): Boolean = mutationMutex.withLock {
+        val round = veggieOrderDao.getRoundById(entry.roundId)?.toDomain() ?: return@withLock false
+        val now = if (entry.updatedAt > 0L) entry.updatedAt else currentTimeMillis()
+        val existing = veggieOrderDao.getEntryByRoundUserProduct(entry.roundId, entry.userId, entry.veggieProductId)
+        val merged = entry.copy(
+            id = existing?.id ?: entry.id.ifBlank { generateUuid() },
+            orderedQuantityScaled = entry.orderedQuantityScaled.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED),
+            actualQuantityScaled = entry.actualQuantityScaled?.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED),
+            updatedAt = now
+        )
+        veggieOrderDao.insertOrUpdateEntry(VeggieOrderEntryEntity.fromDomain(merged))
+        val updatedRound = round.copy(workerPdfExportedAt = null, ordersUpdatedAt = now, updatedAt = now)
+        veggieOrderDao.insertOrUpdateRound(
+            VeggieOrderRoundEntity.fromDomain(updatedRound)
+        )
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun deleteAdminOrderEntry(roundId: String, entryId: String): Boolean = mutationMutex.withLock {
+        val round = veggieOrderDao.getRoundById(roundId)?.toDomain() ?: return@withLock false
+        val now = currentTimeMillis()
+        veggieOrderDao.deleteEntryById(entryId)
+        val updatedRound = round.copy(workerPdfExportedAt = null, ordersUpdatedAt = now, updatedAt = now)
+        veggieOrderDao.insertOrUpdateRound(
+            VeggieOrderRoundEntity.fromDomain(updatedRound)
+        )
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun getProductSettlementsForRound(roundId: String): List<VeggieRoundProductSettlement> {
+        return veggieOrderDao.getRoundProductSettlements(roundId).map { it.toDomain() }
+    }
+
+    override suspend fun saveDraftSettlement(
+        roundId: String,
+        buyerOperationFeeCents: Long,
+        transportFeeCents: Long,
+        transporterUserId: String?,
+        productSettlements: List<VeggieRoundProductSettlement>,
+        actualQuantitiesByEntryId: Map<String, Long>
+    ): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val round = roundEntity.toDomain()
+        if (round.status == VeggieRoundStatus.SETTLED) return@withLock false
+
+        val now = currentTimeMillis()
+        val existingEntries = veggieOrderDao.getRoundEntries(roundId).map { it.toDomain() }
+        val updatedEntries = existingEntries.map { entry ->
+            val newActual = actualQuantitiesByEntryId[entry.id]
+            if (newActual != null) {
+                VeggieOrderEntryEntity.fromDomain(
+                    entry.copy(actualQuantityScaled = newActual.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED), updatedAt = now)
+                )
+            } else {
+                VeggieOrderEntryEntity.fromDomain(entry)
+            }
+        }
+
+        val updatedRound = round.copy(
+            buyerOperationFeeCents = buyerOperationFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+            transportFeeCents = transportFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+            transporterUserId = transporterUserId?.takeIf { it.isNotBlank() },
+            buyerPdfExportedAt = null,
+            workerPdfExportedAt = null,
+            updatedAt = now
+        )
+
+        val settlementEntities = productSettlements.map {
+            VeggieRoundProductSettlementEntity.fromDomain(
+                it.copy(
+                    roundId = roundId,
+                    marketUnitPriceCents = it.marketUnitPriceCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+                    totalSpentCents = it.totalSpentCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+                    updatedAt = now
+                )
+            )
+        }
+
+        veggieOrderDao.saveSettlementState(
+            round = VeggieOrderRoundEntity.fromDomain(updatedRound),
+            updatedEntries = updatedEntries,
+            updatedProductSettlements = settlementEntities,
+            catalogPriceUpdates = emptyMap(),
+            timestamp = now
+        )
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun saveBuyerDraftPrices(
+        roundId: String,
+        buyerOperationFeeCents: Long,
+        productSettlements: List<VeggieRoundProductSettlement>
+    ): Boolean = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock false
+        val round = roundEntity.toDomain()
+        if (round.status != VeggieRoundStatus.CLOSED) return@withLock false
+
+        val excludedProductIds = veggieOrderDao.getAllVeggieProducts(includeDeleted = true)
+            .filter { it.excludeFromBuyerPdf }
+            .map { it.id }
+            .toSet()
+        val allowedProductIds = veggieOrderDao.getRoundEntries(roundId)
+            .filter { (it.orderedQuantityScaled > 0L || (it.actualQuantityScaled ?: 0L) > 0L) && it.veggieProductId !in excludedProductIds }
+            .map { it.veggieProductId }
+            .toSet()
+
+        val now = currentTimeMillis()
+        val updatedRound = round.copy(
+            buyerOperationFeeCents = buyerOperationFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+            updatedAt = now
+        )
+        val sanitizedSettlements = productSettlements
+            .filter { it.veggieProductId in allowedProductIds }
+            .map {
+                VeggieRoundProductSettlementEntity.fromDomain(
+                    it.copy(
+                        roundId = roundId,
+                        marketUnitPriceCents = it.marketUnitPriceCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+                        totalSpentCents = it.totalSpentCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+                        updatedAt = now
+                    )
+                )
+            }
+
+        veggieOrderDao.saveSettlementState(
+            round = VeggieOrderRoundEntity.fromDomain(updatedRound),
+            updatedEntries = emptyList(),
+            updatedProductSettlements = sanitizedSettlements,
+            catalogPriceUpdates = emptyMap(),
+            timestamp = now
+        )
+        onDataChanged?.invoke()
+        true
+    }
+
+    override suspend fun executeRoundSettlement(
+        roundId: String,
+        buyerOperationFeeCents: Long,
+        transportFeeCents: Long,
+        transporterUserId: String?,
+        productSettlements: List<VeggieRoundProductSettlement>,
+        actualQuantitiesByEntryId: Map<String, Long>,
+        settledAt: Long,
+        pendingEntries: List<VeggieOrderEntry>
+    ): VeggieRoundSettlementResult? = mutationMutex.withLock {
+        val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock null
+        val previousRound = roundEntity.toDomain()
+        val dbEntries = veggieOrderDao.getRoundEntries(roundId).map { it.toDomain() }
+
+        val now = if (settledAt > 0L) settledAt else currentTimeMillis()
+        // Merge any staged pendingEntries atomically (reusing existing entry IDs on (userId, veggieProductId) match)
+        val mergedPendingEntries = pendingEntries.map { pending ->
+            val existing = dbEntries.find { it.userId == pending.userId && it.veggieProductId == pending.veggieProductId }
+            pending.copy(
+                id = existing?.id ?: pending.id.ifBlank { generateUuid() },
+                roundId = roundId,
+                orderedQuantityScaled = pending.orderedQuantityScaled.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED),
+                actualQuantityScaled = pending.actualQuantityScaled?.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED),
+                updatedAt = now
+            )
+        }
+        val previousEntries = mergedPendingEntries.fold(dbEntries) { acc, pending ->
+            acc.filterNot { it.userId == pending.userId && it.veggieProductId == pending.veggieProductId } + pending
+        }
+
+        val entriesWithActuals = previousEntries.map { entry ->
+            val actualQty = actualQuantitiesByEntryId[entry.id]
+                ?: entry.actualQuantityScaled
+                ?: entry.orderedQuantityScaled
+            entry.copy(actualQuantityScaled = actualQty.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED), updatedAt = now)
+        }
+
+        val clampedBuyerFee = buyerOperationFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS)
+        val clampedTransportFee = transportFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS)
+        val settlementInputsByProduct = productSettlements.associate {
+            it.veggieProductId to it.copy(
+                marketUnitPriceCents = it.marketUnitPriceCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+                totalSpentCents = it.totalSpentCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS)
+            )
+        }
+        val calculationResult = VeggieSettlementCalculator.calculateRoundSettlement(
+            roundId = roundId,
+            entries = entriesWithActuals,
+            productSettlementInputs = settlementInputsByProduct,
+            buyerOperationFeeCents = clampedBuyerFee,
+            transportFeeCents = clampedTransportFee,
+            transporterUserId = transporterUserId,
+            timestamp = now
+        )
+
+        val weekInfo = IsoWeekUtils.fromEpochMillis(previousRound.openedAt)
+        val batchTransactions = mutableListOf<Triple<TransactionEntity, Long, Map<String, Long>>>()
+
+        if (previousRound.status != VeggieRoundStatus.SETTLED) {
+            // Initial settlement: 1 summary VEGGIE transaction per customer + optional ADMIN_DEPOSIT for transporter
+            for (summary in calculationResult.customerSummaries) {
+                if (summary.grandTotalCents <= 0L) continue
+                // Verify user exists in DB before recording transaction
+                val userEntity = userDao.getUserById(summary.userId)
+                    ?: throw IllegalStateException("Cannot settle round '$roundId': user '${summary.userId}' does not exist.")
+                val withdrawalAmount = -summary.grandTotalCents
+                val txEntity = TransactionEntity(
+                    id = generateUuid(),
+                    userId = userEntity.id,
+                    userNameSnapshot = userEntity.name,
+                    timestamp = now,
+                    type = TransactionType.VEGGIE.name,
+                    referenceTransactionId = null,
+                    note = "SYSNOTE|VEGGIE_ORDER|${weekInfo.weekOfYear}|${weekInfo.isoYear}|$roundId",
+                    totalAmount = withdrawalAmount,
+                    items = emptyList()
+                )
+                batchTransactions.add(Triple(txEntity, withdrawalAmount, emptyMap()))
+            }
+
+            val cleanTransporterId = calculationResult.transporterUserId
+            if (cleanTransporterId != null && calculationResult.transporterCreditCents > 0L) {
+                val transporterEntity = userDao.getUserById(cleanTransporterId)
+                if (transporterEntity != null) {
+                    val creditAmount = calculationResult.transporterCreditCents
+                    val transportTx = TransactionEntity(
+                        id = generateUuid(),
+                        userId = transporterEntity.id,
+                        userNameSnapshot = transporterEntity.name,
+                        timestamp = now,
+                        type = TransactionType.ADMIN_DEPOSIT.name,
+                        referenceTransactionId = null,
+                        note = "SYSNOTE|VEGGIE_TRANSPORT|${weekInfo.weekOfYear}|${weekInfo.isoYear}|$roundId",
+                        totalAmount = creditAmount,
+                        items = emptyList()
+                    )
+                    batchTransactions.add(Triple(transportTx, creditAmount, emptyMap()))
+                }
+            }
+        } else {
+            // Post-settlement correction: compare against ACTUAL ledger transactions for this round
+            val roundTransactions = transactionDao.getTransactionsForRound(roundId)
+
+            // Customer transactions: all round VEGGIE transactions
+            val customerTransactions = roundTransactions.filter { tx ->
+                tx.type == TransactionType.VEGGIE.name
+            }
+
+            // Total amount previously charged to each user:
+            // Since charges are recorded as negative values (-grandTotalCents),
+            // the net amount charged is - (sum of totalAmount).
+            val previouslyChargedByUser = customerTransactions
+                .groupBy { it.userId }
+                .mapValues { (_, txs) -> -txs.sumOf { it.totalAmount } }
+
+            val newTotalsByUser = calculationResult.customerSummaries.associate {
+                it.userId to it.grandTotalCents
+            }
+            val customerDeltas = VeggieSettlementCalculator.calculateCustomerChargeCorrectionDeltas(
+                previousCustomerTotals = previouslyChargedByUser,
+                newCustomerTotals = newTotalsByUser
+            )
+
+            for ((userId, balanceDelta) in customerDeltas) {
+                val userEntity = userDao.getUserById(userId)
+                    ?: throw IllegalStateException("Cannot settle round '$roundId': user '$userId' does not exist.")
+                val txEntity = TransactionEntity(
+                    id = generateUuid(),
+                    userId = userEntity.id,
+                    userNameSnapshot = userEntity.name,
+                    timestamp = now,
+                    type = TransactionType.VEGGIE.name,
+                    referenceTransactionId = null,
+                    note = "SYSNOTE|VEGGIE_CORRECTION|${weekInfo.weekOfYear}|${weekInfo.isoYear}|$roundId",
+                    totalAmount = balanceDelta,
+                    items = emptyList()
+                )
+                batchTransactions.add(Triple(txEntity, balanceDelta, emptyMap()))
+            }
+
+            // Also check if transporter credit changed
+            val transporterTransactions = roundTransactions.filter { tx ->
+                tx.note?.startsWith("SYSNOTE|VEGGIE_TRANSPORT|") == true
+            }
+            val previouslyCreditedByUser = transporterTransactions
+                .groupBy { it.userId }
+                .mapValues { (_, txs) -> txs.sumOf { it.totalAmount } }
+
+            val newTransporterId = calculationResult.transporterUserId
+            val newTransportCredit = calculationResult.transporterCreditCents
+            val newTransporterMap = if (newTransporterId != null && newTransportCredit > 0L) {
+                mapOf(newTransporterId to newTransportCredit)
+            } else {
+                emptyMap()
+            }
+
+            val allTransporterUserIds = (previouslyCreditedByUser.keys + newTransporterMap.keys).toSet()
+            for (tUserId in allTransporterUserIds) {
+                val prevCredit = previouslyCreditedByUser[tUserId] ?: 0L
+                val targetCredit = newTransporterMap[tUserId] ?: 0L
+                val tDelta = targetCredit - prevCredit
+                if (tDelta == 0L) continue
+
+                val userEntity = userDao.getUserById(tUserId) ?: continue
+                val txType = if (tDelta >= 0L) {
+                    TransactionType.ADMIN_DEPOSIT.name
+                } else {
+                    TransactionType.ADMIN_WITHDRAWAL.name
+                }
+                val txEntity = TransactionEntity(
+                    id = generateUuid(),
+                    userId = userEntity.id,
+                    userNameSnapshot = userEntity.name,
+                    timestamp = now,
+                    type = txType,
+                    referenceTransactionId = null,
+                    note = "SYSNOTE|VEGGIE_TRANSPORT|${weekInfo.weekOfYear}|${weekInfo.isoYear}|$roundId",
+                    totalAmount = tDelta,
+                    items = emptyList()
+                )
+                batchTransactions.add(Triple(txEntity, tDelta, emptyMap()))
+            }
+        }
+
+        val updatedRound = previousRound.copy(
+            status = VeggieRoundStatus.SETTLED,
+            closedAt = previousRound.closedAt ?: now,
+            settledAt = previousRound.settledAt ?: now,
+            buyerOperationFeeCents = clampedBuyerFee,
+            transportFeeCents = clampedTransportFee,
+            transporterUserId = calculationResult.transporterUserId,
+            buyerPdfExportedAt = null,
+            workerPdfExportedAt = null,
+            ordersUpdatedAt = if (mergedPendingEntries.isNotEmpty()) now else previousRound.ordersUpdatedAt,
+            updatedAt = now
+        )
+
+        // Only update catalog estimated prices on initial settlement so historical round corrections
+        // do not overwrite current catalog prices.
+        val catalogUpdates = if (previousRound.status != VeggieRoundStatus.SETTLED) {
+            calculationResult.catalogPriceUpdates
+        } else {
+            emptyMap()
+        }
+
+        val persistSettlement: suspend () -> Unit = {
+            if (batchTransactions.isNotEmpty()) {
+                transactionDao.executeBatchAtomicTransactions(batchTransactions)
+            }
+
+            veggieOrderDao.saveSettlementState(
+                round = VeggieOrderRoundEntity.fromDomain(updatedRound),
+                updatedEntries = calculationResult.updatedEntries.map { VeggieOrderEntryEntity.fromDomain(it) },
+                updatedProductSettlements = calculationResult.updatedProductSettlements.map {
+                    VeggieRoundProductSettlementEntity.fromDomain(it)
+                },
+                catalogPriceUpdates = catalogUpdates,
+                timestamp = now
+            )
+        }
+
+        if (runInTransaction != null) {
+            runInTransaction.invoke(persistSettlement)
+        } else {
+            persistSettlement()
+        }
+
+        AppLogger.info(
+            TAG,
+            "Settled veggie round '$roundId' (correction=${previousRound.status == VeggieRoundStatus.SETTLED}, " +
+                "customers=${calculationResult.customerSummaries.size}, transactions=${batchTransactions.size})"
+        )
+        onDataChanged?.invoke()
+        calculationResult
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. Customer Favorites
+    // -------------------------------------------------------------------------
+    override suspend fun getFavoriteProductIdsForUser(userId: String): Set<String> {
+        return veggieOrderDao.getFavoriteProductIdsForUser(userId).toSet()
+    }
+
+    override suspend fun setFavoriteProductIdsForUser(userId: String, productIds: Set<String>) {
+        val now = currentTimeMillis()
+        val entities = productIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .map { productId ->
+                VeggieUserFavoriteEntity(
+                    userId = userId,
+                    veggieProductId = productId,
+                    createdAt = now
+                )
+            }
+        veggieOrderDao.replaceFavoritesForUser(userId, entities)
+        onUserScopedDataChanged?.invoke(userId) ?: onDataChanged?.invoke()
+    }
+}

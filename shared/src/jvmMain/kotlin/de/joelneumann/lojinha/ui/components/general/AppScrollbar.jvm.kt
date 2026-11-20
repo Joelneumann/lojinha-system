@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.ui.components.general
 
+import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.defaultScrollbarStyle
@@ -46,4 +47,24 @@ actual fun AppVerticalScrollbar(
             minimalHeight = 36.dp
         )
     )
+}
+
+@Composable
+actual fun AppHorizontalScrollbar(
+    scrollState: ScrollState,
+    modifier: Modifier
+) {
+    if (scrollState.maxValue > 0) {
+        HorizontalScrollbar(
+            adapter = rememberScrollbarAdapter(scrollState),
+            modifier = modifier,
+            style = defaultScrollbarStyle().copy(
+                unhoverColor = PrimaryNavy.copy(alpha = 0.25f),
+                hoverColor = AccentNavy.copy(alpha = 0.85f),
+                thickness = 8.dp,
+                shape = RoundedCornerShape(4.dp),
+                minimalHeight = 36.dp
+            )
+        )
+    }
 }

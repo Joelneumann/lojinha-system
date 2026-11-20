@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.repository
 
 import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.AppDatabase_Impl
 import de.joelneumann.lojinha.data.database.DatabaseFactory
@@ -142,16 +143,37 @@ class RoomShoppingListRepositoryImplTest {
     }
 
     @Test
-    fun testMigration17To18SqlCreatesValidTable() {
-        val migrationDbFile = File(tempDir, "migration_17_18.db")
+    fun testMigration17To18To19SqlCreatesValidTables() {
+        val migrationDbFile = File(tempDir, "migration_17_18_19.db")
         val conn = BundledSQLiteDriver().open(migrationDbFile.absolutePath)
         try {
+            // Minimal v17 users and settings tables so MIGRATION_18_19 ALTER TABLE statements succeed
+            conn.execSQL(
+                "CREATE TABLE IF NOT EXISTS `users` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `balance` INTEGER NOT NULL, `language` TEXT NOT NULL, `secondaryCurrency` TEXT NOT NULL, `pin` TEXT, `userBarcode` TEXT, `userBarcodeNumber` TEXT, `isActive` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `avatarType` TEXT NOT NULL, `avatarEmoji` TEXT NOT NULL, `avatarColor` TEXT NOT NULL, PRIMARY KEY(`id`))"
+            )
+            conn.execSQL(
+                "CREATE TABLE IF NOT EXISTS `settings` (`id` INTEGER NOT NULL, `adminPasswordHash` TEXT NOT NULL, `globalMarkupPercent` REAL NOT NULL, `usdExchangeRate` REAL NOT NULL, `eurExchangeRate` REAL NOT NULL, `inactivityTimeoutMinutes` INTEGER NOT NULL, `autoUpdateExchangeRates` INTEGER NOT NULL, `lastExchangeRateUpdateTimestamp` INTEGER, `yellowBalanceWarningThresholdCents` INTEGER NOT NULL, `redBalanceWarningThresholdCents` INTEGER NOT NULL, `backupLocationPath` TEXT NOT NULL, `autoBackupEnabled` INTEGER NOT NULL, `autoBackupFormat` TEXT NOT NULL, `autoBackupScheduleType` TEXT NOT NULL, `autoBackupTime` TEXT NOT NULL, `autoBackupIntervalHours` INTEGER NOT NULL, `oneDriveClientId` TEXT NOT NULL, `oneDriveRefreshToken` TEXT, `oneDriveAccountEmail` TEXT, `oneDriveAccountName` TEXT, `oneDriveDefaultFolder` TEXT NOT NULL, `oneDriveTenant` TEXT NOT NULL, `supportEmail` TEXT, PRIMARY KEY(`id`))"
+            )
+
             DatabaseFactory.MIGRATION_17_18.migrate(conn)
-            val stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='shopping_list_items'")
-            try {
-                assertTrue(stmt.step(), "shopping_list_items table must exist after MIGRATION_17_18")
-            } finally {
-                stmt.close()
+            DatabaseFactory.MIGRATION_18_19.migrate(conn)
+
+            val expectedTables = listOf(
+                "shopping_list_items",
+                "veggie_unit_types",
+                "veggie_products",
+                "veggie_order_rounds",
+                "veggie_round_product_settlements",
+                "veggie_order_entries",
+                "veggie_user_favorites"
+            )
+            for (table in expectedTables) {
+                val stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='$table'")
+                try {
+                    assertTrue(stmt.step(), "$table table must exist after MIGRATION_17_18 + MIGRATION_18_19")
+                } finally {
+                    stmt.close()
+                }
             }
         } finally {
             conn.close()

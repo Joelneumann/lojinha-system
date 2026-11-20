@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.repository
 
 import de.joelneumann.lojinha.domain.model.*
 import de.joelneumann.lojinha.domain.repository.*
+import de.joelneumann.lojinha.domain.service.VeggieRoundSettlementResult
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.util.AppLogger
 import io.ktor.client.*
@@ -19,61 +20,148 @@ import kotlinx.serialization.json.Json
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
-@JsFun("(key, value) => window.sessionStorage.setItem(key, value)")
-private external fun jsSetSessionItem(key: String, value: String)
-
-@JsFun("(key) => window.sessionStorage.getItem(key)")
-private external fun jsGetSessionItem(key: String): String?
-
-@JsFun("(key) => window.sessionStorage.removeItem(key)")
-private external fun jsRemoveSessionItem(key: String)
-
 @JsFun("""
-(baseUrl, token) => {
-    if (window._lojinhaEventSource) {
-        window._lojinhaEventSource.close();
+(key, path, baseUrl) => {
+    window._lojinhaSse = window._lojinhaSse || {};
+    const prev = window._lojinhaSse[key];
+    if (prev) {
+        if (prev.es) prev.es.close();
+        if (prev.visHandler) document.removeEventListener('visibilitychange', prev.visHandler);
     }
     const cleanBase = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
-    const url = cleanBase + '/api/admin/events' + (token ? '?token=' + encodeURIComponent(token) : '');
-    try {
-        const es = new EventSource(url);
-        es.addEventListener('data_changed', () => {
-            window._lojinhaHasNewData = true;
-        });
-        es.onerror = (e) => {
-            window._lojinhaSyncError = true;
-        };
-        window._lojinhaEventSource = es;
-    } catch (err) {
-        console.warn('Failed to start EventSource:', err);
-    }
+    const url = cleanBase + path;
+    const state = { es: null, syncError: false, hasNewData: false, visHandler: null };
+    window._lojinhaSse[key] = state;
+
+    const connect = () => {
+        if (document.hidden || state.es) return;
+        try {
+            state.syncError = false;
+            const es = new EventSource(url, { withCredentials: true });
+            es.onopen = () => { state.syncError = false; };
+            es.addEventListener('data_changed', () => {
+                state.syncError = false;
+                state.hasNewData = true;
+            });
+            es.onerror = () => { state.syncError = true; };
+            state.es = es;
+        } catch (err) {
+            console.warn('Failed to start EventSource:', err);
+        }
+    };
+
+    state.visHandler = () => {
+        if (document.hidden) {
+            if (state.es) {
+                state.es.close();
+                state.es = null;
+            }
+        } else {
+            state.hasNewData = true;
+            connect();
+        }
+    };
+    document.addEventListener('visibilitychange', state.visHandler);
+    connect();
 }
 """)
-private external fun jsStartEventSource(baseUrl: String, token: String)
+internal external fun jsStartSse(key: String, path: String, baseUrl: String)
 
 @JsFun("""
-() => {
-    if (window._lojinhaEventSource) {
-        window._lojinhaEventSource.close();
-        window._lojinhaEventSource = null;
+(key) => {
+    const state = window._lojinhaSse && window._lojinhaSse[key];
+    if (state) {
+        if (state.es) { state.es.close(); state.es = null; }
+        if (state.visHandler) { document.removeEventListener('visibilitychange', state.visHandler); state.visHandler = null; }
+        state.syncError = false;
     }
 }
 """)
-private external fun jsStopEventSource()
+internal external fun jsStopSse(key: String)
 
-@JsFun("() => { const flag = window._lojinhaHasNewData === true; window._lojinhaHasNewData = false; return flag; }")
-private external fun jsCheckAndClearDataChanged(): Boolean
+@JsFun("(key) => { const s = window._lojinhaSse && window._lojinhaSse[key]; if (!s) return false; const f = s.hasNewData === true; s.hasNewData = false; return f; }")
+internal external fun jsCheckAndClearSseDataChanged(key: String): Boolean
 
-sealed class LoginResult {
-    object Success : LoginResult()
-    data class RateLimited(val message: String) : LoginResult()
-    object InvalidCredentials : LoginResult()
-    data class NetworkError(val message: String) : LoginResult()
+@JsFun("(key) => { const s = window._lojinhaSse && window._lojinhaSse[key]; if (!s) return false; const e = s.syncError === true; s.syncError = false; return e; }")
+internal external fun jsCheckAndClearSseSyncError(key: String): Boolean
+
+object KioskConnectionMonitor {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val _isServerReachable = MutableStateFlow(true)
+    val isServerReachable: StateFlow<Boolean> = _isServerReachable.asStateFlow()
+
+    private val _onReconnected = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val onReconnected: SharedFlow<Unit> = _onReconnected.asSharedFlow()
+
+    private var pollJob: Job? = null
+    private val healthClient = HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 6_000L
+            connectTimeoutMillis = 5_000L
+        }
+    }
+
+    fun reportNetworkFailure(baseUrl: String = "") {
+        if (_isServerReachable.value) {
+            _isServerReachable.value = false
+        }
+        startPolling(baseUrl)
+    }
+
+    fun reportServerReachable() {
+        pollJob?.cancel()
+        pollJob = null
+        if (!_isServerReachable.value) {
+            _isServerReachable.value = true
+            _onReconnected.tryEmit(Unit)
+        }
+    }
+
+    suspend fun checkHealthNow(baseUrl: String = ""): Boolean {
+        val cleanBase = baseUrl.trimEnd('/')
+        val url = if (cleanBase.isEmpty()) "/api/health" else "$cleanBase/api/health"
+        return try {
+            val response = healthClient.get(url)
+            if (response.status.isSuccess()) {
+                reportServerReachable()
+                true
+            } else {
+                reportNetworkFailure(baseUrl)
+                false
+            }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            reportNetworkFailure(baseUrl)
+            false
+        }
+    }
+
+    private fun startPolling(baseUrl: String) {
+        if (pollJob?.isActive == true) return
+        pollJob = scope.launch {
+            while (isActive && !_isServerReachable.value) {
+                delay(2500)
+                val cleanBase = baseUrl.trimEnd('/')
+                val url = if (cleanBase.isEmpty()) "/api/health" else "$cleanBase/api/health"
+                try {
+                    val response = healthClient.get(url)
+                    if (response.status.isSuccess()) {
+                        _isServerReachable.value = true
+                        _onReconnected.tryEmit(Unit)
+                        break
+                    }
+                } catch (e: Throwable) {
+                    if (e is CancellationException) throw e
+                }
+            }
+            pollJob = null
+        }
+    }
 }
 
 class AdminNetworkClient(val baseUrl: String = "") {
-    var authToken: String? = null
-    var adminPassword: String = ""
+    var isAuthenticated: Boolean = false
+        private set
 
     fun resolveUrl(path: String): String {
         val cleanBase = baseUrl.trimEnd('/')
@@ -88,12 +176,10 @@ class AdminNetworkClient(val baseUrl: String = "") {
     val onUnauthorized: SharedFlow<Unit> = _onUnauthorized.asSharedFlow()
 
     fun notifyUnauthorized() {
-        val hadToken = authToken != null
+        val wasAuthenticated = isAuthenticated
         stopRealtimeSync()
-        authToken = null
-        adminPassword = ""
-        try { jsRemoveSessionItem("lojinha_admin_token") } catch (e: Exception) {}
-        if (hadToken) {
+        isAuthenticated = false
+        if (wasAuthenticated) {
             _onUnauthorized.tryEmit(Unit)
         }
     }
@@ -101,6 +187,10 @@ class AdminNetworkClient(val baseUrl: String = "") {
     private var syncJob: Job? = null
 
     val httpClient = HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 20_000L
+            connectTimeoutMillis = 10_000L
+        }
         install(ContentNegotiation) {
             json(Json {
                 prettyPrint = true
@@ -117,79 +207,49 @@ class AdminNetworkClient(val baseUrl: String = "") {
         }
     }
 
-    suspend fun login(password: String): LoginResult {
+    suspend fun fetchSessionRole(): String? {
         return try {
-            val response = httpClient.post(resolveUrl("/api/admin/login")) {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(password))
-            }
-            if (response.status == HttpStatusCode.TooManyRequests) {
-                val resp: LoginResponse? = try { response.body() } catch (e: Exception) { null }
-                val msg = resp?.message?.ifBlank { null } ?: "Too many failed attempts. Please wait a minute."
-                LoginResult.RateLimited(msg)
-            } else if (response.status.isSuccess()) {
-                val loginResponse: LoginResponse = response.body()
-                if (loginResponse.success) {
-                    authToken = loginResponse.token
-                    adminPassword = password
-                    authToken?.let { token ->
-                        try { jsSetSessionItem("lojinha_admin_token", token) } catch (e: Exception) {}
-                    }
-                    LoginResult.Success
-                } else {
-                    LoginResult.InvalidCredentials
-                }
+            val response = httpClient.get(resolveUrl("/api/session"))
+            if (response.status.isSuccess()) {
+                val status: SessionStatusResponse = response.body()
+                status.role
             } else {
-                AppLogger.warn("AdminNetworkClient", "Client login failed with HTTP status: ${response.status}")
-                LoginResult.InvalidCredentials
+                null
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            LoginResult.NetworkError(e.message ?: "Network error")
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            null
         }
     }
 
     suspend fun tryRestoreSession(): Boolean {
-        val storedToken = try { jsGetSessionItem("lojinha_admin_token") } catch (e: Exception) { null }
-        if (storedToken.isNullOrBlank()) return false
-        authToken = storedToken
         return try {
-            val response = httpClient.get(resolveUrl("/api/admin/products")) {
-                appendAdminAuth()
-            }
+            val response = httpClient.get(resolveUrl("/api/admin/ui-settings"))
             if (response.status.isSuccess()) {
+                isAuthenticated = true
                 true
-            } else if (response.status == HttpStatusCode.Unauthorized) {
-                logout()
-                false
             } else {
-                // Server error / unavailable - do not clear stored token so user can retry
-                authToken = null
+                isAuthenticated = false
                 false
             }
-        } catch (e: Exception) {
-            // Transient network failure - keep stored token
-            authToken = null
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            isAuthenticated = false
             false
         }
     }
 
     suspend fun logout() {
         stopRealtimeSync()
+        isAuthenticated = false
         try {
-            httpClient.post(resolveUrl("/api/admin/logout")) {
-                appendAdminAuth()
-            }
-        } catch (e: Exception) {}
-        authToken = null
-        adminPassword = ""
-        try { jsRemoveSessionItem("lojinha_admin_token") } catch (e: Exception) {}
+            httpClient.post(resolveUrl("/api/admin/logout"))
+        } catch (_: Exception) {}
     }
 
     fun startRealtimeSync(scope: CoroutineScope) {
-        val token = authToken ?: ""
         try {
-            jsStartEventSource(baseUrl, token)
+            jsStartSse("admin", "/api/admin/events", baseUrl)
         } catch (e: Exception) {
             AppLogger.error("AdminNetworkClient", "Failed to initialize EventSource: ${e.message}", e)
         }
@@ -198,13 +258,44 @@ class AdminNetworkClient(val baseUrl: String = "") {
         syncJob = scope.launch {
             while (isActive) {
                 delay(1200)
-                if (authToken.isNullOrBlank()) break
+                if (!isAuthenticated) break
                 try {
-                    if (jsCheckAndClearDataChanged()) {
+                    if (jsCheckAndClearSseDataChanged("admin")) {
                         _onDataChanged.tryEmit(Unit)
                     }
-                } catch (e: Exception) {}
+                    if (jsCheckAndClearSseSyncError("admin")) {
+                        val healthy = KioskConnectionMonitor.checkHealthNow(baseUrl)
+                        if (healthy) {
+                            // Server is up but SSE errored (e.g., 401 session revoked or transient proxy drop):
+                            // verify session validity and restart SSE if still authenticated.
+                            val role = fetchSessionRole()
+                            if (role != "ADMIN") {
+                                notifyUnauthorized()
+                                break
+                            } else {
+                                try {
+                                    jsStartSse("admin", "/api/admin/events", baseUrl)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
             }
+        }
+    }
+
+    suspend fun verifySessionStillValid() {
+        if (!isAuthenticated) return
+        try {
+            val response = httpClient.get(resolveUrl("/api/admin/products"))
+            if (response.status.isSuccess()) {
+                KioskConnectionMonitor.reportServerReachable()
+            }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            KioskConnectionMonitor.reportNetworkFailure(baseUrl)
         }
     }
 
@@ -212,16 +303,33 @@ class AdminNetworkClient(val baseUrl: String = "") {
         syncJob?.cancel()
         syncJob = null
         try {
-            jsStopEventSource()
+            jsStopSse("admin")
         } catch (e: Exception) {}
     }
 
-    fun HttpRequestBuilder.appendAdminAuth() {
-        if (!authToken.isNullOrBlank()) {
-            header(HttpHeaders.Authorization, "Bearer $authToken")
-        } else if (adminPassword.isNotBlank()) {
-            header("X-Admin-Password", adminPassword)
+    fun HttpRequestBuilder.appendAdminAuth() {}
+}
+
+class HttpSettingsRepository(private val client: AdminNetworkClient) : SettingsRepository {
+    override fun getSettingsFlow(): Flow<SystemSettings> = flow {
+        emit(getSettings())
+    }
+
+    override suspend fun getSettings(): SystemSettings {
+        return try {
+            client.httpClient.get(client.resolveUrl("/api/admin/ui-settings")) {
+                client.run { appendAdminAuth() }
+            }.body()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpSettingsRepository", "getSettings failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            SystemSettings()
         }
+    }
+
+    override suspend fun updateSettings(settings: SystemSettings, notifyDataChanged: Boolean) {
+        // Settings are managed on Desktop only
     }
 }
 
@@ -237,6 +345,9 @@ class HttpProductRepository(private val client: AdminNetworkClient) : ProductRep
             }.body()
             list.sortedByAccentInsensitive { it.name }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -340,6 +451,9 @@ class HttpUserRepository(private val client: AdminNetworkClient) : UserRepositor
             }.body()
             list.sortedByAccentInsensitive { it.name }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -459,12 +573,25 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 client.run { appendAdminAuth() }
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
 
     override suspend fun getTransactionsByUserId(userId: String): List<Transaction> {
-        return getAllTransactions().filter { it.userId == userId }
+        return try {
+            client.httpClient.get(client.resolveUrl("/api/admin/transactions")) {
+                client.run { appendAdminAuth() }
+                parameter("userId", userId)
+            }.body()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpTransactionRepository", "getTransactionsByUserId failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            emptyList()
+        }
     }
 
     override suspend fun getTransactionById(id: String): Transaction? {
@@ -506,6 +633,9 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 if (typeFilter != null) parameter("type", typeFilter.name)
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpTransactionRepository", "getTransactionsPaged failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             PagedResult(emptyList(), 0, page, pageSize, 1)
         }
     }
@@ -527,6 +657,9 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 if (typeFilter != null) parameter("type", typeFilter.name)
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpTransactionRepository", "getTransactionsByUserIdPaged failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             PagedResult(emptyList(), 0, page, pageSize, 1)
         }
     }
@@ -540,6 +673,9 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 setBody(referenceIds)
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -553,6 +689,9 @@ class HttpTransactionRepository(private val client: AdminNetworkClient) : Transa
                 setBody(ids)
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -646,6 +785,9 @@ class HttpBillingListRepository(private val client: AdminNetworkClient) : Billin
                 client.run { appendAdminAuth() }
             }.body()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpProductRepository", "getAllProducts failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
             emptyList()
         }
     }
@@ -768,72 +910,100 @@ class HttpShoppingListRepository(private val client: AdminNetworkClient) : Shopp
         emit(getAllItems())
     }
 
+    private suspend inline fun <T> performCall(crossinline call: suspend () -> T): T {
+        return try {
+            call()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            throw e
+        }
+    }
+
     override suspend fun getAllItems(): List<ShoppingListItem> {
-        val response = client.httpClient.get(client.resolveUrl("/api/admin/shopping-list")) {
-            client.run { appendAdminAuth() }
+        val response = performCall {
+            client.httpClient.get(client.resolveUrl("/api/admin/shopping-list")) {
+                client.run { appendAdminAuth() }
+            }
         }
         ensureSuccess("getAllItems", response)
         return response.body()
     }
 
     override suspend fun addOrUpdateItem(item: ShoppingListItem) {
-        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list")) {
-            contentType(ContentType.Application.Json)
-            client.run { appendAdminAuth() }
-            setBody(item)
+        val response = performCall {
+            client.httpClient.post(client.resolveUrl("/api/admin/shopping-list")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(item)
+            }
         }
         ensureSuccess("addOrUpdateItem", response)
     }
 
     override suspend fun updateItem(item: ShoppingListItem) {
-        val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/item")) {
-            contentType(ContentType.Application.Json)
-            client.run { appendAdminAuth() }
-            setBody(item)
+        val response = performCall {
+            client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/item")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(item)
+            }
         }
         ensureSuccess("updateItem", response)
     }
 
     override suspend fun confirmItem(id: String) {
-        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/confirm")) {
-            client.run { appendAdminAuth() }
+        val response = performCall {
+            client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/confirm")) {
+                client.run { appendAdminAuth() }
+            }
         }
         ensureSuccess("confirmItem", response)
     }
 
     override suspend fun unconfirmItem(id: String) {
-        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/unconfirm")) {
-            client.run { appendAdminAuth() }
+        val response = performCall {
+            client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/$id/unconfirm")) {
+                client.run { appendAdminAuth() }
+            }
         }
         ensureSuccess("unconfirmItem", response)
     }
 
     override suspend fun updateItemsOrder(items: List<ShoppingListItem>) {
-        val response = client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/reorder")) {
-            contentType(ContentType.Application.Json)
-            client.run { appendAdminAuth() }
-            setBody(items)
+        val response = performCall {
+            client.httpClient.put(client.resolveUrl("/api/admin/shopping-list/reorder")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(items)
+            }
         }
         ensureSuccess("updateItemsOrder", response)
     }
 
     override suspend fun deleteItem(id: String) {
-        val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list/$id")) {
-            client.run { appendAdminAuth() }
+        val response = performCall {
+            client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list/$id")) {
+                client.run { appendAdminAuth() }
+            }
         }
         ensureSuccess("deleteItem", response)
     }
 
     override suspend fun clearAllItems() {
-        val response = client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list")) {
-            client.run { appendAdminAuth() }
+        val response = performCall {
+            client.httpClient.delete(client.resolveUrl("/api/admin/shopping-list")) {
+                client.run { appendAdminAuth() }
+            }
         }
         ensureSuccess("clearAllItems", response)
     }
 
     override suspend fun commitExportBaseline() {
-        val response = client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/commit-export")) {
-            client.run { appendAdminAuth() }
+        val response = performCall {
+            client.httpClient.post(client.resolveUrl("/api/admin/shopping-list/commit-export")) {
+                client.run { appendAdminAuth() }
+            }
         }
         ensureSuccess("commitExportBaseline", response)
     }
@@ -853,4 +1023,822 @@ class HttpShoppingListRepository(private val client: AdminNetworkClient) : Shopp
     }
 }
 
+class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : VeggieOrderRepository {
+    override fun getUnitTypesFlow(): Flow<List<VeggieUnitType>> = flow {
+        emit(getAllUnitTypes())
+    }
+
+    override suspend fun getAllUnitTypes(): List<VeggieUnitType> {
+        return try {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/unit-types")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getAllUnitTypes failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body<List<VeggieUnitType>>().sortedByAccentInsensitive { it.name }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
+            AppLogger.error("HttpVeggieOrderRepository", "getAllUnitTypes failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun saveUnitType(unitType: VeggieUnitType) {
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/unit-types")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(unitType)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("saveUnitType failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "saveUnitType failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override fun getVeggieProductsFlow(): Flow<List<VeggieProduct>> = flow {
+        emit(getAllVeggieProducts())
+    }
+
+    override suspend fun getAllVeggieProducts(): List<VeggieProduct> {
+        return try {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/products")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getAllVeggieProducts failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body<List<VeggieProduct>>().sortedByAccentInsensitive { it.name }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
+            AppLogger.error("HttpVeggieOrderRepository", "getAllVeggieProducts failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun getVeggieProductById(id: String): VeggieProduct? {
+        return getAllVeggieProducts().find { it.id == id }
+    }
+
+    override suspend fun saveVeggieProduct(product: VeggieProduct) {
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/products")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(product)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("saveVeggieProduct failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "saveVeggieProduct failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun deactivateVeggieProduct(id: String) {
+        try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/products/deactivate/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("deactivateVeggieProduct failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "deactivateVeggieProduct failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun cancelProductEntriesInOpenRound(roundId: String, productId: String): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/cancel-product/$productId")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "cancelProductEntriesInOpenRound failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun hardDeleteVeggieProduct(id: String) {
+        try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/veggie/products/$id")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("hardDeleteVeggieProduct failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "hardDeleteVeggieProduct failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    suspend fun uploadProductImage(productId: String, productName: String?, imageBytes: ByteArray): String? {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/products/$productId/image")) {
+                contentType(ContentType.Application.OctetStream)
+                client.run { appendAdminAuth() }
+                if (!productName.isNullOrBlank()) {
+                    parameter("name", productName)
+                }
+                setBody(imageBytes)
+            }
+            if (response.status.isSuccess()) {
+                val res: Map<String, String> = response.body()
+                res["imageFileName"]
+            } else {
+                throw IllegalStateException("uploadProductImage failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "uploadProductImage failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    suspend fun deleteProductImage(productId: String) {
+        try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/veggie/products/$productId/image")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("deleteProductImage failed with status ${response.status}")
+            }
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "deleteProductImage failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override fun getRoundsFlow(): Flow<List<VeggieOrderRound>> = flow {
+        emit(getAllRounds())
+    }
+
+    override suspend fun getAllRounds(): List<VeggieOrderRound> {
+        return try {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getAllRounds failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
+            AppLogger.error("HttpVeggieOrderRepository", "getAllRounds failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun getActiveOrLatestRound(): VeggieOrderRound? {
+        return try {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/active")) {
+                client.run { appendAdminAuth() }
+            }
+            if (response.status == HttpStatusCode.OK) {
+                response.body()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    override suspend fun getRoundById(roundId: String): VeggieOrderRound? {
+        return try {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/$roundId")) {
+                client.run { appendAdminAuth() }
+            }
+            if (response.status == HttpStatusCode.OK) {
+                response.body()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    override suspend fun openNewRound(
+        buyerOperationFeeCents: Long,
+        transportFeeCents: Long,
+        openedAt: Long
+    ): VeggieOrderRound {
+        val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/open")) {
+            contentType(ContentType.Application.Json)
+            client.run { appendAdminAuth() }
+            setBody(OpenVeggieRoundRequest(buyerOperationFeeCents, transportFeeCents, openedAt))
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("openNewRound failed with status ${response.status}")
+        }
+        return response.body()
+    }
+
+    override suspend fun closeRound(roundId: String, closedAt: Long): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/close")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(CloseVeggieRoundRequest(closedAt))
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "closeRound failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun reopenRound(roundId: String): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/reopen")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "reopenRound failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun deleteRound(roundId: String): Boolean {
+        return try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/veggie/rounds/$roundId")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "deleteRound failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun markBuyerPdfExported(roundId: String, timestamp: Long): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf/exported")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "markBuyerPdfExported failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun markWorkerPdfExported(roundId: String, timestamp: Long): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf/exported")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "markWorkerPdfExported failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun getEntriesForRound(roundId: String): List<VeggieOrderEntry> {
+        return try {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/$roundId/entries")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getEntriesForRound failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
+            AppLogger.error("HttpVeggieOrderRepository", "getEntriesForRound failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun getEntriesForUserInRound(roundId: String, userId: String): List<VeggieOrderEntry> {
+        return getEntriesForRound(roundId).filter { it.userId == userId }
+    }
+
+    override suspend fun getPreviousRoundQuantitiesForUser(currentRoundId: String, userId: String): Map<String, Long> {
+        return emptyMap()
+    }
+
+    override suspend fun saveCustomerOrder(
+        roundId: String,
+        user: User,
+        productQuantitiesScaled: Map<String, Long>
+    ): Boolean {
+        return false
+    }
+
+    override suspend fun getCustomerOrderHistory(userId: String): List<CustomerVeggieRoundHistoryItem> {
+        return emptyList()
+    }
+
+    override suspend fun upsertAdminOrderEntry(entry: VeggieOrderEntry): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/${entry.roundId}/entries")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(entry)
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "upsertAdminOrderEntry failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun deleteAdminOrderEntry(roundId: String, entryId: String): Boolean {
+        return try {
+            val response = client.httpClient.delete(client.resolveUrl("/api/admin/veggie/rounds/$roundId/entries/$entryId")) {
+                client.run { appendAdminAuth() }
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "deleteAdminOrderEntry failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun getProductSettlementsForRound(roundId: String): List<VeggieRoundProductSettlement> {
+        return try {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/$roundId/settlements")) {
+                client.run { appendAdminAuth() }
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getProductSettlementsForRound failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
+            AppLogger.error("HttpVeggieOrderRepository", "getProductSettlementsForRound failed: ${e.message}", e)
+            throw e
+        }
+    }
+
+    override suspend fun saveDraftSettlement(
+        roundId: String,
+        buyerOperationFeeCents: Long,
+        transportFeeCents: Long,
+        transporterUserId: String?,
+        productSettlements: List<VeggieRoundProductSettlement>,
+        actualQuantitiesByEntryId: Map<String, Long>
+    ): Boolean {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/draft-settlement")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(
+                    VeggieSettlementRequest(
+                        buyerOperationFeeCents = buyerOperationFeeCents,
+                        transportFeeCents = transportFeeCents,
+                        transporterUserId = transporterUserId,
+                        productSettlements = productSettlements,
+                        actualQuantitiesByEntryId = actualQuantitiesByEntryId
+                    )
+                )
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("HttpVeggieOrderRepository", "saveDraftSettlement failed: ${e.message}", e)
+            false
+        }
+    }
+
+    override suspend fun executeRoundSettlement(
+        roundId: String,
+        buyerOperationFeeCents: Long,
+        transportFeeCents: Long,
+        transporterUserId: String?,
+        productSettlements: List<VeggieRoundProductSettlement>,
+        actualQuantitiesByEntryId: Map<String, Long>,
+        settledAt: Long,
+        pendingEntries: List<VeggieOrderEntry>
+    ): VeggieRoundSettlementResult? {
+        return try {
+            val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/settle")) {
+                contentType(ContentType.Application.Json)
+                client.run { appendAdminAuth() }
+                setBody(
+                    VeggieSettlementRequest(
+                        buyerOperationFeeCents = buyerOperationFeeCents,
+                        transportFeeCents = transportFeeCents,
+                        transporterUserId = transporterUserId,
+                        productSettlements = productSettlements,
+                        actualQuantitiesByEntryId = actualQuantitiesByEntryId,
+                        pendingEntries = pendingEntries,
+                        settledAt = settledAt
+                    )
+                )
+            }
+            if (response.status.isSuccess()) {
+                response.body()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLogger.error("HttpVeggieOrderRepository", "executeRoundSettlement failed: ${e.message}", e)
+            null
+        }
+    }
+}
+
+class CustomerNetworkClient(val baseUrl: String = "") {
+    var isAuthenticated: Boolean = false
+        private set
+    var currentUser: User? = null
+
+    fun resolveUrl(path: String): String {
+        val cleanBase = baseUrl.trimEnd('/')
+        val cleanPath = if (path.startsWith("/")) path else "/$path"
+        return if (cleanBase.isEmpty()) cleanPath else "$cleanBase$cleanPath"
+    }
+
+    fun resolveProductImageUrl(productId: String, isThumb: Boolean = true, updatedAt: Long = 0L): String {
+        val versionParam = if (updatedAt > 0L) "&v=$updatedAt" else ""
+        return resolveUrl("/api/veggie/images/$productId?thumb=$isThumb$versionParam")
+    }
+
+    private val _onDataChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val onDataChanged: SharedFlow<Unit> = _onDataChanged.asSharedFlow()
+
+    private val _onUnauthorized = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val onUnauthorized: SharedFlow<Unit> = _onUnauthorized.asSharedFlow()
+
+    fun notifyUnauthorized() {
+        val wasAuthenticated = isAuthenticated
+        stopRealtimeSync()
+        isAuthenticated = false
+        currentUser = null
+        if (wasAuthenticated) {
+            _onUnauthorized.tryEmit(Unit)
+        }
+    }
+
+    private var syncJob: Job? = null
+
+    val httpClient = HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 20_000L
+            connectTimeoutMillis = 10_000L
+        }
+        install(ContentNegotiation) {
+            json(Json {
+                prettyPrint = true
+                isLenient = true
+                ignoreUnknownKeys = true
+            })
+        }
+        HttpResponseValidator {
+            validateResponse { response ->
+                if (response.status == HttpStatusCode.Unauthorized) {
+                    notifyUnauthorized()
+                }
+            }
+        }
+    }
+
+    fun HttpRequestBuilder.appendCustomerAuth() {}
+
+    suspend fun tryRestoreCustomerSession(): User? {
+        return try {
+            val response = httpClient.get(resolveUrl("/api/customer/me"))
+            if (response.status.isSuccess()) {
+                val user: User = response.body()
+                currentUser = user
+                isAuthenticated = true
+                user
+            } else {
+                isAuthenticated = false
+                currentUser = null
+                null
+            }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            isAuthenticated = false
+            currentUser = null
+            null
+        }
+    }
+
+    suspend fun fetchCurrentUser(): User? {
+        return try {
+            val response = httpClient.get(resolveUrl("/api/customer/me")) {
+                appendCustomerAuth()
+            }
+            if (response.status.isSuccess()) {
+                val user: User = response.body()
+                currentUser = user
+                user
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun updateMySettings(
+        language: Language,
+        secondaryCurrency: SecondaryCurrency? = null,
+        avatar: UserAvatarConfig? = null,
+        newPin: String? = null,
+        requirePinOnKiosk: Boolean = true
+    ): User? {
+        return try {
+            val response = httpClient.post(resolveUrl("/api/customer/me/settings")) {
+                contentType(ContentType.Application.Json)
+                appendCustomerAuth()
+                setBody(
+                    CustomerSettingsUpdateRequest(
+                        language = language,
+                        secondaryCurrency = secondaryCurrency,
+                        avatar = avatar,
+                        newPin = newPin,
+                        requirePinOnKiosk = requirePinOnKiosk
+                    )
+                )
+            }
+            if (response.status.isSuccess()) {
+                val updated: User = response.body()
+                currentUser = updated
+                updated
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            AppLogger.error("CustomerNetworkClient", "updateMySettings failed: ${e.message}", e)
+            null
+        }
+    }
+
+    suspend fun getVeggieState(): CustomerVeggieStateResponse {
+        return try {
+            val response = httpClient.get(resolveUrl("/api/customer/veggie/state")) {
+                appendCustomerAuth()
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("HTTP ${response.status.value}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            AppLogger.error("CustomerNetworkClient", "getVeggieState failed: ${e.message}", e)
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+            }
+            throw e
+        }
+    }
+
+    suspend fun saveCustomerOrder(roundId: String, productQuantitiesScaled: Map<String, Long>): Boolean {
+        return try {
+            val response = httpClient.post(resolveUrl("/api/customer/veggie/order")) {
+                contentType(ContentType.Application.Json)
+                appendCustomerAuth()
+                setBody(SaveCustomerVeggieOrderRequest(roundId, productQuantitiesScaled))
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.status.isSuccess()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            AppLogger.error("CustomerNetworkClient", "saveCustomerOrder failed: ${e.message}", e)
+            KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+            false
+        }
+    }
+
+    suspend fun saveVeggieFavorites(productIds: Set<String>): Boolean {
+        return try {
+            val response = httpClient.post(resolveUrl("/api/customer/veggie/favorites")) {
+                contentType(ContentType.Application.Json)
+                appendCustomerAuth()
+                setBody(UpdateCustomerVeggieFavoritesRequest(productIds))
+            }
+            response.status.isSuccess()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            AppLogger.error("CustomerNetworkClient", "saveVeggieFavorites failed: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun getVeggieHistory(): List<CustomerVeggieRoundHistoryItem> {
+        return try {
+            val response = httpClient.get(resolveUrl("/api/customer/veggie/history")) {
+                appendCustomerAuth()
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("HTTP ${response.status.value}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            AppLogger.error("CustomerNetworkClient", "getVeggieHistory failed: ${e.message}", e)
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+            }
+            throw e
+        }
+    }
+
+    suspend fun submitCustomerNote(message: String): Boolean {
+        return try {
+            val response = httpClient.post(resolveUrl("/api/customer/notes")) {
+                contentType(ContentType.Application.Json)
+                appendCustomerAuth()
+                setBody(AdminNote(id = "", message = message, userId = currentUser?.id ?: "", userNameSnapshot = currentUser?.name ?: ""))
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            AppLogger.error("CustomerNetworkClient", "submitCustomerNote failed: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun logout() {
+        stopRealtimeSync()
+        isAuthenticated = false
+        currentUser = null
+        try {
+            httpClient.post(resolveUrl("/api/customer/logout"))
+        } catch (_: Exception) {}
+    }
+
+    fun startRealtimeSync(scope: CoroutineScope) {
+        try {
+            jsStartSse("customer", "/api/customer/events", baseUrl)
+        } catch (e: Exception) {
+            AppLogger.error("CustomerNetworkClient", "Failed to initialize Customer EventSource: ${e.message}", e)
+        }
+
+        syncJob?.cancel()
+        syncJob = scope.launch {
+            while (isActive) {
+                delay(1200)
+                if (!isAuthenticated) break
+                try {
+                    if (jsCheckAndClearSseDataChanged("customer")) {
+                        _onDataChanged.tryEmit(Unit)
+                    }
+                    if (jsCheckAndClearSseSyncError("customer")) {
+                        val healthy = KioskConnectionMonitor.checkHealthNow(baseUrl)
+                        if (healthy) {
+                            val stillValid = try {
+                                val resp = httpClient.get(resolveUrl("/api/session"))
+                                resp.status.isSuccess() && resp.body<SessionStatusResponse>().role == "CUSTOMER"
+                            } catch (e: Throwable) {
+                                if (e is CancellationException) throw e
+                                true
+                            }
+                            if (!stillValid) {
+                                notifyUnauthorized()
+                                break
+                            } else {
+                                try {
+                                    jsStartSse("customer", "/api/customer/events", baseUrl)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
+            }
+        }
+    }
+
+    fun stopRealtimeSync() {
+        syncJob?.cancel()
+        syncJob = null
+        try {
+            jsStopSse("customer")
+        } catch (_: Exception) {}
+    }
+}
+
+class HttpCustomerUserRepository(private val client: CustomerNetworkClient) : UserRepository {
+    override fun getUsersFlow(): Flow<List<User>> = flow {
+        emit(getAllUsers())
+    }
+
+    override suspend fun getAllUsers(): List<User> = listOfNotNull(client.currentUser ?: client.fetchCurrentUser())
+
+    override suspend fun getUserById(id: String): User? =
+        (client.currentUser ?: client.fetchCurrentUser())?.takeIf { it.id == id }
+
+    override suspend fun getUserByBarcode(barcode: String): User? = null
+
+    override suspend fun saveUser(user: User) {
+        val newPin = if (user.pin != null && user.pin != "PROTECTED") user.pin else null
+        client.updateMySettings(
+            language = user.language,
+            secondaryCurrency = user.secondaryCurrency,
+            avatar = user.avatar,
+            newPin = newPin,
+            requirePinOnKiosk = user.requirePinOnKiosk
+        )
+    }
+    override suspend fun deactivateUser(id: String) {}
+    override suspend fun softDeleteUser(id: String) {}
+    override suspend fun restoreUser(id: String) {}
+    override suspend fun canHardDeleteUser(id: String): Boolean = false
+    override suspend fun hardDeleteUser(id: String): Boolean = false
+    override suspend fun updateBalance(userId: String, amountDelta: Long) {}
+}
+
+class HttpCustomerTransactionRepository(private val client: CustomerNetworkClient) : TransactionRepository {
+    override fun getTransactionsFlow(): Flow<List<Transaction>> = emptyFlow()
+
+    override suspend fun getAllTransactions(): List<Transaction> {
+        return try {
+            client.httpClient.get(client.resolveUrl("/api/customer/transactions")) {
+                client.run { appendCustomerAuth() }
+            }.body()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    override suspend fun getTransactionsByUserId(userId: String): List<Transaction> {
+        return getAllTransactions()
+    }
+
+    override suspend fun getTransactionById(id: String): Transaction? {
+        return getAllTransactions().find { it.id == id }
+    }
+
+    override suspend fun recordTransaction(transaction: Transaction) {}
+
+    override suspend fun getTransactionCountForUser(userId: String): Int {
+        return getAllTransactions().size
+    }
+
+    override suspend fun getTransactionsPaged(
+        page: Int,
+        pageSize: Int,
+        searchQuery: String?,
+        typeFilter: TransactionType?
+    ): PagedResult<Transaction> {
+        return getTransactionsByUserIdPaged("", page, pageSize, searchQuery, typeFilter)
+    }
+
+    override suspend fun getTransactionsByUserIdPaged(
+        userId: String,
+        page: Int,
+        pageSize: Int,
+        searchQuery: String?,
+        typeFilter: TransactionType?
+    ): PagedResult<Transaction> {
+        return try {
+            client.httpClient.get(client.resolveUrl("/api/customer/transactions")) {
+                client.run { appendCustomerAuth() }
+                parameter("page", page)
+                parameter("pageSize", pageSize)
+                if (!searchQuery.isNullOrBlank()) parameter("search", searchQuery)
+                if (typeFilter != null) parameter("type", typeFilter.name)
+            }.body()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            PagedResult(emptyList(), 0, page, pageSize, 1)
+        }
+    }
+
+    override suspend fun getTransactionsByReferenceIds(referenceIds: List<String>): List<Transaction> = emptyList()
+    override suspend fun getTransactionsByIds(ids: List<String>): List<Transaction> = emptyList()
+    override suspend fun getCancellationCountForReference(refId: String): Int = 0
+    override suspend fun executeAtomicTransaction(transaction: Transaction, balanceDelta: Long, stockDeltas: Map<String, Long>) {}
+    override suspend fun applyPurchaseCorrection(originalTransactionId: String, newItems: List<TransactionItem>): Boolean = false
+    override suspend fun stornoNonPurchase(transactionId: String): Boolean = false
+    override suspend fun executeBatchTransactions(requests: List<AtomicTransactionRequest>): Boolean = false
+}
 

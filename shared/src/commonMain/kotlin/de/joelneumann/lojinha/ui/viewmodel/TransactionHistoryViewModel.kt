@@ -39,6 +39,18 @@ class TransactionHistoryViewModel(
     private val _showSettingsModal = MutableStateFlow(false)
     val showSettingsModal: StateFlow<Boolean> = _showSettingsModal.asStateFlow()
 
+    private val _showExportPdfModal = MutableStateFlow(false)
+    val showExportPdfModal: StateFlow<Boolean> = _showExportPdfModal.asStateFlow()
+
+    private val _exportPdfTransactions = MutableStateFlow<List<Transaction>>(emptyList())
+    val exportPdfTransactions: StateFlow<List<Transaction>> = _exportPdfTransactions.asStateFlow()
+
+    private val _isExportingPdf = MutableStateFlow(false)
+    val isExportingPdf: StateFlow<Boolean> = _isExportingPdf.asStateFlow()
+
+    private val _exportPdfError = MutableStateFlow<String?>(null)
+    val exportPdfError: StateFlow<String?> = _exportPdfError.asStateFlow()
+
     private val _pinInput = MutableStateFlow("")
     val pinInput: StateFlow<String> = _pinInput.asStateFlow()
 
@@ -50,6 +62,9 @@ class TransactionHistoryViewModel(
 
     private val _selectedAvatar = MutableStateFlow(UserAvatarConfig())
     val selectedAvatar: StateFlow<UserAvatarConfig> = _selectedAvatar.asStateFlow()
+
+    private val _selectedRequirePinOnKiosk = MutableStateFlow(true)
+    val selectedRequirePinOnKiosk: StateFlow<Boolean> = _selectedRequirePinOnKiosk.asStateFlow()
 
     private var currentUserId: String? = null
 
@@ -75,8 +90,10 @@ class TransactionHistoryViewModel(
             _searchFilter.value = ""
             _selectedTypeFilter.value = null
             _showSettingsModal.value = false
+            _currentPage.value = 0
+        } else if (!sameUser) {
+            _currentPage.value = 0
         }
-        _currentPage.value = 0
         if (sameUser && fetchJob?.isActive == true && resetFilters) {
             return
         }
@@ -148,11 +165,40 @@ class TransactionHistoryViewModel(
         _selectedLanguage.value = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
         _selectedSecondaryCurrency.value = user.secondaryCurrency
         _selectedAvatar.value = user.avatar
+        _selectedRequirePinOnKiosk.value = user.requirePinOnKiosk
         _showSettingsModal.value = true
     }
 
     fun closeSettingsModal() {
         _showSettingsModal.value = false
+    }
+
+    fun openExportPdfModal(userId: String) {
+        _showExportPdfModal.value = true
+        _exportPdfError.value = null
+        activeScope.launch {
+            try {
+                _exportPdfTransactions.value = transactionRepository.getTransactionsByUserId(userId)
+            } catch (e: Exception) {
+                AppLogger.warn("TransactionHistoryViewModel", "Failed to load transactions for PDF: ${e.message}", e)
+                _exportPdfTransactions.value = emptyList()
+            }
+        }
+    }
+
+    fun closeExportPdfModal() {
+        _showExportPdfModal.value = false
+        _exportPdfTransactions.value = emptyList()
+        _isExportingPdf.value = false
+        _exportPdfError.value = null
+    }
+
+    fun setIsExportingPdf(loading: Boolean) {
+        _isExportingPdf.value = loading
+    }
+
+    fun setExportPdfError(error: String?) {
+        _exportPdfError.value = error
     }
 
     fun updatePinInput(pin: String) {
@@ -171,6 +217,10 @@ class TransactionHistoryViewModel(
         _selectedAvatar.value = avatar
     }
 
+    fun updateRequirePinOnKiosk(require: Boolean) {
+        _selectedRequirePinOnKiosk.value = require
+    }
+
     fun saveUserSettings(user: User, removePin: Boolean = false, onSaved: (User) -> Unit) {
         val updatedPin = when {
             removePin -> null
@@ -179,6 +229,7 @@ class TransactionHistoryViewModel(
         }
         val updated = user.copy(
             pin = updatedPin,
+            requirePinOnKiosk = if (updatedPin == null) true else _selectedRequirePinOnKiosk.value,
             language = _selectedLanguage.value,
             secondaryCurrency = _selectedSecondaryCurrency.value,
             avatar = _selectedAvatar.value

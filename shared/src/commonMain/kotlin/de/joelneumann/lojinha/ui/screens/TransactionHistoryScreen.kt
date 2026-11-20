@@ -28,6 +28,7 @@ import de.joelneumann.lojinha.domain.model.User
 import de.joelneumann.lojinha.domain.model.UserAvatarConfig
 import de.joelneumann.lojinha.domain.model.balanceWarningLevel
 import de.joelneumann.lojinha.ui.components.general.HeaderBar
+import de.joelneumann.lojinha.ui.components.general.LocalHeaderCompact
 import de.joelneumann.lojinha.ui.components.general.LogoutButton
 import de.joelneumann.lojinha.ui.components.history.TransactionFilterBar
 import de.joelneumann.lojinha.ui.components.history.TransactionItemCard
@@ -59,7 +60,9 @@ fun TransactionHistoryScreen(
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit,
-    onUserInteracted: (force: Boolean) -> Unit = {}
+    onUserInteracted: (force: Boolean) -> Unit = {},
+    isNetworkPortal: Boolean = false,
+    showHeaderAndBalance: Boolean = true
 ) {
     val transactions by viewModel.transactions.collectAsState()
     val searchFilter by viewModel.searchFilter.collectAsState()
@@ -74,6 +77,7 @@ fun TransactionHistoryScreen(
     val selectedLanguage by viewModel.selectedLanguage.collectAsState()
     val selectedSecondaryCurrency by viewModel.selectedSecondaryCurrency.collectAsState()
     val selectedAvatar by viewModel.selectedAvatar.collectAsState()
+    val selectedRequirePinOnKiosk by viewModel.selectedRequirePinOnKiosk.collectAsState()
     val relatedTransactionsMap by viewModel.relatedTransactionsMap.collectAsState()
 
     LaunchedEffect(user.id) {
@@ -96,6 +100,9 @@ fun TransactionHistoryScreen(
         selectedLanguage = selectedLanguage,
         selectedSecondaryCurrency = selectedSecondaryCurrency,
         selectedAvatar = selectedAvatar,
+        selectedRequirePinOnKiosk = selectedRequirePinOnKiosk,
+        isNetworkPortal = isNetworkPortal,
+        showHeaderAndBalance = showHeaderAndBalance,
         onContinueShopping = onContinueShopping,
         onLogout = onLogout,
         onUserUpdated = onUserUpdated,
@@ -139,10 +146,15 @@ fun TransactionHistoryScreen(
             onUserInteracted(true)
             viewModel.updateAvatar(av)
         },
+        onUpdateRequirePinOnKiosk = { req ->
+            onUserInteracted(true)
+            viewModel.updateRequirePinOnKiosk(req)
+        },
         onSaveUserSettings = { removePin ->
             onUserInteracted(true)
             viewModel.saveUserSettings(user, removePin = removePin, onSaved = onUserUpdated)
         },
+        onExportPdf = if (isNetworkPortal) { { viewModel.openExportPdfModal(user.id) } } else null,
         onUserInteracted = onUserInteracted
     )
 }
@@ -164,6 +176,9 @@ fun TransactionHistoryContent(
     selectedLanguage: Language,
     selectedSecondaryCurrency: SecondaryCurrency,
     selectedAvatar: UserAvatarConfig,
+    selectedRequirePinOnKiosk: Boolean = user.requirePinOnKiosk,
+    isNetworkPortal: Boolean = false,
+    showHeaderAndBalance: Boolean = true,
     onContinueShopping: () -> Unit,
     onLogout: () -> Unit,
     onUserUpdated: (User) -> Unit,
@@ -177,7 +192,9 @@ fun TransactionHistoryContent(
     onUpdateLanguage: (Language) -> Unit,
     onUpdateSecondaryCurrency: (SecondaryCurrency) -> Unit,
     onUpdateAvatar: (UserAvatarConfig) -> Unit,
+    onUpdateRequirePinOnKiosk: (Boolean) -> Unit = {},
     onSaveUserSettings: (removePin: Boolean) -> Unit,
+    onExportPdf: (() -> Unit)? = null,
     onUserInteracted: (force: Boolean) -> Unit = {}
 ) {
     val strings = I18n.current
@@ -203,12 +220,6 @@ fun TransactionHistoryContent(
         listState.scrollToItem(0)
     }
 
-    LaunchedEffect(showSettingsModal) {
-        if (!showSettingsModal) {
-            searchFocusRequester.safeRequestFocus()
-        }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -228,131 +239,145 @@ fun TransactionHistoryContent(
             }
             .trackUserInteractions(onUserInteracted)
     ) {
-        // Header Bar with "Continue Shopping" button on the left of Logout
-        HeaderBar(
-            title = strings.history,
-            onLanguageSelected = { lang ->
-                onUserUpdated(user.copy(language = lang))
-            },
-            onLanguageClick = {
-                coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
-            },
-            actions = {
-                Button(
-                    onClick = onContinueShopping,
-                    modifier = Modifier.focusProperties { canFocus = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        if (showHeaderAndBalance) {
+            // Header Bar with "Continue Shopping" button on the left of Logout
+            HeaderBar(
+                title = strings.history,
+                onLanguageSelected = { lang ->
+                    onUserUpdated(user.copy(language = lang))
+                },
+                onLanguageClick = {
+                    coroutineScope.launch { searchFocusRequester.safeRequestFocus() }
+                },
+                actions = {
+                    val isCompact = LocalHeaderCompact.current
+                    Button(
+                        onClick = onContinueShopping,
+                        modifier = Modifier.focusProperties { canFocus = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentNavy),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = if (isCompact) PaddingValues(horizontal = 10.dp, vertical = 6.dp) else PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ShoppingCart,
-                            contentDescription = null,
-                            tint = SurfaceWhite,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = strings.continueShopping,
-                            color = SurfaceWhite,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ShoppingCart,
+                                contentDescription = strings.continueShopping,
+                                tint = SurfaceWhite,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            if (!isCompact) {
+                                Text(
+                                    text = strings.continueShopping,
+                                    color = SurfaceWhite,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
                     }
-                }
 
-                LogoutButton(
-                    onClick = onLogout,
-                    modifier = Modifier.focusProperties { canFocus = false }
-                )
-            }
-        )
+                    LogoutButton(
+                        onClick = onLogout,
+                        modifier = Modifier.focusProperties { canFocus = false }
+                    )
+                }
+            )
+        }
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val isMobile = maxWidth < 600.dp
+            val isMobile = maxWidth < MOBILE_BREAKPOINT
+
+            LaunchedEffect(showSettingsModal, isMobile) {
+                if (!isMobile && !showSettingsModal) {
+                    searchFocusRequester.safeRequestFocus()
+                }
+            }
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(SurfaceContainerLight)
-                    .padding(if (isMobile) 10.dp else ScreenPadding)
+                    .padding(if (!showHeaderAndBalance) 0.dp else if (isMobile) 10.dp else ScreenPadding)
             ) {
-                // Top Row: Reused UserBalanceHeader (Left) & User Settings Button (Right)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(if (isMobile) 8.dp else 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    UserBalanceHeader(
-                        user = user,
-                        rate = rate,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Surface(
-                        onClick = onOpenSettingsModal,
-                        shape = RoundedCornerShape(12.dp),
-                        color = SurfaceWhite,
-                        shadowElevation = 2.dp
+                if (showHeaderAndBalance) {
+                    // Top Row: Reused UserBalanceHeader (Left) & User Settings Button (Right)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(if (isMobile) 8.dp else 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isMobile) {
-                            Box(
-                                modifier = Modifier.size(52.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = strings.userSettings,
-                                    tint = PrimaryNavy,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = null,
-                                    tint = PrimaryNavy,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = strings.userSettings,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PrimaryNavy,
-                                    fontSize = 15.sp
-                                )
+                        UserBalanceHeader(
+                            user = user,
+                            rate = rate,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Surface(
+                            onClick = onOpenSettingsModal,
+                            shape = RoundedCornerShape(12.dp),
+                            color = SurfaceWhite,
+                            shadowElevation = 2.dp
+                        ) {
+                            if (isMobile) {
+                                Box(
+                                    modifier = Modifier.size(52.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = strings.userSettings,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = strings.userSettings,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrimaryNavy,
+                                        fontSize = 15.sp
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                val warningLevel = user.balanceWarningLevel(
-                    yellowThresholdCents = settings.yellowBalanceWarningThresholdCents,
-                    redThresholdCents = settings.redBalanceWarningThresholdCents
-                )
-                if (warningLevel != BalanceWarningLevel.NORMAL) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    UserBalanceWarningBanner(user = user, settings = settings)
-                }
+                    val warningLevel = user.balanceWarningLevel(
+                        yellowThresholdCents = settings.yellowBalanceWarningThresholdCents,
+                        redThresholdCents = settings.redBalanceWarningThresholdCents
+                    )
+                    if (warningLevel != BalanceWarningLevel.NORMAL) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        UserBalanceWarningBanner(user = user, settings = settings)
+                    }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
 
                 // Search & Filter Bar reusing SearchInputField
                 TransactionFilterBar(
-                searchFilter = searchFilter,
-                selectedTypeFilter = selectedTypeFilter,
-                onSearchFilterChange = onSearchFilterChange,
-                onTypeFilterSelect = onTypeFilterSelect,
-                onEscape = onContinueShopping,
-                focusRequester = searchFocusRequester
-            )
+                    searchFilter = searchFilter,
+                    selectedTypeFilter = selectedTypeFilter,
+                    onSearchFilterChange = onSearchFilterChange,
+                    onTypeFilterSelect = onTypeFilterSelect,
+                    onEscape = onContinueShopping,
+                    focusRequester = searchFocusRequester,
+                    onExportPdf = onExportPdf
+                )
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -393,17 +418,20 @@ fun TransactionHistoryContent(
     }
 
         // User Settings Modal Dialog
-        if (showSettingsModal) {
+        if (showHeaderAndBalance && showSettingsModal) {
             UserSettingsModalDialog(
                 user = user,
                 pinInput = pinInput,
                 selectedLanguage = selectedLanguage,
                 selectedSecondaryCurrency = selectedSecondaryCurrency,
                 selectedAvatar = selectedAvatar,
+                selectedRequirePinOnKiosk = selectedRequirePinOnKiosk,
+                isNetworkPortal = isNetworkPortal,
                 onPinInputChange = onUpdatePinInput,
                 onLanguageSelect = onUpdateLanguage,
                 onSecondaryCurrencySelect = onUpdateSecondaryCurrency,
                 onAvatarSelect = onUpdateAvatar,
+                onRequirePinOnKioskChange = onUpdateRequirePinOnKiosk,
                 onDismiss = onCloseSettingsModal,
                 onSave = onSaveUserSettings,
                 onUserInteracted = onUserInteracted

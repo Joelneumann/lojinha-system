@@ -444,6 +444,15 @@ class ShoppingViewModel(
         _cartItems.value = _cartItems.value.filterNot { it.product.id == productId }
     }
 
+    fun clearTransientMessages() {
+        _weightError.value = null
+        _unitError.value = null
+        _purchaseError.value = null
+        _stockNotice.value = null
+        _noteSubmitSuccess.value = null
+        _noteSubmitError.value = null
+    }
+
     fun clearCart() {
         _cartItems.value = emptyList()
         _searchQuery.value = ""

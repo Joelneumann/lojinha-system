@@ -3,6 +3,9 @@ package de.joelneumann.lojinha.data.service
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.AppVersion
+import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.ui.i18n.I18n
+import de.joelneumann.lojinha.ui.i18n.LanguageManager
 import de.joelneumann.lojinha.util.AppLogger
 import de.joelneumann.lojinha.util.FileRollingLogger
 import kotlinx.coroutines.Dispatchers
@@ -177,6 +180,7 @@ class DiagnosticsService(
         val shmFile = File("${dbFile.absolutePath}-shm")
 
         var integrityResult = "Unknown"
+        var schemaVersion = -1
         if (dbFile.exists()) {
             try {
                 val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
@@ -186,6 +190,13 @@ class DiagnosticsService(
                         timeoutStmt.step()
                     } finally {
                         timeoutStmt.close()
+                    }
+
+                    val verStmt = connection.prepare("PRAGMA user_version;")
+                    try {
+                        if (verStmt.step()) schemaVersion = verStmt.getLong(0).toInt()
+                    } finally {
+                        verStmt.close()
                     }
 
                     val stmt = connection.prepare("PRAGMA integrity_check;")
@@ -214,6 +225,9 @@ class DiagnosticsService(
         var activeProductsCount = -1
         var transactionsCount = -1
         var billingListsCount = -1
+        var veggieProductsCount = -1
+        var veggieRoundsCount = -1
+        var veggieEntriesCount = -1
 
         db?.let { database ->
             try {
@@ -235,6 +249,12 @@ class DiagnosticsService(
             try {
                 billingListsCount = database.billingListDao().getAllBillingLists().size
             } catch (_: Exception) {}
+
+            try {
+                veggieProductsCount = database.veggieOrderDao().getAllVeggieProducts(includeDeleted = false).size
+                veggieRoundsCount = database.veggieOrderDao().getAllRounds().size
+                veggieEntriesCount = database.veggieOrderDao().getAllEntries().size
+            } catch (_: Exception) {}
         }
 
         buildString {
@@ -243,6 +263,7 @@ class DiagnosticsService(
             appendLine("================================================================================")
             appendLine("Database File:      ${dbFile.absolutePath}")
             appendLine("Database Exists:    ${dbFile.exists()}")
+            appendLine("Schema Version:     ${if (schemaVersion >= 0) "v$schemaVersion" else "N/A"}")
             appendLine("Database Size:      ${if (dbFile.exists()) FileRollingLogger.formatFileSize(dbFile.length()) else "0 B"}")
             appendLine("WAL File Exists:    ${walFile.exists()} (${if (walFile.exists()) FileRollingLogger.formatFileSize(walFile.length()) else "N/A"})")
             appendLine("SHM File Exists:    ${shmFile.exists()} (${if (shmFile.exists()) FileRollingLogger.formatFileSize(shmFile.length()) else "N/A"})")
@@ -255,6 +276,9 @@ class DiagnosticsService(
             appendLine("Products Active:    ${if (activeProductsCount >= 0) activeProductsCount else "N/A"}")
             appendLine("Transactions:       ${if (transactionsCount >= 0) transactionsCount else "N/A"}")
             appendLine("Billing Lists:      ${if (billingListsCount >= 0) billingListsCount else "N/A"}")
+            appendLine("Veggie Products:    ${if (veggieProductsCount >= 0) veggieProductsCount else "N/A"}")
+            appendLine("Veggie Rounds:      ${if (veggieRoundsCount >= 0) veggieRoundsCount else "N/A"}")
+            appendLine("Veggie Entries:     ${if (veggieEntriesCount >= 0) veggieEntriesCount else "N/A"}")
             appendLine("================================================================================")
         }
     }
@@ -290,22 +314,43 @@ class DiagnosticsService(
         revealInFileExplorer(dir)
     }
 
-    fun openEmailDraft(recipientEmail: String, zipFile: File) {
+    fun openFolder(folder: File) {
+        if (!folder.exists()) {
+            folder.mkdirs()
+        }
         try {
+            val os = System.getProperty("os.name").lowercase(Locale.US)
+            when {
+                os.contains("win") -> {
+                    ProcessBuilder("explorer.exe", folder.absolutePath).start()
+                }
+                os.contains("mac") -> {
+                    ProcessBuilder("open", folder.absolutePath).start()
+                }
+                else -> {
+                    ProcessBuilder("xdg-open", folder.absolutePath).start()
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.warn(TAG, "Failed to open folder: ${e.message}", e)
+            try {
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+                    Desktop.getDesktop().open(folder)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun openEmailDraft(
+        recipientEmail: String,
+        zipFile: File,
+        language: Language = LanguageManager.currentLanguage
+    ) {
+        try {
+            val strings = I18n.get(language)
             val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            val subject = "Lojinha Support Diagnostic Bundle - $dateStr"
-            val body = """
-                Hello Support,
-                
-                Please find attached the diagnostic support bundle from my Lojinha Kiosk:
-                File: ${zipFile.name}
-                Location: ${zipFile.absolutePath}
-                
-                Description of the issue encountered:
-                [Please describe what happened, what screen you were on, or any error message]
-                
-                Thank you!
-            """.trimIndent()
+            val subject = strings.supportEmailSubject(dateStr)
+            val body = strings.supportEmailBody(zipFile.name, zipFile.absolutePath)
 
             val encodedSubject = URLEncoder.encode(subject, "UTF-8").replace("+", "%20")
             val encodedBody = URLEncoder.encode(body, "UTF-8").replace("+", "%20")

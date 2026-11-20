@@ -41,6 +41,7 @@ object SystemNoteHelper {
                     TransactionType.PURCHASE.name -> strings.historyTypePurchase
                     TransactionType.CANCELLATION.name -> strings.historyTypeCancellation
                     TransactionType.CORRECTION.name -> strings.historyTypeCorrection
+                    TransactionType.VEGGIE.name -> strings.historyTypeVeggie
                     else -> rawType
                 }
                 
@@ -61,6 +62,21 @@ object SystemNoteHelper {
                 val product = parts.getOrNull(2)?.trim()?.ifBlank { "?" } ?: "?"
                 val customer = parts.getOrNull(3)?.trim()?.ifBlank { "?" } ?: "?"
                 strings.sysNoteStockZero(customer = customer, product = product)
+            }
+            "VEGGIE_ORDER" -> {
+                val week = parts.getOrNull(2)?.trim()?.ifBlank { "?" } ?: "?"
+                val year = parts.getOrNull(3)?.trim()?.ifBlank { "?" } ?: "?"
+                strings.sysNoteVeggieOrder(week = week, year = year)
+            }
+            "VEGGIE_TRANSPORT" -> {
+                val week = parts.getOrNull(2)?.trim()?.ifBlank { "?" } ?: "?"
+                val year = parts.getOrNull(3)?.trim()?.ifBlank { "?" } ?: "?"
+                strings.sysNoteVeggieTransport(week = week, year = year)
+            }
+            "VEGGIE_CORRECTION" -> {
+                val week = parts.getOrNull(2)?.trim()?.ifBlank { "?" } ?: "?"
+                val year = parts.getOrNull(3)?.trim()?.ifBlank { "?" } ?: "?"
+                strings.sysNoteVeggieCorrection(week = week, year = year)
             }
             else -> note // fallback if code not recognized
         }

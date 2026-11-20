@@ -49,6 +49,7 @@ interface AppStrings {
     val historyTypeExpenses: String
     val historyTypeCancellation: String
     val historyTypeCorrection: String
+    val historyTypeVeggie: String
     fun cancellationNote(type: String, date: String): String
     val continueShopping: String
     val lowBalanceWarningTitle: String
@@ -711,6 +712,10 @@ interface AppStrings {
     val errInvalidDateRange: String
     val errNoTransactionsToExport: String
     val errPdfExportFailed: String
+    val exportBuyerPdfQuestion: String
+    val exportWorkerPdfQuestion: String
+    val exportOrderFormPdfQuestion: String
+    val exportStatementPdfQuestion: String
 
     // Admin Notes & Suggestions
     val tabNotes: String
@@ -782,6 +787,252 @@ interface AppStrings {
     val shoppingListDeleteItemTooltip: String
     val shoppingListDragHandleTooltip: String
     val shoppingListInvalidQuantityError: String
+
+    // Veggie Order System & Customer Network Portal
+    fun sysNoteVeggieOrder(week: String, year: String): String
+    fun sysNoteVeggieTransport(week: String, year: String): String
+    fun sysNoteVeggieCorrection(week: String, year: String): String
+
+    val requirePinOnKioskLabel: String
+    val requirePinOnKioskDesc: String
+    fun userNameAlreadyExists(existingName: String): String
+    fun userNameReservedAdmin(buyerLoginName: String): String
+
+    val veggieSettingsCardTitle: String
+    val veggieSettingsCardSubtitle: String
+    val veggieAutoOpenEnabledLabel: String
+    val veggieAutoOpenDayLabel: String
+    val veggieAutoOpenTimeLabel: String
+    val veggieAutoOpenTimeInvalidError: String
+    val veggieStandardBuyerFeeLabel: String
+    val veggieStandardTransportFeeLabel: String
+    val importVeggieProductsCsvBtn: String
+    val openVeggieImagesFolderBtn: String
+    val selectVeggieProductsCsvFile: String
+    val csvTypeVeggieProducts: String
+    val weekdayMonday: String
+    val weekdayTuesday: String
+    val weekdayWednesday: String
+    val weekdayThursday: String
+    val weekdayFriday: String
+    val weekdaySaturday: String
+    val weekdaySunday: String
+
+    val tabVeggieOrders: String
+    val veggieSubTabRound: String
+    val veggieSubTabCatalog: String
+    val veggieSubTabHistory: String
+    val veggieCatalogTitle: String
+    val addVeggieProduct: String
+    val editVeggieProduct: String
+    val veggieProductNameLabel: String
+    val veggieProductNamePlaceholder: String
+    val veggieProductDescriptionLabel: String
+    val veggieProductDescriptionPlaceholder: String
+    val veggieEstimatedPriceLabel: String
+    val veggieEstimatedPricePlaceholder: String
+    val veggieEstimatedPriceUnknown: String
+    val veggieUnitTypeLabel: String
+    val manageUnitTypesBtn: String
+    val veggieUnitTypesDialogTitle: String
+    val addUnitTypeBtn: String
+    val addUnitTypeSectionTitle: String
+    fun editUnitTypeSectionTitle(name: String): String
+    val editingBadge: String
+    val unitTypeNameLabel: String
+    val unitTypeNamePlaceholder: String
+    val allUnitsFilter: String
+    val filterByUnit: String
+    val confirmDeleteUnitTypeTitle: String
+    fun confirmDeleteUnitTypeMsg(name: String): String
+    val allowDecimalsLabel: String
+    val unitIntegerOnly: String
+    val unitAllowDecimals: String
+    val settlementUnitLabel: String
+    val sameAsCustomerUnitOption: String
+    val veggieProductPhotoLabel: String
+    val uploadPhotoBtn: String
+    val removePhotoBtn: String
+    val noPhotoAssigned: String
+    val disabledVeggieProductsSection: String
+
+    // Round Lifecycle, 2D Settlement Matrix & Customer Portal
+    fun weekOfYearLabel(week: Int, year: Int): String
+    val roundStatusOpen: String
+    val roundStatusClosed: String
+    val roundStatusSettled: String
+    val openNewRoundBtn: String
+    fun nextAutoRoundScheduled(day: String, date: String, time: String): String
+    val closeRoundBtn: String
+    val confirmCloseRoundTitle: String
+    val confirmCloseRoundMsg: String
+    val reopenRoundBtn: String
+    val exportBuyerPdfBtn: String
+    val exportWorkerPdfBtn: String
+    val exportOrderFormPdfBtn: String
+    val noActiveRoundTitle: String
+    val noActiveRoundDesc: String
+    val settlementMatrixTitle: String
+    val buyerOperationFeeLabel: String
+    val transportFeeLabel: String
+    val transporterLabel: String
+    val transporterExternal: String
+    val saveDraftBtn: String
+    val saveChangesBtn: String
+    val resetChangesBtn: String
+    val unsavedChangesBadge: String
+    val unsavedExportTitle: String
+    val unsavedExportMsg: String
+    val saveAndExportBtn: String
+    val unsavedSettleTitle: String
+    val unsavedSettleMsg: String
+    val saveAndSettleBtn: String
+    val confirmResetChangesTitle: String
+    val confirmResetChangesMsg: String
+    val deleteRoundBtn: String
+    val confirmDeleteRoundTitle: String
+    val confirmDeleteRoundMsg: String
+    val completeRoundBtn: String
+    val confirmCompleteEmptyRoundTitle: String
+    val confirmCompleteEmptyRoundMsg: String
+    val pdfExportSuccessTitle: String
+    val pdfSavedToMsg: String
+    val openPdfBtn: String
+    val showInFolderBtn: String
+    val settleAndChargeBtn: String
+    val updateSettledRoundBtn: String
+    fun confirmUpdateSettledRoundMsg(total: String): String
+    val errInvalidVeggieInputs: String
+    val backToPastRounds: String
+    fun editingPastRoundTitle(weekOfYear: Int, isoYear: Int): String
+    val colOrderedQty: String
+    val colActualQty: String
+    val colMarketUnitPrice: String
+    val colTotalSpent: String
+    val colEffectivePrice: String
+    val hideBuyerOverviewBtn: String
+    val showBuyerOverviewBtn: String
+    val hideRoundSettingsBtn: String
+    val showRoundSettingsBtn: String
+    val customerPortalTabOrder: String
+    val customerPortalTabVeggieHistory: String
+    val customerPortalTabStoreHistory: String
+    fun lastOrderBadge(qty: String, unit: String): String
+    val saveVeggieOrderBtn: String
+    val veggieOrderAllSavedBtn: String
+    val veggieOrderSavedMsg: String
+    val veggieOrderClosedBanner: String
+    val veggieCombinedFeeLabel: String
+    val veggieEstimatedTotalLabel: String
+    val veggieFinalTotalLabel: String
+    val searchVeggieProductsPlaceholder: String
+    val searchVeggieHistoryPlaceholder: String
+    val noVeggieHistoryMsg: String
+    val unsavedChangesMessage: String
+    val btnSaveAndProceed: String
+    val btnDiscardChanges: String
+    val btnKeepEditing: String
+    val veggieCartTitle: String
+    val veggieCartEmptyMsg: String
+    val mobileSubTabCatalog: String
+    fun mobileSubTabCart(count: Int): String
+    val veggieAmountDialogTitle: String
+    val veggieAmountDialogConfirm: String
+    val veggieAmountDialogPlaceholder: String
+    val veggieUnsavedBadge: String
+    val lastOrderNone: String
+    val veggiePricelessItemsNotice: String
+    val btnFillFromLastWeek: String
+    val filterFavoritesTooltip: String
+    val filterFavoritesActiveTooltip: String
+    val markFavoriteTooltip: String
+    val unmarkFavoriteTooltip: String
+    val noFavoriteProductsFound: String
+    val veggieFixedRoundFeesLabel: String
+    val veggieSharedFeeNotice: String
+    val veggieFilterInOrder: String
+    val veggieClearItemTooltip: String
+    val addOrderModeOverwrite: String
+    val addOrderModeAddToExisting: String
+    fun addOrderCurrentQuantityLabel(quantity: String, unit: String): String
+    fun addOrderNewTotalLabel(quantity: String, unit: String): String
+    val addOrEditOrderBtn: String
+    val addOrderAction: String
+    val updateOrderAction: String
+    val removeOrderEntryAction: String
+    val confirmRemoveOrderEntryTitle: String
+    fun confirmRemoveOrderEntryMsg(userName: String, productName: String): String
+    val noMatchingUsersFound: String
+    val noMatchingProductsFound: String
+    val veggieProductDiscontinuedBadge: String
+    fun veggieAmountMaxExceededError(maxFormatted: String, unitName: String): String
+    fun confirmDeactivateWithOrdersMsg(productName: String, orderCount: Int): String
+    val deactivateStopNewOrdersOnly: String
+    val deactivateCancelExistingOrders: String
+    val kioskOfflineTitle: String
+    val kioskOfflineDescription: String
+    val kioskOfflineWaiting: String
+    val kioskOfflineRetryButton: String
+    val kioskOfflineSaveError: String
+    fun statementPdfPagePrefix(pageNum: Int): String
+    fun supportEmailSubject(dateStr: String): String
+    fun supportEmailBody(fileName: String, filePath: String): String
+    val userNicknameLabel: String
+    val userNicknamePlaceholder: String
+    val userNicknameHint: String
+    val userNicknameNotSet: String
+    fun userNicknameReservedError(buyerLoginName: String): String
+    val userNicknameDuplicateError: String
+    val veggieExcludeFromBuyerPdfLabel: String
+    val veggieExcludeFromBuyerPdfHint: String
+    val veggieExcludeFromBuyerPdfBadge: String
+    val exportCsv: String
+    val csvExportSuccessTitle: String
+    val csvExportSavedTo: String
+    val csvExportFailed: String
+    // Buyer Portal & Buyer Login Credentials
+    val buyerPasswordTitle: String
+    fun buyerPasswordSubtitle(buyerLoginName: String): String
+    val buyerLoginNameLabel: String
+    val buyerLoginNamePlaceholder: String
+    val buyerLoginNameEmptyError: String
+    val buyerLoginNameTooLongError: String
+    val buyerLoginNameReservedAdminError: String
+    fun buyerLoginNameDuplicateUserError(userName: String): String
+    val buyerPasswordPlaceholder: String
+    val buyerPasswordConfiguredBadge: String
+    val buyerPasswordNotConfiguredBadge: String
+    val clearBuyerPasswordBtn: String
+    val buyerPortalTitle: String
+    val buyerNoActiveRoundTitle: String
+    val buyerNoActiveRoundMessage: String
+    val buyerRoundOpenLockedTitle: String
+    val buyerRoundOpenLockedMessage: String
+    val buyerOrdersChangedSincePdfBanner: String
+    val buyerPdfOutdatedBadge: String
+    val buyerReopenExportedWarning: String
+    val buyerExportPdfBtn: String
+    val buyerSaveDraftBtn: String
+    val buyerDraftSavedSuccess: String
+    val buyerDraftSaveError: String
+    val buyerTotalOrderedLabel: String
+    val buyerMarketUnitPriceLabel: String
+    val buyerTotalSpentLabel: String
+    val buyerUnsavedChangesLogoutWarning: String
+    val buyerLogoutBtn: String
+    val buyerSearchPlaceholder: String
+    val buyerSubtotalLabel: String
+    val buyerGrandTotalLabel: String
+    fun settleMissingPricesWarning(count: Int): String
+    val buyerPdfUpToDateBadge: String
+    val buyerPdfNotExportedBadge: String
+    val adminBuyerPortalPdfNotExported: String
+    val adminBuyerPortalPdfUpToDate: String
+    val adminBuyerPortalPdfOutdated: String
+    val priceTotalMismatchBadge: String
+    val adminPriceMismatchEffectiveFromTotal: String
+    fun buyerPriceMismatchExpected(qty: String, unit: String, unitPrice: String, expectedTotal: String): String
+    fun effectiveUnitPriceShort(formattedPrice: String, unit: String): String
 }
 
 

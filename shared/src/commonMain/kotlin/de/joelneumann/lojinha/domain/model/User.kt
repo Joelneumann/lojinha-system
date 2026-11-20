@@ -9,14 +9,18 @@ data class UserAvatarConfig(
     val colorHex: String = "#1E293B"
 )
 
+const val MAX_USER_NICKNAME_LENGTH = 10
+
 @Serializable
 data class User(
     val id: String,
     val name: String,
+    val nickname: String? = null,
     val balance: Long = 0L,
-    val language: Language = Language.DE,
+    val language: Language = Language.DEFAULT,
     val secondaryCurrency: SecondaryCurrency = SecondaryCurrency.NONE,
     val pin: String? = null,
+    val requirePinOnKiosk: Boolean = true,
     val userBarcode: String? = null,
     val userBarcodeNumber: String? = null,
     val isActive: Boolean = true,
@@ -28,6 +32,9 @@ data class User(
             "userBarcode and userBarcodeNumber must both be present or both be null"
         }
     }
+
+    val veggieDisplayName: String
+        get() = nickname?.takeIf { it.isNotBlank() } ?: name
 
     val initials: String
         get() {

@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.ColorWarningAmber
 import de.joelneumann.lojinha.ui.theme.DividerBorder
 import de.joelneumann.lojinha.ui.theme.PrimaryNavy
@@ -76,7 +77,7 @@ fun AdminAccordionCard(
                             )
                             if (isExpanded && hasUnsaved) {
                                 AdminStatusBadge(
-                                    text = "● Unsaved",
+                                    text = I18n.current.unsavedEditsBadge,
                                     type = AdminBadgeType.WARNING
                                 )
                             }

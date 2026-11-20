@@ -1,5 +1,6 @@
 package de.joelneumann.lojinha.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import de.joelneumann.lojinha.domain.model.SystemSettings
@@ -29,7 +30,14 @@ data class SettingsEntity(
     val autoUpdateExchangeRates: Boolean = true,
     val lastExchangeRateUpdateTimestamp: Long? = null,
     val yellowBalanceWarningThresholdCents: Long = 300_00L,
-    val redBalanceWarningThresholdCents: Long = 0L
+    val redBalanceWarningThresholdCents: Long = 0L,
+    @ColumnInfo(defaultValue = "0") val veggieAutoOpenEnabled: Boolean = false,
+    @ColumnInfo(defaultValue = "1") val veggieAutoOpenDayOfWeek: Int = 1,
+    @ColumnInfo(defaultValue = "'08:00'") val veggieAutoOpenTime: String = "08:00",
+    @ColumnInfo(defaultValue = "0") val defaultVeggieBuyerFeeCents: Long = 0L,
+    @ColumnInfo(defaultValue = "0") val defaultVeggieTransportFeeCents: Long = 0L,
+    @ColumnInfo(defaultValue = "''") val buyerPasswordHash: String = "",
+    @ColumnInfo(defaultValue = "'Buyer'") val buyerLoginName: String = SystemSettings.DEFAULT_BUYER_LOGIN_NAME
 ) {
     fun toDomain(): SystemSettings = SystemSettings(
         adminPasswordHash = adminPasswordHash,
@@ -54,7 +62,14 @@ data class SettingsEntity(
         autoUpdateExchangeRates = autoUpdateExchangeRates,
         lastExchangeRateUpdateTimestamp = lastExchangeRateUpdateTimestamp,
         yellowBalanceWarningThresholdCents = yellowBalanceWarningThresholdCents,
-        redBalanceWarningThresholdCents = redBalanceWarningThresholdCents
+        redBalanceWarningThresholdCents = redBalanceWarningThresholdCents,
+        veggieAutoOpenEnabled = veggieAutoOpenEnabled,
+        veggieAutoOpenDayOfWeek = veggieAutoOpenDayOfWeek,
+        veggieAutoOpenTime = veggieAutoOpenTime,
+        defaultVeggieBuyerFeeCents = defaultVeggieBuyerFeeCents,
+        defaultVeggieTransportFeeCents = defaultVeggieTransportFeeCents,
+        buyerPasswordHash = buyerPasswordHash,
+        buyerLoginName = buyerLoginName.trim().ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
     )
 
     companion object {
@@ -82,7 +97,14 @@ data class SettingsEntity(
             autoUpdateExchangeRates = settings.autoUpdateExchangeRates,
             lastExchangeRateUpdateTimestamp = settings.lastExchangeRateUpdateTimestamp,
             yellowBalanceWarningThresholdCents = settings.yellowBalanceWarningThresholdCents,
-            redBalanceWarningThresholdCents = settings.redBalanceWarningThresholdCents
+            redBalanceWarningThresholdCents = settings.redBalanceWarningThresholdCents,
+            veggieAutoOpenEnabled = settings.veggieAutoOpenEnabled,
+            veggieAutoOpenDayOfWeek = settings.veggieAutoOpenDayOfWeek,
+            veggieAutoOpenTime = settings.veggieAutoOpenTime,
+            defaultVeggieBuyerFeeCents = settings.defaultVeggieBuyerFeeCents,
+            defaultVeggieTransportFeeCents = settings.defaultVeggieTransportFeeCents,
+            buyerPasswordHash = settings.buyerPasswordHash,
+            buyerLoginName = settings.effectiveBuyerLoginName
         )
     }
 }

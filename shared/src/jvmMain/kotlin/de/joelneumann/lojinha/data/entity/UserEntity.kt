@@ -14,6 +14,7 @@ import de.joelneumann.lojinha.domain.model.UserAvatarConfig
     tableName = "users",
     indices = [
         Index(value = ["name"]),
+        Index(value = ["nickname"]),
         Index(value = ["userBarcode"]),
         Index(value = ["userBarcodeNumber"])
     ]
@@ -31,7 +32,9 @@ data class UserEntity(
     @ColumnInfo(defaultValue = "0") val isDeleted: Boolean = false,
     @ColumnInfo(defaultValue = "'INITIALS'") val avatarType: String = "INITIALS",
     @ColumnInfo(defaultValue = "'😀'") val avatarEmoji: String = "😀",
-    @ColumnInfo(defaultValue = "'#1E293B'") val avatarColor: String = "#1E293B"
+    @ColumnInfo(defaultValue = "'#1E293B'") val avatarColor: String = "#1E293B",
+    @ColumnInfo(defaultValue = "1") val requirePinOnKiosk: Boolean = true,
+    @ColumnInfo(defaultValue = "NULL") val nickname: String? = null
 ) {
 
     fun toDomain(): User {
@@ -47,10 +50,12 @@ data class UserEntity(
         return User(
             id = id,
             name = name,
+            nickname = nickname,
             balance = balance,
             language = Language.fromCode(language),
             secondaryCurrency = try { SecondaryCurrency.valueOf(secondaryCurrency) } catch (e: Exception) { SecondaryCurrency.NONE },
             pin = pin,
+            requirePinOnKiosk = requirePinOnKiosk,
             userBarcode = safeBarcode.first,
             userBarcodeNumber = safeBarcode.second,
             isActive = isActive,
@@ -67,6 +72,7 @@ data class UserEntity(
         fun fromDomain(user: User): UserEntity = UserEntity(
             id = user.id,
             name = user.name,
+            nickname = user.nickname,
             balance = user.balance,
             language = user.language.code,
             secondaryCurrency = user.secondaryCurrency.name,
@@ -77,7 +83,8 @@ data class UserEntity(
             isDeleted = user.isDeleted,
             avatarType = user.avatar.type.name,
             avatarEmoji = user.avatar.emoji,
-            avatarColor = user.avatar.colorHex
+            avatarColor = user.avatar.colorHex,
+            requirePinOnKiosk = user.requirePinOnKiosk
         )
     }
 }

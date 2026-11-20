@@ -6,6 +6,7 @@ import de.joelneumann.lojinha.domain.model.TransactionItem
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.ui.i18n.I18n
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -236,5 +237,43 @@ class TransactionPdfGeneratorTest {
         )
         assertTrue(deBytes.isNotEmpty())
         assertEquals("%PDF-", String(deBytes.copyOfRange(0, 5), Charsets.US_ASCII))
+    }
+
+    @Test
+    fun testBuildDescription_eachProductOnNewLine() {
+        val tx = Transaction(
+            id = "tx-multi",
+            userId = "u-1",
+            userNameSnapshot = "Test User",
+            timestamp = 1000L,
+            type = TransactionType.PURCHASE,
+            totalAmount = -1500L,
+            items = listOf(
+                TransactionItem(
+                    productId = "p-1",
+                    productName = "Coca-Cola",
+                    quantity = 2,
+                    unitPriceAtPurchase = 500L,
+                    unitType = UnitType.PIECE
+                ),
+                TransactionItem(
+                    productId = "p-2",
+                    productName = "Pão de Queijo",
+                    quantity = 1,
+                    unitPriceAtPurchase = 500L,
+                    unitType = UnitType.PIECE
+                )
+            ),
+            note = "Customer special request"
+        )
+
+        val strings = I18n.get(Language.BR)
+        val desc = TransactionPdfGenerator.buildDescription(tx, strings, Language.BR)
+
+        val lines = desc.lines()
+        assertEquals(3, lines.size, "Should have 2 product lines + 1 note line")
+        assertTrue(lines[0].contains("Coca-Cola"), "Line 1 should contain first product")
+        assertTrue(lines[1].contains("Pão de Queijo"), "Line 2 should contain second product")
+        assertEquals("Customer special request", lines[2], "Line 3 should contain note")
     }
 }

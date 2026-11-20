@@ -2,10 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <meta name="theme-color" content="#1e3a8a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Lojinha">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="alternate icon" href="favicon.ico">
-    <title>Lojinha Admin Console</title>
+    <title>Lojinha</title>
     <style>
         html, body {
             width: 100%;
@@ -13,8 +19,16 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
+            overflow: clip;
+            overscroll-behavior: none;
+            overscroll-behavior-x: none;
             background-color: #f8fafc;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        body > input, body > textarea {
+            font-size: 16px !important;
+            width: 1px !important;
+            max-width: 1px !important;
         }
         #ComposeTarget {
             width: 100%;
@@ -23,6 +37,8 @@
             top: 0;
             left: 0;
             z-index: 1;
+            overscroll-behavior: none;
+            overscroll-behavior-x: none;
         }
         .loading-container {
             position: absolute;
@@ -61,13 +77,49 @@
             color: #64748b;
         }
     </style>
-    <script type="application/javascript" src="lojinha.js"></script>
+    <script defer type="application/javascript" src="lojinha.js"></script>
+    <script>
+        if ('serviceWorker' in navigator && window.isSecureContext) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch((err) => {
+                    console.warn('Service Worker registration failed:', err);
+                });
+            });
+        }
+        const resetScroll = () => {
+            if (document.documentElement) {
+                document.documentElement.scrollLeft = 0;
+                document.documentElement.scrollTop = 0;
+            }
+            if (document.body) {
+                document.body.scrollLeft = 0;
+                document.body.scrollTop = 0;
+            }
+            window.scrollTo(0, 0);
+        };
+        window.addEventListener('scroll', resetScroll, { passive: true });
+        document.addEventListener('focusin', () => {
+            resetScroll();
+            window.requestAnimationFrame(resetScroll);
+        }, { passive: true });
+        if (window.visualViewport) {
+            const syncViewport = () => {
+                const h = window.visualViewport.height;
+                document.documentElement.style.height = h + 'px';
+                document.body.style.height = h + 'px';
+                resetScroll();
+            };
+            window.visualViewport.addEventListener('resize', syncViewport);
+            window.visualViewport.addEventListener('scroll', syncViewport);
+            syncViewport();
+        }
+    </script>
 </head>
 <body>
     <div class="loading-container">
         <div class="spinner"></div>
-        <div class="loading-title">Lojinha Admin Console</div>
-        <div class="loading-sub">Loading WebAssembly application...</div>
+        <div class="loading-title">Lojinha</div>
+        <div class="loading-sub">Loading...</div>
     </div>
     <canvas id="ComposeTarget"></canvas>
 </body>

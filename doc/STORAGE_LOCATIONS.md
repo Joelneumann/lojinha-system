@@ -30,7 +30,10 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 ├── lojinha_room.db.startup_backup-shm # SHM companion for safety backup
 ├── lojinha_room_pre_restore_safety.db # Atomic safety snapshot created before database restore
 ├── lojinha_room_pre_wipe_safety.db    # Atomic safety snapshot created before factory reset / wipe
+├── customer_sessions.json             # Persisted hashed customer portal session tokens
+├── .version                           # Last launched app version marker (used for upgrade checks)
 ├── .lojinha.lock                      # OS kernel-level single-instance file lock
+├── veggie_images/                     # Uploaded Veggie Order product thumbnails
 └── logs/
     ├── lojinha.log                    # Current active log file
     ├── lojinha_2026-09-29_12-00-00.log# Archived rolling log file (up to 5x 5MB)
@@ -40,10 +43,11 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 ---
 
 ### 1. Primary Database (`lojinha_room.db`)
-* **Format:** Standard SQLite 3 relational database managed by **AndroidX Room (KMP)** using the bundled C SQLite driver (schema v18).
-* **Tables:** `users`, `products`, `transactions`, `billing_lists`, `billing_list_users`, `settings`, `backups`, `admin_notes`, `product_stock_adjustments`, `shopping_list_items`.
+* **Format:** Standard SQLite 3 relational database managed by **AndroidX Room (KMP)** using the bundled C SQLite driver (schema v23).
+* **Tables:** `users`, `products`, `transactions`, `billing_lists`, `billing_list_users`, `settings`, `backups`, `admin_notes`, `product_stock_adjustments`, `shopping_list_items`, `veggie_unit_types`, `veggie_products`, `veggie_order_rounds`, `veggie_round_product_settlements`, `veggie_order_entries`, `veggie_user_favorites`.
 * **WAL Mode:** Operates in Write-Ahead Logging (`PRAGMA journal_mode=WAL;`). When backing up manually, ensure you copy `lojinha_room.db`, `lojinha_room.db-wal`, and `lojinha_room.db-shm` together, or perform a checkpoint before copying.
-* **Backup & Restore Coverage:** All tables (including `product_stock_adjustments` and `shopping_list_items`) are included in `.db` snapshots, table-level restore, and factory reset wipes via `BackupRestoreService`. Scheduled CSV backups export `products.csv`, `users.csv`, `transactions.csv`, `billing_lists.csv`, and `admin_notes.csv`.
+* **Backup & Restore Coverage:** All tables (including `product_stock_adjustments`, `shopping_list_items`, and all Veggie Order tables) are included in `.db` snapshots, table-level restore, and factory reset wipes via `BackupRestoreService`. Scheduled CSV backups export `products.csv`, `users.csv`, `transactions.csv`, `billing_lists.csv`, `admin_notes.csv`, `veggie_products.csv`, and `veggie_orders.csv`.
+* **Veggie Product Images (`veggie_images/`):** Stored under `~/.lojinha/veggie_images/` alongside `lojinha_room.db` and cleared on factory reset wipes.
 
 ### 2. Pre-Startup, Pre-Restore & Pre-Wipe Safety Backups
 * **Pre-Startup Snapshot (`lojinha_room.db.startup_backup`):** Before initializing Room and executing any database migrations on application launch, Lojinha automatically creates a point-in-time snapshot of the `.db`, `-wal`, and `-shm` files. If an unexpected power failure or migration error occurs, this file acts as an immediate fallback recovery point.
@@ -61,11 +65,11 @@ Lojinha stores all application data inside a dedicated `.lojinha` directory loca
 * **Crash Interception:** Uncaught JVM exceptions and system termination signals are caught by [`CrashHandler`](../desktopApp/src/main/kotlin/de/joelneumann/lojinha/util/CrashHandler.kt) and flushed to disk before exit.
 
 ### 5. Diagnostics Support Bundle (`.zip`)
-* When an admin clicks **Export Diagnostic Bundle** in the Settings tab (or via `GET /api/admin/diagnostics/export`), a timestamped ZIP archive (`lojinha_diagnostic_bundle_<timestamp>.zip`) is generated containing:
-  * System metrics (Java version, OS architecture, memory usage, display resolution).
-  * The current database file snapshot.
-  * All rolling log files.
-  * Summary table counts (users, products, transactions).
+* When an admin clicks **Export Diagnostic Bundle** in the Settings tab (or via `GET /api/admin/diagnostics/export`), a timestamped ZIP archive (`lojinha-support-bundle-<timestamp>.zip`) is generated containing:
+  * `system_info.txt`: System metrics (app version, Java version, OS architecture, memory usage, display/environment info).
+  * `db_diagnostics.txt`: Database schema version (`PRAGMA user_version`), integrity/WAL diagnostics, and summary table counts (users, products, transactions, veggie catalog/rounds/entries).
+  * All rolling log files under `logs/`.
+  * *(Note: For privacy and bundle size safety, the raw `.db` file is not included in diagnostic support bundles.)*
 
 ---
 

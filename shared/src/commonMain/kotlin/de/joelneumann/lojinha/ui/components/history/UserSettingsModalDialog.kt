@@ -53,6 +53,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
@@ -71,6 +72,9 @@ fun UserSettingsModalDialog(
     onDismiss: () -> Unit,
     onSave: (removePin: Boolean) -> Unit,
     onUserInteracted: (force: Boolean) -> Unit = {},
+    selectedRequirePinOnKiosk: Boolean = user.requirePinOnKiosk,
+    onRequirePinOnKioskChange: (Boolean) -> Unit = {},
+    isNetworkPortal: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -100,12 +104,14 @@ fun UserSettingsModalDialog(
             confirmPinInput.isNotEmpty() ||
             (selectedLanguage != user.language) ||
             (selectedSecondaryCurrency != user.secondaryCurrency) ||
-            (selectedAvatar != user.avatar)
+            (selectedAvatar != user.avatar) ||
+            (selectedRequirePinOnKiosk != user.requirePinOnKiosk)
 
     val hasChanges = isPinActionChanged ||
             (selectedLanguage != user.language) ||
             (selectedSecondaryCurrency != user.secondaryCurrency) ||
-            (selectedAvatar != user.avatar)
+            (selectedAvatar != user.avatar) ||
+            (selectedRequirePinOnKiosk != user.requirePinOnKiosk)
 
     val handleDismissRequest = {
         onUserInteracted(true)
@@ -190,19 +196,12 @@ fun UserSettingsModalDialog(
                                     fontSize = 18.sp
                                 )
 
-                                Column {
-                                    Text(
-                                        text = strings.profileAvatarColorTitle,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = PrimaryNavy
-                                    )
-                                    Text(
-                                        text = if (selectedAvatar.type == AvatarType.EMOJI) strings.emojiWithVal(selectedAvatar.emoji) else strings.initialsWithVal(user.initials),
-                                        fontSize = 12.sp,
-                                        color = TextSecondaryMuted
-                                    )
-                                }
+                                Text(
+                                    text = strings.profileAvatarColorTitle,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryNavy
+                                )
                             }
 
                             Row(
@@ -267,7 +266,14 @@ fun UserSettingsModalDialog(
                                         ),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Text(strings.emojiWithVal(selectedAvatar.emoji), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text("${strings.emojiLabel} (", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            PlatformEmoji(emoji = selectedAvatar.emoji, fontSize = 14.sp)
+                                            Text(")", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
 
@@ -340,7 +346,7 @@ fun UserSettingsModalDialog(
                 ) {
                     Text(text = strings.setPin, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = PrimaryNavy)
 
-                    if (user.pin != null) {
+                    if (user.pin != null && !isNetworkPortal) {
                         TextButton(
                             onClick = {
                                 onUserInteracted(true)
@@ -430,7 +436,10 @@ fun UserSettingsModalDialog(
                             }
                         },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = if (pinInput.isNotEmpty()) ImeAction.Next else ImeAction.Done),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = if (pinInput.isNotEmpty()) ImeAction.Next else ImeAction.Done
+                        ),
                         keyboardActions = KeyboardActions(onDone = { if (hasChanges && canSave) onSave(false) }),
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     )
@@ -454,7 +463,10 @@ fun UserSettingsModalDialog(
                                 visualTransformation = if (isPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 isError = confirmPinInput.isNotEmpty() && !isPinMatching,
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Password,
+                                    imeAction = ImeAction.Done
+                                ),
                                 keyboardActions = KeyboardActions(onDone = { if (hasChanges && canSave) onSave(false) }),
                                 modifier = Modifier.fillMaxWidth().height(56.dp)
                             )
@@ -470,6 +482,43 @@ fun UserSettingsModalDialog(
                             }
                         }
                     }
+
+                    if (user.pin != null || pinInput.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    onUserInteracted(true)
+                                    onRequirePinOnKioskChange(!selectedRequirePinOnKiosk)
+                                }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Checkbox(
+                                checked = selectedRequirePinOnKiosk,
+                                onCheckedChange = {
+                                    onUserInteracted(true)
+                                    onRequirePinOnKioskChange(it)
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column {
+                                Text(
+                                    text = strings.requirePinOnKioskLabel,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryNavy
+                                )
+                                Text(
+                                    text = strings.requirePinOnKioskDesc,
+                                    fontSize = 11.5.sp,
+                                    color = TextSecondaryMuted
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -477,27 +526,44 @@ fun UserSettingsModalDialog(
                 // Language Selection
                 Text(text = strings.preferredLanguage, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Language.entries.forEach { lang ->
-                        val isSel = selectedLanguage == lang
-                        OutlinedButton(
-                            onClick = {
-                                onUserInteracted(true)
-                                onLanguageSelect(lang)
-                            },
-                            modifier = Modifier.weight(1f).pointerHoverIcon(PointerIcon.Hand),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = if (isSel) AccentNavy else SurfaceWhite,
-                                contentColor = if (isSel) SurfaceWhite else PrimaryNavy
-                            ),
-                            border = BorderStroke(1.dp, if (isSel) AccentNavy else DividerBorder)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val isPhone = maxWidth < 390.dp
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Language.entries.forEach { lang ->
+                            val isSel = selectedLanguage == lang
+                            OutlinedButton(
+                                onClick = {
+                                    onUserInteracted(true)
+                                    onLanguageSelect(lang)
+                                },
+                                modifier = Modifier.weight(1f).pointerHoverIcon(PointerIcon.Hand),
+                                contentPadding = if (isPhone) {
+                                    PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                                } else {
+                                    ButtonDefaults.ContentPadding
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (isSel) AccentNavy else SurfaceWhite,
+                                    contentColor = if (isSel) SurfaceWhite else PrimaryNavy
+                                ),
+                                border = BorderStroke(1.dp, if (isSel) AccentNavy else DividerBorder)
                             ) {
-                                de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon(language = lang, width = 18.dp, height = 12.dp)
-                                Text(lang.code.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    de.joelneumann.lojinha.ui.components.general.LanguageFlagIcon(
+                                        language = lang,
+                                        width = if (isPhone) 22.dp else 18.dp,
+                                        height = if (isPhone) 15.dp else 12.dp
+                                    )
+                                    if (!isPhone) {
+                                        Text(lang.code.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
                             }
                         }
                     }
@@ -537,6 +603,25 @@ fun UserSettingsModalDialog(
                             Text(label, fontSize = 14.sp)
                         }
                     }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Nickname (Read-Only)
+                Text(text = strings.userNicknameLabel, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SurfaceContainerHighLight, RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = user.nickname?.takeIf { it.isNotBlank() } ?: strings.userNicknameNotSet,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondarySubtle
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

@@ -34,6 +34,7 @@ interface UserDao {
     @Query("""
         UPDATE users 
         SET name = :name, 
+            nickname = :nickname,
             language = :language, 
             secondaryCurrency = :secondaryCurrency, 
             pin = :pin, 
@@ -43,12 +44,14 @@ interface UserDao {
             isDeleted = :isDeleted, 
             avatarType = :avatarType, 
             avatarEmoji = :avatarEmoji, 
-            avatarColor = :avatarColor 
+            avatarColor = :avatarColor,
+            requirePinOnKiosk = :requirePinOnKiosk
         WHERE id = :id
     """)
     suspend fun updateUserProfile(
         id: String,
         name: String,
+        nickname: String?,
         language: String,
         secondaryCurrency: String,
         pin: String?,
@@ -58,7 +61,30 @@ interface UserDao {
         isDeleted: Boolean,
         avatarType: String,
         avatarEmoji: String,
-        avatarColor: String
+        avatarColor: String,
+        requirePinOnKiosk: Boolean = true
+    )
+
+    @Query("""
+        UPDATE users
+        SET language = :language,
+            secondaryCurrency = :secondaryCurrency,
+            pin = :pin,
+            avatarType = :avatarType,
+            avatarEmoji = :avatarEmoji,
+            avatarColor = :avatarColor,
+            requirePinOnKiosk = :requirePinOnKiosk
+        WHERE id = :id
+    """)
+    suspend fun updateCustomerSettings(
+        id: String,
+        language: String,
+        secondaryCurrency: String,
+        pin: String?,
+        avatarType: String,
+        avatarEmoji: String,
+        avatarColor: String,
+        requirePinOnKiosk: Boolean
     )
 
     @Query("DELETE FROM billing_list_users WHERE userId = :id")

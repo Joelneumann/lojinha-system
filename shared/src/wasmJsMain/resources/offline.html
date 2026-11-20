@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1e3a8a">
+    <title>Lojinha — Kiosk Offline</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <style>
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #f8fafc;
+            color: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            max-width: 440px;
+            width: calc(100% - 32px);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 32px 28px;
+            text-align: center;
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+        }
+        .icon-wrap {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            background-color: #eff6ff;
+            border: 2px solid #bfdbfe;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+        }
+        h1 {
+            margin: 0 0 12px;
+            font-size: 22px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        p {
+            margin: 0 0 20px;
+            font-size: 15px;
+            line-height: 1.55;
+            color: #475569;
+        }
+        .status-row {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background-color: #f1f5f9;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 22px;
+        }
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2.5px solid #cbd5e1;
+            border-top-color: #1e3a8a;
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 10px;
+            background-color: #1e3a8a;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+        .btn:hover { background-color: #1e40af; }
+        .btn:active { background-color: #172554; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon-wrap" aria-hidden="true">🔌</div>
+        <h1 id="title">Lojinha Kiosk is offline</h1>
+        <p id="desc">
+            The Lojinha Desktop/Kiosk system needs to be started before you can use the web portal.
+            This page will automatically reconnect as soon as Lojinha is running.
+        </p>
+        <div class="status-row">
+            <div class="spinner"></div>
+            <span id="status">Checking connection…</span>
+        </div>
+        <button class="btn" id="retryBtn" type="button">Retry Now</button>
+    </div>
+
+    <script>
+        (function () {
+            const lang = (navigator.language || 'en').toLowerCase();
+            const strings = lang.startsWith('pt') ? {
+                title: 'O Kiosk Lojinha está desligado',
+                desc: 'O sistema Lojinha (aplicativo Desktop/Kiosk) precisa ser iniciado antes de usar o portal web. Esta página será reconectada automaticamente assim que o Lojinha estiver em execução.',
+                status: 'Aguardando o sistema Lojinha iniciar…',
+                checking: 'Verificando conexão…',
+                retry: 'Tentar novamente'
+            } : lang.startsWith('de') ? {
+                title: 'Das Lojinha-System ist offline',
+                desc: 'Die Lojinha Desktop-/Kiosk-Anwendung muss gestartet werden, bevor das Webportal genutzt werden kann. Diese Seite verbindet sich automatisch wieder, sobald Lojinha läuft.',
+                status: 'Warte auf Start des Lojinha-Systems…',
+                checking: 'Verbindung wird geprüft…',
+                retry: 'Jetzt erneut prüfen'
+            } : {
+                title: 'Lojinha Kiosk is offline',
+                desc: 'The Lojinha Desktop/Kiosk system needs to be started before you can use the web portal. This page will automatically reconnect as soon as Lojinha is running.',
+                status: 'Waiting for Lojinha system to start…',
+                checking: 'Checking connection…',
+                retry: 'Retry Now'
+            };
+
+            document.getElementById('title').textContent = strings.title;
+            document.getElementById('desc').textContent = strings.desc;
+            const statusEl = document.getElementById('status');
+            const retryBtn = document.getElementById('retryBtn');
+            statusEl.textContent = strings.status;
+            retryBtn.textContent = strings.retry;
+
+            let checking = false;
+            async function checkHealth() {
+                if (checking) return;
+                checking = true;
+                statusEl.textContent = strings.checking;
+                try {
+                    const res = await fetch('/api/health', { cache: 'no-store' });
+                    if (res.ok) {
+                        window.location.reload();
+                        return;
+                    }
+                } catch (_) {
+                    // Still offline
+                } finally {
+                    checking = false;
+                    statusEl.textContent = strings.status;
+                }
+            }
+
+            retryBtn.addEventListener('click', checkHealth);
+            setInterval(checkHealth, 3000);
+        })();
+    </script>
+</body>
+</html>

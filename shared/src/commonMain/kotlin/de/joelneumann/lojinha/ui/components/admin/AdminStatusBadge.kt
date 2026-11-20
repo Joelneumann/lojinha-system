@@ -1,10 +1,17 @@
 package de.joelneumann.lojinha.ui.components.admin
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -51,5 +58,47 @@ fun AdminStatusBadge(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
         )
+    }
+}
+
+@Composable
+fun DualUnitBadge(
+    orderUnitName: String,
+    deliveryUnitName: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = AccentNavy.copy(alpha = 0.12f),
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+        ) {
+            Text(
+                text = orderUnitName,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = AccentNavy,
+                maxLines = 1,
+                softWrap = false
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                modifier = Modifier.size(10.dp),
+                tint = AccentNavy
+            )
+            Text(
+                text = deliveryUnitName,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = AccentNavy,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
     }
 }

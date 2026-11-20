@@ -27,6 +27,7 @@ fun AdminCardActionsRow(
     onCustomExpense: (() -> Unit)? = null,
     onCustomIncome: (() -> Unit)? = null,
     onExportPdf: (() -> Unit)? = null,
+    onExportCsv: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -208,6 +209,13 @@ fun AdminCardActionsRow(
                         )
                     }
                 }
+            }
+
+            if (onExportCsv != null) {
+                CompactCsvExportButton(
+                    onClick = onExportCsv,
+                    modifier = Modifier.height(40.dp)
+                )
             }
         }
 

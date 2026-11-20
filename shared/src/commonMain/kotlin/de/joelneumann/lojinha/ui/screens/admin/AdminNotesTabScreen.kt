@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 fun AdminNotesTabScreen(
     viewModel: AdminNotesViewModel,
     onAddToShoppingListFromNote: ((productName: String, noteId: String) -> Unit)? = null,
+    onExportCsv: (() -> Unit)? = null,
     onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
     isExternalModalOpen: Boolean = false,
     focusTrigger: Int = 0
@@ -109,6 +110,7 @@ fun AdminNotesTabScreen(
             placeholder = strings.searchNotesPlaceholder,
             countText = strings.notesCountText(filteredNotes.size),
             onSearchSubmitted = {},
+            onExportCsv = onExportCsv,
             focusRequester = searchFocusRequester
         )
 

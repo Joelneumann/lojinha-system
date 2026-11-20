@@ -37,10 +37,12 @@ Defined in [`User.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/do
 |---|---|---|
 | `id` | `String` (UUID) | Unique primary key. |
 | `name` | `String` | Unique user name displayed in kiosk and admin views. |
+| `nickname` | `String?` | Optional unique short nickname (max `MAX_USER_NICKNAME_LENGTH = 10` chars), used by `veggieDisplayName` in Veggie Worker PDFs and sorting matrices. |
 | `balance` | `Long` | Current account balance in cents. Can be negative (no hard credit limit enforced). |
-| `language` | `Language` | Preferred UI language (`BR`, `EN`, `DE`). Default: `DE`. |
+| `language` | `Language` | Preferred UI language (`BR`, `EN`, `DE`). Default: `BR`. |
 | `secondaryCurrency` | `SecondaryCurrency` | Visual reference currency (`NONE`, `USD`, `EUR`). Default: `NONE`. |
 | `pin` | `String?` | Optional numeric PIN, hashed using SHA-256 with salt. |
+| `requirePinOnKiosk` | `Boolean` | Whether the PIN prompt is enforced when logging in on the Desktop POS kiosk. Default: `true`. |
 | `userBarcode` | `String?` | Optional scanned barcode string (e.g., Code 128 / EAN). |
 | `userBarcodeNumber` | `String?` | Optional visual barcode identifier displayed on badges/cards. |
 | `isActive` | `Boolean` | Whether the user is active on the POS terminal. Default: `true`. |
@@ -106,7 +108,7 @@ Transactions represent an **immutable, append-only ledger**. Historical records 
 | `userId` | `String` (UUID) | Foreign reference to the associated user. |
 | `userNameSnapshot` | `String` | Snapshot of the user's name at the time of the transaction. |
 | `timestamp` | `Long` | Epoch milliseconds when the transaction occurred. |
-| `type` | `TransactionType` | `PURCHASE`, `ADMIN_DEPOSIT`, `ADMIN_WITHDRAWAL`, `CANCELLATION`, `CORRECTION`. |
+| `type` | `TransactionType` | `PURCHASE`, `ADMIN_DEPOSIT`, `ADMIN_WITHDRAWAL`, `CANCELLATION`, `CORRECTION`, `VEGGIE`. |
 | `referenceTransactionId` | `String?` | References the original transaction ID for cancellations and corrections. |
 | `note` | `String?` | Human-readable note or structured system note identifier. |
 | `totalAmount` | `Long` | Amount in cents (negative for purchases/debits, positive for deposits/refunds). |
@@ -178,6 +180,8 @@ Single-row configuration entity persisted in Room SQLite.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `adminPasswordHash` | `String` | SHA-256 of `"admin"` | Master admin password hash. |
+| `buyerPasswordHash` | `String` | `""` | Optional Buyer Portal password hash (enables the scoped Buyer Portal role when non-blank). |
+| `buyerLoginName` | `String` | `"Buyer"` | Dynamic login identifier for the Buyer Portal (case/accent-insensitive, reserved alongside `"Admin"` against all user names and nicknames). |
 | `globalMarkupPercent` | `Double` | `0.0` | Default markup percentage applied to catalog items without custom markup. |
 | `usdExchangeRate` | `Double` | `0.18` | Conversion rate: 1 BRL = X USD (manual or via API). |
 | `eurExchangeRate` | `Double` | `0.16` | Conversion rate: 1 BRL = X EUR (manual or via API). |
@@ -192,6 +196,12 @@ Single-row configuration entity persisted in Room SQLite.
 | `oneDriveAccountEmail` | `String?` | `null` | Display email of connected Microsoft account. |
 | `oneDriveAccountName` | `String?` | `null` | Display name of connected Microsoft account. |
 | `oneDriveDefaultFolder` | `String` | `"/LojinhaBackups"` | Target folder in user's OneDrive. |
+| `oneDriveTenant` | `String` | `"common"` | Microsoft Entra tenant identifier for OAuth2 PKCE. |
+| `veggieAutoOpenEnabled` | `Boolean` | `false` | Enables automatic weekly Veggie Order round opening. |
+| `veggieAutoOpenDayOfWeek` | `Int` | `1` | ISO day of week (`1` = Monday .. `7` = Sunday) for auto-opening rounds. |
+| `veggieAutoOpenTime` | `String` | `"08:00"` | Local 24-hour `"HH:mm"` time slot for auto-opening rounds. |
+| `defaultVeggieBuyerFeeCents` | `Long` | `0L` | Default buyer operation fee (in cents) pre-filled on new rounds. |
+| `defaultVeggieTransportFeeCents` | `Long` | `0L` | Default transport fee (in cents) pre-filled on new rounds. |
 
 ---
 
@@ -294,3 +304,19 @@ Tracks manual inventory changes and initial stock baselines in the `product_stoc
 * Creating a product or adjusting its stock records a corresponding `ProductStockAdjustment` entry.
 * When upgrading existing databases to Room v17+, migration seeding establishes an initial stock baseline so historical timelines remain consistent.
 * The Product History modal aggregates `STOCK_ADJUSTMENT`, `PURCHASE`, and `CANCELLATION` events in chronological pages (`25`, `50`, or `100` entries per page) with a computed `stockAfter` column.
+
+---
+
+## 🥬 10. Veggie Orders
+
+Defined in [`VeggieModels.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/domain/model/VeggieModels.kt).
+
+Manages recurring weekly produce ordering rounds, dual-unit catalogs, and proportional market settlement:
+
+* **`VeggieUnitType`:** Defines ordering and delivery units (`id`, `name`, `allowDecimals`, `isActive`).
+* **`VeggieProduct`:** Catalog item (`id`, `name`, `description`, `estimatedPriceCents`, `unitTypeId`, optional `deliveryUnitTypeId`, `imageFileName`, `excludeFromBuyerPdf`, `isActive`, `isDeleted`).
+* **`VeggieOrderRound`:** Weekly round (`OPEN`, `CLOSED`, `SETTLED`) with `buyerOperationFeeCents`, `transportFeeCents`, optional `transporterUserId`, PDF export timestamps (`buyerPdfExportedAt`, `workerPdfExportedAt`, `buyerPortalPdfExportedAt`), and `ordersUpdatedAt` (tracks whether orders changed after the last Buyer Portal PDF export).
+* **`VeggieRoundProductSettlement`:** Per-product market settlement record (`marketUnitPriceCents`, `totalSpentCents`).
+* **`VeggieOrderEntry`:** Per-user, per-product order line with snapshotted product/unit names, `orderedQuantityScaled`, `actualQuantityScaled`, `effectiveUnitPriceCents`, and `finalItemTotalCents`. Quantities use fixed-point scaling (`VEGGIE_QTY_SCALE = 1000L`, e.g., `1,5` → `1500L`).
+
+👉 **For round lifecycle rules, auto-open scheduling, Largest Remainder settlement math, and Customer Portal integration, see [Veggie Orders & Customer Network Portal](VEGGIE_ORDERS.md).**

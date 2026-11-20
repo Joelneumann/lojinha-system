@@ -50,6 +50,8 @@ fun AdminProductsTabScreen(
     onRequestExpandProduct: (String) -> Unit,
     onUnsavedStateChanged: (Boolean) -> Unit,
     onAddToShoppingList: ((Product) -> Unit)? = null,
+    onExportCsv: (() -> Unit)? = null,
+    onExportProductHistoryCsv: ((Product) -> Unit)? = null,
     onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
     isExternalModalOpen: Boolean = false,
     focusTrigger: Int = 0
@@ -172,6 +174,7 @@ fun AdminProductsTabScreen(
             onSearchSubmitted = openFirstResult,
             actionButtonText = strings.addProduct,
             onActionButtonClick = viewModel::openNewProductModal,
+            onExportCsv = onExportCsv,
             focusRequester = searchFocusRequester,
             sortContent = {
                 ProductSortButton(
@@ -298,12 +301,14 @@ fun AdminProductsTabScreen(
     }
 
     if (historyProduct != null) {
+        val targetProduct = historyProduct!!
         ProductHistoryDialog(
-            product = historyProduct!!,
+            product = targetProduct,
             historyResult = historyResult,
             isLoading = isLoadingHistory,
             onPageChange = viewModel::setHistoryPage,
             onPageSizeChange = viewModel::setHistoryPageSize,
+            onExportCsv = onExportProductHistoryCsv?.let { { it(targetProduct) } },
             onDismiss = { viewModel.closeProductHistoryModal() }
         )
     }

@@ -248,4 +248,45 @@ class TransactionHistoryViewModelTest {
             testScope.cancel()
         }
     }
+
+    @Test
+    fun testExportPdfModal_openAndClose() = runBlocking {
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val txRepo = FakeTransactionRepository().apply {
+            transactions.add(
+                Transaction(
+                    id = "tx-pdf-1",
+                    userId = "user-export",
+                    userNameSnapshot = "Export User",
+                    timestamp = 1000L,
+                    type = TransactionType.PURCHASE,
+                    totalAmount = -500L
+                )
+            )
+        }
+        val userRepo = TxFakeUserRepository()
+        val vm = TransactionHistoryViewModel(txRepo, userRepo, testScope)
+
+        try {
+            assertEquals(false, vm.showExportPdfModal.value)
+            assertEquals(emptyList(), vm.exportPdfTransactions.value)
+
+            vm.openExportPdfModal("user-export")
+            delay(50)
+
+            assertEquals(true, vm.showExportPdfModal.value)
+            assertEquals(1, vm.exportPdfTransactions.value.size)
+            assertEquals("tx-pdf-1", vm.exportPdfTransactions.value.first().id)
+
+            vm.setIsExportingPdf(true)
+            assertEquals(true, vm.isExportingPdf.value)
+
+            vm.closeExportPdfModal()
+            assertEquals(false, vm.showExportPdfModal.value)
+            assertEquals(emptyList(), vm.exportPdfTransactions.value)
+            assertEquals(false, vm.isExportingPdf.value)
+        } finally {
+            testScope.cancel()
+        }
+    }
 }

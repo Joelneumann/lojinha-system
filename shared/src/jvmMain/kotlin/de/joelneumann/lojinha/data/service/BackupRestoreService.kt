@@ -6,6 +6,7 @@ import androidx.room.useWriterConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.joelneumann.lojinha.data.database.AppDatabase
 import de.joelneumann.lojinha.data.database.Converters
+import de.joelneumann.lojinha.data.database.DatabaseFactory
 import de.joelneumann.lojinha.data.entity.AdminNoteEntity
 import de.joelneumann.lojinha.data.entity.BackupEntity
 import de.joelneumann.lojinha.data.entity.BillingListEntity
@@ -16,16 +17,27 @@ import de.joelneumann.lojinha.data.entity.SettingsEntity
 import de.joelneumann.lojinha.data.entity.ShoppingListItemEntity
 import de.joelneumann.lojinha.data.entity.TransactionEntity
 import de.joelneumann.lojinha.data.entity.UserEntity
+import de.joelneumann.lojinha.data.entity.VeggieOrderEntryEntity
+import de.joelneumann.lojinha.data.entity.VeggieOrderRoundEntity
+import de.joelneumann.lojinha.data.entity.VeggieProductEntity
+import de.joelneumann.lojinha.data.entity.VeggieRoundProductSettlementEntity
+import de.joelneumann.lojinha.data.entity.VeggieUnitTypeEntity
+import de.joelneumann.lojinha.data.entity.VeggieUserFavoriteEntity
 import de.joelneumann.lojinha.domain.model.Barcode
 import de.joelneumann.lojinha.domain.model.CsvImportResult
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SecondaryCurrency
+import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.TransactionType
 import de.joelneumann.lojinha.domain.model.UnitType
 import de.joelneumann.lojinha.domain.model.User
+import de.joelneumann.lojinha.domain.model.VeggieQuantityScaling
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
+import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
+import de.joelneumann.lojinha.ui.utils.isReservedAdminName
+import de.joelneumann.lojinha.ui.utils.normalizeUserName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.NonCancellable
@@ -35,10 +47,12 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class BackupRestoreService(
     private val db: AppDatabase,
-    private val dbFile: File = de.joelneumann.lojinha.data.database.DatabaseFactory.getDatabaseFile()
+    private val dbFile: File = de.joelneumann.lojinha.data.database.DatabaseFactory.getDatabaseFile(),
+    private val veggieImageDir: File = File(System.getProperty("user.home"), ".lojinha/veggie_images")
 ) {
 
     private fun getTimestampString(): String {
@@ -58,14 +72,15 @@ class BackupRestoreService(
         }
         require(dbFile.exists()) { "Database file not found at ${dbFile.absolutePath}" }
 
-        // SQLite VACUUM INTO requires target file to not exist prior to command execution
-        if (targetFile.exists()) {
-            targetFile.delete()
-        }
         targetFile.parentFile?.mkdirs()
+        // Write snapshot to a temporary file first so an error never destroys an existing OVERWRITE_LATEST backup
+        val tempFile = File(targetFile.parentFile, "${targetFile.name}.${System.currentTimeMillis()}.tmp")
+        if (tempFile.exists()) {
+            tempFile.delete()
+        }
 
         // Use native VACUUM INTO for an atomic, crash-consistent live snapshot with full WAL integration
-        val escapedPath = targetFile.absolutePath.replace("'", "''")
+        val escapedPath = tempFile.absolutePath.replace("'", "''")
         val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
         try {
             val busyStmt = connection.prepare("PRAGMA busy_timeout = 5000")
@@ -84,8 +99,18 @@ class BackupRestoreService(
             connection.close()
         }
 
-        if (!targetFile.exists()) {
-            throw IllegalStateException("Failed to create database snapshot at ${targetFile.absolutePath}")
+        if (!tempFile.exists()) {
+            throw IllegalStateException("Failed to create database snapshot at ${tempFile.absolutePath}")
+        }
+        try {
+            java.nio.file.Files.move(
+                tempFile.toPath(),
+                targetFile.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+            )
+        } catch (e: Exception) {
+            tempFile.delete()
+            throw e
         }
         targetFile
     }
@@ -134,16 +159,21 @@ class BackupRestoreService(
         writeMode: de.joelneumann.lojinha.domain.model.BackupWriteMode = de.joelneumann.lojinha.domain.model.BackupWriteMode.CREATE_NEW_FILE
     ): File = withContext(Dispatchers.IO) {
         require(destinationDir.exists() && destinationDir.isDirectory) { "Destination directory does not exist: ${destinationDir.absolutePath}" }
-        val folderName = if (writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST) {
+        val isOverwriteLatest = writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST
+        val folderName = if (isOverwriteLatest) {
             "lojinha_csv_export_latest"
         } else {
             "lojinha_csv_export_${getTimestampString()}"
         }
-        val exportFolder = File(destinationDir, folderName)
-        if (writeMode == de.joelneumann.lojinha.domain.model.BackupWriteMode.OVERWRITE_LATEST && exportFolder.exists()) {
-            exportFolder.deleteRecursively()
+        val finalFolder = File(destinationDir, folderName)
+        val exportFolder = if (isOverwriteLatest) {
+            File(destinationDir, "${folderName}.${System.currentTimeMillis()}.tmp").apply {
+                if (exists()) deleteRecursively()
+                mkdirs()
+            }
+        } else {
+            finalFolder.apply { mkdirs() }
         }
-        exportFolder.mkdirs()
 
         val converters = Converters()
 
@@ -170,11 +200,12 @@ class BackupRestoreService(
         // 2. Export Users
         val users = db.userDao().getAllUsers().map { it.toDomain() }
         val usersCsv = File(exportFolder, "users.csv")
-        val userLines = mutableListOf("id;name;balance;language;secondaryCurrency;pin;userBarcode;userBarcodeNumber;isActive;isDeleted;avatarType;avatarEmoji;avatarColor")
+        val userLines = mutableListOf("id;name;nickname;balance;language;secondaryCurrency;pin;userBarcode;userBarcodeNumber;isActive;isDeleted;avatarType;avatarEmoji;avatarColor;requirePinOnKiosk")
         users.forEach { u ->
             val line = listOf(
                 escapeCsv(u.id),
                 escapeCsv(u.name),
+                escapeCsv(u.nickname ?: ""),
                 escapeCsv(Formatting.formatBrlCanonical(u.balance)),
                 u.language.code,
                 u.secondaryCurrency.name,
@@ -185,7 +216,8 @@ class BackupRestoreService(
                 u.isDeleted.toString(),
                 escapeCsv(u.avatar.type.name),
                 escapeCsv(u.avatar.emoji),
-                escapeCsv(u.avatar.colorHex)
+                escapeCsv(u.avatar.colorHex),
+                u.requirePinOnKiosk.toString()
             ).joinToString(CSV_DELIMITER)
             userLines.add(line)
         }
@@ -291,7 +323,129 @@ class BackupRestoreService(
         }
         writeCsvFile(stockAdjCsv, stockAdjLines)
 
-        exportFolder
+        // 7. Export Veggie Products Catalog
+        val veggieUnitsById = db.veggieOrderDao().getAllUnitTypes().associateBy { it.id }
+        val veggieProducts = db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true)
+        val veggieProductsCsv = File(exportFolder, "veggie_products.csv")
+        val veggieProductLines = mutableListOf(
+            "id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;excludeFromBuyerPdf;isActive;isDeleted;deliveryUnitTypeId"
+        )
+        veggieProducts.forEach { vp ->
+            val unit = veggieUnitsById[vp.unitTypeId]
+            val line = listOf(
+                escapeCsv(vp.id),
+                escapeCsv(vp.name),
+                escapeCsv(vp.description ?: ""),
+                vp.estimatedPriceCents?.let { escapeCsv(Formatting.formatBrlCanonical(it)) } ?: "",
+                escapeCsv(vp.unitTypeId),
+                escapeCsv(unit?.name ?: ""),
+                (unit?.allowDecimals ?: false).toString(),
+                escapeCsv(vp.imageFileName ?: ""),
+                vp.excludeFromBuyerPdf.toString(),
+                vp.isActive.toString(),
+                vp.isDeleted.toString(),
+                escapeCsv(vp.deliveryUnitTypeId ?: "")
+            ).joinToString(CSV_DELIMITER)
+            veggieProductLines.add(line)
+        }
+        writeCsvFile(veggieProductsCsv, veggieProductLines)
+
+        // 8. Export Veggie Orders & Rounds
+        val veggieRounds = db.veggieOrderDao().getAllRounds()
+        val veggieOrdersCsv = File(exportFolder, "veggie_orders.csv")
+        val veggieOrderLines = mutableListOf(
+            "roundId;isoYear;weekOfYear;openedAt;closedAt;settledAt;status;buyerOperationFee;transportFee;transporterUserId;entryId;userId;userName;veggieProductId;veggieName;unitName;allowDecimals;orderedQuantity;actualQuantity;marketUnitPrice;productTotalSpent;effectiveUnitPrice;finalItemTotal;deliveryUnitName;deliveryAllowDecimals"
+        )
+        veggieRounds.forEach { r ->
+            val weekInfo = IsoWeekUtils.fromEpochMillis(r.openedAt)
+            val entries = db.veggieOrderDao().getRoundEntries(r.id)
+            val settlementsByProduct = db.veggieOrderDao().getRoundProductSettlements(r.id).associateBy { it.veggieProductId }
+            val buyerFeeStr = Formatting.formatBrlCanonical(r.buyerOperationFeeCents)
+            val transportFeeStr = Formatting.formatBrlCanonical(r.transportFeeCents)
+
+            if (entries.isEmpty()) {
+                val emptyRoundLine = listOf(
+                    escapeCsv(r.id),
+                    weekInfo.isoYear.toString(),
+                    weekInfo.weekOfYear.toString(),
+                    r.openedAt.toString(),
+                    r.closedAt?.toString() ?: "",
+                    r.settledAt?.toString() ?: "",
+                    r.status,
+                    escapeCsv(buyerFeeStr),
+                    escapeCsv(transportFeeStr),
+                    escapeCsv(r.transporterUserId ?: ""),
+                    "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
+                ).joinToString(CSV_DELIMITER)
+                veggieOrderLines.add(emptyRoundLine)
+            } else {
+                entries.forEach { e ->
+                    val settlement = settlementsByProduct[e.veggieProductId]
+                    val orderedStr = VeggieQuantityScaling.formatScaledQuantity(e.orderedQuantityScaled, e.allowDecimalsSnapshot)
+                    val actualStr = e.actualQuantityScaled?.let {
+                        VeggieQuantityScaling.formatScaledQuantity(it, e.deliveryAllowDecimalsSnapshot ?: e.allowDecimalsSnapshot)
+                    } ?: ""
+                    val marketUnitStr = settlement?.marketUnitPriceCents?.let { Formatting.formatBrlCanonical(it) } ?: ""
+                    val totalSpentStr = settlement?.totalSpentCents?.let { Formatting.formatBrlCanonical(it) } ?: ""
+                    val effectiveUnitStr = e.effectiveUnitPriceCents?.let { Formatting.formatBrlCanonical(it) } ?: ""
+                    val finalItemTotalStr = e.finalItemTotalCents?.let { Formatting.formatBrlCanonical(it) } ?: ""
+
+                    val entryLine = listOf(
+                        escapeCsv(r.id),
+                        weekInfo.isoYear.toString(),
+                        weekInfo.weekOfYear.toString(),
+                        r.openedAt.toString(),
+                        r.closedAt?.toString() ?: "",
+                        r.settledAt?.toString() ?: "",
+                        r.status,
+                        escapeCsv(buyerFeeStr),
+                        escapeCsv(transportFeeStr),
+                        escapeCsv(r.transporterUserId ?: ""),
+                        escapeCsv(e.id),
+                        escapeCsv(e.userId),
+                        escapeCsv(e.userNameSnapshot),
+                        escapeCsv(e.veggieProductId),
+                        escapeCsv(e.veggieNameSnapshot),
+                        escapeCsv(e.unitNameSnapshot),
+                        e.allowDecimalsSnapshot.toString(),
+                        escapeCsv(orderedStr),
+                        escapeCsv(actualStr),
+                        escapeCsv(marketUnitStr),
+                        escapeCsv(totalSpentStr),
+                        escapeCsv(effectiveUnitStr),
+                        escapeCsv(finalItemTotalStr),
+                        escapeCsv(e.deliveryUnitNameSnapshot ?: ""),
+                        e.deliveryAllowDecimalsSnapshot?.toString() ?: ""
+                    ).joinToString(CSV_DELIMITER)
+                    veggieOrderLines.add(entryLine)
+                }
+            }
+        }
+        writeCsvFile(veggieOrdersCsv, veggieOrderLines)
+
+        if (isOverwriteLatest) {
+            if (finalFolder.exists()) {
+                finalFolder.deleteRecursively()
+            }
+            if (!exportFolder.renameTo(finalFolder)) {
+                exportFolder.copyRecursively(finalFolder, overwrite = true)
+                exportFolder.deleteRecursively()
+            }
+        }
+        finalFolder
+    }
+
+    private fun getTableColumns(connection: androidx.sqlite.SQLiteConnection, tableName: String): Set<String> {
+        val cols = mutableSetOf<String>()
+        val stmt = connection.prepare("PRAGMA table_info($tableName)")
+        try {
+            while (stmt.step()) {
+                cols.add(stmt.getText(1).lowercase())
+            }
+        } finally {
+            stmt.close()
+        }
+        return cols
     }
 
     suspend fun restoreDbFromBackup(
@@ -312,10 +466,18 @@ class BackupRestoreService(
         val backupNotes = mutableListOf<AdminNoteEntity>()
         val backupStockAdjustments = mutableListOf<ProductStockAdjustmentEntity>()
         val backupShoppingListItems = mutableListOf<ShoppingListItemEntity>()
+        val backupVeggieUnitTypes = mutableListOf<VeggieUnitTypeEntity>()
+        val backupVeggieProducts = mutableListOf<VeggieProductEntity>()
+        val backupVeggieRounds = mutableListOf<VeggieOrderRoundEntity>()
+        val backupVeggieSettlements = mutableListOf<VeggieRoundProductSettlementEntity>()
+        val backupVeggieEntries = mutableListOf<VeggieOrderEntryEntity>()
+        val backupVeggieFavorites = mutableListOf<VeggieUserFavoriteEntity>()
         val tableNames = mutableSetOf<String>()
 
-        // 1. Read tables from backupFile using BundledSQLiteDriver (read-only C driver, cross-platform)
-        val connection = BundledSQLiteDriver().open(backupFile.absolutePath)
+        // 1. Copy backupFile to a temp file before opening so read-only media/shares don't fail or get sidecar files
+        val tempBackupCopy = File.createTempFile("lojinha_restore_", ".db")
+        backupFile.copyTo(tempBackupCopy, overwrite = true)
+        val connection = BundledSQLiteDriver().open(tempBackupCopy.absolutePath)
         try {
             // Quick integrity check before processing
             val integrityStmt = connection.prepare("PRAGMA quick_check")
@@ -347,20 +509,14 @@ class BackupRestoreService(
 
             // Read users
             if (tableNames.contains("users")) {
-                val userColumns = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(users)")
-                try {
-                    while (stmtCols.step()) {
-                        userColumns.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val userColumns = getTableColumns(connection, "users")
 
                 val hasIsDeleted = userColumns.contains("isdeleted")
                 val hasAvatarType = userColumns.contains("avatartype")
                 val hasAvatarEmoji = userColumns.contains("avataremoji")
                 val hasAvatarColor = userColumns.contains("avatarcolor")
+                val hasRequirePinOnKiosk = userColumns.contains("requirepinonkiosk")
+                val hasNickname = userColumns.contains("nickname")
 
                 val userQuery = buildString {
                     append("SELECT id, name, balance, language, secondaryCurrency, pin, userBarcode, userBarcodeNumber, isActive")
@@ -368,6 +524,8 @@ class BackupRestoreService(
                     if (hasAvatarType) append(", avatarType") else append(", 'INITIALS'")
                     if (hasAvatarEmoji) append(", avatarEmoji") else append(", '😀'")
                     if (hasAvatarColor) append(", avatarColor") else append(", '#1E293B'")
+                    if (hasRequirePinOnKiosk) append(", requirePinOnKiosk") else append(", 1")
+                    if (hasNickname) append(", nickname") else append(", NULL")
                     append(" FROM users")
                 }
 
@@ -390,7 +548,9 @@ class BackupRestoreService(
                             isDeleted = stmt.getLong(9) != 0L,
                             avatarType = if (stmt.isNull(10)) "INITIALS" else stmt.getText(10),
                             avatarEmoji = if (stmt.isNull(11)) "😀" else stmt.getText(11),
-                            avatarColor = if (stmt.isNull(12)) "#1E293B" else stmt.getText(12)
+                            avatarColor = if (stmt.isNull(12)) "#1E293B" else stmt.getText(12),
+                            requirePinOnKiosk = if (stmt.isNull(13)) true else stmt.getLong(13) != 0L,
+                            nickname = if (stmt.isNull(14)) null else stmt.getText(14).trim().ifBlank { null }
                         )
                         backupUsers.add(u)
                     }
@@ -401,15 +561,7 @@ class BackupRestoreService(
 
             // Read products
             if (tableNames.contains("products")) {
-                val productCols = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(products)")
-                try {
-                    while (stmtCols.step()) {
-                        productCols.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val productCols = getTableColumns(connection, "products")
 
                 val hasMarkup = productCols.contains("custommarkuppercent")
                 val query = buildString {
@@ -443,15 +595,7 @@ class BackupRestoreService(
 
             // Read transactions
             if (tableNames.contains("transactions")) {
-                val txColumns = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(transactions)")
-                try {
-                    while (stmtCols.step()) {
-                        txColumns.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val txColumns = getTableColumns(connection, "transactions")
 
                 val hasSnapshots = txColumns.contains("userbalancebefore") && txColumns.contains("userbalanceafter")
                 val query = if (hasSnapshots) {
@@ -489,15 +633,7 @@ class BackupRestoreService(
 
             // Read settings
             if (tableNames.contains("settings")) {
-                val settingsColumns = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(settings)")
-                try {
-                    while (stmtCols.step()) {
-                        settingsColumns.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val settingsColumns = getTableColumns(connection, "settings")
 
                 val settingsQuery = buildString {
                     append("SELECT id, adminPasswordHash, globalMarkupPercent, usdExchangeRate, eurExchangeRate, inactivityTimeoutMinutes")
@@ -519,6 +655,13 @@ class BackupRestoreService(
                     append(if (settingsColumns.contains("lastexchangerateupdatetimestamp")) ", lastExchangeRateUpdateTimestamp" else ", NULL")
                     append(if (settingsColumns.contains("yellowbalancewarningthresholdcents")) ", yellowBalanceWarningThresholdCents" else ", 30000")
                     append(if (settingsColumns.contains("redbalancewarningthresholdcents")) ", redBalanceWarningThresholdCents" else ", 0")
+                    append(if (settingsColumns.contains("veggieautoopenenabled")) ", veggieAutoOpenEnabled" else ", 0")
+                    append(if (settingsColumns.contains("veggieautoopendayofweek")) ", veggieAutoOpenDayOfWeek" else ", 1")
+                    append(if (settingsColumns.contains("veggieautoopentime")) ", veggieAutoOpenTime" else ", '08:00'")
+                    append(if (settingsColumns.contains("defaultveggiebuyerfeecents")) ", defaultVeggieBuyerFeeCents" else ", 0")
+                    append(if (settingsColumns.contains("defaultveggietransportfeecents")) ", defaultVeggieTransportFeeCents" else ", 0")
+                    append(if (settingsColumns.contains("buyerpasswordhash")) ", buyerPasswordHash" else ", ''")
+                    append(if (settingsColumns.contains("buyerloginname")) ", buyerLoginName" else ", 'Buyer'")
                     append(" FROM settings LIMIT 1")
                 }
 
@@ -552,7 +695,14 @@ class BackupRestoreService(
                             autoUpdateExchangeRates = if (stmt.isNull(20)) true else stmt.getLong(20) != 0L,
                             lastExchangeRateUpdateTimestamp = if (stmt.isNull(21)) null else stmt.getLong(21),
                             yellowBalanceWarningThresholdCents = if (stmt.isNull(22)) 300_00L else stmt.getLong(22),
-                            redBalanceWarningThresholdCents = if (stmt.isNull(23)) 0L else stmt.getLong(23)
+                            redBalanceWarningThresholdCents = if (stmt.isNull(23)) 0L else stmt.getLong(23),
+                            veggieAutoOpenEnabled = if (stmt.isNull(24)) false else stmt.getLong(24) != 0L,
+                            veggieAutoOpenDayOfWeek = if (stmt.isNull(25)) 1 else stmt.getLong(25).toInt(),
+                            veggieAutoOpenTime = if (stmt.isNull(26)) "08:00" else stmt.getText(26),
+                            defaultVeggieBuyerFeeCents = if (stmt.isNull(27)) 0L else stmt.getLong(27),
+                            defaultVeggieTransportFeeCents = if (stmt.isNull(28)) 0L else stmt.getLong(28),
+                            buyerPasswordHash = if (stmt.isNull(29)) "" else stmt.getText(29),
+                            buyerLoginName = if (stmt.isNull(30)) SystemSettings.DEFAULT_BUYER_LOGIN_NAME else stmt.getText(30).trim().ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
                         )
                     }
                 } finally {
@@ -562,15 +712,7 @@ class BackupRestoreService(
 
             // Read backup_routines
             if (tableNames.contains("backup_routines")) {
-                val routineColumns = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(backup_routines)")
-                try {
-                    while (stmtCols.step()) {
-                        routineColumns.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val routineColumns = getTableColumns(connection, "backup_routines")
 
                 val hasWriteMode = routineColumns.contains("writemode")
                 val routineQuery = buildString {
@@ -605,15 +747,7 @@ class BackupRestoreService(
 
             // Read billing_lists
             if (tableNames.contains("billing_lists")) {
-                val listCols = mutableSetOf<String>()
-                val stmtCols = connection.prepare("PRAGMA table_info(billing_lists)")
-                try {
-                    while (stmtCols.step()) {
-                        listCols.add(stmtCols.getText(1).lowercase())
-                    }
-                } finally {
-                    stmtCols.close()
-                }
+                val listCols = getTableColumns(connection, "billing_lists")
 
                 val hasComment = listCols.contains("comment")
                 val hasIsDeleted = listCols.contains("isdeleted")
@@ -730,8 +864,185 @@ class BackupRestoreService(
                     stmt.close()
                 }
             }
+
+            // Read veggie_unit_types
+            if (tableNames.contains("veggie_unit_types")) {
+                val stmt = connection.prepare("SELECT id, name, allowDecimals, isActive, updatedAt FROM veggie_unit_types")
+                try {
+                    while (stmt.step()) {
+                        backupVeggieUnitTypes.add(
+                            VeggieUnitTypeEntity(
+                                id = stmt.getText(0),
+                                name = stmt.getText(1),
+                                allowDecimals = stmt.getLong(2) != 0L,
+                                isActive = stmt.getLong(3) != 0L,
+                                updatedAt = stmt.getLong(4)
+                            )
+                        )
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
+
+            // Read veggie_products
+            if (tableNames.contains("veggie_products")) {
+                val vpCols = getTableColumns(connection, "veggie_products")
+                val hasDeliveryUnit = vpCols.contains("deliveryunittypeid")
+                val hasExcludeFromBuyerPdf = vpCols.contains("excludefrombuyerpdf")
+                val stmt = connection.prepare(
+                    "SELECT id, name, description, estimatedPriceCents, unitTypeId, " +
+                        (if (hasDeliveryUnit) "deliveryUnitTypeId" else "NULL") +
+                        ", imageFileName, " +
+                        (if (hasExcludeFromBuyerPdf) "excludeFromBuyerPdf" else "0") +
+                        ", isActive, isDeleted, updatedAt FROM veggie_products"
+                )
+                try {
+                    while (stmt.step()) {
+                        backupVeggieProducts.add(
+                            VeggieProductEntity(
+                                id = stmt.getText(0),
+                                name = stmt.getText(1),
+                                description = if (stmt.isNull(2)) null else stmt.getText(2),
+                                estimatedPriceCents = if (stmt.isNull(3)) null else stmt.getLong(3),
+                                unitTypeId = stmt.getText(4),
+                                deliveryUnitTypeId = if (stmt.isNull(5)) null else stmt.getText(5),
+                                imageFileName = if (stmt.isNull(6)) null else stmt.getText(6),
+                                excludeFromBuyerPdf = stmt.getLong(7) != 0L,
+                                isActive = stmt.getLong(8) != 0L,
+                                isDeleted = stmt.getLong(9) != 0L,
+                                updatedAt = stmt.getLong(10)
+                            )
+                        )
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
+
+            // Read veggie_order_rounds
+            if (tableNames.contains("veggie_order_rounds")) {
+                val roundCols = getTableColumns(connection, "veggie_order_rounds")
+                val hasBuyerPdf = roundCols.contains("buyerpdfexportedat")
+                val hasBuyerPortalPdf = roundCols.contains("buyerportalpdfexportedat")
+                val hasWorkerPdf = roundCols.contains("workerpdfexportedat")
+                val hasOrdersUpdatedAt = roundCols.contains("ordersupdatedat")
+                val stmt = connection.prepare(
+                    "SELECT id, openedAt, closedAt, settledAt, status, buyerOperationFeeCents, transportFeeCents, transporterUserId, " +
+                        (if (hasBuyerPdf) "buyerPdfExportedAt" else "NULL") + ", " +
+                        (if (hasWorkerPdf) "workerPdfExportedAt" else "NULL") +
+                        ", updatedAt, " +
+                        (if (hasBuyerPortalPdf) "buyerPortalPdfExportedAt" else "NULL") + ", " +
+                        (if (hasOrdersUpdatedAt) "ordersUpdatedAt" else "0") +
+                        " FROM veggie_order_rounds"
+                )
+                try {
+                    while (stmt.step()) {
+                        backupVeggieRounds.add(
+                            VeggieOrderRoundEntity(
+                                id = stmt.getText(0),
+                                openedAt = stmt.getLong(1),
+                                closedAt = if (stmt.isNull(2)) null else stmt.getLong(2),
+                                settledAt = if (stmt.isNull(3)) null else stmt.getLong(3),
+                                status = stmt.getText(4),
+                                buyerOperationFeeCents = stmt.getLong(5),
+                                transportFeeCents = stmt.getLong(6),
+                                transporterUserId = if (stmt.isNull(7)) null else stmt.getText(7),
+                                buyerPdfExportedAt = if (stmt.isNull(8)) null else stmt.getLong(8),
+                                workerPdfExportedAt = if (stmt.isNull(9)) null else stmt.getLong(9),
+                                updatedAt = stmt.getLong(10),
+                                buyerPortalPdfExportedAt = if (stmt.isNull(11)) null else stmt.getLong(11),
+                                ordersUpdatedAt = if (stmt.isNull(12)) 0L else stmt.getLong(12)
+                            )
+                        )
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
+
+            // Read veggie_round_product_settlements
+            if (tableNames.contains("veggie_round_product_settlements")) {
+                val stmt = connection.prepare(
+                    "SELECT roundId, veggieProductId, marketUnitPriceCents, totalSpentCents, updatedAt FROM veggie_round_product_settlements"
+                )
+                try {
+                    while (stmt.step()) {
+                        backupVeggieSettlements.add(
+                            VeggieRoundProductSettlementEntity(
+                                roundId = stmt.getText(0),
+                                veggieProductId = stmt.getText(1),
+                                marketUnitPriceCents = if (stmt.isNull(2)) null else stmt.getLong(2),
+                                totalSpentCents = if (stmt.isNull(3)) null else stmt.getLong(3),
+                                updatedAt = stmt.getLong(4)
+                            )
+                        )
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
+
+            // Read veggie_order_entries
+            if (tableNames.contains("veggie_order_entries")) {
+                val entryCols = getTableColumns(connection, "veggie_order_entries")
+                val hasDelivUnit = entryCols.contains("deliveryunitnamesnapshot")
+                val hasDelivDec = entryCols.contains("deliveryallowdecimalssnapshot")
+                val stmt = connection.prepare(
+                    "SELECT id, roundId, userId, userNameSnapshot, veggieProductId, veggieNameSnapshot, unitNameSnapshot, allowDecimalsSnapshot, " +
+                        (if (hasDelivUnit) "deliveryUnitNameSnapshot" else "NULL") + ", " +
+                        (if (hasDelivDec) "deliveryAllowDecimalsSnapshot" else "NULL") +
+                        ", orderedQuantityScaled, actualQuantityScaled, effectiveUnitPriceCents, finalItemTotalCents, updatedAt FROM veggie_order_entries"
+                )
+                try {
+                    while (stmt.step()) {
+                        backupVeggieEntries.add(
+                            VeggieOrderEntryEntity(
+                                id = stmt.getText(0),
+                                roundId = stmt.getText(1),
+                                userId = stmt.getText(2),
+                                userNameSnapshot = stmt.getText(3),
+                                veggieProductId = stmt.getText(4),
+                                veggieNameSnapshot = stmt.getText(5),
+                                unitNameSnapshot = stmt.getText(6),
+                                allowDecimalsSnapshot = stmt.getLong(7) != 0L,
+                                deliveryUnitNameSnapshot = if (stmt.isNull(8)) null else stmt.getText(8),
+                                deliveryAllowDecimalsSnapshot = if (stmt.isNull(9)) null else stmt.getLong(9) != 0L,
+                                orderedQuantityScaled = stmt.getLong(10),
+                                actualQuantityScaled = if (stmt.isNull(11)) null else stmt.getLong(11),
+                                effectiveUnitPriceCents = if (stmt.isNull(12)) null else stmt.getLong(12),
+                                finalItemTotalCents = if (stmt.isNull(13)) null else stmt.getLong(13),
+                                updatedAt = stmt.getLong(14)
+                            )
+                        )
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
+
+            // Read veggie_user_favorites
+            if (tableNames.contains("veggie_user_favorites")) {
+                val stmt = connection.prepare("SELECT userId, veggieProductId, createdAt FROM veggie_user_favorites")
+                try {
+                    while (stmt.step()) {
+                        backupVeggieFavorites.add(
+                            VeggieUserFavoriteEntity(
+                                userId = stmt.getText(0),
+                                veggieProductId = stmt.getText(1),
+                                createdAt = stmt.getLong(2)
+                            )
+                        )
+                    }
+                } finally {
+                    stmt.close()
+                }
+            }
         } finally {
             connection.close()
+            tempBackupCopy.delete()
+            File("${tempBackupCopy.absolutePath}-wal").delete()
+            File("${tempBackupCopy.absolutePath}-shm").delete()
         }
 
         // 2. Create pre-restore safety snapshot before touching active database
@@ -747,6 +1058,12 @@ class BackupRestoreService(
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
                     // Clear tables in reverse dependency order (children first)
+                    db.veggieOrderDao().deleteAllFavorites()
+                    db.veggieOrderDao().deleteAllEntries()
+                    db.veggieOrderDao().deleteAllProductSettlements()
+                    db.veggieOrderDao().deleteAllRounds()
+                    db.veggieOrderDao().deleteAllVeggieProducts()
+                    db.veggieOrderDao().deleteAllUnitTypes()
                     db.productStockAdjustmentDao().deleteAllAdjustments()
                     db.adminNoteDao().deleteAllNotes()
                     db.shoppingListItemDao().deleteAllItems()
@@ -774,6 +1091,28 @@ class BackupRestoreService(
                     backupStockAdjustments.forEach { db.productStockAdjustmentDao().insertAdjustment(it) }
                     backupShoppingListItems.forEach { db.shoppingListItemDao().insertItem(it) }
 
+                    val unitsToInsert = if (backupVeggieUnitTypes.isNotEmpty()) {
+                        backupVeggieUnitTypes
+                    } else {
+                        DatabaseFactory.defaultVeggieUnitTypes()
+                    }
+                    db.veggieOrderDao().insertOrUpdateUnitTypes(unitsToInsert)
+                    if (backupVeggieProducts.isNotEmpty()) {
+                        db.veggieOrderDao().insertOrUpdateVeggieProducts(backupVeggieProducts)
+                    }
+                    if (backupVeggieRounds.isNotEmpty()) {
+                        db.veggieOrderDao().insertOrUpdateRounds(backupVeggieRounds)
+                    }
+                    if (backupVeggieSettlements.isNotEmpty()) {
+                        db.veggieOrderDao().insertOrUpdateProductSettlements(backupVeggieSettlements)
+                    }
+                    if (backupVeggieEntries.isNotEmpty()) {
+                        db.veggieOrderDao().insertOrUpdateEntries(backupVeggieEntries)
+                    }
+                    if (backupVeggieFavorites.isNotEmpty()) {
+                        db.veggieOrderDao().insertFavorites(backupVeggieFavorites)
+                    }
+
                     if (hasBackupRoutinesInBackup && !preserveExistingRoutines) {
                         backupRoutines.forEach { db.backupDao().insertOrUpdateBackup(it) }
                     }
@@ -783,9 +1122,21 @@ class BackupRestoreService(
                         } else {
                             backupSettings.adminPasswordHash
                         }
+                        val finalBuyerPassword = if (preserveCurrentAdminPassword && currentSettings != null) {
+                            currentSettings.buyerPasswordHash
+                        } else {
+                            backupSettings.buyerPasswordHash
+                        }
+                        val finalBuyerLoginName = if (preserveCurrentAdminPassword && currentSettings != null) {
+                            currentSettings.buyerLoginName.trim().ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
+                        } else {
+                            backupSettings.buyerLoginName.trim().ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
+                        }
                         val finalSettings = if (preserveExistingRoutines && currentSettings != null) {
                             backupSettings.copy(
                                 adminPasswordHash = finalPassword,
+                                buyerPasswordHash = finalBuyerPassword,
+                                buyerLoginName = finalBuyerLoginName,
                                 backupLocationPath = currentSettings.backupLocationPath,
                                 autoBackupEnabled = currentSettings.autoBackupEnabled,
                                 autoBackupFormat = currentSettings.autoBackupFormat,
@@ -800,7 +1151,11 @@ class BackupRestoreService(
                                 oneDriveTenant = currentSettings.oneDriveTenant
                             )
                         } else {
-                            backupSettings.copy(adminPasswordHash = finalPassword)
+                            backupSettings.copy(
+                                adminPasswordHash = finalPassword,
+                                buyerPasswordHash = finalBuyerPassword,
+                                buyerLoginName = finalBuyerLoginName
+                            )
                         }
                         db.settingsDao().insertOrUpdateSettings(finalSettings)
                     }
@@ -828,6 +1183,13 @@ class BackupRestoreService(
         withContext(NonCancellable) {
             db.useWriterConnection { transactor ->
                 transactor.immediateTransaction {
+                    db.veggieOrderDao().deleteAllFavorites()
+                    db.veggieOrderDao().deleteAllEntries()
+                    db.veggieOrderDao().deleteAllProductSettlements()
+                    db.veggieOrderDao().deleteAllRounds()
+                    db.veggieOrderDao().deleteAllVeggieProducts()
+                    db.veggieOrderDao().deleteAllUnitTypes()
+                    db.veggieOrderDao().insertOrUpdateUnitTypes(DatabaseFactory.defaultVeggieUnitTypes())
                     db.adminNoteDao().deleteAllNotes()
                     db.shoppingListItemDao().deleteAllItems()
                     db.billingListDao().deleteAllBillingListUsers()
@@ -845,6 +1207,13 @@ class BackupRestoreService(
                     val defaultSettings = SettingsEntity(
                         id = 1,
                         adminPasswordHash = finalPasswordHash,
+                        buyerPasswordHash = if (preserveAdminPassword) existingSettings?.buyerPasswordHash ?: "" else "",
+                        buyerLoginName = if (preserveAdminPassword) {
+                            existingSettings?.buyerLoginName?.trim()?.ifBlank { SystemSettings.DEFAULT_BUYER_LOGIN_NAME }
+                                ?: SystemSettings.DEFAULT_BUYER_LOGIN_NAME
+                        } else {
+                            SystemSettings.DEFAULT_BUYER_LOGIN_NAME
+                        },
                         globalMarkupPercent = 0.0,
                         usdExchangeRate = 0.18,
                         eurExchangeRate = 0.16,
@@ -870,17 +1239,29 @@ class BackupRestoreService(
                     db.settingsDao().insertOrUpdateSettings(defaultSettings)
                 }
             }
+            if (veggieImageDir.exists() && veggieImageDir.isDirectory) {
+                veggieImageDir.listFiles()?.forEach { file ->
+                    if (file.isFile) {
+                        file.delete()
+                    }
+                }
+            }
         }
     }
 
-    suspend fun importProductsFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
+    suspend fun importProductsFromCsv(
+        csvFile: File,
+        dryRun: Boolean = false,
+        language: Language = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
+    ): CsvImportResult = withContext(Dispatchers.IO) {
+        val strings = I18n.get(language)
         require(csvFile.exists() && csvFile.isFile) { "Product CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
         if (records.isEmpty()) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvEmptyError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvEmptyError))
         }
 
-        val header = records[0].map { it.trim().removePrefix("\uFEFF") }
+        val header = records[0].map { it.trim() }
         fun findHeaderIndex(vararg candidates: String): Int =
             header.indexOfFirst { col -> candidates.any { it.equals(col, ignoreCase = true) } }
 
@@ -894,7 +1275,7 @@ class BackupRestoreService(
         val activeIdx = findHeaderIndex("isActive", "active", "is_active")
 
         if (nameIdx == -1 || priceIdx == -1) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvMissingHeadersError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvMissingHeadersError))
         }
 
         val existingProducts = db.productDao().getAllProducts().associateBy { it.id }
@@ -1097,7 +1478,9 @@ class BackupRestoreService(
         val activeUsers = db.userDao().getAllUsers().count { !it.isDeleted }
         val activeProducts = db.productDao().getAllProducts().count { it.isActive }
         val transactions = db.transactionDao().getAllTransactions().size
-        activeUsers == 0 && activeProducts == 0 && transactions == 0
+        val veggieProducts = db.veggieOrderDao().getAllVeggieProducts(includeDeleted = false).size
+        val veggieRounds = db.veggieOrderDao().getAllRounds().size
+        activeUsers == 0 && activeProducts == 0 && transactions == 0 && veggieProducts == 0 && veggieRounds == 0
     }
 
     fun parseCurrencyToCents(input: String): Long? {
@@ -1162,19 +1545,25 @@ class BackupRestoreService(
         return if (isNegative) -cents else cents
     }
 
-    suspend fun importUsersFromCsv(csvFile: File, dryRun: Boolean = false): CsvImportResult = withContext(Dispatchers.IO) {
+    suspend fun importUsersFromCsv(
+        csvFile: File,
+        dryRun: Boolean = false,
+        language: Language = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
+    ): CsvImportResult = withContext(Dispatchers.IO) {
+        val strings = I18n.get(language)
         require(csvFile.exists() && csvFile.isFile) { "User CSV file does not exist: ${csvFile.absolutePath}" }
         val records = parseCsvRecords(csvFile.readText())
         if (records.isEmpty()) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvEmptyError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvEmptyError))
         }
 
-        val header = records[0].map { it.trim().removePrefix("\uFEFF") }
+        val header = records[0].map { it.trim() }
         fun findHeaderIndex(vararg candidates: String): Int =
             header.indexOfFirst { col -> candidates.any { it.equals(col, ignoreCase = true) } }
 
         val idIdx = findHeaderIndex("id", "userId", "user_id")
         val nameIdx = findHeaderIndex("name", "userName", "user_name")
+        val nicknameIdx = findHeaderIndex("nickname", "nick", "apelido", "spitzname")
         val balanceIdx = findHeaderIndex("balance", "kontostand", "saldo")
         val langIdx = findHeaderIndex("language", "lang", "sprache")
         val secCurrIdx = findHeaderIndex("secondaryCurrency", "secondary_currency", "secCurr")
@@ -1186,16 +1575,26 @@ class BackupRestoreService(
         val avatarTypeIdx = findHeaderIndex("avatarType", "avatar_type")
         val avatarEmojiIdx = findHeaderIndex("avatarEmoji", "avatar_emoji", "emoji")
         val avatarColorIdx = findHeaderIndex("avatarColor", "avatar_color", "color")
+        val requirePinOnKioskIdx = findHeaderIndex("requirePinOnKiosk", "require_pin_on_kiosk")
 
         if (nameIdx == -1) {
-            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(I18n.get().csvMissingNameHeaderError))
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvMissingNameHeaderError))
         }
 
+        val buyerLoginName = db.settingsDao().getSettings()?.toDomain()?.effectiveBuyerLoginName
+            ?: SystemSettings.DEFAULT_BUYER_LOGIN_NAME
         val existingUsers = db.userDao().getAllUsers().associateBy { it.id }
         val allExistingUserBarcodesMap = mutableMapOf<String, String>() // barcode string -> userId
+        val activeIdentifiersToUserId = mutableMapOf<String, String>() // normalized name/nickname -> userId
         existingUsers.values.forEach { eu ->
             eu.userBarcode?.let { if (it.isNotBlank()) allExistingUserBarcodesMap[it] = eu.id }
             eu.userBarcodeNumber?.let { if (it.isNotBlank()) allExistingUserBarcodesMap[it] = eu.id }
+            if (!eu.isDeleted) {
+                activeIdentifiersToUserId[eu.name.normalizeUserName()] = eu.id
+                eu.nickname?.trim()?.takeIf { it.isNotEmpty() }?.let { nick ->
+                    activeIdentifiersToUserId[nick.normalizeUserName()] = eu.id
+                }
+            }
         }
 
         var addedCount = 0
@@ -1218,6 +1617,10 @@ class BackupRestoreService(
             val name = cols[nameIdx].trim()
             if (name.isBlank()) {
                 warnings.add("Row ${i + 1}: Skipped user because name is blank.")
+                continue
+            }
+            if (name.isReservedAdminName(buyerLoginName)) {
+                warnings.add("Row ${i + 1} ('$name'): Skipped because name is reserved for system login.")
                 continue
             }
 
@@ -1263,7 +1666,7 @@ class BackupRestoreService(
             val langStr = if (langIdx != -1 && langIdx < cols.size && cols[langIdx].trim().isNotEmpty()) {
                 Language.fromCode(cols[langIdx].trim()).code
             } else {
-                existing?.language ?: Language.DE.code
+                existing?.language ?: Language.DEFAULT.code
             }
 
             val secCurrStr = if (secCurrIdx != -1 && secCurrIdx < cols.size && cols[secCurrIdx].trim().isNotEmpty()) {
@@ -1309,6 +1712,17 @@ class BackupRestoreService(
                 cols[avatarColorIdx].trim()
             } else {
                 existing?.avatarColor ?: "#1E293B"
+            }
+
+            val requirePinOnKioskStr = if (requirePinOnKioskIdx != -1 && requirePinOnKioskIdx < cols.size && cols[requirePinOnKioskIdx].trim().isNotEmpty()) {
+                cols[requirePinOnKioskIdx].trim()
+            } else {
+                ""
+            }
+            val requirePinOnKiosk = if (requirePinOnKioskStr.isNotEmpty()) {
+                parseBooleanFlexible(requirePinOnKioskStr) ?: existing?.requirePinOnKiosk ?: true
+            } else {
+                existing?.requirePinOnKiosk ?: true
             }
 
             val rawUserBarcode = if (userBarcodeIdx != -1 && userBarcodeIdx < cols.size) cols[userBarcodeIdx].trim() else ""
@@ -1369,9 +1783,51 @@ class BackupRestoreService(
                 null to null
             }
 
+            // Resolve nickname (preserve existing nickname when column is omitted; validate reserved & collisions)
+            val candidateNickname: String? = if (nicknameIdx != -1 && nicknameIdx < cols.size) {
+                cols[nicknameIdx].trim().ifBlank { null }?.let { rawNick ->
+                    if (rawNick.length > de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH) {
+                        warnings.add("Row ${i + 1} ('$name'): Nickname '$rawNick' truncated to ${de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH} characters.")
+                        rawNick.take(de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH)
+                    } else {
+                        rawNick
+                    }
+                }
+            } else {
+                existing?.nickname
+            }
+            var finalNickname = candidateNickname
+            if (!isDeleted) {
+                activeIdentifiersToUserId.entries.removeAll { it.value == userId }
+                val normName = name.normalizeUserName()
+                val nameOwner = activeIdentifiersToUserId[normName]
+                if (nameOwner != null && nameOwner != userId) {
+                    warnings.add("Row ${i + 1} ('$name'): Name collides with existing user '$nameOwner'.")
+                } else {
+                    activeIdentifiersToUserId[normName] = userId
+                }
+
+                if (finalNickname != null) {
+                    val normNick = finalNickname.normalizeUserName()
+                    if (finalNickname.isReservedAdminName(buyerLoginName)) {
+                        warnings.add("Row ${i + 1} ('$name'): Reserved nickname '$finalNickname' cleared.")
+                        finalNickname = null
+                    } else {
+                        val nickOwner = activeIdentifiersToUserId[normNick]
+                        if (nickOwner != null && nickOwner != userId) {
+                            warnings.add("Row ${i + 1} ('$name'): Duplicate nickname '$finalNickname' cleared.")
+                            finalNickname = null
+                        } else {
+                            activeIdentifiersToUserId[normNick] = userId
+                        }
+                    }
+                }
+            }
+
             val userEntity = UserEntity(
                 id = userId,
                 name = name,
+                nickname = finalNickname,
                 balance = targetBalance,
                 language = langStr,
                 secondaryCurrency = secCurrStr,
@@ -1382,7 +1838,8 @@ class BackupRestoreService(
                 isDeleted = isDeleted,
                 avatarType = avatarTypeStr,
                 avatarEmoji = avatarEmojiStr,
-                avatarColor = avatarColorStr
+                avatarColor = avatarColorStr,
+                requirePinOnKiosk = requirePinOnKiosk
             )
 
             usersToInsert.add(userEntity)
@@ -1407,6 +1864,283 @@ class BackupRestoreService(
             addedCount = addedCount,
             updatedCount = updatedCount,
             strippedBarcodesCount = strippedBarcodesCount,
+            errors = errors,
+            warnings = warnings
+        )
+    }
+
+    suspend fun importVeggieProductsFromCsv(
+        csvFile: File,
+        dryRun: Boolean = false,
+        language: Language = de.joelneumann.lojinha.ui.i18n.LanguageManager.currentLanguage
+    ): CsvImportResult = withContext(Dispatchers.IO) {
+        val strings = I18n.get(language)
+        require(csvFile.exists() && csvFile.isFile) { "Veggie Product CSV file does not exist: ${csvFile.absolutePath}" }
+        val records = parseCsvRecords(csvFile.readText())
+        if (records.isEmpty()) {
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvEmptyError))
+        }
+
+        val header = records[0].map { it.trim() }
+        fun findHeaderIndex(vararg candidates: String): Int =
+            header.indexOfFirst { col -> candidates.any { it.equals(col, ignoreCase = true) } }
+
+        val idIdx = findHeaderIndex("id", "veggieProductId", "productId", "veggie_product_id")
+        val nameIdx = findHeaderIndex("name", "productName", "veggieName", "title")
+        val descIdx = findHeaderIndex("description", "desc", "beschreibung")
+        val priceIdx = findHeaderIndex("estimatedPrice", "price", "basePrice", "estimated_price", "estimatedPriceCents")
+        val unitIdIdx = findHeaderIndex("unitTypeId", "unit_type_id")
+        val deliveryUnitIdIdx = findHeaderIndex("deliveryUnitTypeId", "delivery_unit_type_id")
+        val unitNameIdx = findHeaderIndex("unitTypeName", "unitType", "unit", "type", "unit_type", "unit_name")
+        val allowDecimalsIdx = findHeaderIndex("allowDecimals", "allow_decimals", "decimals")
+        val imageIdx = findHeaderIndex("imageFileName", "image", "image_file_name")
+        val excludeBuyerPdfIdx = findHeaderIndex("excludeFromBuyerPdf", "exclude_from_buyer_pdf")
+        val activeIdx = findHeaderIndex("isActive", "active", "is_active")
+        val deletedIdx = findHeaderIndex("isDeleted", "deleted", "is_deleted")
+
+        if (nameIdx == -1) {
+            return@withContext CsvImportResult(0, 0, 0, 0, errors = listOf(strings.csvMissingNameHeaderError))
+        }
+
+        val importTimestamp = System.currentTimeMillis()
+        val existingUnitsList = db.veggieOrderDao().getAllUnitTypes().toMutableList()
+        if (existingUnitsList.isEmpty()) {
+            existingUnitsList.addAll(DatabaseFactory.defaultVeggieUnitTypes(importTimestamp))
+        }
+        val unitsById = existingUnitsList.associateBy { it.id }.toMutableMap()
+        val newUnitsToInsert = mutableListOf<VeggieUnitTypeEntity>()
+        val warnings = mutableListOf<String>()
+        val errors = mutableListOf<String>()
+
+        fun ensureActiveUnit(unit: VeggieUnitTypeEntity): VeggieUnitTypeEntity {
+            if (!unit.isActive) {
+                val reactivated = unit.copy(isActive = true, updatedAt = importTimestamp)
+                unitsById[reactivated.id] = reactivated
+                newUnitsToInsert.removeAll { it.id == reactivated.id }
+                newUnitsToInsert.add(reactivated)
+                return reactivated
+            }
+            return unit
+        }
+
+        fun resolveUnitType(
+            rowNum: Int,
+            productName: String,
+            rawUnitId: String,
+            rawUnitName: String,
+            rawAllowDecimals: Boolean?,
+            existingUnitTypeId: String?
+        ): VeggieUnitTypeEntity {
+            if (rawUnitId.isNotEmpty()) {
+                unitsById[rawUnitId]?.let { return ensureActiveUnit(it) }
+            }
+            if (rawUnitName.isNotEmpty()) {
+                // Direct name match
+                unitsById.values.firstOrNull { it.name.equals(rawUnitName, ignoreCase = true) }?.let { return ensureActiveUnit(it) }
+                // Common alias match
+                val aliasId = when (rawUnitName.lowercase()) {
+                    "kg", "kilo", "kilogram", "weight", "g", "gram" -> "unit-kg"
+                    "unit", "un", "pc", "pcs", "piece", "stk", "unidade" -> "unit-piece"
+                    "pack", "pkg", "pacote", "packung" -> "unit-pack"
+                    "bunch", "maço", "maco", "bund" -> "unit-bunch"
+                    else -> null
+                }
+                if (aliasId != null) {
+                    unitsById[aliasId]?.let { return ensureActiveUnit(it) }
+                }
+                // Auto-create new custom unit type
+                val slug = rawUnitName.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+                var newId = if (rawUnitId.isNotEmpty()) {
+                    rawUnitId
+                } else {
+                    "unit-imp-${slug.ifEmpty { rawUnitName.hashCode().toUInt().toString(16) }}"
+                }
+                if (unitsById.containsKey(newId)) {
+                    newId = "$newId-${UUID.randomUUID().toString().take(6)}"
+                }
+                val created = VeggieUnitTypeEntity(
+                    id = newId,
+                    name = rawUnitName,
+                    allowDecimals = rawAllowDecimals ?: false,
+                    isActive = true,
+                    updatedAt = importTimestamp
+                )
+                unitsById[created.id] = created
+                newUnitsToInsert.add(created)
+                return created
+            }
+            if (rawUnitId.isNotEmpty()) {
+                warnings.add("Row $rowNum ('$productName'): Unknown unitTypeId '$rawUnitId' with no unitTypeName; fell back to default unit.")
+            }
+            if (existingUnitTypeId != null) {
+                unitsById[existingUnitTypeId]?.let { return ensureActiveUnit(it) }
+            }
+            val fallback = unitsById["unit-piece"] ?: existingUnitsList.first()
+            return ensureActiveUnit(fallback)
+        }
+
+        val existingProductsList = db.veggieOrderDao().getAllVeggieProducts(includeDeleted = true)
+        val existingById = existingProductsList.associateBy { it.id }.toMutableMap()
+        val existingByNameLower = existingProductsList
+            .sortedBy { !it.isDeleted } // Put active (!isDeleted) last so associateBy prefers active products
+            .associateBy { it.name.trim().lowercase() }
+            .toMutableMap()
+
+        var addedCount = 0
+        var updatedCount = 0
+        val productsToInsertById = linkedMapOf<String, VeggieProductEntity>()
+        val addedIdsInCsv = mutableSetOf<String>()
+        val updatedIdsInCsv = mutableSetOf<String>()
+
+        for (i in 1 until records.size) {
+            val cols = records[i]
+            if (cols.size <= nameIdx) {
+                warnings.add("Row ${i + 1}: Skipped due to missing columns.")
+                continue
+            }
+            fun col(idx: Int): String = if (idx != -1 && idx < cols.size) cols[idx].trim() else ""
+
+            val rawId = col(idIdx)
+            val name = cols[nameIdx].trim()
+            if (name.isBlank()) {
+                warnings.add("Row ${i + 1}: Skipped veggie product because name is blank.")
+                continue
+            }
+
+            val existing = if (rawId.isNotEmpty()) {
+                existingById[rawId]
+            } else {
+                existingByNameLower[name.lowercase()]
+            }
+            val isExisting = existing != null
+            val productId = when {
+                rawId.isNotEmpty() -> rawId
+                existing != null -> existing.id
+                else -> "vp-imp-${UUID.randomUUID()}"
+            }
+
+            val description = if (descIdx != -1 && descIdx < cols.size) {
+                col(descIdx).takeIf { it.isNotEmpty() }
+            } else {
+                existing?.description
+            }
+
+            // Optional estimated price (null if blank and not existing)
+            val priceStr = col(priceIdx)
+            val estimatedPriceCents: Long? = if (priceStr.isNotEmpty()) {
+                val parsed = parseCurrencyToCents(priceStr)
+                if (parsed == null) {
+                    val fallbackNote = if (existing?.estimatedPriceCents != null) "Kept existing price." else "Price left empty."
+                    warnings.add("Row ${i + 1} ('$name'): Invalid price '$priceStr'. $fallbackNote")
+                    existing?.estimatedPriceCents
+                } else if (parsed < 0L) {
+                    warnings.add("Row ${i + 1} ('$name'): Negative price '$priceStr' adjusted to 0,00.")
+                    0L
+                } else {
+                    parsed
+                }
+            } else if (priceIdx != -1) {
+                // Price column present in CSV but cell is intentionally blank -> unknown price (null)
+                null
+            } else {
+                existing?.estimatedPriceCents
+            }
+
+            val rawUnitId = col(unitIdIdx)
+            val rawUnitName = col(unitNameIdx)
+            val rawAllowDecimals = col(allowDecimalsIdx).takeIf { it.isNotEmpty() }?.let { parseBooleanFlexible(it) }
+            val resolvedUnit = resolveUnitType(i + 1, name, rawUnitId, rawUnitName, rawAllowDecimals, existing?.unitTypeId)
+
+            val imageFileName = col(imageIdx).takeIf { it.isNotEmpty() } ?: existing?.imageFileName
+
+            val isDeleted = col(deletedIdx).takeIf { it.isNotEmpty() }
+                ?.let { parseBooleanFlexible(it) }
+                ?: existing?.isDeleted
+                ?: false
+
+            val isActive = if (isDeleted) {
+                false
+            } else {
+                col(activeIdx).takeIf { it.isNotEmpty() }
+                    ?.let { parseBooleanFlexible(it) }
+                    ?: existing?.isActive
+                    ?: true
+            }
+
+            val deliveryUnitTypeId = if (deliveryUnitIdIdx != -1 && deliveryUnitIdIdx < cols.size) {
+                val rawDeliveryUnitId = col(deliveryUnitIdIdx)
+                if (rawDeliveryUnitId.isEmpty()) {
+                    null
+                } else {
+                    val matched = unitsById[rawDeliveryUnitId]
+                    if (matched != null) {
+                        ensureActiveUnit(matched).id
+                    } else {
+                        warnings.add("Row ${i + 1} ('$name'): Unknown deliveryUnitTypeId '$rawDeliveryUnitId'. Kept existing delivery unit.")
+                        existing?.deliveryUnitTypeId
+                    }
+                }
+            } else {
+                existing?.deliveryUnitTypeId
+            }
+
+            val excludeFromBuyerPdf = if (excludeBuyerPdfIdx != -1 && excludeBuyerPdfIdx < cols.size && col(excludeBuyerPdfIdx).isNotEmpty()) {
+                parseBooleanFlexible(col(excludeBuyerPdfIdx)) ?: existing?.excludeFromBuyerPdf ?: false
+            } else {
+                existing?.excludeFromBuyerPdf ?: false
+            }
+
+            val entity = VeggieProductEntity(
+                id = productId,
+                name = name,
+                description = description,
+                estimatedPriceCents = estimatedPriceCents,
+                unitTypeId = resolvedUnit.id,
+                deliveryUnitTypeId = deliveryUnitTypeId,
+                imageFileName = imageFileName,
+                excludeFromBuyerPdf = excludeFromBuyerPdf,
+                isActive = isActive,
+                isDeleted = isDeleted,
+                updatedAt = importTimestamp + i
+            )
+            if (productsToInsertById.containsKey(productId)) {
+                warnings.add("Row ${i + 1} ('$name'): Duplicate product in CSV; overwriting earlier row.")
+            } else if (isExisting) {
+                if (updatedIdsInCsv.add(productId)) updatedCount++
+            } else {
+                if (addedIdsInCsv.add(productId)) addedCount++
+            }
+            productsToInsertById[productId] = entity
+            existingById[productId] = entity
+            existingByNameLower[name.lowercase()] = entity
+        }
+        val productsToInsert = productsToInsertById.values.toList()
+
+        if (!dryRun && (productsToInsert.isNotEmpty() || newUnitsToInsert.isNotEmpty())) {
+            val safetyFile = File(dbFile.parentFile ?: File(System.getProperty("user.home"), ".lojinha"), "lojinha_room_pre_csv_import_safety.db")
+            if (dbFile.exists()) {
+                performDbSnapshot(safetyFile)
+            }
+            db.useWriterConnection { transactor ->
+                transactor.immediateTransaction {
+                    if (db.veggieOrderDao().getAllUnitTypes().isEmpty()) {
+                        db.veggieOrderDao().insertOrUpdateUnitTypes(DatabaseFactory.defaultVeggieUnitTypes(importTimestamp))
+                    }
+                    if (newUnitsToInsert.isNotEmpty()) {
+                        db.veggieOrderDao().insertOrUpdateUnitTypes(newUnitsToInsert)
+                    }
+                    if (productsToInsert.isNotEmpty()) {
+                        db.veggieOrderDao().insertOrUpdateVeggieProducts(productsToInsert)
+                    }
+                }
+            }
+        }
+
+        CsvImportResult(
+            totalProcessed = addedCount + updatedCount,
+            addedCount = addedCount,
+            updatedCount = updatedCount,
+            strippedBarcodesCount = 0,
             errors = errors,
             warnings = warnings
         )

@@ -13,6 +13,19 @@ import kotlin.math.round
 
 object Formatting {
 
+    fun decimalSeparator(language: Language = LanguageManager.currentLanguage): Char =
+        if (language == Language.EN) '.' else ','
+
+    private fun normalizeDecimalString(raw: String): String {
+        val clean = raw.trim()
+        return if (clean.contains('.') && clean.contains(',')) {
+            if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) clean.replace(".", "").replace(',', '.')
+            else clean.replace(",", "")
+        } else {
+            clean.replace(',', '.')
+        }
+    }
+
     fun formatIntegerWithGrouping(value: Long, groupingSeparator: Char): String {
         if (value == Long.MIN_VALUE) {
             return when (groupingSeparator) {
@@ -134,7 +147,11 @@ object Formatting {
         }
     }
 
-    fun formatStockForAdmin(stockQuantity: Long, unitType: UnitType): String {
+    fun formatStockForAdmin(
+        stockQuantity: Long,
+        unitType: UnitType,
+        language: Language = LanguageManager.currentLanguage
+    ): String {
         return when (unitType) {
             UnitType.PIECE -> stockQuantity.toString()
             UnitType.WEIGHT -> {
@@ -142,7 +159,7 @@ object Formatting {
                 if (kg == kg.toLong().toDouble()) {
                     kg.toLong().toString()
                 } else {
-                    kg.toString().replace('.', ',')
+                    kg.toString().replace('.', decimalSeparator(language))
                 }
             }
         }
@@ -151,7 +168,7 @@ object Formatting {
     fun parseAdminStockToDb(input: String, unitType: UnitType): Long? {
         val trimmed = input.trim()
         if (trimmed.isBlank()) return null
-        val normalized = trimmed.replace(',', '.')
+        val normalized = normalizeDecimalString(trimmed)
 
         return when (unitType) {
             UnitType.PIECE -> normalized.toLongOrNull()
@@ -175,7 +192,7 @@ object Formatting {
             .trim()
 
         if (cleaned.isBlank()) return null
-        val normalized = cleaned.replace(',', '.')
+        val normalized = normalizeDecimalString(cleaned)
         val valDouble = normalized.toDoubleOrNull() ?: return null
         if (valDouble <= 0.0) return null
 
@@ -191,11 +208,15 @@ object Formatting {
         return grams
     }
 
-    fun formatWeightForInput(grams: Long): String {
+    fun formatWeightForInput(
+        grams: Long,
+        language: Language = LanguageManager.currentLanguage
+    ): String {
         if (grams <= 0L) return ""
+        val sep = decimalSeparator(language)
         val kg = grams / 1000.0
-        val str = kg.toString().replace('.', ',')
-        return if (str.contains(',')) str else "$str,0"
+        val str = kg.toString().replace('.', sep)
+        return if (str.contains(sep)) str else "$str${sep}0"
     }
 
     enum class WeightUnitDisplay(val symbol: String) {
@@ -272,16 +293,22 @@ object Formatting {
         return if (value.isFinite()) value else null
     }
 
-    fun formatDecimal(value: Double): String {
+    fun formatDecimal(
+        value: Double,
+        language: Language = LanguageManager.currentLanguage
+    ): String {
         if (!value.isFinite()) return "0"
         val isWhole = value == kotlin.math.floor(value)
-        return if (isWhole) value.toLong().toString() else value.toString().replace('.', ',')
+        return if (isWhole) value.toLong().toString() else value.toString().replace('.', decimalSeparator(language))
     }
 
-    fun formatMarkupPercent(markup: Double): String {
+    fun formatMarkupPercent(
+        markup: Double,
+        language: Language = LanguageManager.currentLanguage
+    ): String {
         if (!markup.isFinite() || markup < 0.0) return "+0%"
         val isWhole = markup == kotlin.math.floor(markup) && !markup.isInfinite()
-        val formatted = if (isWhole) markup.toLong().toString() else markup.toString().replace('.', ',')
+        val formatted = if (isWhole) markup.toLong().toString() else markup.toString().replace('.', decimalSeparator(language))
         return "+$formatted%"
     }
 
@@ -294,12 +321,7 @@ object Formatting {
     fun parsePriceInputToCents(input: String): Long? {
         val clean = input.trim().removePrefix("R$").trim()
         if (clean.isBlank()) return null
-        val normalized = if (clean.contains('.') && clean.contains(',')) {
-            if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) clean.replace(".", "").replace(',', '.')
-            else clean.replace(",", "")
-        } else {
-            clean.replace(',', '.')
-        }
+        val normalized = normalizeDecimalString(clean)
         val d = normalized.toDoubleOrNull()
         if (d != null && d.isFinite() && d >= 0.0 && d <= 100_000.0) {
             return round(d * 100.0).toLong()
@@ -323,6 +345,21 @@ object Formatting {
 
         val average = (currentTotal + incomingTotal) / totalUnits
         return round(average).toLong()
+    }
+
+    /**
+     * Shortens long names for narrow matrix columns (e.g. "Maria Aparecida Silva" -> "Maria S.").
+     */
+    fun formatShortName(fullName: String, maxChars: Int = 14): String {
+        val trimmed = fullName.trim()
+        if (trimmed.length <= maxChars) return trimmed
+        val tokens = trimmed.split("\\s+".toRegex()).filter { it.isNotBlank() }
+        if (tokens.size <= 1) return trimmed.take((maxChars - 1).coerceAtLeast(1)) + "."
+        val first = tokens.first()
+        val last = tokens.last()
+        val candidate = "$first ${last.first().uppercaseChar()}."
+        if (candidate.length <= maxChars) return candidate
+        return candidate.take((maxChars - 1).coerceAtLeast(1)) + "."
     }
 }
 
