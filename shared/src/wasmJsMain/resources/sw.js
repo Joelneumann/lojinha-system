@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lojinha-offline-v1';
+const CACHE_NAME = 'lojinha-offline-v2';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE_ASSETS = [
     OFFLINE_URL,
@@ -38,14 +38,24 @@ self.addEventListener('fetch', (event) => {
 
     if (request.mode === 'navigate') {
         event.respondWith(
-            fetch(request).catch(async () => {
-                const cache = await caches.open(CACHE_NAME);
-                const cached = await cache.match(OFFLINE_URL);
-                return cached || new Response(
-                    'Lojinha Kiosk is offline. Please start the Lojinha Desktop application.',
-                    { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
-                );
-            })
+            fetch(request)
+                .then(async (response) => {
+                    // Treat upstream gateway/tunnel errors (e.g., Cloudflare 502/503/504/530) as offline
+                    if (response.status >= 502) {
+                        const cache = await caches.open(CACHE_NAME);
+                        const cached = await cache.match(OFFLINE_URL);
+                        if (cached) return cached;
+                    }
+                    return response;
+                })
+                .catch(async () => {
+                    const cache = await caches.open(CACHE_NAME);
+                    const cached = await cache.match(OFFLINE_URL);
+                    return cached || new Response(
+                        'Lojinha Kiosk is offline. Please start the Lojinha Desktop application.',
+                        { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+                    );
+                })
         );
     }
 });

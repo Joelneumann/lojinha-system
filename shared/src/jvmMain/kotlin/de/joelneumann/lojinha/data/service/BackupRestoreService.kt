@@ -35,6 +35,8 @@ import de.joelneumann.lojinha.domain.model.VeggieQuantityScaling
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.Formatting
 import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
+import de.joelneumann.lojinha.ui.utils.isReservedAdminName
+import de.joelneumann.lojinha.ui.utils.normalizeUserName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.NonCancellable
@@ -1545,6 +1547,7 @@ class BackupRestoreService(
 
         val idIdx = findHeaderIndex("id", "userId", "user_id")
         val nameIdx = findHeaderIndex("name", "userName", "user_name")
+        val nicknameIdx = findHeaderIndex("nickname", "nick", "apelido", "spitzname")
         val balanceIdx = findHeaderIndex("balance", "kontostand", "saldo")
         val langIdx = findHeaderIndex("language", "lang", "sprache")
         val secCurrIdx = findHeaderIndex("secondaryCurrency", "secondary_currency", "secCurr")
@@ -1564,9 +1567,16 @@ class BackupRestoreService(
 
         val existingUsers = db.userDao().getAllUsers().associateBy { it.id }
         val allExistingUserBarcodesMap = mutableMapOf<String, String>() // barcode string -> userId
+        val activeIdentifiersToUserId = mutableMapOf<String, String>() // normalized name/nickname -> userId
         existingUsers.values.forEach { eu ->
             eu.userBarcode?.let { if (it.isNotBlank()) allExistingUserBarcodesMap[it] = eu.id }
             eu.userBarcodeNumber?.let { if (it.isNotBlank()) allExistingUserBarcodesMap[it] = eu.id }
+            if (!eu.isDeleted) {
+                activeIdentifiersToUserId[eu.name.normalizeUserName()] = eu.id
+                eu.nickname?.trim()?.takeIf { it.isNotEmpty() }?.let { nick ->
+                    activeIdentifiersToUserId[nick.normalizeUserName()] = eu.id
+                }
+            }
         }
 
         var addedCount = 0
@@ -1589,6 +1599,10 @@ class BackupRestoreService(
             val name = cols[nameIdx].trim()
             if (name.isBlank()) {
                 warnings.add("Row ${i + 1}: Skipped user because name is blank.")
+                continue
+            }
+            if (name.isReservedAdminName()) {
+                warnings.add("Row ${i + 1} ('$name'): Skipped because name is reserved for system login.")
                 continue
             }
 
@@ -1751,9 +1765,51 @@ class BackupRestoreService(
                 null to null
             }
 
+            // Resolve nickname (preserve existing nickname when column is omitted; validate reserved & collisions)
+            val candidateNickname: String? = if (nicknameIdx != -1 && nicknameIdx < cols.size) {
+                cols[nicknameIdx].trim().ifBlank { null }?.let { rawNick ->
+                    if (rawNick.length > de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH) {
+                        warnings.add("Row ${i + 1} ('$name'): Nickname '$rawNick' truncated to ${de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH} characters.")
+                        rawNick.take(de.joelneumann.lojinha.domain.model.MAX_USER_NICKNAME_LENGTH)
+                    } else {
+                        rawNick
+                    }
+                }
+            } else {
+                existing?.nickname
+            }
+            var finalNickname = candidateNickname
+            if (!isDeleted) {
+                activeIdentifiersToUserId.entries.removeAll { it.value == userId }
+                val normName = name.normalizeUserName()
+                val nameOwner = activeIdentifiersToUserId[normName]
+                if (nameOwner != null && nameOwner != userId) {
+                    warnings.add("Row ${i + 1} ('$name'): Name collides with existing user '$nameOwner'.")
+                } else {
+                    activeIdentifiersToUserId[normName] = userId
+                }
+
+                if (finalNickname != null) {
+                    val normNick = finalNickname.normalizeUserName()
+                    if (finalNickname.isReservedAdminName()) {
+                        warnings.add("Row ${i + 1} ('$name'): Reserved nickname '$finalNickname' cleared.")
+                        finalNickname = null
+                    } else {
+                        val nickOwner = activeIdentifiersToUserId[normNick]
+                        if (nickOwner != null && nickOwner != userId) {
+                            warnings.add("Row ${i + 1} ('$name'): Duplicate nickname '$finalNickname' cleared.")
+                            finalNickname = null
+                        } else {
+                            activeIdentifiersToUserId[normNick] = userId
+                        }
+                    }
+                }
+            }
+
             val userEntity = UserEntity(
                 id = userId,
                 name = name,
+                nickname = finalNickname,
                 balance = targetBalance,
                 language = langStr,
                 secondaryCurrency = secCurrStr,
@@ -1820,6 +1876,7 @@ class BackupRestoreService(
         val unitNameIdx = findHeaderIndex("unitTypeName", "unitType", "unit", "type", "unit_type", "unit_name")
         val allowDecimalsIdx = findHeaderIndex("allowDecimals", "allow_decimals", "decimals")
         val imageIdx = findHeaderIndex("imageFileName", "image", "image_file_name")
+        val excludeBuyerPdfIdx = findHeaderIndex("excludeFromBuyerPdf", "exclude_from_buyer_pdf")
         val activeIdx = findHeaderIndex("isActive", "active", "is_active")
         val deletedIdx = findHeaderIndex("isDeleted", "deleted", "is_deleted")
 
@@ -2009,6 +2066,12 @@ class BackupRestoreService(
                 existing?.deliveryUnitTypeId
             }
 
+            val excludeFromBuyerPdf = if (excludeBuyerPdfIdx != -1 && excludeBuyerPdfIdx < cols.size && col(excludeBuyerPdfIdx).isNotEmpty()) {
+                parseBooleanFlexible(col(excludeBuyerPdfIdx)) ?: existing?.excludeFromBuyerPdf ?: false
+            } else {
+                existing?.excludeFromBuyerPdf ?: false
+            }
+
             val entity = VeggieProductEntity(
                 id = productId,
                 name = name,
@@ -2017,6 +2080,7 @@ class BackupRestoreService(
                 unitTypeId = resolvedUnit.id,
                 deliveryUnitTypeId = deliveryUnitTypeId,
                 imageFileName = imageFileName,
+                excludeFromBuyerPdf = excludeFromBuyerPdf,
                 isActive = isActive,
                 isDeleted = isDeleted,
                 updatedAt = importTimestamp + i

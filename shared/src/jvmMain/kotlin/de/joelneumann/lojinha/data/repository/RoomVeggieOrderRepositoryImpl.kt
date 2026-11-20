@@ -72,6 +72,12 @@ class RoomVeggieOrderRepositoryImpl(
             .sortedByAccentInsensitive { it.name }
     }
 
+    override suspend fun getAllVeggieProductsIncludingDeleted(): List<VeggieProduct> {
+        return veggieOrderDao.getAllVeggieProducts(includeDeleted = true)
+            .map { it.toDomain() }
+            .sortedByAccentInsensitive { it.name }
+    }
+
     override suspend fun getVeggieProductById(id: String): VeggieProduct? {
         return veggieOrderDao.getVeggieProductById(id)?.toDomain()
     }
@@ -375,11 +381,12 @@ class RoomVeggieOrderRepositoryImpl(
             val unit = product?.let { allUnits[it.unitTypeId] }
             val deliveryUnit = product?.deliveryUnitTypeId?.let { allUnits[it] }
             val allowDecimals = unit?.allowDecimals ?: existing?.allowDecimalsSnapshot ?: false
+            val clampedRawQty = rawQty.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED)
             // Round to nearest whole unit if decimals are disallowed
             val roundedQty = if (allowDecimals) {
-                rawQty
+                clampedRawQty
             } else {
-                (rawQty / VEGGIE_QTY_SCALE) * VEGGIE_QTY_SCALE
+                (clampedRawQty / VEGGIE_QTY_SCALE) * VEGGIE_QTY_SCALE
             }
             val isProductInactive = product == null || !product.isActive || product.isDeleted
             val normalizedQty = if (existing != null && isProductInactive) {
@@ -513,6 +520,8 @@ class RoomVeggieOrderRepositoryImpl(
         val existing = veggieOrderDao.getEntryByRoundUserProduct(entry.roundId, entry.userId, entry.veggieProductId)
         val merged = entry.copy(
             id = existing?.id ?: entry.id.ifBlank { generateUuid() },
+            orderedQuantityScaled = entry.orderedQuantityScaled.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED),
+            actualQuantityScaled = entry.actualQuantityScaled?.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED),
             updatedAt = now
         )
         veggieOrderDao.insertOrUpdateEntry(VeggieOrderEntryEntity.fromDomain(merged))
@@ -558,7 +567,7 @@ class RoomVeggieOrderRepositoryImpl(
             val newActual = actualQuantitiesByEntryId[entry.id]
             if (newActual != null) {
                 VeggieOrderEntryEntity.fromDomain(
-                    entry.copy(actualQuantityScaled = newActual.coerceAtLeast(0L), updatedAt = now)
+                    entry.copy(actualQuantityScaled = newActual.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED), updatedAt = now)
                 )
             } else {
                 VeggieOrderEntryEntity.fromDomain(entry)
@@ -566,8 +575,8 @@ class RoomVeggieOrderRepositoryImpl(
         }
 
         val updatedRound = round.copy(
-            buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
-            transportFeeCents = transportFeeCents.coerceAtLeast(0L),
+            buyerOperationFeeCents = buyerOperationFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+            transportFeeCents = transportFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
             transporterUserId = transporterUserId?.takeIf { it.isNotBlank() },
             buyerPdfExportedAt = null,
             workerPdfExportedAt = null,
@@ -575,7 +584,14 @@ class RoomVeggieOrderRepositoryImpl(
         )
 
         val settlementEntities = productSettlements.map {
-            VeggieRoundProductSettlementEntity.fromDomain(it.copy(roundId = roundId, updatedAt = now))
+            VeggieRoundProductSettlementEntity.fromDomain(
+                it.copy(
+                    roundId = roundId,
+                    marketUnitPriceCents = it.marketUnitPriceCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+                    totalSpentCents = it.totalSpentCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+                    updatedAt = now
+                )
+            )
         }
 
         veggieOrderDao.saveSettlementState(
@@ -603,13 +619,13 @@ class RoomVeggieOrderRepositoryImpl(
             .map { it.id }
             .toSet()
         val allowedProductIds = veggieOrderDao.getRoundEntries(roundId)
-            .filter { it.orderedQuantityScaled > 0L && it.veggieProductId !in excludedProductIds }
+            .filter { (it.orderedQuantityScaled > 0L || (it.actualQuantityScaled ?: 0L) > 0L) && it.veggieProductId !in excludedProductIds }
             .map { it.veggieProductId }
             .toSet()
 
         val now = currentTimeMillis()
         val updatedRound = round.copy(
-            buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
+            buyerOperationFeeCents = buyerOperationFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
             updatedAt = now
         )
         val sanitizedSettlements = productSettlements
@@ -618,8 +634,8 @@ class RoomVeggieOrderRepositoryImpl(
                 VeggieRoundProductSettlementEntity.fromDomain(
                     it.copy(
                         roundId = roundId,
-                        marketUnitPriceCents = it.marketUnitPriceCents?.coerceAtLeast(0L),
-                        totalSpentCents = it.totalSpentCents?.coerceAtLeast(0L),
+                        marketUnitPriceCents = it.marketUnitPriceCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+                        totalSpentCents = it.totalSpentCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
                         updatedAt = now
                     )
                 )
@@ -643,27 +659,50 @@ class RoomVeggieOrderRepositoryImpl(
         transporterUserId: String?,
         productSettlements: List<VeggieRoundProductSettlement>,
         actualQuantitiesByEntryId: Map<String, Long>,
-        settledAt: Long
+        settledAt: Long,
+        pendingEntries: List<VeggieOrderEntry>
     ): VeggieRoundSettlementResult? = mutationMutex.withLock {
         val roundEntity = veggieOrderDao.getRoundById(roundId) ?: return@withLock null
         val previousRound = roundEntity.toDomain()
-        val previousEntries = veggieOrderDao.getRoundEntries(roundId).map { it.toDomain() }
+        val dbEntries = veggieOrderDao.getRoundEntries(roundId).map { it.toDomain() }
 
         val now = if (settledAt > 0L) settledAt else currentTimeMillis()
+        // Merge any staged pendingEntries atomically (reusing existing entry IDs on (userId, veggieProductId) match)
+        val mergedPendingEntries = pendingEntries.map { pending ->
+            val existing = dbEntries.find { it.userId == pending.userId && it.veggieProductId == pending.veggieProductId }
+            pending.copy(
+                id = existing?.id ?: pending.id.ifBlank { generateUuid() },
+                roundId = roundId,
+                orderedQuantityScaled = pending.orderedQuantityScaled.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED),
+                actualQuantityScaled = pending.actualQuantityScaled?.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED),
+                updatedAt = now
+            )
+        }
+        val previousEntries = mergedPendingEntries.fold(dbEntries) { acc, pending ->
+            acc.filterNot { it.userId == pending.userId && it.veggieProductId == pending.veggieProductId } + pending
+        }
+
         val entriesWithActuals = previousEntries.map { entry ->
             val actualQty = actualQuantitiesByEntryId[entry.id]
                 ?: entry.actualQuantityScaled
                 ?: entry.orderedQuantityScaled
-            entry.copy(actualQuantityScaled = actualQty.coerceAtLeast(0L), updatedAt = now)
+            entry.copy(actualQuantityScaled = actualQty.coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED), updatedAt = now)
         }
 
-        val settlementInputsByProduct = productSettlements.associateBy { it.veggieProductId }
+        val clampedBuyerFee = buyerOperationFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS)
+        val clampedTransportFee = transportFeeCents.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS)
+        val settlementInputsByProduct = productSettlements.associate {
+            it.veggieProductId to it.copy(
+                marketUnitPriceCents = it.marketUnitPriceCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS),
+                totalSpentCents = it.totalSpentCents?.coerceIn(0L, MAX_VEGGIE_MONEY_CENTS)
+            )
+        }
         val calculationResult = VeggieSettlementCalculator.calculateRoundSettlement(
             roundId = roundId,
             entries = entriesWithActuals,
             productSettlementInputs = settlementInputsByProduct,
-            buyerOperationFeeCents = buyerOperationFeeCents,
-            transportFeeCents = transportFeeCents,
+            buyerOperationFeeCents = clampedBuyerFee,
+            transportFeeCents = clampedTransportFee,
             transporterUserId = transporterUserId,
             timestamp = now
         )
@@ -801,11 +840,12 @@ class RoomVeggieOrderRepositoryImpl(
             status = VeggieRoundStatus.SETTLED,
             closedAt = previousRound.closedAt ?: now,
             settledAt = previousRound.settledAt ?: now,
-            buyerOperationFeeCents = buyerOperationFeeCents.coerceAtLeast(0L),
-            transportFeeCents = transportFeeCents.coerceAtLeast(0L),
+            buyerOperationFeeCents = clampedBuyerFee,
+            transportFeeCents = clampedTransportFee,
             transporterUserId = calculationResult.transporterUserId,
             buyerPdfExportedAt = null,
             workerPdfExportedAt = null,
+            ordersUpdatedAt = if (mergedPendingEntries.isNotEmpty()) now else previousRound.ordersUpdatedAt,
             updatedAt = now
         )
 

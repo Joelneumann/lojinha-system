@@ -20,7 +20,7 @@ data class BuyerVeggiePriceDraft(
     val marketPrices: Map<String, String> = emptyMap(),
     val totalSpent: Map<String, String> = emptyMap(),
     val manuallyEditedTotalSpentIds: Set<String> = emptySet(),
-    val buyerFeeInput: String = ""
+    val buyerFeeInput: String? = null
 )
 
 class BuyerVeggieViewModel(
@@ -68,6 +68,19 @@ class BuyerVeggieViewModel(
     private val _isErrorFeedback = MutableStateFlow(false)
     val isErrorFeedback: StateFlow<Boolean> = _isErrorFeedback.asStateFlow()
 
+    // Track only fields explicitly touched by the Buyer so SSE updates from Admin merge cleanly
+    // and saving never overwrites untouched Admin-entered prices with null.
+    private val dirtyMarketPriceIds = mutableSetOf<String>()
+    private val dirtyTotalSpentIds = mutableSetOf<String>()
+    private var dirtyBuyerFee = false
+    private var lastClosedRoundId: String? = null
+
+    private fun clearDirtyTracking() {
+        dirtyMarketPriceIds.clear()
+        dirtyTotalSpentIds.clear()
+        dirtyBuyerFee = false
+    }
+
     init {
         loadState(forceSyncDrafts = true)
         activeScope.launch {
@@ -104,18 +117,88 @@ class BuyerVeggieViewModel(
                 val previousRound = _roundState.value?.round
                 val newState = repository.getRoundState()
                 _roundState.value = newState
+                if (_isErrorFeedback.value && _feedbackMessage.value != null && previousRound == null) {
+                    _feedbackMessage.value = null
+                    _isErrorFeedback.value = false
+                }
 
                 val statusChanged = previousRound?.id != newState.round?.id ||
                     previousRound?.status != newState.round?.status
 
                 if (forceSyncDrafts || statusChanged || !_hasUnsavedChanges.value) {
                     applyServerDrafts(newState)
+                } else {
+                    mergeServerDraftsPreservingDirty(newState)
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                // Keep existing state on transient network errors; SSE/retry will recover
+                if (_roundState.value == null) {
+                    _isErrorFeedback.value = true
+                    _feedbackMessage.value = e.message ?: "Failed to load round state"
+                }
             } finally {
                 _isLoading.value = false
+            }
+        }
+    }
+
+    private fun mergeServerDraftsPreservingDirty(state: BuyerVeggieRoundStateResponse) {
+        val round = state.round
+        if (round == null || round.status != VeggieRoundStatus.CLOSED) {
+            applyServerDrafts(state)
+            return
+        }
+        val validIds = state.items.map { it.productId }.toSet()
+        dirtyMarketPriceIds.retainAll(validIds)
+        dirtyTotalSpentIds.retainAll(validIds)
+
+        val mergedPrices = _marketPrices.value.filterKeys { it in validIds }.toMutableMap()
+        val mergedSpent = _totalSpent.value.filterKeys { it in validIds }.toMutableMap()
+        val mergedManual = _manuallyEditedTotalSpentIds.value.filter { it in validIds }.toMutableSet()
+
+        state.items.forEach { item ->
+            if (item.productId !in dirtyMarketPriceIds) {
+                val priceCents = item.marketUnitPriceCents
+                if (priceCents != null) {
+                    mergedPrices[item.productId] = AdminVeggieViewModel.formatCentsToInput(priceCents)
+                } else {
+                    mergedPrices.remove(item.productId)
+                }
+            }
+            if (item.productId !in dirtyTotalSpentIds) {
+                val spentCents = item.totalSpentCents
+                if (spentCents != null) {
+                    mergedSpent[item.productId] = AdminVeggieViewModel.formatCentsToInput(spentCents)
+                    val autoSpent = if (!item.isDualUnit) {
+                        item.marketUnitPriceCents?.let { priceCents ->
+                            VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(priceCents, item.totalOrderedScaled)
+                        }
+                    } else null
+                    if (autoSpent == null || spentCents != autoSpent) {
+                        mergedManual.add(item.productId)
+                    } else {
+                        mergedManual.remove(item.productId)
+                    }
+                } else {
+                    mergedSpent.remove(item.productId)
+                    mergedManual.remove(item.productId)
+                }
+            } else if (!item.isDualUnit && item.productId !in mergedManual && item.productId in dirtyMarketPriceIds) {
+                val unitPriceCents = AdminVeggieViewModel.parseBrlInputToCents(mergedPrices[item.productId].orEmpty())
+                if (unitPriceCents != null && unitPriceCents >= 0L) {
+                    val autoSpent = VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(unitPriceCents, item.totalOrderedScaled)
+                    mergedSpent[item.productId] = AdminVeggieViewModel.formatCentsToInput(autoSpent)
+                }
+            }
+        }
+        _marketPrices.value = mergedPrices
+        _totalSpent.value = mergedSpent
+        _manuallyEditedTotalSpentIds.value = mergedManual
+        if (!dirtyBuyerFee) {
+            _buyerFeeInput.value = if (state.buyerOperationFeeCents > 0L) {
+                AdminVeggieViewModel.formatCentsToInput(state.buyerOperationFeeCents)
+            } else {
+                ""
             }
         }
     }
@@ -123,9 +206,13 @@ class BuyerVeggieViewModel(
     private fun applyServerDrafts(state: BuyerVeggieRoundStateResponse) {
         val round = state.round
         if (round == null || round.status != VeggieRoundStatus.CLOSED) {
-            if (round != null) {
-                onClearDraft?.invoke(round.id)
+            // Only clear localStorage draft when the round is settled/gone (round == null),
+            // NOT when an Admin temporarily reopens a CLOSED round to OPEN.
+            if (round == null) {
+                lastClosedRoundId?.let { onClearDraft?.invoke(it) }
+                lastClosedRoundId = null
             }
+            clearDirtyTracking()
             _marketPrices.value = emptyMap()
             _totalSpent.value = emptyMap()
             _manuallyEditedTotalSpentIds.value = emptySet()
@@ -134,6 +221,8 @@ class BuyerVeggieViewModel(
             return
         }
 
+        lastClosedRoundId = round.id
+        clearDirtyTracking()
         val priceMap = mutableMapOf<String, String>()
         val spentMap = mutableMapOf<String, String>()
         val manualSpent = mutableSetOf<String>()
@@ -144,9 +233,11 @@ class BuyerVeggieViewModel(
             }
             item.totalSpentCents?.let { spentCents ->
                 spentMap[item.productId] = AdminVeggieViewModel.formatCentsToInput(spentCents)
-                val autoSpent = item.marketUnitPriceCents?.let { priceCents ->
-                    VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(priceCents, item.totalOrderedScaled)
-                }
+                val autoSpent = if (!item.isDualUnit) {
+                    item.marketUnitPriceCents?.let { priceCents ->
+                        VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(priceCents, item.totalOrderedScaled)
+                    }
+                } else null
                 if (autoSpent == null || spentCents != autoSpent) {
                     manualSpent.add(item.productId)
                 }
@@ -162,13 +253,37 @@ class BuyerVeggieViewModel(
         val localDraft = onLoadDraft?.invoke(round.id)
         if (localDraft != null) {
             val validIds = state.items.map { it.productId }.toSet()
-            _marketPrices.value = (priceMap + localDraft.marketPrices).filterKeys { it in validIds }
-            _totalSpent.value = (spentMap + localDraft.totalSpent).filterKeys { it in validIds }
+            val mergedPrices = priceMap.toMutableMap()
+            localDraft.marketPrices.forEach { (pid, value) ->
+                if (pid in validIds) {
+                    dirtyMarketPriceIds.add(pid)
+                    if (value.isBlank()) mergedPrices.remove(pid) else mergedPrices[pid] = value
+                }
+            }
+            val mergedSpent = spentMap.toMutableMap()
+            localDraft.totalSpent.forEach { (pid, value) ->
+                if (pid in validIds) {
+                    dirtyTotalSpentIds.add(pid)
+                    if (value.isBlank()) {
+                        mergedSpent.remove(pid)
+                        manualSpent.remove(pid)
+                    } else {
+                        mergedSpent[pid] = value
+                    }
+                }
+            }
+            _marketPrices.value = mergedPrices
+            _totalSpent.value = mergedSpent
             _manuallyEditedTotalSpentIds.value = (manualSpent + localDraft.manuallyEditedTotalSpentIds)
-                .filter { it in validIds && !_totalSpent.value[it].isNullOrBlank() }
+                .filter { it in validIds && !mergedSpent[it].isNullOrBlank() }
                 .toSet()
-            _buyerFeeInput.value = localDraft.buyerFeeInput
-            _hasUnsavedChanges.value = true
+            if (localDraft.buyerFeeInput != null) {
+                _buyerFeeInput.value = localDraft.buyerFeeInput
+                dirtyBuyerFee = true
+            } else {
+                _buyerFeeInput.value = serverBuyerFee
+            }
+            _hasUnsavedChanges.value = dirtyMarketPriceIds.isNotEmpty() || dirtyTotalSpentIds.isNotEmpty() || dirtyBuyerFee
         } else {
             _marketPrices.value = priceMap
             _totalSpent.value = spentMap
@@ -181,18 +296,21 @@ class BuyerVeggieViewModel(
     private fun persistLocalDraft() {
         val round = _roundState.value?.round ?: return
         if (round.status != VeggieRoundStatus.CLOSED) return
+        val dirtyPrices = dirtyMarketPriceIds.associateWith { pid -> _marketPrices.value[pid].orEmpty() }
+        val dirtySpent = dirtyTotalSpentIds.associateWith { pid -> _totalSpent.value[pid].orEmpty() }
         onSaveDraft?.invoke(
             round.id,
             BuyerVeggiePriceDraft(
-                marketPrices = _marketPrices.value,
-                totalSpent = _totalSpent.value,
-                manuallyEditedTotalSpentIds = _manuallyEditedTotalSpentIds.value,
-                buyerFeeInput = _buyerFeeInput.value
+                marketPrices = dirtyPrices,
+                totalSpent = dirtySpent,
+                manuallyEditedTotalSpentIds = _manuallyEditedTotalSpentIds.value.filter { it in dirtyTotalSpentIds }.toSet(),
+                buyerFeeInput = if (dirtyBuyerFee) _buyerFeeInput.value else null
             )
         )
     }
 
     fun updateMarketUnitPrice(productId: String, input: String) {
+        dirtyMarketPriceIds.add(productId)
         val newPrices = _marketPrices.value.toMutableMap()
         if (input.isEmpty()) {
             newPrices.remove(productId)
@@ -202,9 +320,9 @@ class BuyerVeggieViewModel(
         _marketPrices.value = newPrices
         _hasUnsavedChanges.value = true
 
-        if (productId !in _manuallyEditedTotalSpentIds.value) {
+        val item = _roundState.value?.items?.firstOrNull { it.productId == productId }
+        if (productId !in _manuallyEditedTotalSpentIds.value && item?.isDualUnit != true) {
             val unitPriceCents = AdminVeggieViewModel.parseBrlInputToCents(input)
-            val item = _roundState.value?.items?.firstOrNull { it.productId == productId }
             val newSpent = _totalSpent.value.toMutableMap()
             if (unitPriceCents != null && unitPriceCents >= 0L && item != null) {
                 val autoSpent = VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(
@@ -212,8 +330,10 @@ class BuyerVeggieViewModel(
                     item.totalOrderedScaled
                 )
                 newSpent[productId] = AdminVeggieViewModel.formatCentsToInput(autoSpent)
+                dirtyTotalSpentIds.add(productId)
             } else if (input.isBlank()) {
                 newSpent.remove(productId)
+                dirtyTotalSpentIds.add(productId)
             }
             _totalSpent.value = newSpent
         }
@@ -221,6 +341,7 @@ class BuyerVeggieViewModel(
     }
 
     fun updateTotalSpent(productId: String, input: String) {
+        dirtyTotalSpentIds.add(productId)
         val newSpent = _totalSpent.value.toMutableMap()
         if (input.isEmpty()) {
             newSpent.remove(productId)
@@ -235,6 +356,7 @@ class BuyerVeggieViewModel(
     }
 
     fun updateBuyerFee(input: String) {
+        dirtyBuyerFee = true
         _buyerFeeInput.value = input
         _hasUnsavedChanges.value = true
         persistLocalDraft()
@@ -245,20 +367,63 @@ class BuyerVeggieViewModel(
         val round = currentState.round ?: return
         if (round.status != VeggieRoundStatus.CLOSED || _isSaving.value) return
 
+        // Validate BRL inputs before saving so malformed entries like "." or overflow don't silently coerce to null/0
+        val rawFee = _buyerFeeInput.value
+        val parsedFee = if (rawFee.isBlank()) 0L else AdminVeggieViewModel.parseBrlInputToCents(rawFee)
+        if (parsedFee == null) {
+            _isErrorFeedback.value = true
+            _feedbackMessage.value = errorMessage
+            return
+        }
+        val touchedIds = (dirtyMarketPriceIds + dirtyTotalSpentIds).toSet()
+        for (item in currentState.items) {
+            if (touchedIds.isNotEmpty() && item.productId !in touchedIds) continue
+            val priceInput = _marketPrices.value[item.productId].orEmpty()
+            val spentInput = _totalSpent.value[item.productId].orEmpty()
+            if (priceInput.isNotBlank() && AdminVeggieViewModel.parseBrlInputToCents(priceInput) == null) {
+                _isErrorFeedback.value = true
+                _feedbackMessage.value = errorMessage
+                return
+            }
+            if (spentInput.isNotBlank() && AdminVeggieViewModel.parseBrlInputToCents(spentInput) == null) {
+                _isErrorFeedback.value = true
+                _feedbackMessage.value = errorMessage
+                return
+            }
+        }
+
+        val snapshotPrices = _marketPrices.value
+        val snapshotSpent = _totalSpent.value
+        val snapshotFee = _buyerFeeInput.value
+
         _isSaving.value = true
         _feedbackMessage.value = null
         activeScope.launch {
             try {
-                val buyerFeeCents = if (_buyerFeeInput.value.isBlank()) {
-                    0L
+                val buyerFeeCents = if (dirtyBuyerFee) {
+                    parsedFee.coerceAtLeast(0L)
                 } else {
-                    AdminVeggieViewModel.parseBrlInputToCents(_buyerFeeInput.value) ?: 0L
+                    currentState.buyerOperationFeeCents.coerceAtLeast(0L)
                 }
-                val settlements = currentState.items.map { item ->
-                    val priceInput = _marketPrices.value[item.productId].orEmpty()
-                    val spentInput = _totalSpent.value[item.productId].orEmpty()
-                    val unitPriceCents = if (priceInput.isBlank()) null else AdminVeggieViewModel.parseBrlInputToCents(priceInput)
-                    val totalSpentCents = if (spentInput.isBlank()) null else AdminVeggieViewModel.parseBrlInputToCents(spentInput)
+                // Only send products that the Buyer actually touched so untouched Admin-entered prices are preserved
+                val itemsToSubmit = if (touchedIds.isNotEmpty()) {
+                    currentState.items.filter { it.productId in touchedIds }
+                } else {
+                    emptyList()
+                }
+                val settlements = itemsToSubmit.map { item ->
+                    val priceInput = snapshotPrices[item.productId].orEmpty()
+                    val spentInput = snapshotSpent[item.productId].orEmpty()
+                    val unitPriceCents = if (item.productId in dirtyMarketPriceIds) {
+                        if (priceInput.isBlank()) null else AdminVeggieViewModel.parseBrlInputToCents(priceInput)
+                    } else {
+                        item.marketUnitPriceCents
+                    }
+                    val totalSpentCents = if (item.productId in dirtyTotalSpentIds) {
+                        if (spentInput.isBlank()) null else AdminVeggieViewModel.parseBrlInputToCents(spentInput)
+                    } else {
+                        item.totalSpentCents
+                    }
                     BuyerProductPriceDraft(
                         productId = item.productId,
                         marketUnitPriceCents = unitPriceCents,
@@ -269,13 +434,19 @@ class BuyerVeggieViewModel(
                 val ok = repository.saveDraftSettlement(
                     BuyerSaveDraftSettlementRequest(
                         roundId = round.id,
-                        buyerOperationFeeCents = buyerFeeCents.coerceAtLeast(0L),
+                        buyerOperationFeeCents = buyerFeeCents,
                         productSettlements = settlements
                     )
                 )
                 if (ok) {
-                    onClearDraft?.invoke(round.id)
-                    _hasUnsavedChanges.value = false
+                    val editedWhileInFlight = _marketPrices.value != snapshotPrices ||
+                        _totalSpent.value != snapshotSpent ||
+                        _buyerFeeInput.value != snapshotFee
+                    if (!editedWhileInFlight) {
+                        onClearDraft?.invoke(round.id)
+                        clearDirtyTracking()
+                        _hasUnsavedChanges.value = false
+                    }
                     _isErrorFeedback.value = false
                     _feedbackMessage.value = successMessage
                     loadState(forceSyncDrafts = false)

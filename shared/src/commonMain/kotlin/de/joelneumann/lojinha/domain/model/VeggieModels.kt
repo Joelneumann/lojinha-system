@@ -4,6 +4,8 @@ import kotlinx.serialization.Serializable
 import kotlin.math.roundToLong
 
 const val VEGGIE_QTY_SCALE: Long = 1000L
+const val MAX_VEGGIE_QUANTITY_SCALED: Long = 100_000L * VEGGIE_QTY_SCALE // 100,000 units max (prevents Long overflow)
+const val MAX_VEGGIE_MONEY_CENTS: Long = 10_000_000L // R$ 100.000,00 max per field (matches Formatting.parsePriceInputToCents)
 
 @Serializable
 enum class VeggieRoundStatus {
@@ -34,7 +36,10 @@ data class VeggieProduct(
     val isActive: Boolean = true,
     val isDeleted: Boolean = false,
     val updatedAt: Long = 0L
-)
+) {
+    val isDualUnit: Boolean
+        get() = deliveryUnitTypeId != null && deliveryUnitTypeId != unitTypeId
+}
 
 @Serializable
 data class VeggieOrderRound(
@@ -97,17 +102,20 @@ data class VeggieOrderEntry(
 
     val effectiveAllowDecimals: Boolean
         get() = deliveryAllowDecimalsSnapshot ?: allowDecimalsSnapshot
+
+    val isDualUnit: Boolean
+        get() = deliveryUnitNameSnapshot != null && deliveryUnitNameSnapshot != unitNameSnapshot
 }
 
 object VeggieQuantityScaling {
-    fun fromWholeUnits(units: Long): Long = units * VEGGIE_QTY_SCALE
+    fun fromWholeUnits(units: Long): Long = (units * VEGGIE_QTY_SCALE).coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED)
 
     fun fromDouble(value: Double, allowDecimals: Boolean): Long {
         if (value <= 0.0 || !value.isFinite()) return 0L
         return if (allowDecimals) {
-            (value * VEGGIE_QTY_SCALE).roundToLong().coerceAtLeast(0L)
+            (value * VEGGIE_QTY_SCALE).roundToLong().coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED)
         } else {
-            value.roundToLong().coerceAtLeast(0L) * VEGGIE_QTY_SCALE
+            (value.roundToLong().coerceAtLeast(0L) * VEGGIE_QTY_SCALE).coerceAtMost(MAX_VEGGIE_QUANTITY_SCALED)
         }
     }
 
@@ -116,11 +124,11 @@ object VeggieQuantityScaling {
         if (clean.isEmpty()) return 0L
         return if (allowDecimals) {
             val dbl = clean.toDoubleOrNull() ?: return null
-            if (dbl < 0.0 || !dbl.isFinite()) return null
-            (dbl * VEGGIE_QTY_SCALE).roundToLong()
+            if (dbl < 0.0 || !dbl.isFinite() || dbl > (MAX_VEGGIE_QUANTITY_SCALED.toDouble() / VEGGIE_QTY_SCALE)) return null
+            (dbl * VEGGIE_QTY_SCALE).roundToLong().coerceIn(0L, MAX_VEGGIE_QUANTITY_SCALED)
         } else {
             val whole = clean.toLongOrNull() ?: return null
-            if (whole < 0L || whole > Long.MAX_VALUE / VEGGIE_QTY_SCALE) return null
+            if (whole < 0L || whole > MAX_VEGGIE_QUANTITY_SCALED / VEGGIE_QTY_SCALE) return null
             whole * VEGGIE_QTY_SCALE
         }
     }

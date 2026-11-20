@@ -2,9 +2,11 @@ package de.joelneumann.lojinha.ui.utils
 
 import androidx.compose.ui.graphics.ImageBitmap
 import io.ktor.client.*
+import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.sync.Semaphore
@@ -12,7 +14,14 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.yield
 import org.jetbrains.compose.resources.decodeToImageBitmap
 
-private val imageHttpClient by lazy { HttpClient() }
+private val imageHttpClient by lazy {
+    HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 15_000L
+            connectTimeoutMillis = 8_000L
+        }
+    }
+}
 private val imageBitmapCache = mutableMapOf<String, ImageBitmap>()
 private val inFlightLoads = mutableMapOf<String, Deferred<ImageBitmap?>>()
 private val imageLoadSemaphore = Semaphore(permits = 2)
@@ -45,7 +54,10 @@ actual suspend fun loadVeggieImageBitmap(
             imageBitmapCache[cacheKey]?.let { return@withPermit it }
             try {
                 val isThumb = !fullSize
-                val response = imageHttpClient.get("/api/veggie/images/$productId?thumb=$isThumb&v=$imageFileName")
+                val response = imageHttpClient.get("/api/veggie/images/${productId.encodeURLPathPart()}") {
+                    parameter("thumb", isThumb)
+                    parameter("v", imageFileName)
+                }
                 if (response.status == HttpStatusCode.OK) {
                     val bytes = response.readRawBytes()
                     if (bytes.isNotEmpty()) {
@@ -61,13 +73,19 @@ actual suspend fun loadVeggieImageBitmap(
                     null
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 null
             }
         }
         deferred.complete(result)
         return result
     } catch (t: Throwable) {
-        deferred.completeExceptionally(t)
+        if (t is CancellationException) {
+            // Do not fail unrelated waiters when one LazyColumn card scrolls offscreen
+            deferred.complete(null)
+        } else {
+            deferred.completeExceptionally(t)
+        }
         throw t
     } finally {
         if (inFlightLoads[cacheKey] === deferred) {

@@ -2,6 +2,7 @@ package de.joelneumann.lojinha.data.repository
 
 import de.joelneumann.lojinha.domain.model.BuyerSaveDraftSettlementRequest
 import de.joelneumann.lojinha.domain.model.BuyerVeggieRoundStateResponse
+import de.joelneumann.lojinha.domain.model.SessionStatusResponse
 import de.joelneumann.lojinha.domain.repository.BuyerVeggieRepository
 import de.joelneumann.lojinha.util.AppLogger
 import io.ktor.client.*
@@ -44,6 +45,10 @@ class BuyerNetworkClient(val baseUrl: String = "") {
     }
 
     val httpClient = HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 20_000L
+            connectTimeoutMillis = 10_000L
+        }
         install(ContentNegotiation) {
             json(Json {
                 prettyPrint = true
@@ -76,7 +81,24 @@ class BuyerNetworkClient(val baseUrl: String = "") {
                         _onDataChanged.tryEmit(Unit)
                     }
                     if (jsCheckAndClearSseSyncError("buyer")) {
-                        KioskConnectionMonitor.checkHealthNow(baseUrl)
+                        val healthy = KioskConnectionMonitor.checkHealthNow(baseUrl)
+                        if (healthy) {
+                            val stillValid = try {
+                                val resp = httpClient.get(resolveUrl("/api/session"))
+                                resp.status.isSuccess() && resp.body<SessionStatusResponse>().role == "BUYER"
+                            } catch (e: Throwable) {
+                                if (e is CancellationException) throw e
+                                true
+                            }
+                            if (!stillValid) {
+                                notifyUnauthorized()
+                                break
+                            } else {
+                                try {
+                                    jsStartSse("buyer", "/api/buyer/events", baseUrl)
+                                } catch (_: Exception) {}
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e

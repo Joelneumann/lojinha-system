@@ -131,11 +131,15 @@ class CustomerVeggieViewModel(
                 val sameRound = currentRoundId != null && currentRoundId == loadedRoundId
                 loadedRoundId = currentRoundId
 
+                val visibleProductIds = (_products.value + _inactiveOrderedProducts.value).map { it.id }.toSet()
                 _savedQuantitiesScaled.value = serverQuantities
                 val isRoundOpen = state.activeRound?.status == VeggieRoundStatus.OPEN
+                if (state.activeRound?.status == VeggieRoundStatus.SETTLED && currentRoundId != null) {
+                    onClearDraft?.invoke(currentRoundId)
+                }
                 if (!isRoundOpen || !preserveDraftIfSameRound || !sameRound || !_hasUnsavedOrderChanges.value) {
                     val localDraft = if (currentRoundId != null && isRoundOpen) {
-                        onLoadDraft?.invoke(currentRoundId)?.filterValues { it > 0L }
+                        onLoadDraft?.invoke(currentRoundId)?.filter { (pid, qty) -> qty > 0L && pid in visibleProductIds }
                     } else {
                         null
                     }
@@ -147,8 +151,14 @@ class CustomerVeggieViewModel(
                         _hasUnsavedOrderChanges.value = false
                     }
                 } else {
+                    // Prune any draft entries for products that were deactivated before saving
+                    val prunedDraft = _draftQuantitiesScaled.value.filterKeys { it in visibleProductIds }
+                    if (prunedDraft != _draftQuantitiesScaled.value) {
+                        _draftQuantitiesScaled.value = prunedDraft
+                    }
                     recomputeUnsavedFlag()
                 }
+                _errorMessage.value = null
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 AppLogger.error("CustomerVeggieViewModel", "Failed to load veggie state: ${e.message}", e)
@@ -300,15 +310,25 @@ class CustomerVeggieViewModel(
         var total = 0L
         for ((productId, qtyScaled) in _draftQuantitiesScaled.value) {
             if (qtyScaled <= 0L) continue
-            val price = productsById[productId]?.estimatedPriceCents ?: continue
+            val product = productsById[productId] ?: continue
+            // Skip dual-unit products because estimatedPriceCents is per delivery unit (e.g. R$/kg)
+            // whereas qtyScaled is in ordering units (e.g. pieces)
+            if (product.isDualUnit) continue
+            val price = product.estimatedPriceCents ?: continue
             total += VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(price, qtyScaled)
         }
         return total
     }
 
-    fun saveOrder(onOrderSaved: () -> Unit = {}) {
-        val round = _activeRound.value ?: return
-        if (round.status != VeggieRoundStatus.OPEN) return
+    fun saveOrder(
+        onOrderSaved: () -> Unit = {},
+        onOrderFailed: () -> Unit = {}
+    ) {
+        val round = _activeRound.value
+        if (round == null || round.status != VeggieRoundStatus.OPEN) {
+            onOrderFailed()
+            return
+        }
         if (_isSavingOrder.value) return
 
         _isSavingOrder.value = true
@@ -333,11 +353,13 @@ class CustomerVeggieViewModel(
                 } else {
                     _errorMessage.value = "Failed to save veggie order"
                     loadData(preserveDraftIfSameRound = true)
+                    onOrderFailed()
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 AppLogger.error("CustomerVeggieViewModel", "Failed to save veggie order for round '${round.id}': ${e.message}", e)
                 _errorMessage.value = e.message ?: "Failed to save veggie order"
+                onOrderFailed()
             } finally {
                 _isSavingOrder.value = false
             }

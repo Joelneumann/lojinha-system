@@ -23,6 +23,7 @@ interface VeggieOrderRepository {
     // 2. Veggie Catalog Products
     fun getVeggieProductsFlow(): Flow<List<VeggieProduct>>
     suspend fun getAllVeggieProducts(): List<VeggieProduct>
+    suspend fun getAllVeggieProductsIncludingDeleted(): List<VeggieProduct> = getAllVeggieProducts()
     suspend fun getVeggieProductById(id: String): VeggieProduct?
     suspend fun saveVeggieProduct(product: VeggieProduct)
     suspend fun updateVeggieProductImage(productId: String, imageFileName: String?, updatedAt: Long) {
@@ -96,7 +97,8 @@ interface VeggieOrderRepository {
         transporterUserId: String?,
         productSettlements: List<VeggieRoundProductSettlement>,
         actualQuantitiesByEntryId: Map<String, Long>,
-        settledAt: Long
+        settledAt: Long,
+        pendingEntries: List<VeggieOrderEntry> = emptyList()
     ): VeggieRoundSettlementResult?
 
     // 6. Customer Favorites

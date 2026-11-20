@@ -49,14 +49,14 @@ fun VeggieProductEditDialog(
     var name by remember(product.id) { mutableStateOf(product.name) }
     var description by remember(product.id) { mutableStateOf(product.description ?: "") }
     var estimatedPriceInput by remember(product.id) { mutableStateOf(initialPriceInput) }
-    var selectedUnitId by remember(product.id, activeUnits) {
+    var selectedUnitId by remember(product.id) {
         mutableStateOf(
             product.unitTypeId.takeIf { id -> activeUnits.any { it.id == id } }
                 ?: activeUnits.firstOrNull()?.id
                 ?: product.unitTypeId
         )
     }
-    var selectedDeliveryUnitId by remember(product.id, activeUnits) {
+    var selectedDeliveryUnitId by remember(product.id) {
         mutableStateOf(
             product.deliveryUnitTypeId?.takeIf { id -> activeUnits.any { it.id == id } }
         )

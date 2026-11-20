@@ -32,10 +32,12 @@ fun VeggieProductDetailModal(
     unitType: VeggieUnitType?,
     onDismiss: () -> Unit,
     isFavorite: Boolean = false,
-    onToggleFavorite: (() -> Unit)? = null
+    onToggleFavorite: (() -> Unit)? = null,
+    deliveryUnitType: VeggieUnitType? = null
 ) {
     val strings = I18n.current
     val unitName = unitType?.name ?: "Unit"
+    val priceUnitName = deliveryUnitType?.takeIf { product.isDualUnit }?.name ?: unitName
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -83,7 +85,7 @@ fun VeggieProductDetailModal(
                             )
                             Text(
                                 text = if (product.estimatedPriceCents != null) {
-                                    "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $unitName"
+                                    "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $priceUnitName"
                                 } else {
                                     strings.veggieEstimatedPriceUnknown
                                 },

@@ -59,10 +59,13 @@ fun main() {
         val transactionRepository = RoomTransactionRepositoryImpl(database.transactionDao(), onDataChanged)
         val billingListRepository = RoomBillingListRepositoryImpl(database.billingListDao(), onDataChanged)
         val settingsRepository = RoomSettingsRepositoryImpl(database.settingsDao(), onDataChanged)
-        val adminNoteRepository = RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onDataChanged)
         val onAdminOnlyDataChanged = {
-            DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(adminOnly = true))
+            DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(adminOnly = true, notifyBuyer = false))
         }
+        val onVeggieAdminOrBuyerDataChanged = {
+            DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(adminOnly = true, notifyBuyer = true))
+        }
+        val adminNoteRepository = RoomAdminNoteRepositoryImpl(database.adminNoteDao(), onAdminOnlyDataChanged)
         val shoppingListRepository = RoomShoppingListRepositoryImpl(database.shoppingListItemDao(), onAdminOnlyDataChanged)
         val veggieOrderRepository = RoomVeggieOrderRepositoryImpl(
             veggieOrderDao = database.veggieOrderDao(),
@@ -70,9 +73,9 @@ fun main() {
             transactionDao = database.transactionDao(),
             onDataChanged = onDataChanged,
             onUserScopedDataChanged = { userId ->
-                DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(targetUserId = userId))
+                DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(targetUserId = userId, notifyBuyer = false))
             },
-            onAdminOnlyDataChanged = onAdminOnlyDataChanged,
+            onAdminOnlyDataChanged = onVeggieAdminOrBuyerDataChanged,
             runInTransaction = { block ->
                 DatabaseFactory.runImmediateTransaction(database, block)
             }

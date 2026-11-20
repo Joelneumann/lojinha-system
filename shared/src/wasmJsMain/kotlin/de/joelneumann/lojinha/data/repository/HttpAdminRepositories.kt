@@ -94,7 +94,12 @@ object KioskConnectionMonitor {
     val onReconnected: SharedFlow<Unit> = _onReconnected.asSharedFlow()
 
     private var pollJob: Job? = null
-    private val healthClient = HttpClient()
+    private val healthClient = HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 6_000L
+            connectTimeoutMillis = 5_000L
+        }
+    }
 
     fun reportNetworkFailure(baseUrl: String = "") {
         if (_isServerReachable.value) {
@@ -182,6 +187,10 @@ class AdminNetworkClient(val baseUrl: String = "") {
     private var syncJob: Job? = null
 
     val httpClient = HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 20_000L
+            connectTimeoutMillis = 10_000L
+        }
         install(ContentNegotiation) {
             json(Json {
                 prettyPrint = true
@@ -255,7 +264,20 @@ class AdminNetworkClient(val baseUrl: String = "") {
                         _onDataChanged.tryEmit(Unit)
                     }
                     if (jsCheckAndClearSseSyncError("admin")) {
-                        KioskConnectionMonitor.checkHealthNow(baseUrl)
+                        val healthy = KioskConnectionMonitor.checkHealthNow(baseUrl)
+                        if (healthy) {
+                            // Server is up but SSE errored (e.g., 401 session revoked or transient proxy drop):
+                            // verify session validity and restart SSE if still authenticated.
+                            val role = fetchSessionRole()
+                            if (role != "ADMIN") {
+                                notifyUnauthorized()
+                                break
+                            } else {
+                                try {
+                                    jsStartSse("admin", "/api/admin/events", baseUrl)
+                                } catch (_: Exception) {}
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
@@ -1008,13 +1030,21 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
 
     override suspend fun getAllUnitTypes(): List<VeggieUnitType> {
         return try {
-            val list: List<VeggieUnitType> = client.httpClient.get(client.resolveUrl("/api/admin/veggie/unit-types")) {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/unit-types")) {
                 client.run { appendAdminAuth() }
-            }.body()
-            list.sortedByAccentInsensitive { it.name }
-        } catch (e: Exception) {
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getAllUnitTypes failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body<List<VeggieUnitType>>().sortedByAccentInsensitive { it.name }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
             AppLogger.error("HttpVeggieOrderRepository", "getAllUnitTypes failed: ${e.message}", e)
-            emptyList()
+            throw e
         }
     }
 
@@ -1040,13 +1070,21 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
 
     override suspend fun getAllVeggieProducts(): List<VeggieProduct> {
         return try {
-            val list: List<VeggieProduct> = client.httpClient.get(client.resolveUrl("/api/admin/veggie/products")) {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/products")) {
                 client.run { appendAdminAuth() }
-            }.body()
-            list.sortedByAccentInsensitive { it.name }
-        } catch (e: Exception) {
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getAllVeggieProducts failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body<List<VeggieProduct>>().sortedByAccentInsensitive { it.name }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
             AppLogger.error("HttpVeggieOrderRepository", "getAllVeggieProducts failed: ${e.message}", e)
-            emptyList()
+            throw e
         }
     }
 
@@ -1152,12 +1190,21 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
 
     override suspend fun getAllRounds(): List<VeggieOrderRound> {
         return try {
-            client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds")) {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds")) {
                 client.run { appendAdminAuth() }
-            }.body()
-        } catch (e: Exception) {
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getAllRounds failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
             AppLogger.error("HttpVeggieOrderRepository", "getAllRounds failed: ${e.message}", e)
-            emptyList()
+            throw e
         }
     }
 
@@ -1271,12 +1318,21 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
 
     override suspend fun getEntriesForRound(roundId: String): List<VeggieOrderEntry> {
         return try {
-            client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/$roundId/entries")) {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/$roundId/entries")) {
                 client.run { appendAdminAuth() }
-            }.body()
-        } catch (e: Exception) {
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getEntriesForRound failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
             AppLogger.error("HttpVeggieOrderRepository", "getEntriesForRound failed: ${e.message}", e)
-            emptyList()
+            throw e
         }
     }
 
@@ -1328,12 +1384,21 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
 
     override suspend fun getProductSettlementsForRound(roundId: String): List<VeggieRoundProductSettlement> {
         return try {
-            client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/$roundId/settlements")) {
+            val response = client.httpClient.get(client.resolveUrl("/api/admin/veggie/rounds/$roundId/settlements")) {
                 client.run { appendAdminAuth() }
-            }.body()
-        } catch (e: Exception) {
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("getProductSettlementsForRound failed: ${response.status}")
+            }
+            KioskConnectionMonitor.reportServerReachable()
+            response.body()
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(client.baseUrl)
+            }
             AppLogger.error("HttpVeggieOrderRepository", "getProductSettlementsForRound failed: ${e.message}", e)
-            emptyList()
+            throw e
         }
     }
 
@@ -1373,7 +1438,8 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
         transporterUserId: String?,
         productSettlements: List<VeggieRoundProductSettlement>,
         actualQuantitiesByEntryId: Map<String, Long>,
-        settledAt: Long
+        settledAt: Long,
+        pendingEntries: List<VeggieOrderEntry>
     ): VeggieRoundSettlementResult? {
         return try {
             val response = client.httpClient.post(client.resolveUrl("/api/admin/veggie/rounds/$roundId/settle")) {
@@ -1386,6 +1452,7 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
                         transporterUserId = transporterUserId,
                         productSettlements = productSettlements,
                         actualQuantitiesByEntryId = actualQuantitiesByEntryId,
+                        pendingEntries = pendingEntries,
                         settledAt = settledAt
                     )
                 )
@@ -1396,6 +1463,7 @@ class HttpVeggieOrderRepository(private val client: AdminNetworkClient) : Veggie
                 null
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             AppLogger.error("HttpVeggieOrderRepository", "executeRoundSettlement failed: ${e.message}", e)
             null
         }
@@ -1437,6 +1505,10 @@ class CustomerNetworkClient(val baseUrl: String = "") {
     private var syncJob: Job? = null
 
     val httpClient = HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 20_000L
+            connectTimeoutMillis = 10_000L
+        }
         install(ContentNegotiation) {
             json(Json {
                 prettyPrint = true
@@ -1535,11 +1607,14 @@ class CustomerNetworkClient(val baseUrl: String = "") {
             if (!response.status.isSuccess()) {
                 throw IllegalStateException("HTTP ${response.status.value}")
             }
+            KioskConnectionMonitor.reportServerReachable()
             response.body()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             if (e is CancellationException) throw e
             AppLogger.error("CustomerNetworkClient", "getVeggieState failed: ${e.message}", e)
-            KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+            }
             throw e
         }
     }
@@ -1551,8 +1626,10 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                 appendCustomerAuth()
                 setBody(SaveCustomerVeggieOrderRequest(roundId, productQuantitiesScaled))
             }
+            KioskConnectionMonitor.reportServerReachable()
             response.status.isSuccess()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
             AppLogger.error("CustomerNetworkClient", "saveCustomerOrder failed: ${e.message}", e)
             KioskConnectionMonitor.reportNetworkFailure(baseUrl)
             false
@@ -1567,7 +1644,8 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                 setBody(UpdateCustomerVeggieFavoritesRequest(productIds))
             }
             response.status.isSuccess()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
             AppLogger.error("CustomerNetworkClient", "saveVeggieFavorites failed: ${e.message}", e)
             false
         }
@@ -1581,11 +1659,14 @@ class CustomerNetworkClient(val baseUrl: String = "") {
             if (!response.status.isSuccess()) {
                 throw IllegalStateException("HTTP ${response.status.value}")
             }
+            KioskConnectionMonitor.reportServerReachable()
             response.body()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             if (e is CancellationException) throw e
             AppLogger.error("CustomerNetworkClient", "getVeggieHistory failed: ${e.message}", e)
-            KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+            if (e !is IllegalStateException) {
+                KioskConnectionMonitor.reportNetworkFailure(baseUrl)
+            }
             throw e
         }
     }
@@ -1630,7 +1711,24 @@ class CustomerNetworkClient(val baseUrl: String = "") {
                         _onDataChanged.tryEmit(Unit)
                     }
                     if (jsCheckAndClearSseSyncError("customer")) {
-                        KioskConnectionMonitor.checkHealthNow(baseUrl)
+                        val healthy = KioskConnectionMonitor.checkHealthNow(baseUrl)
+                        if (healthy) {
+                            val stillValid = try {
+                                val resp = httpClient.get(resolveUrl("/api/session"))
+                                resp.status.isSuccess() && resp.body<SessionStatusResponse>().role == "CUSTOMER"
+                            } catch (e: Throwable) {
+                                if (e is CancellationException) throw e
+                                true
+                            }
+                            if (!stillValid) {
+                                notifyUnauthorized()
+                                break
+                            } else {
+                                try {
+                                    jsStartSse("customer", "/api/customer/events", baseUrl)
+                                } catch (_: Exception) {}
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
@@ -1729,7 +1827,8 @@ class HttpCustomerTransactionRepository(private val client: CustomerNetworkClien
                 if (!searchQuery.isNullOrBlank()) parameter("search", searchQuery)
                 if (typeFilter != null) parameter("type", typeFilter.name)
             }.body()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             PagedResult(emptyList(), 0, page, pageSize, 1)
         }
     }

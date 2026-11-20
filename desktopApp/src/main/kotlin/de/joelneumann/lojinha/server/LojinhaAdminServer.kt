@@ -31,6 +31,7 @@ import de.joelneumann.lojinha.ui.utils.IsoWeekUtils
 import de.joelneumann.lojinha.ui.utils.PdfFilenames
 import de.joelneumann.lojinha.ui.utils.isReservedAdminName
 import de.joelneumann.lojinha.ui.utils.normalizeUserName
+import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import de.joelneumann.lojinha.util.AppLogger
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -59,10 +60,16 @@ class LojinhaAdminServer(
 ) {
     private var server: EmbeddedServer<*, *>? = null
 
+    private data class AdminSession(
+        val expiryTimestamp: Long,
+        val credentialHash: String
+    )
+
     private data class CustomerSession(
         val userId: String,
         val expiryTimestamp: Long,
-        val keepLoggedIn: Boolean = false
+        val keepLoggedIn: Boolean = false,
+        val credentialHash: String? = null
     )
 
     @kotlinx.serialization.Serializable
@@ -70,7 +77,8 @@ class LojinhaAdminServer(
         val tokenHash: String,
         val userId: String,
         val expiryTimestamp: Long,
-        val keepLoggedIn: Boolean = true
+        val keepLoggedIn: Boolean = true,
+        val credentialHash: String? = null
     )
 
     private data class LoginAttemptState(
@@ -85,7 +93,7 @@ class LojinhaAdminServer(
     )
 
     // Token Session Management (keyed by SHA-256(token) so raw tokens are never stored in memory or on disk)
-    private val activeTokens = ConcurrentHashMap<String, Long>() // tokenHash -> expiryTimestamp
+    private val activeTokens = ConcurrentHashMap<String, AdminSession>() // tokenHash -> AdminSession
     private val activeCustomerTokens = ConcurrentHashMap<String, CustomerSession>() // tokenHash -> CustomerSession
     private val activeBuyerTokens = ConcurrentHashMap<String, BuyerSession>() // tokenHash -> BuyerSession
     private val sessionStoreLock = Any()
@@ -126,7 +134,8 @@ class LojinhaAdminServer(
                         activeCustomerTokens[entry.tokenHash] = CustomerSession(
                             userId = entry.userId,
                             expiryTimestamp = entry.expiryTimestamp,
-                            keepLoggedIn = true
+                            keepLoggedIn = true,
+                            credentialHash = entry.credentialHash
                         )
                     } else {
                         pruned = true
@@ -158,7 +167,8 @@ class LojinhaAdminServer(
                         tokenHash = it.key,
                         userId = it.value.userId,
                         expiryTimestamp = it.value.expiryTimestamp,
-                        keepLoggedIn = true
+                        keepLoggedIn = true,
+                        credentialHash = it.value.credentialHash
                     )
                 }
             file.parentFile?.mkdirs()
@@ -234,10 +244,14 @@ class LojinhaAdminServer(
                 transactionDao = db.transactionDao(),
                 onDataChanged = { DataChangeNotifier.notifyDataChanged() },
                 onUserScopedDataChanged = { userId ->
-                    DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(targetUserId = userId))
+                    DataChangeNotifier.notifyScopedDataChanged(
+                        DataChangeNotifier.ChangeScope(targetUserId = userId, notifyBuyer = false)
+                    )
                 },
                 onAdminOnlyDataChanged = {
-                    DataChangeNotifier.notifyScopedDataChanged(DataChangeNotifier.ChangeScope(adminOnly = true))
+                    DataChangeNotifier.notifyScopedDataChanged(
+                        DataChangeNotifier.ChangeScope(adminOnly = true, notifyBuyer = true)
+                    )
                 },
                 runInTransaction = { block ->
                     DatabaseFactory.runImmediateTransaction(db, block)
@@ -416,9 +430,12 @@ class LojinhaAdminServer(
                             failedLoginAttempts.remove(ipKey)
                             accountKey?.let { failedLoginAttempts.remove(it) }
                             call.clearOtherRoleSessions(keepCookieName = ADMIN_COOKIE_NAME)
-                            activeTokens.entries.removeIf { now >= it.value }
+                            activeTokens.entries.removeIf { now >= it.value.expiryTimestamp }
                             val token = UUID.randomUUID().toString()
-                            activeTokens[hashToken(token)] = now + SESSION_DURATION_MS
+                            activeTokens[hashToken(token)] = AdminSession(
+                                expiryTimestamp = now + SESSION_DURATION_MS,
+                                credentialHash = settings.adminPasswordHash
+                            )
                             val cookieMaxAgeSec = if (req.keepLoggedIn) (SESSION_DURATION_MS / 1000L).toInt() else null
                             call.setSessionCookie(ADMIN_COOKIE_NAME, token, cookieMaxAgeSec)
                             call.respond(HttpStatusCode.OK, UnifiedLoginResponse(success = true, role = "ADMIN", message = "Authenticated"))
@@ -492,7 +509,8 @@ class LojinhaAdminServer(
                         activeCustomerTokens[hashToken(token)] = CustomerSession(
                             userId = targetUser.id,
                             expiryTimestamp = now + sessionTtl,
-                            keepLoggedIn = req.keepLoggedIn
+                            keepLoggedIn = req.keepLoggedIn,
+                            credentialHash = targetUser.pin
                         )
                         if (req.keepLoggedIn) {
                             savePersistedCustomerSessions()
@@ -587,7 +605,10 @@ class LojinhaAdminServer(
                     // Users
                     get("/users") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
-                        call.respond(userRepository.getAllUsers())
+                        val redacted = userRepository.getAllUsers().map { user ->
+                            user.copy(pin = if (user.pin.isNullOrBlank()) null else "PROTECTED")
+                        }
+                        call.respond(redacted)
                     }
                     post("/users") {
                         if (!call.checkAdminAuth(settingsRepository)) return@post
@@ -638,9 +659,12 @@ class LojinhaAdminServer(
                             }
                         }
                         val previousUser = allUsers.find { it.id == trimmedUser.id }
-                        userRepository.saveUser(trimmedUser)
-                        if (previousUser != null && (previousUser.pin != trimmedUser.pin || !trimmedUser.isActive || trimmedUser.isDeleted)) {
-                            revokeCustomerSessions(trimmedUser.id)
+                        val effectivePin = if (trimmedUser.pin == "PROTECTED") previousUser?.pin else trimmedUser.pin
+                        val userToSave = trimmedUser.copy(pin = effectivePin)
+                        userRepository.saveUser(userToSave)
+                        val pinChanged = previousUser?.pin != userToSave.pin
+                        if (previousUser != null && (pinChanged || !userToSave.isActive || userToSave.isDeleted)) {
+                            revokeCustomerSessions(userToSave.id)
                         }
                         call.respond(HttpStatusCode.OK)
                     }
@@ -946,7 +970,7 @@ class LojinhaAdminServer(
                             shoppingListRepository ?: database?.let {
                                 RoomShoppingListRepositoryImpl(it.shoppingListItemDao()) {
                                     DataChangeNotifier.notifyScopedDataChanged(
-                                        DataChangeNotifier.ChangeScope(adminOnly = true)
+                                        DataChangeNotifier.ChangeScope(adminOnly = true, notifyBuyer = false)
                                     )
                                 }
                             }
@@ -1114,7 +1138,9 @@ class LojinhaAdminServer(
                     // Real-Time Server-Sent Events (SSE) Stream
                     get("/events") {
                         if (!call.checkAdminAuth(settingsRepository)) return@get
-                        call.streamDataChangeEvents()
+                        call.streamDataChangeEvents(
+                            isSessionStillValid = { call.hasValidAdminSession() }
+                        )
                     }
 
                     // On-Demand CSV Exports (excluding soft-deleted items)
@@ -1181,7 +1207,7 @@ class LojinhaAdminServer(
 
                         get("/veggie-products.csv") {
                             if (!call.checkAdminAuth(settingsRepository)) return@get
-                            val repo = veggieOrderRepository
+                            val repo = resolveVeggieRepo()
                             if (repo == null) {
                                 call.respond(HttpStatusCode.ServiceUnavailable, "Veggie order repository unavailable")
                                 return@get
@@ -1194,7 +1220,7 @@ class LojinhaAdminServer(
 
                         get("/veggie-orders.csv") {
                             if (!call.checkAdminAuth(settingsRepository)) return@get
-                            val repo = veggieOrderRepository
+                            val repo = resolveVeggieRepo()
                             if (repo == null) {
                                 call.respond(HttpStatusCode.ServiceUnavailable, "Veggie order repository unavailable")
                                 return@get
@@ -1303,8 +1329,8 @@ class LojinhaAdminServer(
                                 call.respond(HttpStatusCode.PayloadTooLarge, "Image exceeds 15 MB limit")
                                 return@post
                             }
-                            val bytes = call.receive<ByteArray>()
-                            if (bytes.size > MAX_IMAGE_UPLOAD_BYTES) {
+                            val bytes = call.readBoundedBytes(MAX_IMAGE_UPLOAD_BYTES)
+                            if (bytes == null) {
                                 call.respond(HttpStatusCode.PayloadTooLarge, "Image exceeds 15 MB limit")
                                 return@post
                             }
@@ -1477,15 +1503,22 @@ class LojinhaAdminServer(
                             val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
                             val req = call.receive<VeggieSettlementRequest>()
                             val settledAt = if (req.settledAt > 0L) req.settledAt else System.currentTimeMillis()
-                            val result = repo.executeRoundSettlement(
-                                roundId = id,
-                                buyerOperationFeeCents = req.buyerOperationFeeCents,
-                                transportFeeCents = req.transportFeeCents,
-                                transporterUserId = req.transporterUserId,
-                                productSettlements = req.productSettlements,
-                                actualQuantitiesByEntryId = req.actualQuantitiesByEntryId,
-                                settledAt = settledAt
-                            )
+                            val result = try {
+                                repo.executeRoundSettlement(
+                                    roundId = id,
+                                    buyerOperationFeeCents = req.buyerOperationFeeCents,
+                                    transportFeeCents = req.transportFeeCents,
+                                    transporterUserId = req.transporterUserId,
+                                    productSettlements = req.productSettlements,
+                                    actualQuantitiesByEntryId = req.actualQuantitiesByEntryId,
+                                    settledAt = settledAt,
+                                    pendingEntries = req.pendingEntries
+                                )
+                            } catch (e: IllegalStateException) {
+                                AppLogger.warn("LojinhaAdminServer", "Rejected settlement for round '$id': ${e.message}")
+                                call.respond(HttpStatusCode.BadRequest, e.message ?: "Failed to execute round settlement")
+                                return@post
+                            }
                             if (result != null) {
                                 call.respond(HttpStatusCode.OK, result)
                             } else {
@@ -1498,7 +1531,7 @@ class LojinhaAdminServer(
                             val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
                             val round = repo.getRoundById(id) ?: return@get call.respond(HttpStatusCode.NotFound)
                             val entries = repo.getEntriesForRound(id)
-                            val products = repo.getAllVeggieProducts()
+                            val products = repo.getAllVeggieProductsIncludingDeleted()
                             val language = call.parseLanguageParam()
                             try {
                                 val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(round, entries, language, products)
@@ -1640,10 +1673,17 @@ class LojinhaAdminServer(
                         )
                         if (!cleanNewPin.isNullOrBlank()) {
                             val currentTokenHash = call.request.cookies[CUSTOMER_COOKIE_NAME]?.let { hashToken(it) }
+                            var sessionsMutated = false
+                            if (currentTokenHash != null) {
+                                activeCustomerTokens[currentTokenHash]?.let { currentSession ->
+                                    activeCustomerTokens[currentTokenHash] = currentSession.copy(credentialHash = updatedPinHash)
+                                    sessionsMutated = true
+                                }
+                            }
                             val revokedOther = activeCustomerTokens.entries.removeIf {
                                 it.value.userId == user.id && it.key != currentTokenHash
                             }
-                            if (revokedOther) {
+                            if (revokedOther || sessionsMutated) {
                                 savePersistedCustomerSessions()
                             }
                         }
@@ -1735,8 +1775,8 @@ class LojinhaAdminServer(
                             .filter { it.orderedQuantityScaled > 0L }
                             .map { it.veggieProductId }
                             .toSet()
-                        val products = repo.getAllVeggieProducts().filter {
-                            !it.isDeleted && (it.isActive || it.id in orderedProductIds)
+                        val products = repo.getAllVeggieProductsIncludingDeleted().filter {
+                            (!it.isDeleted && it.isActive) || it.id in orderedProductIds
                         }
                         val previousQuantities = if (activeRound != null) {
                             repo.getPreviousRoundQuantitiesForUser(activeRound.id, userId)
@@ -1799,7 +1839,10 @@ class LojinhaAdminServer(
 
                     get("/events") {
                         val user = call.requireActiveCustomer() ?: return@get
-                        call.streamDataChangeEvents(targetUserId = user.id)
+                        call.streamDataChangeEvents(
+                            targetUserId = user.id,
+                            isSessionStillValid = { call.hasValidCustomerSession() }
+                        )
                     }
                 }
 
@@ -1821,7 +1864,9 @@ class LojinhaAdminServer(
                             ?.takeIf { it.status == VeggieRoundStatus.OPEN || it.status == VeggieRoundStatus.CLOSED }
                         val sanitizedRound = activeRound?.copy(
                             buyerPdfExportedAt = null,
-                            workerPdfExportedAt = null
+                            workerPdfExportedAt = null,
+                            transportFeeCents = 0L,
+                            transporterUserId = null
                         )
                         if (activeRound == null || activeRound.status != VeggieRoundStatus.CLOSED) {
                             call.respond(
@@ -1836,22 +1881,25 @@ class LojinhaAdminServer(
                         }
 
                         val entries = repo.getEntriesForRound(activeRound.id)
-                        val productsById = repo.getAllVeggieProducts().associateBy { it.id }
+                        val productsById = repo.getAllVeggieProductsIncludingDeleted().associateBy { it.id }
                         val unitTypesById = repo.getAllUnitTypes().associateBy { it.id }
                         val settlementsByProductId = repo.getProductSettlementsForRound(activeRound.id).associateBy { it.veggieProductId }
 
                         val rows = entries
-                            .filter { it.orderedQuantityScaled > 0L }
+                            .filter { it.orderedQuantityScaled > 0L || (it.actualQuantityScaled ?: 0L) > 0L }
                             .groupBy { it.veggieProductId }
                             .mapNotNull { (productId, productEntries) ->
                                 val product = productsById[productId]
                                 if (product?.excludeFromBuyerPdf == true) return@mapNotNull null
                                 val firstEntry = productEntries.first()
-                                val totalOrderedScaled = productEntries.sumOf { it.orderedQuantityScaled }
+                                val totalOrderedScaled = productEntries.sumOf {
+                                    if (it.orderedQuantityScaled > 0L) it.orderedQuantityScaled else it.deliveredQuantityScaled
+                                }
                                 val settlement = settlementsByProductId[productId]
                                 val unitAbbrev = product?.unitTypeId?.let { unitTypesById[it]?.name }
                                     ?: firstEntry.unitNameSnapshot
-                                val allowDecimals = product?.unitTypeId?.let { unitTypesById[it]?.allowDecimals } ?: true
+                                val allowDecimals = product?.unitTypeId?.let { unitTypesById[it]?.allowDecimals }
+                                    ?: firstEntry.allowDecimalsSnapshot
                                 val deliveryAbbrev = product?.deliveryUnitTypeId?.let { unitTypesById[it]?.name }
                                     ?: firstEntry.deliveryUnitNameSnapshot
                                 BuyerVeggieProductRowDto(
@@ -1866,7 +1914,7 @@ class LojinhaAdminServer(
                                     totalSpentCents = settlement?.totalSpentCents
                                 )
                             }
-                            .sortedBy { it.name.lowercase() }
+                            .sortedByAccentInsensitive { it.name }
 
                         val ordersChangedSinceLastPdf = activeRound.isBuyerPortalPdfOutdated
 
@@ -1890,7 +1938,7 @@ class LojinhaAdminServer(
                             return@get
                         }
                         val entries = repo.getEntriesForRound(activeRound.id)
-                        val products = repo.getAllVeggieProducts()
+                        val products = repo.getAllVeggieProductsIncludingDeleted()
                         val language = call.parseLanguageParam()
                         try {
                             val pdfBytes = VeggieOrderPdfGenerator.generateBuyerShoppingListBytes(activeRound, entries, language, products)
@@ -1938,7 +1986,10 @@ class LojinhaAdminServer(
 
                     get("/events") {
                         if (!call.checkBuyerAuth()) return@get
-                        call.streamDataChangeEvents()
+                        call.streamDataChangeEvents(
+                            isBuyer = true,
+                            isSessionStillValid = { call.hasValidBuyerSession() }
+                        )
                     }
                 }
 
@@ -2108,19 +2159,45 @@ class LojinhaAdminServer(
         )
     }
 
-    private fun ApplicationCall.resolveClientIp(): String {
+    private fun ApplicationCall.isLoopbackRemote(): Boolean {
         val remote = request.local.remoteHost
-        val isLoopback = remote == "127.0.0.1" || remote == "::1" || remote == "0:0:0:0:0:0:0:1" || remote == "localhost"
-        if (isLoopback) {
+        return remote == "127.0.0.1" || remote == "::1" || remote == "0:0:0:0:0:0:0:1" || remote == "localhost"
+    }
+
+    private fun ApplicationCall.resolveClientIp(): String {
+        if (isLoopbackRemote()) {
             val cfIp = request.header("CF-Connecting-IP")?.trim()?.takeIf { it.isNotBlank() }
             if (cfIp != null) return cfIp
         }
-        return remote
+        return request.local.remoteHost
     }
 
     private fun ApplicationCall.isHttpsRequest(): Boolean {
-        val forwardedProto = request.header("X-Forwarded-Proto")
-        return forwardedProto.equals("https", ignoreCase = true) || request.local.scheme.equals("https", ignoreCase = true)
+        if (request.local.scheme.equals("https", ignoreCase = true)) return true
+        if (isLoopbackRemote()) {
+            val forwardedProto = request.header("X-Forwarded-Proto")
+            if (forwardedProto.equals("https", ignoreCase = true)) return true
+        }
+        return false
+    }
+
+    private suspend fun ApplicationCall.readBoundedBytes(maxBytes: Long): ByteArray? {
+        val stream = receiveStream()
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val buffer = ByteArray(8192)
+            val out = ByteArrayOutputStream()
+            var total = 0L
+            stream.use { input ->
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    total += read
+                    if (total > maxBytes) return@withContext null
+                    out.write(buffer, 0, read)
+                }
+            }
+            out.toByteArray()
+        }
     }
 
     private fun ApplicationCall.setSessionCookie(name: String, rawToken: String, maxAgeSeconds: Int?) {
@@ -2169,14 +2246,49 @@ class LojinhaAdminServer(
         }
     }
 
-    private fun ApplicationCall.hasValidAdminSession(now: Long = System.currentTimeMillis()): Boolean {
+    private suspend fun ApplicationCall.hasValidAdminSession(now: Long = System.currentTimeMillis()): Boolean {
         val adminToken = request.cookies[ADMIN_COOKIE_NAME]
         if (adminToken.isNullOrBlank()) return false
         val adminHash = hashToken(adminToken)
-        val expiry = activeTokens[adminHash] ?: return false
-        if (now < expiry) return true
-        activeTokens.remove(adminHash)
-        return false
+        val session = activeTokens[adminHash] ?: return false
+        if (now >= session.expiryTimestamp) {
+            activeTokens.remove(adminHash)
+            return false
+        }
+        val settings = settingsRepository.getSettings()
+        val defaultAdminHash = de.joelneumann.lojinha.security.PasswordHasher.hash("admin")
+        val hasCustomAdminHash = settings.adminPasswordHash.isNotBlank() &&
+            !safeEquals(settings.adminPasswordHash.lowercase(), defaultAdminHash)
+        val stillValid = hasCustomAdminHash && safeEquals(session.credentialHash, settings.adminPasswordHash)
+        if (!stillValid) {
+            activeTokens.remove(adminHash)
+        }
+        return stillValid
+    }
+
+    private suspend fun ApplicationCall.hasValidCustomerSession(now: Long = System.currentTimeMillis()): Boolean {
+        val customerToken = request.cookies[CUSTOMER_COOKIE_NAME]
+        if (customerToken.isNullOrBlank()) return false
+        val customerHash = hashToken(customerToken)
+        val session = activeCustomerTokens[customerHash] ?: return false
+        if (now >= session.expiryTimestamp) {
+            activeCustomerTokens.remove(customerHash)
+            savePersistedCustomerSessions()
+            return false
+        }
+        val user = userRepository.getUserById(session.userId)
+        val currentPin = user?.pin
+        val pinMatches = user != null &&
+            user.isActive &&
+            !user.isDeleted &&
+            !currentPin.isNullOrBlank() &&
+            (session.credentialHash == null || safeEquals(session.credentialHash, currentPin))
+        if (!pinMatches) {
+            activeCustomerTokens.remove(customerHash)
+            savePersistedCustomerSessions()
+            return false
+        }
+        return true
     }
 
     private suspend fun ApplicationCall.hasValidBuyerSession(now: Long = System.currentTimeMillis()): Boolean {
@@ -2204,16 +2316,7 @@ class LojinhaAdminServer(
         val now = System.currentTimeMillis()
         if (hasValidAdminSession(now)) return true
         if (hasValidBuyerSession(now)) return true
-        val customerToken = request.cookies[CUSTOMER_COOKIE_NAME]
-        if (!customerToken.isNullOrBlank()) {
-            val customerHash = hashToken(customerToken)
-            val session = activeCustomerTokens[customerHash]
-            if (session != null) {
-                if (now < session.expiryTimestamp) return true
-                activeCustomerTokens.remove(customerHash)
-                savePersistedCustomerSessions()
-            }
-        }
+        if (hasValidCustomerSession(now)) return true
         return false
     }
 
@@ -2221,21 +2324,7 @@ class LojinhaAdminServer(
         val now = System.currentTimeMillis()
         if (hasValidAdminSession(now)) return "ADMIN"
         if (hasValidBuyerSession(now)) return "BUYER"
-        val customerToken = request.cookies[CUSTOMER_COOKIE_NAME]
-        if (!customerToken.isNullOrBlank()) {
-            val customerHash = hashToken(customerToken)
-            val session = activeCustomerTokens[customerHash]
-            if (session != null) {
-                if (now < session.expiryTimestamp) {
-                    val user = userRepository.getUserById(session.userId)
-                    if (user != null && user.isActive && !user.isDeleted) {
-                        return "CUSTOMER"
-                    }
-                }
-                activeCustomerTokens.remove(customerHash)
-                savePersistedCustomerSessions()
-            }
-        }
+        if (hasValidCustomerSession(now)) return "CUSTOMER"
         return null
     }
 
@@ -2286,19 +2375,30 @@ class LojinhaAdminServer(
         val userId = requireCustomerUserId() ?: return null
         if (userId.isEmpty()) return null
         val user = userRepository.getUserById(userId)
-        if (user == null || !user.isActive || user.isDeleted) {
-            val token = request.cookies[CUSTOMER_COOKIE_NAME]
+        val currentPin = user?.pin
+        val token = request.cookies[CUSTOMER_COOKIE_NAME]
+        val session = token?.takeIf { it.isNotBlank() }?.let { activeCustomerTokens[hashToken(it)] }
+        val pinStillMatches = user != null &&
+            user.isActive &&
+            !user.isDeleted &&
+            !currentPin.isNullOrBlank() &&
+            (session?.credentialHash == null || safeEquals(session.credentialHash, currentPin))
+        if (!pinStillMatches) {
             if (!token.isNullOrBlank() && activeCustomerTokens.remove(hashToken(token)) != null) {
                 savePersistedCustomerSessions()
             }
             clearSessionCookie(CUSTOMER_COOKIE_NAME)
-            respond(HttpStatusCode.Unauthorized, "Customer account is inactive or not found")
+            respond(HttpStatusCode.Unauthorized, "Customer account is inactive or credentials changed")
             return null
         }
         return user
     }
 
-    private suspend fun ApplicationCall.streamDataChangeEvents(targetUserId: String? = null) {
+    private suspend fun ApplicationCall.streamDataChangeEvents(
+        targetUserId: String? = null,
+        isBuyer: Boolean = false,
+        isSessionStillValid: (suspend () -> Boolean)? = null
+    ) {
         if (activeSseConnections.incrementAndGet() > MAX_SSE_CONNECTIONS) {
             activeSseConnections.decrementAndGet()
             respond(HttpStatusCode.ServiceUnavailable, "Too many active event streams")
@@ -2309,10 +2409,10 @@ class LojinhaAdminServer(
             respondTextWriter(contentType = ContentType.Text.EventStream) {
                 val channel = Channel<Unit>(Channel.CONFLATED)
                 val listener: (DataChangeNotifier.ChangeScope) -> Unit = { scope ->
-                    val shouldNotify = if (targetUserId == null) {
-                        true
-                    } else {
-                        !scope.adminOnly && (scope.targetUserId == null || scope.targetUserId == targetUserId)
+                    val shouldNotify = when {
+                        isBuyer -> scope.notifyBuyer && scope.targetUserId == null
+                        targetUserId == null -> true
+                        else -> !scope.adminOnly && (scope.targetUserId == null || scope.targetUserId == targetUserId)
                     }
                     if (shouldNotify) {
                         channel.trySend(Unit)
@@ -2325,6 +2425,9 @@ class LojinhaAdminServer(
                     while (true) {
                         val received = withTimeoutOrNull(25_000L) {
                             channel.receive()
+                        }
+                        if (isSessionStillValid != null && !isSessionStillValid()) {
+                            break
                         }
                         if (received != null) {
                             write("event: data_changed\ndata: {}\n\n")

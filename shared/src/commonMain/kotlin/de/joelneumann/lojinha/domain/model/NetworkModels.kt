@@ -108,6 +108,7 @@ data class VeggieSettlementRequest(
     val transporterUserId: String? = null,
     val productSettlements: List<VeggieRoundProductSettlement> = emptyList(),
     val actualQuantitiesByEntryId: Map<String, Long> = emptyMap(),
+    val pendingEntries: List<VeggieOrderEntry> = emptyList(),
     val settledAt: Long = 0L
 )
 
@@ -122,7 +123,10 @@ data class BuyerVeggieProductRowDto(
     val totalOrderedScaled: Long,
     val marketUnitPriceCents: Long? = null,
     val totalSpentCents: Long? = null
-)
+) {
+    val isDualUnit: Boolean
+        get() = deliveryUnitAbbreviation != null && deliveryUnitAbbreviation != unitAbbreviation
+}
 
 @Serializable
 data class BuyerVeggieRoundStateResponse(

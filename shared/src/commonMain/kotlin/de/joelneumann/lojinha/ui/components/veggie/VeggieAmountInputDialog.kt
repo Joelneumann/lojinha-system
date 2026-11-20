@@ -50,11 +50,13 @@ fun VeggieAmountInputDialog(
     maxAllowedScaledQuantity: Long? = null,
     onDismiss: () -> Unit,
     onSubmit: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    deliveryUnitType: VeggieUnitType? = null
 ) {
     val strings = I18n.current
     val allowDecimals = unitType?.allowDecimals ?: false
     val unitName = unitType?.name ?: "Unit"
+    val priceUnitName = deliveryUnitType?.takeIf { product.isDualUnit }?.name ?: unitName
 
     val initialText = remember(product.id, initialScaledQuantity) {
         if (initialScaledQuantity > 0L) {
@@ -170,7 +172,7 @@ fun VeggieAmountInputDialog(
 
                             if (product.estimatedPriceCents != null) {
                                 Text(
-                                    text = "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $unitName",
+                                    text = "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $priceUnitName",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = PrimaryNavy

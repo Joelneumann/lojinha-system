@@ -325,10 +325,12 @@ class LojinhaAdminServerTest {
             transporterUserId: String?,
             productSettlements: List<VeggieRoundProductSettlement>,
             actualQuantitiesByEntryId: Map<String, Long>,
-            settledAt: Long
+            settledAt: Long,
+            pendingEntries: List<VeggieOrderEntry>
         ): VeggieRoundSettlementResult? {
             val roundIdx = fakeVeggieRounds.indexOfFirst { it.id == roundId }
             if (roundIdx < 0) return null
+            pendingEntries.forEach { upsertAdminOrderEntry(it.copy(roundId = roundId)) }
             val entries = getEntriesForRound(roundId).map { e ->
                 e.copy(actualQuantityScaled = actualQuantitiesByEntryId[e.id] ?: e.orderedQuantityScaled)
             }

@@ -69,6 +69,26 @@ fun String.isReservedAdminName(): Boolean =
     normalizeUserName().let { it == "admin" || it == "buyer" }
 
 /**
+ * Checks whether [candidateIdentifier] (a user's name or nickname) collides with any other
+ * non-deleted user's name or nickname (case- and accent-insensitive).
+ * Returns the conflicting [User], or null if unique.
+ */
+fun findUserIdentifierConflict(
+    candidateIdentifier: String,
+    excludeUserId: String,
+    allUsers: Iterable<User>
+): User? {
+    val normalized = candidateIdentifier.normalizeUserName()
+    if (normalized.isBlank()) return null
+    return allUsers.firstOrNull { other ->
+        other.id != excludeUserId && !other.isDeleted && (
+            other.name.normalizeUserName() == normalized ||
+                other.nickname?.normalizeUserName() == normalized
+        )
+    }
+}
+
+/**
  * Returns true if this string contains [query], ignoring diacritics/accents (e.g. 'a' matches 'á', 'Â', etc.)
  * and case (by default).
  */

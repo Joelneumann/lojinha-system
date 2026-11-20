@@ -90,8 +90,10 @@ class TransactionHistoryViewModel(
             _searchFilter.value = ""
             _selectedTypeFilter.value = null
             _showSettingsModal.value = false
+            _currentPage.value = 0
+        } else if (!sameUser) {
+            _currentPage.value = 0
         }
-        _currentPage.value = 0
         if (sameUser && fetchJob?.isActive == true && resetFilters) {
             return
         }

@@ -366,6 +366,7 @@ fun CustomerNetworkPortalScreen(
         VeggieProductDetailModal(
             product = detailProduct,
             unitType = unitTypesById[detailProduct.unitTypeId],
+            deliveryUnitType = detailProduct.deliveryUnitTypeId?.let { unitTypesById[it] },
             isFavorite = detailProduct.id in favoriteProductIds,
             onToggleFavorite = { veggieViewModel.toggleFavorite(detailProduct.id) },
             onDismiss = { veggieViewModel.closeProductDetail() }
@@ -415,12 +416,18 @@ fun CustomerNetworkPortalScreen(
                 ) {
                     Button(
                         onClick = {
-                            veggieViewModel.saveOrder {
-                                showUnsavedDialog = false
-                                val nav = pendingNavigation
-                                pendingNavigation = null
-                                nav?.invoke()
-                            }
+                            veggieViewModel.saveOrder(
+                                onOrderSaved = {
+                                    showUnsavedDialog = false
+                                    val nav = pendingNavigation
+                                    pendingNavigation = null
+                                    nav?.invoke()
+                                },
+                                onOrderFailed = {
+                                    showUnsavedDialog = false
+                                    pendingNavigation = null
+                                }
+                            )
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = ColorSuccessEmerald),
                         shape = RoundedCornerShape(8.dp),
@@ -882,8 +889,9 @@ private fun CustomerVeggieOrderTabContent(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+                                        val mobileHasPriceless = cartProducts.any { it.estimatedPriceCents == null || it.isDualUnit }
                                         Text(
-                                            text = "~ ${Formatting.formatBrl(estimatedSubtotalCents)}",
+                                            text = if (mobileHasPriceless) "> ${Formatting.formatBrl(estimatedSubtotalCents)}" else "~ ${Formatting.formatBrl(estimatedSubtotalCents)}",
                                             fontSize = 15.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = PrimaryNavy,
@@ -1041,6 +1049,7 @@ private fun CustomerVeggieOrderTabContent(
         VeggieAmountInputDialog(
             product = editingProduct,
             unitType = unitTypesById[editingProduct.unitTypeId],
+            deliveryUnitType = editingProduct.deliveryUnitTypeId?.let { unitTypesById[it] },
             initialScaledQuantity = draftQuantitiesScaled[editingProduct.id] ?: 0L,
             decimalSeparator = decimalSep,
             previousScaledQuantity = previousRoundQuantitiesScaled[editingProduct.id] ?: 0L,
@@ -1410,6 +1419,7 @@ private fun VeggieCatalogPanel(
                     CustomerVeggieProductCard(
                         product = product,
                         unitType = unitType,
+                        deliveryUnitType = product.deliveryUnitTypeId?.let { unitTypesById[it] },
                         quantityScaled = currentQtyScaled,
                         previousQuantityScaled = prevQtyScaled,
                         isFavorite = isFavorite,
@@ -1486,7 +1496,7 @@ private fun VeggieCartPanel(
 ) {
     val strings = I18n.current
     val hasPricelessItemsInCart = remember(cartProducts) {
-        cartProducts.any { it.estimatedPriceCents == null }
+        cartProducts.any { it.estimatedPriceCents == null || it.isDualUnit }
     }
 
     Surface(
@@ -1627,9 +1637,11 @@ private fun VeggieCartPanel(
                     itemsIndexed(cartProducts, key = { _, it -> it.id }) { _, product ->
                         val qtyScaled = draftQuantitiesScaled[product.id] ?: 0L
                         val unitType = unitTypesById[product.unitTypeId]
+                        val deliveryUnitType = product.deliveryUnitTypeId?.let { unitTypesById[it] }
                         VeggieCartLineItemRow(
                             product = product,
                             unitType = unitType,
+                            deliveryUnitType = deliveryUnitType,
                             quantityScaled = qtyScaled,
                             isEditable = isRoundOpen,
                             decimalSeparator = decimalSep,
@@ -1724,6 +1736,7 @@ private fun VeggieCartPanel(
 private fun VeggieCartLineItemRow(
     product: VeggieProduct,
     unitType: VeggieUnitType?,
+    deliveryUnitType: VeggieUnitType? = null,
     quantityScaled: Long,
     isEditable: Boolean,
     decimalSeparator: Char,
@@ -1736,11 +1749,14 @@ private fun VeggieCartLineItemRow(
     val allowDecimals = unitType?.allowDecimals ?: false
     val isDiscontinued = !product.isActive || product.isDeleted
     val unitName = unitType?.name ?: "Unit"
+    val priceUnitName = deliveryUnitType?.name ?: unitName
     val qtyFormatted = VeggieQuantityScaling.formatScaledQuantity(quantityScaled, allowDecimals, decimalSeparator)
 
-    val lineTotalCents = product.estimatedPriceCents?.let {
-        VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(it, quantityScaled)
-    } ?: 0L
+    val lineTotalCents: Long? = if (!product.isDualUnit) {
+        product.estimatedPriceCents?.let {
+            VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(it, quantityScaled)
+        }
+    } else null
 
     Surface(
         onClick = onEditQuantity,
@@ -1784,7 +1800,7 @@ private fun VeggieCartLineItemRow(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = if (product.estimatedPriceCents != null) {
-                        "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $unitName"
+                        "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $priceUnitName"
                     } else {
                         unitName
                     },
@@ -1807,10 +1823,10 @@ private fun VeggieCartLineItemRow(
                 )
 
                 Text(
-                    text = Formatting.formatBrl(lineTotalCents),
+                    text = lineTotalCents?.let { Formatting.formatBrl(it) } ?: strings.veggieEstimatedPriceUnknown,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = PrimaryNavy,
+                    color = if (lineTotalCents != null) PrimaryNavy else TextSecondaryMuted,
                     modifier = Modifier.widthIn(min = 52.dp),
                     textAlign = TextAlign.End
                 )
@@ -1850,6 +1866,7 @@ private fun VeggieCartLineItemRow(
 private fun CustomerVeggieProductCard(
     product: VeggieProduct,
     unitType: VeggieUnitType?,
+    deliveryUnitType: VeggieUnitType? = null,
     quantityScaled: Long,
     previousQuantityScaled: Long,
     isFavorite: Boolean,
@@ -1871,6 +1888,7 @@ private fun CustomerVeggieProductCard(
     val strings = I18n.current
     val allowDecimals = unitType?.allowDecimals ?: false
     val unitName = unitType?.name ?: "Unit"
+    val priceUnitName = deliveryUnitType?.name ?: unitName
     val isOrdered = quantityScaled > 0L
 
     val cardFocusRequester = remember { FocusRequester() }
@@ -1896,7 +1914,7 @@ private fun CustomerVeggieProductCard(
     val cardElevation = CardDefaults.cardElevation(defaultElevation = if (isMobile) 0.dp else 1.dp)
 
     val cardContent: @Composable ColumnScope.() -> Unit = {
-        val lineTotalCents = if (isOrdered && product.estimatedPriceCents != null) {
+        val lineTotalCents = if (isOrdered && !product.isDualUnit && product.estimatedPriceCents != null) {
             VeggieSettlementCalculator.calculateTotalSpentFromUnitPrice(product.estimatedPriceCents, quantityScaled)
         } else 0L
 
@@ -2017,7 +2035,7 @@ private fun CustomerVeggieProductCard(
                     ) {
                         Text(
                             text = if (product.estimatedPriceCents != null) {
-                                "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $unitName"
+                                "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $priceUnitName"
                             } else {
                                 strings.veggieEstimatedPriceUnknown
                             },
@@ -2134,7 +2152,7 @@ private fun CustomerVeggieProductCard(
                     ) {
                         Text(
                             text = if (product.estimatedPriceCents != null) {
-                                "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $unitName"
+                                "~ ${Formatting.formatBrl(product.estimatedPriceCents)} / $priceUnitName"
                             } else {
                                 strings.veggieEstimatedPriceUnknown
                             },
@@ -2466,8 +2484,13 @@ private fun CustomerVeggieHistoryRoundCard(
                         } else {
                             "${strings.colOrderedQty}: $orderedText ${entry.unitNameSnapshot}"
                         }
+                        val priceUnit = if (isSettled || entry.actualQuantityScaled != null || entry.isDualUnit) {
+                            entry.effectiveDeliveryUnitName
+                        } else {
+                            entry.unitNameSnapshot
+                        }
                         val priceSuffix = if (unitPriceCents != null && unitPriceCents > 0L) {
-                            "  •  ${if (!isSettled) "~ " else ""}${Formatting.formatBrl(unitPriceCents)} / ${if (isSettled) entry.effectiveDeliveryUnitName else entry.unitNameSnapshot}"
+                            "  •  ${if (!isSettled) "~ " else ""}${Formatting.formatBrl(unitPriceCents)} / $priceUnit"
                         } else ""
                         Text(
                             text = qtySummary + priceSuffix,

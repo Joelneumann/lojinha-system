@@ -1825,12 +1825,12 @@ private fun AddOrEditVeggieOrderDialog(
     }
 
     val canSubmit = selectedUser != null && selectedProduct != null && parsedQtyScaled != null && (
-        parsedQtyScaled > 0L || (existingEntry != null && parsedQtyScaled == 0L)
+        parsedQtyScaled > 0L || (existingEntry != null && mode == AddOrderEntryMode.OVERWRITE && parsedQtyScaled == 0L)
     )
 
     val submitOrderChange: () -> Unit = {
         if (canSubmit) {
-            if (existingEntry != null && parsedQtyScaled == 0L) {
+            if (existingEntry != null && mode == AddOrderEntryMode.OVERWRITE && parsedQtyScaled == 0L) {
                 showConfirmRemove = true
             } else {
                 onConfirm(selectedUser!!, selectedProduct!!, textFieldValue.text, mode)

@@ -64,16 +64,19 @@ Managed by [`VeggieRoundAutoScheduler`](../shared/src/jvmMain/kotlin/de/joelneum
 Implemented in [`VeggieSettlementCalculator.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/domain/service/VeggieSettlementCalculator.kt) and [`RoomVeggieOrderRepositoryImpl.kt`](../shared/src/jvmMain/kotlin/de/joelneumann/lojinha/data/repository/RoomVeggieOrderRepositoryImpl.kt).
 
 1. **Product Cost Distribution (`distributeProductTotalSpent`):**
-   * For each product, the admin provides either `totalSpentCents` or `marketUnitPriceCents` (from which `totalSpent = round((unitPrice * totalDeliveredQtyScaled) / 1000)`).
+   * For each product, the admin (or buyer via draft prices) provides either `totalSpentCents` or `marketUnitPriceCents`. When only `marketUnitPriceCents` is supplied and `totalDeliveredQtyScaled > 0`:
+     * For **dual-unit** products (e.g., ordered in pieces, settled/delivered in kg), `totalSpent = round((unitPrice * totalDeliveredQtyScaled) / 1000)`.
+     * For **single-unit** products, `totalSpent = round((unitPrice * totalOrderedQtyScaled) / 1000)` (so adjustments to delivered quantities do not shift the market total unless `totalSpentCents` is explicitly entered).
+     * If `totalDeliveredQtyScaled == 0`, `totalSpent` is `0` so zero-delivery items never generate phantom charges.
    * `totalSpentCents` is distributed proportionally across customers with `actualQuantityScaled > 0` using the **Largest Remainder Method**, guaranteeing that customer shares sum to `totalSpentCents` to the exact cent.
    * `effectiveUnitPriceCents = round((totalSpentCents * 1000) / totalDeliveredQtyScaled)`.
 2. **Fee Distribution (`distributeCombinedFeesEqually`):**
    * `combinedFeeCents = buyerOperationFeeCents + transportFeeCents`.
    * Split equally across all participating users, with any 1-cent remainder distributed deterministically by sorted `userId`.
 3. **Atomic Ledger Transactions:**
-   * **Initial Settlement:** Creates `ADMIN_WITHDRAWAL` (debit) transactions for each participating customer with note `SYSNOTE|VEGGIE_ORDER|<week>|<year>|<roundId>`.
-   * **Transporter Credit:** If `transporterUserId` is set and `transportFeeCents > 0`, creates an `ADMIN_DEPOSIT` credit with note `SYSNOTE|VEGGIE_TRANSPORT|<week>|<year>|<roundId>`.
-   * **Re-Settlement Corrections:** Re-settling an already `SETTLED` round computes the delta against previously settled amounts and posts differential adjustments (`SYSNOTE|VEGGIE_CORRECTION|<week>|<year>|<roundId>`).
+   * **Initial Settlement:** Creates `VEGGIE` (debit) transactions for each participating customer with note `SYSNOTE|VEGGIE_ORDER|<week>|<year>|<roundId>`.
+   * **Transporter Credit:** If `transporterUserId` is set and `transportFeeCents > 0`, creates a `VEGGIE` credit with note `SYSNOTE|VEGGIE_TRANSPORT|<week>|<year>|<roundId>`.
+   * **Re-Settlement Corrections:** Re-settling an already `SETTLED` round computes the delta against previously settled amounts and posts differential `VEGGIE` adjustments (`SYSNOTE|VEGGIE_CORRECTION|<week>|<year>|<roundId>`).
    * **Catalog Price Sync:** Settlement updates each settled product's `estimatedPriceCents` for future rounds.
 
 ---
@@ -95,9 +98,9 @@ Generated on the JVM via [`VeggieOrderPdfGenerator.kt`](../shared/src/jvmMain/ko
 
 The embedded Ktor server serves a mobile-first **Customer Network Portal** alongside the Web Admin console:
 
-* **Authentication:** Native `/login.html` flow issuing an `HttpOnly` session cookie (`lojinha_customer_session`) backed by SHA-256 server-side token hashing and tiered brute-force rate limiting.
+* **Authentication:** Native `/login.html` flow issuing an `HttpOnly` session cookie (`lojinha_customer_session`) backed by SHA-256 server-side token hashing, persisted hashed sessions, and tiered brute-force rate limiting. Logout is handled via `POST /api/customer/logout`.
 * **Veggie Ordering & Favorites:**
-  * View the active `OPEN` round, search/filter products, toggle personal favorites (`/api/customer/veggie/favorites`), and submit or update quantities (`/api/customer/veggie/order`).
+  * Load active round state, catalog, and current user entries via `GET /api/customer/veggie/state`, toggle personal favorites (`/api/customer/veggie/favorites`), and submit or update quantities (`/api/customer/veggie/order`).
   * Inspect past veggie order history (`/api/customer/veggie/history`).
 * **Account & Settings:**
   * View current prepaid balance (with low/negative balance warning banners), paginated transaction history (`/api/customer/transactions`), and download A4 PDF account statements (`/api/customer/transactions-pdf`).
@@ -106,3 +109,18 @@ The embedded Ktor server serves a mobile-first **Customer Network Portal** along
 * **Real-Time Sync & Mobile UX:**
   * Subscribes to `/api/customer/events` (SSE) for live round and balance updates.
   * Includes mobile viewport/keyboard helpers to prevent unwanted horizontal scrolling on iOS/Android web browsers.
+
+---
+
+## 🧺 Buyer Portal (Market Run Interface)
+
+For the dedicated market buyer role (configured with `buyerPasswordHash` in `SystemSettings`), Lojinha provides a scoped **Buyer Portal** accessible from `/login.html`:
+
+* **Authentication:** Issues an `HttpOnly` session cookie (`lojinha_buyer_session`) via `POST /api/login` (`role = "buyer"`) and logs out via `POST /api/buyer/logout`. Buyer sessions cannot access Admin or Customer data (transport fees, transporter user, and customer identities are stripped from buyer payloads).
+* **Closed-Round Shopping View (`GET /api/buyer/veggie/state`):**
+  * Shows aggregated item quantities when the current round is `CLOSED` (excluding items with `excludeFromBuyerPdf = true`).
+  * Displays an outdated-PDF banner whenever orders change after the buyer's last PDF download (`ordersUpdatedAt > buyerPortalPdfExportedAt`).
+* **Buyer PDF Export (`GET /api/buyer/veggie/round/buyer-pdf`):**
+  * Downloads the localized Buyer Shopping List PDF and records `buyerPortalPdfExportedAt`.
+* **Draft Market Prices & Buyer Fee (`POST /api/buyer/veggie/round/draft-settlement`):**
+  * Allows the buyer to enter and save `marketUnitPriceCents`, `totalSpentCents`, and `buyerOperationFeeCents` while at the market; saved values sync live via `/api/buyer/events` and `/api/admin/events` (SSE) into the Admin Settlement Matrix.

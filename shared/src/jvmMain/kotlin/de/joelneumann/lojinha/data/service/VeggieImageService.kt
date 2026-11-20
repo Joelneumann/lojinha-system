@@ -21,6 +21,8 @@ class VeggieImageService(
         private const val TAG = "VeggieImageService"
         const val THUMB_SIZE_PX = 96
         const val FULL_MAX_DIMENSION_PX = 800
+        private const val MAX_DECODE_DIMENSION_PX = 8000
+        private const val MAX_DECODE_PIXELS = 40_000_000L
         private const val THUMB_QUALITY = 0.82f
         private const val FULL_QUALITY = 0.85f
 
@@ -110,6 +112,7 @@ class VeggieImageService(
             imageDirectory.mkdirs()
         }
 
+        validateImageDimensions(rawImageBytes)
         val sourceImage = ImageIO.read(ByteArrayInputStream(rawImageBytes))
             ?: throw IllegalArgumentException("Unsupported or corrupted image format")
 
@@ -180,6 +183,28 @@ class VeggieImageService(
         if (isStillUsedByOther) return
         listOf("_thumb.jpg", "_full.jpg", ".jpg", ".jpeg", ".png", ".webp").forEach { suffix ->
             File(imageDirectory, "$clean$suffix").takeIf { it.exists() }?.delete()
+        }
+    }
+
+    private fun validateImageDimensions(rawImageBytes: ByteArray) {
+        ImageIO.createImageInputStream(ByteArrayInputStream(rawImageBytes)).use { iis ->
+            if (iis == null) throw IllegalArgumentException("Unsupported or corrupted image format")
+            val readers = ImageIO.getImageReaders(iis)
+            if (!readers.hasNext()) throw IllegalArgumentException("Unsupported or corrupted image format")
+            val reader = readers.next()
+            try {
+                reader.input = iis
+                val width = reader.getWidth(0)
+                val height = reader.getHeight(0)
+                require(width in 1..MAX_DECODE_DIMENSION_PX && height in 1..MAX_DECODE_DIMENSION_PX) {
+                    "Image dimensions (${width}x${height}) exceed maximum allowed (${MAX_DECODE_DIMENSION_PX}x${MAX_DECODE_DIMENSION_PX})"
+                }
+                require(width.toLong() * height.toLong() <= MAX_DECODE_PIXELS) {
+                    "Image pixel count exceeds maximum allowed"
+                }
+            } finally {
+                reader.dispose()
+            }
         }
     }
 

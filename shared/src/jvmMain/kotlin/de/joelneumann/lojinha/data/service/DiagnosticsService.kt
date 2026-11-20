@@ -180,6 +180,7 @@ class DiagnosticsService(
         val shmFile = File("${dbFile.absolutePath}-shm")
 
         var integrityResult = "Unknown"
+        var schemaVersion = -1
         if (dbFile.exists()) {
             try {
                 val connection = BundledSQLiteDriver().open(dbFile.absolutePath)
@@ -189,6 +190,13 @@ class DiagnosticsService(
                         timeoutStmt.step()
                     } finally {
                         timeoutStmt.close()
+                    }
+
+                    val verStmt = connection.prepare("PRAGMA user_version;")
+                    try {
+                        if (verStmt.step()) schemaVersion = verStmt.getLong(0).toInt()
+                    } finally {
+                        verStmt.close()
                     }
 
                     val stmt = connection.prepare("PRAGMA integrity_check;")
@@ -217,6 +225,9 @@ class DiagnosticsService(
         var activeProductsCount = -1
         var transactionsCount = -1
         var billingListsCount = -1
+        var veggieProductsCount = -1
+        var veggieRoundsCount = -1
+        var veggieEntriesCount = -1
 
         db?.let { database ->
             try {
@@ -238,6 +249,12 @@ class DiagnosticsService(
             try {
                 billingListsCount = database.billingListDao().getAllBillingLists().size
             } catch (_: Exception) {}
+
+            try {
+                veggieProductsCount = database.veggieOrderDao().getAllVeggieProducts(includeDeleted = false).size
+                veggieRoundsCount = database.veggieOrderDao().getAllRounds().size
+                veggieEntriesCount = database.veggieOrderDao().getAllEntries().size
+            } catch (_: Exception) {}
         }
 
         buildString {
@@ -246,6 +263,7 @@ class DiagnosticsService(
             appendLine("================================================================================")
             appendLine("Database File:      ${dbFile.absolutePath}")
             appendLine("Database Exists:    ${dbFile.exists()}")
+            appendLine("Schema Version:     ${if (schemaVersion >= 0) "v$schemaVersion" else "N/A"}")
             appendLine("Database Size:      ${if (dbFile.exists()) FileRollingLogger.formatFileSize(dbFile.length()) else "0 B"}")
             appendLine("WAL File Exists:    ${walFile.exists()} (${if (walFile.exists()) FileRollingLogger.formatFileSize(walFile.length()) else "N/A"})")
             appendLine("SHM File Exists:    ${shmFile.exists()} (${if (shmFile.exists()) FileRollingLogger.formatFileSize(shmFile.length()) else "N/A"})")
@@ -258,6 +276,9 @@ class DiagnosticsService(
             appendLine("Products Active:    ${if (activeProductsCount >= 0) activeProductsCount else "N/A"}")
             appendLine("Transactions:       ${if (transactionsCount >= 0) transactionsCount else "N/A"}")
             appendLine("Billing Lists:      ${if (billingListsCount >= 0) billingListsCount else "N/A"}")
+            appendLine("Veggie Products:    ${if (veggieProductsCount >= 0) veggieProductsCount else "N/A"}")
+            appendLine("Veggie Rounds:      ${if (veggieRoundsCount >= 0) veggieRoundsCount else "N/A"}")
+            appendLine("Veggie Entries:     ${if (veggieEntriesCount >= 0) veggieEntriesCount else "N/A"}")
             appendLine("================================================================================")
         }
     }

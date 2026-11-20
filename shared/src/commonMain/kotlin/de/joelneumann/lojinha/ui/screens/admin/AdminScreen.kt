@@ -495,22 +495,26 @@ fun AdminScreen(
         }
         val confirmDiscard = {
             hasUnsavedChanges = false
-            veggieViewModel?.let { vm ->
-                if (vm.editingPastRound.value != null) {
-                    vm.closePastRoundEditor()
-                } else {
-                    vm.discardDraft()
+            if (currentTab == AdminTab.VEGGIE_ORDERS) {
+                veggieViewModel?.let { vm ->
+                    if (vm.editingPastRound.value != null) {
+                        vm.closePastRoundEditor()
+                    } else {
+                        vm.discardDraft()
+                    }
                 }
             }
             if (isExitAdminPending) {
                 isExitAdminPending = false
                 onExitAdmin()
             } else if (pendingTabSwitch != null) {
+                activePageScroller = null
                 currentTab = pendingTabSwitch!!
                 pendingTabSwitch = null
                 expandedProductId = null
                 expandedUserId = null
                 expandedTransactionId = null
+                tabFocusTrigger++
             }
         }
 

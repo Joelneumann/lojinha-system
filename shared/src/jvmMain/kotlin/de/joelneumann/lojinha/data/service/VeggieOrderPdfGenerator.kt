@@ -187,7 +187,10 @@ object VeggieOrderPdfGenerator {
         val labels = labelsFor(language)
         val weekInfo = IsoWeekUtils.fromEpochMillis(round.openedAt)
         val excludedProductIds = products.filter { it.excludeFromBuyerPdf }.map { it.id }.toSet()
-        val positiveEntries = entries.filter { it.orderedQuantityScaled > 0L && it.veggieProductId !in excludedProductIds }
+        val positiveEntries = entries.filter {
+            (it.orderedQuantityScaled > 0L || (it.actualQuantityScaled ?: 0L) > 0L) &&
+                it.veggieProductId !in excludedProductIds
+        }
         val groupedByProduct = positiveEntries
             .groupBy { it.veggieProductId }
             .values
@@ -251,7 +254,9 @@ object VeggieOrderPdfGenerator {
         } else {
             groupedByProduct.forEachIndexed { idx, productEntries ->
                 val sample = productEntries.first()
-                val totalOrderedScaled = productEntries.sumOf { it.orderedQuantityScaled }
+                val totalOrderedScaled = productEntries.sumOf {
+                    if (it.orderedQuantityScaled > 0L) it.orderedQuantityScaled else it.deliveredQuantityScaled
+                }
                 val formattedTotalQty = VeggieQuantityScaling.formatScaledQuantity(
                     scaled = totalOrderedScaled,
                     allowDecimals = sample.allowDecimalsSnapshot,
@@ -364,7 +369,7 @@ object VeggieOrderPdfGenerator {
     ) {
         val labels = labelsFor(language)
         val weekInfo = IsoWeekUtils.fromEpochMillis(round.openedAt)
-        val positiveEntries = entries.filter { it.orderedQuantityScaled > 0L }
+        val positiveEntries = entries.filter { it.orderedQuantityScaled > 0L || (it.actualQuantityScaled ?: 0L) > 0L }
         val decimalSep = Formatting.decimalSeparator(language)
 
         val usersById = users.associateBy { it.id }
@@ -491,7 +496,9 @@ object VeggieOrderPdfGenerator {
 
             for (productEntries in products) {
                 val sample = productEntries.first()
-                val totalOrderedScaled = productEntries.sumOf { it.orderedQuantityScaled }
+                val totalOrderedScaled = productEntries.sumOf {
+                    if (it.orderedQuantityScaled > 0L) it.orderedQuantityScaled else it.deliveredQuantityScaled
+                }
                 val totalFormatted = VeggieQuantityScaling.formatScaledQuantity(
                     scaled = totalOrderedScaled,
                     allowDecimals = sample.allowDecimalsSnapshot,
@@ -539,10 +546,13 @@ object VeggieOrderPdfGenerator {
 
                 for ((userId, _) in customerSlice) {
                     val entry = entriesByProductAndUser[sample.veggieProductId to userId]
-                    val orderedQtyText = if (entry != null && entry.orderedQuantityScaled > 0L) {
+                    val displayQty = if (entry != null) {
+                        if (entry.orderedQuantityScaled > 0L) entry.orderedQuantityScaled else entry.deliveredQuantityScaled
+                    } else 0L
+                    val orderedQtyText = if (entry != null && displayQty > 0L) {
                         VeggieQuantityScaling.formatScaledQuantity(
-                            scaled = entry.orderedQuantityScaled,
-                            allowDecimals = sample.allowDecimalsSnapshot,
+                            scaled = displayQty,
+                            allowDecimals = if (entry.orderedQuantityScaled > 0L) sample.allowDecimalsSnapshot else sample.effectiveAllowDecimals,
                             decimalSeparator = decimalSep
                         )
                     } else {

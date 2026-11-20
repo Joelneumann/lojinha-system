@@ -198,8 +198,10 @@ class AdminVeggieViewModelTest {
             transporterUserId: String?,
             productSettlements: List<VeggieRoundProductSettlement>,
             actualQuantitiesByEntryId: Map<String, Long>,
-            settledAt: Long
+            settledAt: Long,
+            pendingEntries: List<VeggieOrderEntry>
         ): VeggieRoundSettlementResult {
+            pendingEntries.forEach { upsertAdminOrderEntry(it.copy(roundId = roundId)) }
             saveDraftSettlement(roundId, buyerOperationFeeCents, transportFeeCents, transporterUserId, productSettlements, actualQuantitiesByEntryId)
             val idx = rounds.indexOfFirst { it.id == roundId }
             if (idx >= 0) {

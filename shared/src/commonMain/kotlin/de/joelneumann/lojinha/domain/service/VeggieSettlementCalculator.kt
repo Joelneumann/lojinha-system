@@ -199,16 +199,26 @@ object VeggieSettlementCalculator {
             }
             val totalDeliveredQty = deliveredByEntryId.values.sum()
             val totalOrderedQty = productEntries.sumOf { it.orderedQuantityScaled.coerceAtLeast(0L) }
-            // When totalSpentCents is omitted and derived from marketUnitPriceCents, base it on ordered
-            // quantity (falling back to delivered only if ordered is 0) so adjusting delivered quantities
-            // never alters the market total—only the effective unit price and customer shares.
-            val unitPriceBasisQty = if (totalOrderedQty > 0L) totalOrderedQty else totalDeliveredQty
-
-            val authoritativeTotalSpent = resolveAuthoritativeTotalSpent(
-                marketUnitPriceCents = input?.marketUnitPriceCents,
-                totalSpentCents = input?.totalSpentCents,
-                totalDeliveredQtyScaled = unitPriceBasisQty
-            )
+            val isDualUnitProduct = productEntries.any { it.isDualUnit }
+            // When nobody received the product (totalDeliveredQty == 0), total spent billed for the product must be 0
+            // so totalMarketProductsSpentCents never counts ghost money that isn't billed to any customer.
+            // For dual-unit products (e.g. ordered in Un, priced/delivered in kg), unit price is per delivery unit,
+            // so derive totalSpent from totalDeliveredQty. For single-unit products, derive from ordered quantity
+            // (falling back to delivered if ordered is 0) so adjusting delivered quantities does not alter market total.
+            val authoritativeTotalSpent = if (totalDeliveredQty <= 0L) {
+                0L
+            } else {
+                val unitPriceBasisQty = when {
+                    isDualUnitProduct -> totalDeliveredQty
+                    totalOrderedQty > 0L -> totalOrderedQty
+                    else -> totalDeliveredQty
+                }
+                resolveAuthoritativeTotalSpent(
+                    marketUnitPriceCents = input?.marketUnitPriceCents,
+                    totalSpentCents = input?.totalSpentCents,
+                    totalDeliveredQtyScaled = unitPriceBasisQty
+                )
+            }
             totalMarketSpent += authoritativeTotalSpent
 
             val effectiveUnitPrice = calculateEffectiveUnitPrice(

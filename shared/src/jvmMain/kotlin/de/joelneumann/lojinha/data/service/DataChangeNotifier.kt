@@ -9,7 +9,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 object DataChangeNotifier {
     data class ChangeScope(
         val adminOnly: Boolean = false,
-        val targetUserId: String? = null
+        val targetUserId: String? = null,
+        val notifyBuyer: Boolean = true
     )
 
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
@@ -37,10 +38,18 @@ object DataChangeNotifier {
 
     fun notifyScopedDataChanged(scope: ChangeScope) {
         for (listener in listeners) {
-            listener()
+            try {
+                listener()
+            } catch (_: Exception) {
+                // Isolate listener exceptions so other subscribers still receive notifications
+            }
         }
         for (listener in scopedListeners) {
-            listener(scope)
+            try {
+                listener(scope)
+            } catch (_: Exception) {
+                // Isolate scoped listener exceptions so other subscribers still receive notifications
+            }
         }
     }
 

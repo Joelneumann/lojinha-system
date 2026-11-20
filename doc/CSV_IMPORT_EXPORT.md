@@ -41,9 +41,10 @@ Discontinued Soda,7891234567890,3.00,PIECE,0,,false
 | Column Name | Aliases Accepted | Type / Format | Required? | Description & Examples |
 |---|---|---|---|---|
 | `id` | `userId`, `user_id` | UUID / String | Optional | If omitted, a unique UUID is generated automatically. |
-| `name` | `userName`, `user_name` | String | **Yes** | Full user name (e.g., `Maria Silva`). Cannot be blank. |
+| `name` | `userName`, `user_name` | String | **Yes** | Full user name (e.g., `Maria Silva`). Cannot be blank or a reserved system/admin name. |
+| `nickname` | `nick`, `shortName`, `short_name` | String | Optional | Unique short nickname (max 10 chars, displayed in Veggie Worker PDFs). Must not collide with another user's name or nickname or reserved names; conflicting/invalid values are stripped with a warning. |
 | `balance` | `kontostand`, `saldo` | Currency / Number | Optional | Starting account balance. Accepts `R$ 50,00`, `50,00`, `50.00`, `-15.20`, or integer cents `5000`. Default: `0`. |
-| `language` | `lang`, `sprache` | String | Optional | `pt-BR` / `BR`, `en` / `EN`, `de` / `DE`. Default: `DE`. |
+| `language` | `lang`, `sprache` | String | Optional | `pt-BR` / `BR`, `en` / `EN`, `de` / `DE`. Default: `pt-BR`. |
 | `secondaryCurrency` | `secondary_currency`, `secCurr` | Enum | Optional | `NONE`, `USD`, `EUR`. Default: `NONE`. |
 | `pin` | `password` | String | Optional | Plaintext 4-6 digit numeric PIN or existing SHA-256 hash. Plaintext entries are hashed automatically. |
 | `userBarcode` | `user_barcode`, `barcode` | String | Optional | Scanned barcode value assigned to the user badge. |
@@ -54,9 +55,6 @@ Discontinued Soda,7891234567890,3.00,PIECE,0,,false
 | `avatarEmoji` | `avatar_emoji`, `emoji` | String | Optional | Emoji icon if avatarType is `EMOJI` (e.g., `☕`, `🚀`, `⭐`). |
 | `avatarColor` | `avatar_color`, `color` | Hex Color | Optional | Background hex color (e.g., `#1E293B`, `#2563EB`). |
 | `requirePinOnKiosk` | `require_pin_on_kiosk` | Boolean | Optional | Whether PIN is required on the Desktop POS kiosk (`true` or `false`). Default: `true`. |
-
-> [!NOTE]
-> Exported `users.csv` backups also include a `nickname` column (`id;name;nickname;...;requirePinOnKiosk`). During CSV import, `nickname` is not currently parsed.
 
 ### Example `users.csv`
 
@@ -111,6 +109,7 @@ Ana Costa,0.00,pt-BR,NONE,,,true,INITIALS,,#DC2626
 | `allowDecimals` | `allow_decimals`, `decimals` | Boolean | Optional | Used when auto-creating a new custom unit type (`true`/`false`, `1`/`0`). Default: `false`. |
 | `deliveryUnitTypeId` | `delivery_unit_type_id` | String | Optional | Optional delivery/settlement unit type ID (e.g., `unit-pack`). Blank clears it; unknown IDs preserve the existing value with a warning. |
 | `imageFileName` | `image`, `image_file_name` | String | Optional | Image filename key inside `~/.lojinha/veggie_images/`. |
+| `excludeFromBuyerPdf` | `exclude_from_buyer_pdf`, `excludeBuyerPdf` | Boolean | Optional | Excludes product from the Buyer Shopping List PDF (`true`/`false`, `1`/`0`). Default: `false`. |
 | `isActive` | `active`, `is_active` | Boolean | Optional | `true` or `false` (`1` or `0`). Default: `true` (forced `false` when `isDeleted` is `true`). |
 | `isDeleted` | `deleted`, `is_deleted` | Boolean | Optional | Soft-delete status (`true` or `false`). Default: `false`. |
 
@@ -141,5 +140,20 @@ Exported files include:
    ```csv
    id;userId;userNameSnapshot;timestamp;message
    ```
-6. **`veggie_products.csv`**: Veggie catalog (`id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;excludeFromBuyerPdf;isActive;isDeleted;deliveryUnitTypeId`). *(Note: `excludeFromBuyerPdf` is included in CSV exports and preserved on backups; it is not parsed on CSV import.)*
+6. **`veggie_products.csv`**: Veggie catalog (`id;name;description;estimatedPrice;unitTypeId;unitTypeName;allowDecimals;imageFileName;excludeFromBuyerPdf;isActive;isDeleted;deliveryUnitTypeId`).
 7. **`veggie_orders.csv`**: Veggie order rounds, entries, and per-product settlements (`roundId;isoYear;weekOfYear;openedAt;closedAt;settledAt;status;buyerOperationFee;transportFee;transporterUserId;entryId;userId;userName;veggieProductId;veggieName;unitName;allowDecimals;orderedQuantity;actualQuantity;marketUnitPrice;productTotalSpent;effectiveUnitPrice;finalItemTotal;deliveryUnitName;deliveryAllowDecimals`).
+
+---
+
+## ⬇️ 5. On-Demand Per-Tab Admin CSV Exports
+
+In addition to scheduled CSV backup routines, Desktop and Web Admins can export individual tables on demand (from their respective tabs or via authenticated `GET /api/admin/export/...` endpoints):
+
+* `GET /api/admin/export/notes.csv` — Admin notes & suggestions.
+* `GET /api/admin/export/products.csv` — Store product catalog.
+* `GET /api/admin/export/products/{id}/history.csv` — Single product stock & purchase history.
+* `GET /api/admin/export/users.csv` — Active & deactivated user accounts (excludes soft-deleted users).
+* `GET /api/admin/export/users/{id}/transactions.csv` — Single user transaction ledger.
+* `GET /api/admin/export/transactions.csv` — Full transaction ledger.
+* `GET /api/admin/export/veggie-products.csv` — Active & deactivated veggie products (excludes soft-deleted products).
+* `GET /api/admin/export/veggie-orders.csv` — All veggie rounds, order entries, and settlements.

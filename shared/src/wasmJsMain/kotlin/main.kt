@@ -179,6 +179,7 @@ fun main() {
                                     }
                                     launch {
                                         KioskConnectionMonitor.onReconnected.collect {
+                                            customerNetworkClient.startRealtimeSync(this@LaunchedEffect)
                                             customerNetworkClient.fetchCurrentUser()?.let { refreshed ->
                                                 loggedInCustomer = refreshed
                                             }
@@ -238,7 +239,11 @@ fun main() {
                                             },
                                             onError = { err ->
                                                 historyViewModel.setIsExportingPdf(false)
-                                                historyViewModel.setExportPdfError(err)
+                                                if (err.contains("401")) {
+                                                    customerNetworkClient.notifyUnauthorized()
+                                                } else {
+                                                    historyViewModel.setExportPdfError(err)
+                                                }
                                             }
                                         )
                                     }
@@ -260,11 +265,12 @@ fun main() {
                                 launch {
                                     buyerNetworkClient.onUnauthorized.collect {
                                         setBrowserBeforeUnloadWarning(false)
-                                        jsRedirectToLogin(true)
+                                        jsRedirectToLogin(false)
                                     }
                                 }
                                 launch {
                                     KioskConnectionMonitor.onReconnected.collect {
+                                        buyerNetworkClient.startRealtimeSync(this@LaunchedEffect)
                                         buyerViewModel.loadState(forceSyncDrafts = false)
                                     }
                                 }
@@ -357,6 +363,7 @@ fun main() {
                                 }
                                 launch {
                                     adminNetworkClient.onUnauthorized.collect {
+                                        setBrowserBeforeUnloadWarning(false)
                                         jsRedirectToLogin(true)
                                     }
                                 }
@@ -364,6 +371,7 @@ fun main() {
                                     KioskConnectionMonitor.onReconnected.collect {
                                         adminNetworkClient.verifySessionStillValid()
                                         if (adminNetworkClient.isAuthenticated) {
+                                            adminNetworkClient.startRealtimeSync(this@LaunchedEffect)
                                             notesViewModel.loadNotes()
                                             productsViewModel.loadData()
                                             shoppingListViewModel.loadData()
@@ -405,7 +413,11 @@ fun main() {
                                     onSuccess = { isExportingCsv = false },
                                     onError = { err ->
                                         isExportingCsv = false
-                                        onError(err)
+                                        if (err.contains("401")) {
+                                            adminNetworkClient.notifyUnauthorized()
+                                        } else {
+                                            onError(err)
+                                        }
                                     }
                                 )
                             }
@@ -427,10 +439,14 @@ fun main() {
                                         url = url,
                                         fallbackFilename = fallbackName,
                                         onSuccess = { shoppingListViewModel.markExportedLocally() },
-                                        onError = { err -> shoppingListViewModel.reportError(err) }
+                                        onError = { err ->
+                                            if (err.contains("401")) adminNetworkClient.notifyUnauthorized()
+                                            else shoppingListViewModel.reportError(err)
+                                        }
                                     )
                                 },
                                 onExecutePdfExport = { user, _, fromTimestamp, toTimestamp, language ->
+                                    if (usersViewModel.isExportingPdf.value) return@AdminScreen
                                     usersViewModel.setIsExportingPdf(true)
                                     usersViewModel.setExportPdfError(null)
                                     val fromQuery = if (fromTimestamp != null) "&from=$fromTimestamp" else ""
@@ -446,35 +462,48 @@ fun main() {
                                         },
                                         onError = { err ->
                                             usersViewModel.setIsExportingPdf(false)
-                                            usersViewModel.setExportPdfError(err)
+                                            if (err.contains("401")) adminNetworkClient.notifyUnauthorized()
+                                            else usersViewModel.setExportPdfError(err)
                                         }
                                     )
                                 },
                                 onExportVeggieBuyerPdf = { roundId, language ->
+                                    veggieViewModel.setExportError(null)
                                     val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/buyer-pdf?lang=${language.name}")
                                     jsDownloadFile(
                                         url = url,
                                         fallbackFilename = "buyer_shopping_list.pdf",
                                         onSuccess = { veggieViewModel.loadData(preserveDraftEdits = true) },
-                                        onError = { err -> veggieViewModel.setExportError(err) }
+                                        onError = { err ->
+                                            if (err.contains("401")) adminNetworkClient.notifyUnauthorized()
+                                            else veggieViewModel.setExportError(err)
+                                        }
                                     )
                                 },
                                 onExportVeggieWorkerPdf = { roundId, language ->
+                                    veggieViewModel.setExportError(null)
                                     val url = adminNetworkClient.resolveUrl("/api/admin/veggie/rounds/$roundId/worker-pdf?lang=${language.name}")
                                     jsDownloadFile(
                                         url = url,
                                         fallbackFilename = "worker_sorting_matrix.pdf",
                                         onSuccess = { veggieViewModel.loadData(preserveDraftEdits = true) },
-                                        onError = { err -> veggieViewModel.setExportError(err) }
+                                        onError = { err ->
+                                            if (err.contains("401")) adminNetworkClient.notifyUnauthorized()
+                                            else veggieViewModel.setExportError(err)
+                                        }
                                     )
                                 },
                                 onExportVeggieOrderFormPdf = { language ->
+                                    veggieViewModel.setExportError(null)
                                     val url = adminNetworkClient.resolveUrl("/api/admin/veggie/order-form-pdf?lang=${language.name}")
                                     jsDownloadFile(
                                         url = url,
                                         fallbackFilename = "customer_order_form.pdf",
                                         onSuccess = {},
-                                        onError = { err -> veggieViewModel.setExportError(err) }
+                                        onError = { err ->
+                                            if (err.contains("401")) adminNetworkClient.notifyUnauthorized()
+                                            else veggieViewModel.setExportError(err)
+                                        }
                                     )
                                 },
                                 onExportNotesCsv = {

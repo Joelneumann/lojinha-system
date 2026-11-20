@@ -18,9 +18,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import de.joelneumann.lojinha.ui.utils.findUserIdentifierConflict
 import de.joelneumann.lojinha.ui.utils.generateUuid
 import de.joelneumann.lojinha.ui.utils.isReservedAdminName
-import de.joelneumann.lojinha.ui.utils.normalizeUserName
 import de.joelneumann.lojinha.ui.utils.sortedByAccentInsensitive
 import kotlin.random.Random
 
@@ -43,6 +43,9 @@ class AdminUsersViewModel(
 
     private val _isSavingUser = MutableStateFlow(false)
     val isSavingUser: StateFlow<Boolean> = _isSavingUser.asStateFlow()
+
+    private val _isMutatingBalance = MutableStateFlow(false)
+    val isMutatingBalance: StateFlow<Boolean> = _isMutatingBalance.asStateFlow()
 
     private val _customExpenseUser = MutableStateFlow<User?>(null)
     val customExpenseUser: StateFlow<User?> = _customExpenseUser.asStateFlow()
@@ -141,13 +144,13 @@ class AdminUsersViewModel(
     }
 
     private suspend fun refreshUsers() {
-        _users.value = userRepository.getAllUsers()
+        _users.value = userRepository.getAllUsers().sortedByAccentInsensitive { it.name }
     }
 
     fun saveUser(user: User, onSuccess: () -> Unit = {}) {
         if (_isSavingUser.value) return
+        _isSavingUser.value = true
         viewModelScope.launch {
-            _isSavingUser.value = true
             try {
                 val trimmedUser = user.copy(
                     name = user.name.trim(),
@@ -161,13 +164,19 @@ class AdminUsersViewModel(
                     _userErrorMessage.value = I18n.get().userNicknameReservedError
                     return@launch
                 }
-                val normalized = trimmedUser.name.normalizeUserName()
-                val existingConflict = userRepository.getAllUsers().firstOrNull { existing ->
-                    existing.id != trimmedUser.id && !existing.isDeleted && existing.name.normalizeUserName() == normalized
-                }
-                if (existingConflict != null) {
-                    _userErrorMessage.value = I18n.get().userNameAlreadyExists(existingConflict.name)
+                val allUsers = userRepository.getAllUsers()
+                val nameConflict = findUserIdentifierConflict(trimmedUser.name, trimmedUser.id, allUsers)
+                if (nameConflict != null) {
+                    _userErrorMessage.value = I18n.get().userNameAlreadyExists(nameConflict.name)
                     return@launch
+                }
+                val nick = trimmedUser.nickname
+                if (nick != null) {
+                    val nickConflict = findUserIdentifierConflict(nick, trimmedUser.id, allUsers)
+                    if (nickConflict != null) {
+                        _userErrorMessage.value = I18n.get().userNicknameDuplicateError
+                        return@launch
+                    }
                 }
                 userRepository.saveUser(trimmedUser)
                 refreshUsers()
@@ -220,13 +229,18 @@ class AdminUsersViewModel(
                         _userErrorMessage.value = I18n.get().userNicknameReservedError
                         return@launch
                     }
-                    val normalized = target.name.normalizeUserName()
-                    val conflict = allUsers.firstOrNull { existing ->
-                        existing.id != userId && !existing.isDeleted && existing.name.normalizeUserName() == normalized
-                    }
-                    if (conflict != null) {
-                        _userErrorMessage.value = I18n.get().userNameAlreadyExists(conflict.name)
+                    val nameConflict = findUserIdentifierConflict(target.name, userId, allUsers)
+                    if (nameConflict != null) {
+                        _userErrorMessage.value = I18n.get().userNameAlreadyExists(nameConflict.name)
                         return@launch
+                    }
+                    val nick = target.nickname
+                    if (nick != null) {
+                        val nickConflict = findUserIdentifierConflict(nick, userId, allUsers)
+                        if (nickConflict != null) {
+                            _userErrorMessage.value = I18n.get().userNicknameDuplicateError
+                            return@launch
+                        }
                     }
                 }
                 userRepository.restoreUser(userId)
@@ -255,6 +269,8 @@ class AdminUsersViewModel(
     }
 
     fun submitCustomExpense(user: User, amountCents: Long, description: String, onSuccess: () -> Unit = {}) {
+        if (_isMutatingBalance.value) return
+        _isMutatingBalance.value = true
         val absCents = kotlin.math.abs(amountCents)
         val deltaCents = -absCents
         val txType = TransactionType.ADMIN_WITHDRAWAL
@@ -295,6 +311,9 @@ class AdminUsersViewModel(
                 onSuccess()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "submitCustomExpense error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToSaveUser
+            } finally {
+                _isMutatingBalance.value = false
             }
         }
     }
@@ -308,6 +327,8 @@ class AdminUsersViewModel(
     }
 
     fun submitCustomIncome(user: User, amountCents: Long, comment: String, onSuccess: () -> Unit = {}) {
+        if (_isMutatingBalance.value) return
+        _isMutatingBalance.value = true
         val absCents = kotlin.math.abs(amountCents)
         val deltaCents = absCents
         val txType = TransactionType.ADMIN_DEPOSIT
@@ -348,11 +369,16 @@ class AdminUsersViewModel(
                 onSuccess()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "submitCustomIncome error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToSaveUser
+            } finally {
+                _isMutatingBalance.value = false
             }
         }
     }
 
     fun adjustUserBalance(userId: String, userName: String, centsDelta: Long, note: String) {
+        if (_isMutatingBalance.value) return
+        _isMutatingBalance.value = true
         val isDeposit = centsDelta > 0
         val txType = if (isDeposit) TransactionType.ADMIN_DEPOSIT else TransactionType.ADMIN_WITHDRAWAL
         val nowMillis = de.joelneumann.lojinha.ui.utils.currentTimeMillis()
@@ -381,6 +407,9 @@ class AdminUsersViewModel(
                 refreshUsers()
             } catch (e: Exception) {
                 AppLogger.error("AdminUsersViewModel", "adjustUserBalance error: ${e.message}", e)
+                _userErrorMessage.value = e.message ?: I18n.get().errFailedToSaveUser
+            } finally {
+                _isMutatingBalance.value = false
             }
         }
     }

@@ -68,8 +68,11 @@ fun BuyerVeggiePortalScreen(
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
     var showLanguageMenu by remember { mutableStateOf(false) }
 
-    LaunchedEffect(hasUnsavedChanges) {
+    DisposableEffect(hasUnsavedChanges) {
         onUnsavedChangesChanged(hasUnsavedChanges)
+        onDispose {
+            onUnsavedChangesChanged(false)
+        }
     }
 
     if (showLogoutConfirmDialog) {
@@ -135,8 +138,13 @@ fun BuyerVeggiePortalScreen(
                                     val isoWeek = remember(activeRound.openedAt) {
                                         IsoWeekUtils.fromEpochMillis(activeRound.openedAt)
                                     }
+                                    val localizedStatus = when (activeRound.status) {
+                                        VeggieRoundStatus.OPEN -> strings.roundStatusOpen
+                                        VeggieRoundStatus.CLOSED -> strings.roundStatusClosed
+                                        VeggieRoundStatus.SETTLED -> strings.roundStatusSettled
+                                    }
                                     Text(
-                                        text = "CW ${isoWeek.weekOfYear} / ${isoWeek.isoYear} • ${activeRound.status.name}",
+                                        text = "${strings.weekOfYearLabel(isoWeek.weekOfYear, isoWeek.isoYear)} • $localizedStatus",
                                         color = SurfaceWhite.copy(alpha = 0.8f),
                                         fontSize = 12.sp
                                     )
@@ -287,6 +295,15 @@ fun BuyerVeggiePortalScreen(
                                     color = TextSecondaryMuted,
                                     textAlign = TextAlign.Center
                                 )
+                                feedbackMessage?.let { msg ->
+                                    Text(
+                                        text = msg,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isErrorFeedback) ColorDangerCrimson else ColorSuccessEmerald,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     }
@@ -573,8 +590,15 @@ private fun BuyerProductPriceCard(
     isCompact: Boolean
 ) {
     val strings = I18n.current
-    val orderedFormatted = remember(item.totalOrderedScaled, item.allowDecimals) {
-        VeggieQuantityScaling.formatScaledQuantity(item.totalOrderedScaled, item.allowDecimals)
+    val currentLanguage = LanguageManager.currentLanguage
+    val decimalSep = Formatting.decimalSeparator(currentLanguage)
+    val orderedFormatted = remember(item.totalOrderedScaled, item.allowDecimals, decimalSep) {
+        VeggieQuantityScaling.formatScaledQuantity(item.totalOrderedScaled, item.allowDecimals, decimalSep)
+    }
+    val unitDisplay = if (item.isDualUnit) {
+        "${item.unitAbbreviation} (${item.deliveryUnitAbbreviation})"
+    } else {
+        item.unitAbbreviation
     }
     val unitPriceCents = remember(unitPriceInput) {
         if (unitPriceInput.isBlank()) null else AdminVeggieViewModel.parseBrlInputToCents(unitPriceInput)
@@ -582,11 +606,13 @@ private fun BuyerProductPriceCard(
     val totalSpentCents = remember(totalSpentInput) {
         if (totalSpentInput.isBlank()) null else AdminVeggieViewModel.parseBrlInputToCents(totalSpentInput)
     }
-    val mismatch = remember(unitPriceCents, totalSpentCents, item.totalOrderedScaled) {
-        VeggieSettlementCalculator.detectPriceTotalMismatch(unitPriceCents, totalSpentCents, item.totalOrderedScaled)
+    val mismatch = remember(unitPriceCents, totalSpentCents, item.totalOrderedScaled, item.isDualUnit) {
+        if (item.isDualUnit) null
+        else VeggieSettlementCalculator.detectPriceTotalMismatch(unitPriceCents, totalSpentCents, item.totalOrderedScaled)
     }
-    val effectiveUnitPriceCents = remember(totalSpentCents, item.totalOrderedScaled) {
-        totalSpentCents?.let {
+    val effectiveUnitPriceCents = remember(totalSpentCents, item.totalOrderedScaled, item.isDualUnit) {
+        if (item.isDualUnit) 0L
+        else totalSpentCents?.let {
             VeggieSettlementCalculator.calculateEffectiveUnitPriceCents(it, item.totalOrderedScaled)
         } ?: 0L
     }
@@ -622,7 +648,7 @@ private fun BuyerProductPriceCard(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${strings.buyerTotalOrderedLabel}: $orderedFormatted ${item.unitAbbreviation}",
+                                text = "${strings.buyerTotalOrderedLabel}: $orderedFormatted $unitDisplay",
                                 fontSize = 13.sp,
                                 color = AccentNavy,
                                 fontWeight = FontWeight.SemiBold
@@ -674,7 +700,7 @@ private fun BuyerProductPriceCard(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${strings.buyerTotalOrderedLabel}: $orderedFormatted ${item.unitAbbreviation}",
+                            text = "${strings.buyerTotalOrderedLabel}: $orderedFormatted $unitDisplay",
                             fontSize = 13.sp,
                             color = AccentNavy,
                             fontWeight = FontWeight.SemiBold

@@ -39,7 +39,7 @@ Defined in [`User.kt`](../shared/src/commonMain/kotlin/de/joelneumann/lojinha/do
 | `name` | `String` | Unique user name displayed in kiosk and admin views. |
 | `nickname` | `String?` | Optional unique short nickname (max `MAX_USER_NICKNAME_LENGTH = 10` chars), used by `veggieDisplayName` in Veggie Worker PDFs and sorting matrices. |
 | `balance` | `Long` | Current account balance in cents. Can be negative (no hard credit limit enforced). |
-| `language` | `Language` | Preferred UI language (`BR`, `EN`, `DE`). Default: `DE`. |
+| `language` | `Language` | Preferred UI language (`BR`, `EN`, `DE`). Default: `BR`. |
 | `secondaryCurrency` | `SecondaryCurrency` | Visual reference currency (`NONE`, `USD`, `EUR`). Default: `NONE`. |
 | `pin` | `String?` | Optional numeric PIN, hashed using SHA-256 with salt. |
 | `requirePinOnKiosk` | `Boolean` | Whether the PIN prompt is enforced when logging in on the Desktop POS kiosk. Default: `true`. |
@@ -108,7 +108,7 @@ Transactions represent an **immutable, append-only ledger**. Historical records 
 | `userId` | `String` (UUID) | Foreign reference to the associated user. |
 | `userNameSnapshot` | `String` | Snapshot of the user's name at the time of the transaction. |
 | `timestamp` | `Long` | Epoch milliseconds when the transaction occurred. |
-| `type` | `TransactionType` | `PURCHASE`, `ADMIN_DEPOSIT`, `ADMIN_WITHDRAWAL`, `CANCELLATION`, `CORRECTION`. |
+| `type` | `TransactionType` | `PURCHASE`, `ADMIN_DEPOSIT`, `ADMIN_WITHDRAWAL`, `CANCELLATION`, `CORRECTION`, `VEGGIE`. |
 | `referenceTransactionId` | `String?` | References the original transaction ID for cancellations and corrections. |
 | `note` | `String?` | Human-readable note or structured system note identifier. |
 | `totalAmount` | `Long` | Amount in cents (negative for purchases/debits, positive for deposits/refunds). |
@@ -180,6 +180,7 @@ Single-row configuration entity persisted in Room SQLite.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `adminPasswordHash` | `String` | SHA-256 of `"admin"` | Master admin password hash. |
+| `buyerPasswordHash` | `String` | `""` | Optional Buyer Portal password hash (enables the scoped Buyer Portal role when non-blank). |
 | `globalMarkupPercent` | `Double` | `0.0` | Default markup percentage applied to catalog items without custom markup. |
 | `usdExchangeRate` | `Double` | `0.18` | Conversion rate: 1 BRL = X USD (manual or via API). |
 | `eurExchangeRate` | `Double` | `0.16` | Conversion rate: 1 BRL = X EUR (manual or via API). |
@@ -313,7 +314,7 @@ Manages recurring weekly produce ordering rounds, dual-unit catalogs, and propor
 
 * **`VeggieUnitType`:** Defines ordering and delivery units (`id`, `name`, `allowDecimals`, `isActive`).
 * **`VeggieProduct`:** Catalog item (`id`, `name`, `description`, `estimatedPriceCents`, `unitTypeId`, optional `deliveryUnitTypeId`, `imageFileName`, `excludeFromBuyerPdf`, `isActive`, `isDeleted`).
-* **`VeggieOrderRound`:** Weekly round (`OPEN`, `CLOSED`, `SETTLED`) with `buyerOperationFeeCents`, `transportFeeCents`, optional `transporterUserId`, and PDF export timestamps (`buyerPdfExportedAt`, `workerPdfExportedAt`).
+* **`VeggieOrderRound`:** Weekly round (`OPEN`, `CLOSED`, `SETTLED`) with `buyerOperationFeeCents`, `transportFeeCents`, optional `transporterUserId`, PDF export timestamps (`buyerPdfExportedAt`, `workerPdfExportedAt`, `buyerPortalPdfExportedAt`), and `ordersUpdatedAt` (tracks whether orders changed after the last Buyer Portal PDF export).
 * **`VeggieRoundProductSettlement`:** Per-product market settlement record (`marketUnitPriceCents`, `totalSpentCents`).
 * **`VeggieOrderEntry`:** Per-user, per-product order line with snapshotted product/unit names, `orderedQuantityScaled`, `actualQuantityScaled`, `effectiveUnitPriceCents`, and `finalItemTotalCents`. Quantities use fixed-point scaling (`VEGGIE_QTY_SCALE = 1000L`, e.g., `1,5` → `1500L`).
 
