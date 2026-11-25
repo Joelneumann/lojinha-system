@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Language
+import de.joelneumann.lojinha.domain.scale.ScaleService
 import de.joelneumann.lojinha.domain.model.Product
 import de.joelneumann.lojinha.domain.model.SystemSettings
 import de.joelneumann.lojinha.domain.model.User
@@ -105,6 +106,7 @@ fun AdminScreen(
     onExportTransactionsCsv: (() -> Unit)? = null,
     onExportVeggieProductsCsv: (() -> Unit)? = null,
     onExportVeggieOrdersCsv: (() -> Unit)? = null,
+    scaleService: ScaleService? = null,
     onExitAdmin: () -> Unit
 ) {
     val strings = I18n.current
@@ -464,7 +466,8 @@ fun AdminScreen(
                                 onExportVeggieProductsCsv = onExportVeggieProductsCsv,
                                 onExportVeggieOrdersCsv = onExportVeggieOrdersCsv,
                                 onOpenExportedPdf = onOpenExportedPdf,
-                                onRevealExportedFolder = onRevealExportedFolder
+                                onRevealExportedFolder = onRevealExportedFolder,
+                                scaleService = scaleService
                             )
                         }
                     }
@@ -474,7 +477,8 @@ fun AdminScreen(
                             AdminSettingsTabScreen(
                                 viewModel = settingsViewModel,
                                 onUnsavedStateChanged = { hasUnsaved -> hasUnsavedChanges = hasUnsaved },
-                                onRegisterPageScroller = { scroller -> activePageScroller = scroller }
+                                onRegisterPageScroller = { scroller -> activePageScroller = scroller },
+                                scaleService = scaleService
                             )
                         }
                     }

@@ -43,6 +43,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import de.joelneumann.lojinha.domain.scale.ScaleService
+import de.joelneumann.lojinha.ui.components.general.ScalePollingEffect
+import de.joelneumann.lojinha.domain.scale.ScaleUiState
 import de.joelneumann.lojinha.ui.viewmodel.CartItem
 import de.joelneumann.lojinha.ui.viewmodel.ShoppingViewModel
 import kotlinx.coroutines.launch
@@ -58,7 +61,8 @@ fun ShoppingScreen(
     onUserInteracted: (force: Boolean) -> Unit = {},
     onPurchaseFinalized: () -> Unit = {},
     onPauseTimer: () -> Unit = {},
-    onResumeTimer: () -> Unit = {}
+    onResumeTimer: () -> Unit = {},
+    scaleService: ScaleService? = null
 ) {
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -78,6 +82,13 @@ fun ShoppingScreen(
     val noteSubmitSuccess by viewModel.noteSubmitSuccess.collectAsState()
     val noteSubmitError by viewModel.noteSubmitError.collectAsState()
     var showNoteDialog by remember { mutableStateOf(false) }
+    val scaleState = scaleService?.state?.collectAsState()?.value
+
+    ScalePollingEffect(
+        scaleService = scaleService,
+        owner = "WeightInputDialog",
+        enabled = weightProductDialog != null
+    )
 
     LaunchedEffect(LanguageManager.currentLanguage) {
         viewModel.clearTransientMessages()
@@ -192,7 +203,8 @@ fun ShoppingScreen(
         onUserUpdated = onUserUpdated,
         onUserInteracted = onUserInteracted,
         onPauseTimer = onPauseTimer,
-        onResumeTimer = onResumeTimer
+        onResumeTimer = onResumeTimer,
+        scaleState = scaleState
     )
 }
 
@@ -200,6 +212,7 @@ fun ShoppingScreen(
 fun ShoppingContent(
     user: User,
     settings: SystemSettings,
+    scaleState: ScaleUiState? = null,
     products: List<Product>,
     searchQuery: String,
     cartItems: List<CartItem>,
@@ -245,7 +258,8 @@ fun ShoppingContent(
     onUserUpdated: (User) -> Unit = {},
     onUserInteracted: (force: Boolean) -> Unit = {},
     onPauseTimer: () -> Unit = {},
-    onResumeTimer: () -> Unit = {}
+    onResumeTimer: () -> Unit = {},
+    scaleService: ScaleService? = null
 ) {
     val strings = I18n.current
     val searchFocusRequester = remember { FocusRequester() }
@@ -759,7 +773,8 @@ fun ShoppingContent(
                     selectProductInCart(product.id)
                     onSubmitWeightDialog()
                 },
-                maxAvailableQuantityText = Formatting.formatQuantity(maxAvailable, UnitType.WEIGHT)
+                maxAvailableQuantityText = Formatting.formatQuantity(maxAvailable, UnitType.WEIGHT),
+                scaleState = scaleState
             )
         }
 

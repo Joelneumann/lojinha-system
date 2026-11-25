@@ -1033,6 +1033,31 @@ interface AppStrings {
     val adminPriceMismatchEffectiveFromTotal: String
     fun buyerPriceMismatchExpected(qty: String, unit: String, unitPrice: String, expectedTotal: String): String
     fun effectiveUnitPriceShort(formattedPrice: String, unit: String): String
+
+    // Serial Scale (Prix 3 Plus)
+    val scaleSectionTitle: String
+    val scaleEnableLabel: String
+    val scaleEnableDesc: String
+    val scalePortLabel: String
+    val scaleNoPortsFound: String
+    val scaleRefreshPortsBtn: String
+    val scaleBaudRateLabel: String
+    val scaleStatusConnected: String
+    val scaleStatusConnecting: String
+    val scaleStatusDisconnected: String
+    val scaleStatusDisabled: String
+    val scaleTestReadoutLabel: String
+    val scaleUseBtn: String
+    val scaleUseMatrixBtn: String
+    val scaleStableLabel: String
+    val scaleUnstableLabel: String
+    val scaleNegativeLabel: String
+    val scaleOverloadLabel: String
+    val scaleSelectCellHint: String
+    val scaleInputOnLabel: String
+    val scaleInputOffLabel: String
+    val scaleReadyCellLabel: String
+    val scaleNonWeightCellHint: String
 }
 
 

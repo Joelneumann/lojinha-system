@@ -89,11 +89,13 @@ fun App(
     val oneDriveBackupService = remember { de.joelneumann.lojinha.data.service.OneDriveBackupService() }
     val currencyRateService = remember { de.joelneumann.lojinha.data.service.KtorCurrencyRateService() }
     val diagnosticsService = remember { de.joelneumann.lojinha.data.service.DiagnosticsService(database) }
+    val scaleService = remember { de.joelneumann.lojinha.data.scale.JSerialCommScaleService() }
     val coroutineScope = rememberCoroutineScope()
 
-    DisposableEffect(currencyRateService) {
+    DisposableEffect(currencyRateService, scaleService) {
         onDispose {
             currencyRateService.close()
+            scaleService.close()
         }
     }
 
@@ -389,7 +391,8 @@ fun App(
                                                 onUserInteracted = onUserInteracted,
                                                 onPurchaseFinalized = onPurchaseFinalized,
                                                 onPauseTimer = onPauseTimer,
-                                                onResumeTimer = onResumeTimer
+                                                onResumeTimer = onResumeTimer,
+                                                scaleService = scaleService
                                             )
                                         }
 
@@ -931,6 +934,7 @@ fun App(
                                     )
                                 }
                             },
+                            scaleService = scaleService,
                             onExitAdmin = {
                                 appViewModel.navigateTo(AppScreen.MAIN_USER_SELECT)
                             }

@@ -84,6 +84,7 @@ kotlin {
             implementation(libs.androidx.sqlite.bundled)
             implementation(libs.ktor.client.cio)
             implementation(libs.openpdf)
+            implementation(libs.jserialcomm)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

@@ -1074,6 +1074,31 @@ object PortugueseStrings : AppStrings {
     override fun buyerPriceMismatchExpected(qty: String, unit: String, unitPrice: String, expectedTotal: String) =
         "$qty $unit × $unitPrice = $expectedTotal"
     override fun effectiveUnitPriceShort(formattedPrice: String, unit: String) = "Efet. $formattedPrice/$unit"
+
+    // Serial Scale (Prix 3 Plus)
+    override val scaleSectionTitle = "Balança (Prix 3 Plus Serial)"
+    override val scaleEnableLabel = "Ativar Balança Serial"
+    override val scaleEnableDesc = "Salvo localmente nesta máquina (fora do backup do BD). Usa polling Prt3 (9600 8N1)."
+    override val scalePortLabel = "Porta Serial"
+    override val scaleNoPortsFound = "Nenhuma porta serial encontrada"
+    override val scaleRefreshPortsBtn = "Atualizar"
+    override val scaleBaudRateLabel = "Taxa de Transmissão (Baud)"
+    override val scaleStatusConnected = "Conectada"
+    override val scaleStatusConnecting = "Conectando…"
+    override val scaleStatusDisconnected = "Balança desconectada"
+    override val scaleStatusDisabled = "Desativada"
+    override val scaleTestReadoutLabel = "Leitura ao Vivo (Teste)"
+    override val scaleUseBtn = "Usar Balança"
+    override val scaleUseMatrixBtn = "Usar Balança (F10)"
+    override val scaleStableLabel = "Estável"
+    override val scaleUnstableLabel = "Estabilizando…"
+    override val scaleNegativeLabel = "Negativo"
+    override val scaleOverloadLabel = "Sobrecarga"
+    override val scaleSelectCellHint = "Foque uma célula de peso"
+    override val scaleInputOnLabel = "Entrada LIGADA"
+    override val scaleInputOffLabel = "Entrada DESLIGADA (Manual)"
+    override val scaleReadyCellLabel = "Pronta p/ célula"
+    override val scaleNonWeightCellHint = "Célula não pesável"
 }
 
 
