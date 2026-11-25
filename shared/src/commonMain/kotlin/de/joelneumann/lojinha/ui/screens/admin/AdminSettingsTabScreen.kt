@@ -37,6 +37,9 @@ import de.joelneumann.lojinha.ui.utils.PlatformFile
 import de.joelneumann.lojinha.ui.utils.pickFile
 import de.joelneumann.lojinha.ui.utils.pickFolder
 import de.joelneumann.lojinha.domain.model.SystemSettings
+import de.joelneumann.lojinha.domain.scale.ScaleService
+import de.joelneumann.lojinha.ui.components.general.ScalePollingEffect
+import de.joelneumann.lojinha.ui.components.general.ScaleStatusBar
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.utils.confirmationDialogKeys
 import de.joelneumann.lojinha.ui.utils.findUserIdentifierConflict
@@ -67,7 +70,8 @@ private fun parseBrlInputToCents(input: String): Long? {
 fun AdminSettingsTabScreen(
     viewModel: AdminSettingsViewModel,
     onUnsavedStateChanged: (Boolean) -> Unit,
-    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null
+    onRegisterPageScroller: (((Boolean) -> Boolean) -> Unit)? = null,
+    scaleService: ScaleService? = null
 ) {
     val strings = I18n.current
     @Suppress("DEPRECATION")
@@ -485,6 +489,184 @@ fun AdminSettingsTabScreen(
                                 color = ColorDangerCrimson,
                                 modifier = Modifier.padding(top = 4.dp, start = 2.dp)
                             )
+                        }
+                    }
+                }
+            }
+
+            if (scaleService != null) {
+                item(key = "scale-settings-card") {
+                    val scaleState by scaleService.state.collectAsState()
+                    val scaleConfig = scaleState.config
+                    var portDropdownExpanded by remember { mutableStateOf(false) }
+                    var baudDropdownExpanded by remember { mutableStateOf(false) }
+
+                    ScalePollingEffect(
+                        scaleService = scaleService,
+                        owner = "AdminSettingsTest",
+                        enabled = scaleConfig.enabled
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SurfaceWhite,
+                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(DividerBorder)),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Scale,
+                                        contentDescription = null,
+                                        tint = PrimaryNavy,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = strings.scaleSectionTitle,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PrimaryNavy
+                                        )
+                                        Text(
+                                            text = strings.scaleEnableDesc,
+                                            fontSize = 12.sp,
+                                            color = TextSecondaryMuted
+                                        )
+                                    }
+                                }
+                                Switch(
+                                    checked = scaleConfig.enabled,
+                                    onCheckedChange = { enabled ->
+                                        scaleService.updateConfig(scaleConfig.copy(enabled = enabled))
+                                    }
+                                )
+                            }
+
+                            if (scaleConfig.enabled) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                scaleService.refreshPorts()
+                                                portDropdownExpanded = true
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().height(46.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                val portText = scaleConfig.portName.ifBlank {
+                                                    if (scaleState.availablePorts.isEmpty()) strings.scaleNoPortsFound else "—"
+                                                }
+                                                Text(
+                                                    text = "${strings.scalePortLabel}: $portText",
+                                                    fontSize = 13.sp,
+                                                    color = PrimaryNavy,
+                                                    maxLines = 1
+                                                )
+                                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = PrimaryNavy)
+                                            }
+                                        }
+                                        DropdownMenu(
+                                            expanded = portDropdownExpanded,
+                                            onDismissRequest = { portDropdownExpanded = false }
+                                        ) {
+                                            if (scaleState.availablePorts.isEmpty()) {
+                                                DropdownMenuItem(
+                                                    text = { Text(strings.scaleNoPortsFound, color = TextSecondaryMuted) },
+                                                    onClick = { portDropdownExpanded = false }
+                                                )
+                                            } else {
+                                                scaleState.availablePorts.forEach { port ->
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Column {
+                                                                Text(port.systemPortName, fontWeight = FontWeight.SemiBold)
+                                                                if (port.descriptiveName != port.systemPortName) {
+                                                                    Text(port.descriptiveName, fontSize = 11.sp, color = TextSecondaryMuted)
+                                                                }
+                                                            }
+                                                        },
+                                                        onClick = {
+                                                            scaleService.updateConfig(
+                                                                scaleConfig.copy(
+                                                                    portName = port.systemPortName,
+                                                                    vendorId = port.vendorId,
+                                                                    productId = port.productId,
+                                                                    serialNumber = port.serialNumber
+                                                                )
+                                                            )
+                                                            portDropdownExpanded = false
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { scaleService.refreshPorts() },
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(46.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = strings.scaleRefreshPortsBtn, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(strings.scaleRefreshPortsBtn, fontSize = 13.sp)
+                                    }
+
+                                    Box {
+                                        OutlinedButton(
+                                            onClick = { baudDropdownExpanded = true },
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.height(46.dp)
+                                        ) {
+                                            Text("${strings.scaleBaudRateLabel}: ${scaleConfig.baudRate}", fontSize = 13.sp, color = PrimaryNavy)
+                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = PrimaryNavy)
+                                        }
+                                        DropdownMenu(
+                                            expanded = baudDropdownExpanded,
+                                            onDismissRequest = { baudDropdownExpanded = false }
+                                        ) {
+                                            listOf(2400, 4800, 9600, 19200).forEach { baud ->
+                                                DropdownMenuItem(
+                                                    text = { Text("$baud") },
+                                                    onClick = {
+                                                        scaleService.updateConfig(scaleConfig.copy(baudRate = baud))
+                                                        baudDropdownExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ScaleStatusBar(
+                                    scaleState = scaleState,
+                                    hintText = strings.scaleTestReadoutLabel,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }

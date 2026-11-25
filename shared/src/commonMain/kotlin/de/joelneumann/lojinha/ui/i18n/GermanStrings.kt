@@ -1074,6 +1074,31 @@ object GermanStrings : AppStrings {
     override fun buyerPriceMismatchExpected(qty: String, unit: String, unitPrice: String, expectedTotal: String) =
         "$qty $unit × $unitPrice = $expectedTotal"
     override fun effectiveUnitPriceShort(formattedPrice: String, unit: String) = "Eff. $formattedPrice/$unit"
+
+    // Serial Scale (Prix 3 Plus)
+    override val scaleSectionTitle = "Waage (Prix 3 Plus Seriell)"
+    override val scaleEnableLabel = "Serielle Waage aktivieren"
+    override val scaleEnableDesc = "Lokal pro Gerät gespeichert (nicht im DB-Backup). Nutzt Prt3-Polling (9600 8N1)."
+    override val scalePortLabel = "Serieller Port"
+    override val scaleNoPortsFound = "Keine seriellen Ports gefunden"
+    override val scaleRefreshPortsBtn = "Aktualisieren"
+    override val scaleBaudRateLabel = "Baudrate"
+    override val scaleStatusConnected = "Verbunden"
+    override val scaleStatusConnecting = "Verbinde…"
+    override val scaleStatusDisconnected = "Waage getrennt"
+    override val scaleStatusDisabled = "Deaktiviert"
+    override val scaleTestReadoutLabel = "Live-Testanzeige"
+    override val scaleUseBtn = "Waage übernehmen"
+    override val scaleUseMatrixBtn = "Waage (F10)"
+    override val scaleStableLabel = "Stabil"
+    override val scaleUnstableLabel = "Schwankt…"
+    override val scaleNegativeLabel = "Negativ"
+    override val scaleOverloadLabel = "Überlast"
+    override val scaleSelectCellHint = "Gewichtszelle wählen"
+    override val scaleInputOnLabel = "Eingabe AN"
+    override val scaleInputOffLabel = "Eingabe AUS (Manuell)"
+    override val scaleReadyCellLabel = "Bereit für Zelle"
+    override val scaleNonWeightCellHint = "Keine Gewichtszelle"
 }
 
 

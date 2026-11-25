@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.sp
 import de.joelneumann.lojinha.domain.model.Language
 import de.joelneumann.lojinha.domain.model.VeggieOrderRound
 import de.joelneumann.lojinha.domain.model.VeggieRoundStatus
+import de.joelneumann.lojinha.domain.scale.ScaleService
+import de.joelneumann.lojinha.ui.components.general.ScalePollingEffect
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
 import de.joelneumann.lojinha.ui.components.admin.AdminStatusBadge
 import de.joelneumann.lojinha.ui.components.admin.CompactCsvExportButton
@@ -55,7 +57,8 @@ fun AdminVeggieTabScreen(
     onExportVeggieProductsCsv: (() -> Unit)? = null,
     onExportVeggieOrdersCsv: (() -> Unit)? = null,
     onOpenExportedPdf: ((String) -> Unit)? = null,
-    onRevealExportedFolder: ((String) -> Unit)? = null
+    onRevealExportedFolder: ((String) -> Unit)? = null,
+    scaleService: ScaleService? = null
 ) {
     val strings = I18n.current
     val currentLanguage = LanguageManager.currentLanguage
@@ -73,8 +76,16 @@ fun AdminVeggieTabScreen(
     val historyTotalCount by viewModel.historyTotalCount.collectAsState()
     val pagedSettledRounds by viewModel.pagedSettledRounds.collectAsState()
     val activeRound by viewModel.activeRound.collectAsState()
+    val scaleState = scaleService?.state?.collectAsState()?.value
+
     val editingPastRound by viewModel.editingPastRound.collectAsState()
     val selectedRound by viewModel.selectedRound.collectAsState()
+
+    ScalePollingEffect(
+        scaleService = scaleService,
+        owner = "AdminVeggieTabScreen",
+        enabled = scaleState?.config?.enabled == true && selectedRound != null
+    )
     val selectedRoundEntries by viewModel.selectedRoundEntries.collectAsState()
     val draftActualQuantities by viewModel.draftActualQuantities.collectAsState()
     val draftMarketPrices by viewModel.draftMarketPrices.collectAsState()
@@ -486,6 +497,7 @@ fun AdminVeggieTabScreen(
                         onResetChanges = viewModel::discardDraft,
                         unitTypes = unitTypes,
                         allowCollapseSettingsCard = true,
+                        scaleState = scaleState,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -613,6 +625,7 @@ fun AdminVeggieTabScreen(
                             hasUnsavedChanges = hasUnsavedSettlementChanges,
                             onResetChanges = viewModel::discardDraft,
                             unitTypes = unitTypes,
+                            scaleState = scaleState,
                             modifier = Modifier.weight(1f)
                         )
                     }

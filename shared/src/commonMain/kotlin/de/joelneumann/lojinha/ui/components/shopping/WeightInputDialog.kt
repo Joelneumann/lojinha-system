@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import de.joelneumann.lojinha.domain.scale.ScaleConnectionStatus
+import de.joelneumann.lojinha.domain.scale.ScaleReadingStatus
+import de.joelneumann.lojinha.domain.scale.ScaleUiState
+import de.joelneumann.lojinha.ui.components.general.ScaleStatusBar
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.theme.*
 import de.joelneumann.lojinha.ui.utils.Formatting
@@ -42,7 +46,8 @@ fun WeightInputDialog(
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
-    maxAvailableQuantityText: String? = null
+    maxAvailableQuantityText: String? = null,
+    scaleState: ScaleUiState? = null
 ) {
     val strings = I18n.current
     val weightFocusRequester = remember { FocusRequester() }
@@ -71,6 +76,29 @@ fun WeightInputDialog(
 
     LaunchedEffect(Unit) {
         weightFocusRequester.safeRequestFocus()
+    }
+
+    // Preserve pre-filled weights (e.g. editing an existing cart item) unless the user clicks "Use"
+    var hasManualEdit by remember { mutableStateOf(weightInput.isNotBlank()) }
+    var lastAutoAppliedGrams by remember {
+        mutableStateOf(
+            if (weightInput.isNotBlank()) scaleState?.reading?.grams else null
+        )
+    }
+    LaunchedEffect(scaleState?.reading) {
+        val reading = scaleState?.reading
+        if (!hasManualEdit &&
+            scaleState?.config?.enabled == true &&
+            scaleState.connectionStatus == ScaleConnectionStatus.CONNECTED &&
+            reading != null &&
+            reading.isStable &&
+            reading.status == ScaleReadingStatus.OK &&
+            reading.grams > 0L &&
+            reading.grams != lastAutoAppliedGrams
+        ) {
+            lastAutoAppliedGrams = reading.grams
+            onWeightInputChange(Formatting.formatWeightForInput(reading.grams))
+        }
     }
 
     Dialog(
@@ -147,6 +175,7 @@ fun WeightInputDialog(
                                 justFocused = false
                                 textFieldValue = newValue
                                 if (newValue.text != weightInput) {
+                                    hasManualEdit = true
                                     onWeightInputChange(newValue.text)
                                 }
                             }
@@ -254,6 +283,30 @@ fun WeightInputDialog(
                 if (weightError != null) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(weightError, color = ColorDangerCrimson, fontSize = 12.sp)
+                }
+
+                if (scaleState != null && scaleState.config.enabled) {
+                    val reading = scaleState.reading
+                    val canUseScale = scaleState.connectionStatus == ScaleConnectionStatus.CONNECTED &&
+                        reading != null &&
+                        reading.grams > 0L &&
+                        (reading.status == ScaleReadingStatus.OK || reading.status == ScaleReadingStatus.UNSTABLE)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    ScaleStatusBar(
+                        scaleState = scaleState,
+                        actionLabel = strings.scaleUseBtn,
+                        actionEnabled = canUseScale,
+                        onActionClick = {
+                            if (reading != null && reading.grams > 0L) {
+                                hasManualEdit = false
+                                lastAutoAppliedGrams = reading.grams
+                                onWeightInputChange(Formatting.formatWeightForInput(reading.grams))
+                            }
+                        },
+                        inputActiveLabel = if (!hasManualEdit) strings.scaleInputOnLabel else strings.scaleInputOffLabel,
+                        isInputActive = !hasManualEdit,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))

@@ -53,6 +53,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.joelneumann.lojinha.domain.model.*
+import de.joelneumann.lojinha.domain.scale.Prix3ProtocolParser
+import de.joelneumann.lojinha.domain.scale.ScaleConnectionStatus
+import de.joelneumann.lojinha.domain.scale.ScaleReadingStatus
+import de.joelneumann.lojinha.domain.scale.ScaleUiState
 import de.joelneumann.lojinha.domain.service.VeggieRoundSettlementResult
 import de.joelneumann.lojinha.domain.service.VeggieSettlementCalculator
 import de.joelneumann.lojinha.ui.components.admin.AdminBadgeType
@@ -64,6 +68,7 @@ import de.joelneumann.lojinha.ui.components.admin.DualUnitBadge
 import de.joelneumann.lojinha.ui.components.general.AppHorizontalScrollbar
 import de.joelneumann.lojinha.ui.components.general.AppVerticalScrollbar
 import de.joelneumann.lojinha.ui.components.general.ConfirmationDialog
+import de.joelneumann.lojinha.ui.components.general.ScaleStatusBar
 import de.joelneumann.lojinha.ui.components.veggie.filterVeggieAmountInput
 import de.joelneumann.lojinha.ui.i18n.I18n
 import de.joelneumann.lojinha.ui.i18n.LanguageManager
@@ -86,6 +91,13 @@ private val COL_EFFECTIVE_PRICE_WIDTH = 130.dp
 private val COL_DIVIDER_WIDTH = 26.dp
 private val COL_SCROLLBAR_GUTTER = 14.dp
 private val OVERVIEW_TOTAL_WIDTH = COL_TOTAL_QTY_WIDTH + COL_MARKET_PRICE_WIDTH + COL_TOTAL_SPENT_WIDTH + COL_EFFECTIVE_PRICE_WIDTH + COL_SCROLLBAR_GUTTER
+
+private data class FocusedMatrixCell(
+    val entryId: String,
+    val unitName: String,
+    val allowDecimals: Boolean,
+    val nextFocusRequester: FocusRequester?
+)
 
 @Composable
 fun AdminVeggieSettlementMatrix(
@@ -121,6 +133,7 @@ fun AdminVeggieSettlementMatrix(
     onResetChanges: (() -> Unit)? = null,
     unitTypes: List<VeggieUnitType> = emptyList(),
     allowCollapseSettingsCard: Boolean = false,
+    scaleState: ScaleUiState? = null,
     modifier: Modifier = Modifier
 ) {
     val strings = I18n.current
@@ -245,8 +258,55 @@ fun AdminVeggieSettlementMatrix(
         )
     }
 
+    var focusedCell by remember(round.id, round.status) { mutableStateOf<FocusedMatrixCell?>(null) }
+
+    fun isWeightCell(cell: FocusedMatrixCell): Boolean {
+        val unit = cell.unitName.trim().lowercase()
+        return cell.allowDecimals || unit in setOf("kg", "g", "gr", "gram", "grams", "gramas", "grama")
+    }
+
+    fun canApplyScaleToFocusedCell(): Boolean {
+        val cell = focusedCell ?: return false
+        val reading = scaleState?.reading ?: return false
+        return scaleState.config.enabled &&
+            scaleState.connectionStatus == ScaleConnectionStatus.CONNECTED &&
+            entries.any { it.id == cell.entryId } &&
+            isWeightCell(cell) &&
+            reading.grams > 0L &&
+            (reading.status == ScaleReadingStatus.OK || reading.status == ScaleReadingStatus.UNSTABLE)
+    }
+
+    fun applyScaleToFocusedCell() {
+        val cell = focusedCell ?: return
+        val reading = scaleState?.reading ?: return
+        if (!canApplyScaleToFocusedCell()) return
+        val formatted = Prix3ProtocolParser.formatGramsForVeggieUnit(
+            grams = reading.grams,
+            unitName = cell.unitName,
+            allowDecimals = cell.allowDecimals,
+            decimalSeparator = Formatting.decimalSeparator(currentLanguage)
+        )
+        onUpdateActualQuantity(cell.entryId, formatted)
+        try {
+            cell.nextFocusRequester?.requestFocus()
+        } catch (_: Exception) {
+        }
+    }
+
     Column(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown &&
+                    keyEvent.key == Key.F10 &&
+                    scaleState?.config?.enabled == true
+                ) {
+                    applyScaleToFocusedCell()
+                    true
+                } else {
+                    false
+                }
+            },
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Round Lifecycle & PDF Export Header Card
@@ -582,6 +642,28 @@ fun AdminVeggieSettlementMatrix(
                 Box(
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    if (scaleState != null && scaleState.config.enabled && entries.isNotEmpty()) {
+                        val activeCell = focusedCell
+                        val isCellWeightReady = activeCell != null &&
+                            entries.any { it.id == activeCell.entryId } &&
+                            isWeightCell(activeCell)
+                        val matrixHintText = when {
+                            activeCell == null || entries.none { it.id == activeCell.entryId } -> strings.scaleSelectCellHint
+                            !isWeightCell(activeCell) -> strings.scaleNonWeightCellHint
+                            else -> null
+                        }
+                        ScaleStatusBar(
+                            scaleState = scaleState,
+                            actionLabel = strings.scaleUseMatrixBtn,
+                            actionEnabled = canApplyScaleToFocusedCell(),
+                            onActionClick = { applyScaleToFocusedCell() },
+                            hintText = matrixHintText,
+                            isInputActive = isCellWeightReady,
+                            compact = true,
+                            modifier = Modifier.align(Alignment.CenterStart)
+                        )
+                    }
+
                     Surface(
                         onClick = { showRoundSettings = !showRoundSettings },
                         shape = RoundedCornerShape(6.dp),
@@ -655,6 +737,27 @@ fun AdminVeggieSettlementMatrix(
                     }
                 }
             }
+        }
+
+        if (!allowCollapseSettingsCard && scaleState != null && scaleState.config.enabled && entries.isNotEmpty()) {
+            val activeCell = focusedCell
+            val isCellWeightReady = activeCell != null &&
+                entries.any { it.id == activeCell.entryId } &&
+                isWeightCell(activeCell)
+            val matrixHintText = when {
+                activeCell == null || entries.none { it.id == activeCell.entryId } -> strings.scaleSelectCellHint
+                !isWeightCell(activeCell) -> strings.scaleNonWeightCellHint
+                else -> null
+            }
+            ScaleStatusBar(
+                scaleState = scaleState,
+                actionLabel = strings.scaleUseMatrixBtn,
+                actionEnabled = canApplyScaleToFocusedCell(),
+                onActionClick = { applyScaleToFocusedCell() },
+                hintText = matrixHintText,
+                isInputActive = isCellWeightReady,
+                compact = true
+            )
         }
 
         // 2. 2D Settlement Matrix Table
@@ -900,6 +1003,14 @@ fun AdminVeggieSettlementMatrix(
                                                             focusRequester = matrixFocusRequesters[entry.id],
                                                             prevFocusRequester = prevReq,
                                                             nextFocusRequester = nextReq,
+                                                            onFocused = {
+                                                                focusedCell = FocusedMatrixCell(
+                                                                    entryId = entry.id,
+                                                                    unitName = rowInfo.deliveryUnitName,
+                                                                    allowDecimals = rowInfo.deliveryAllowDecimals,
+                                                                    nextFocusRequester = nextReq
+                                                                )
+                                                            },
                                                             modifier = Modifier.fillMaxWidth().height(36.dp)
                                                         )
                                                         Text(
@@ -2255,7 +2366,8 @@ private fun MatrixNumberInputField(
     focusRequester: FocusRequester? = null,
     nextFocusRequester: FocusRequester? = null,
     prevFocusRequester: FocusRequester? = null,
-    allowDecimals: Boolean = true
+    allowDecimals: Boolean = true,
+    onFocused: (() -> Unit)? = null
 ) {
     val selectAllState = rememberSelectAllOnFocusState()
     val isFocused = selectAllState.isFocused
@@ -2357,6 +2469,7 @@ private fun MatrixNumberInputField(
                     .onFocusChanged { focusState ->
                         val wasFocused = selectAllState.isFocused
                         if (focusState.isFocused) {
+                            onFocused?.invoke()
                             if (!wasFocused) {
                                 selectAllState.onFocusGained(textFieldValue.text)
                                 textFieldValue = textFieldValue.copy(
